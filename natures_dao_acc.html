@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nature's Dao Daily Settlement</title>
+  <style>
+    :root{
+      --bg:#f5f4ef;
+      --card:#ffffff;
+      --line:#e6e3da;
+      --text:#191919;
+      --muted:#707070;
+      --gold:#b58a2b;
+      --gold-soft:#f5edd7;
+      --ok:#1f7a48;
+      --warn:#b14f19;
+      --danger:#b42318;
+      --soft:#faf8f2;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1240px;margin:0 auto;padding:18px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+    .brand{font-size:26px;font-weight:800}
+    .sub{font-size:13px;color:var(--muted)}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;font-size:13px;font-weight:700;border:1px solid var(--line);background:#fff}
+    .pill.pending{color:#7a5b00;background:#fff7da;border-color:#ecd79a}
+    .pill.accepted{color:var(--ok);background:#eaf7ef;border-color:#bee0cb}
+    .pill.adjust{color:var(--danger);background:#fff0ee;border-color:#efc1bc}
+    .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px}
+    .span3{grid-column:span 3}.span4{grid-column:span 4}.span5{grid-column:span 5}.span6{grid-column:span 6}.span7{grid-column:span 7}.span8{grid-column:span 8}.span12{grid-column:span 12}
+    h2{font-size:18px;margin:0 0 14px}
+    .metric-label{font-size:13px;color:var(--muted)}
+    .metric-value{font-size:30px;font-weight:800;margin-top:6px}
+    .section-note{font-size:12px;color:var(--muted);margin-top:-6px;margin-bottom:12px}
+    .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .row4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:600}
+    input,select,textarea,button{font:inherit}
+    input,select,textarea{
+      width:100%;border:1px solid var(--line);border-radius:14px;background:#fff;
+      padding:12px 13px;font-size:16px;color:var(--text)
+    }
+    input[readonly]{background:#fbfbfb;color:#444}
+    textarea{min-height:110px;resize:vertical}
+    input:focus,select:focus,textarea:focus{outline:2px solid rgba(181,138,43,.25);border-color:var(--gold)}
+    .branch-toggle{display:flex;gap:10px;flex-wrap:wrap}
+    .branch-btn{flex:1;min-width:160px;border:1px solid var(--line);background:#fff;border-radius:16px;padding:14px 16px;text-align:left;cursor:pointer}
+    .branch-btn strong{display:block;font-size:16px}
+    .branch-btn span{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+    .branch-btn.active{background:var(--gold-soft);border-color:#d8bf7b}
+    .actions{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{border:1px solid var(--line);background:#fff;border-radius:14px;padding:12px 16px;cursor:pointer;font-weight:700;min-height:46px}
+    .btn.primary{background:var(--text);color:#fff;border-color:var(--text)}
+    .btn.accept{background:#eaf7ef;color:var(--ok);border-color:#bee0cb}
+    .btn.adjust{background:#fff0ee;color:var(--danger);border-color:#efc1bc}
+    .btn.soft{background:var(--soft)}
+    .status-box{padding:14px;border-radius:16px;background:var(--soft);border:1px solid var(--line);font-size:14px;line-height:1.5}
+    .helper{font-size:12px;color:var(--muted);margin-top:6px}
+    .badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}
+    .badge.pending{background:#fff7da;color:#7a5b00}
+    .badge.accepted{background:#eaf7ef;color:var(--ok)}
+    .badge.adjust{background:#fff0ee;color:var(--danger)}
+    .badge.changed{background:var(--gold-soft);color:#7a5b00;margin-left:4px}
+    .month-review-head{display:flex;align-items:end;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px}
+    .month-review-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-top:10px}
+    .review-day{min-height:58px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:7px 5px;cursor:pointer;text-align:center}
+    .review-day .d{display:block;font-weight:800;font-size:13px}
+    .review-day .s{display:block;font-size:10px;color:var(--muted);margin-top:4px;line-height:1.15}
+    .review-day.accepted{background:#eef8f2;border-color:#bee0cb}
+    .review-day.adjust{background:#fff2ef;border-color:#efc1bc}
+    .review-day.pending{background:#fff9e8;border-color:#ecd79a}
+    .review-day.changed{box-shadow:inset 0 0 0 2px #d8bf7b}
+    .review-day.empty{opacity:.55}
+    .table-wrap{overflow:auto}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:12px 10px;border-bottom:1px solid var(--line);font-size:13px;text-align:left;vertical-align:top;white-space:nowrap}
+    th{color:var(--muted);font-weight:700}
+    .inline-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .mini{padding:7px 10px;font-size:12px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer}
+    .mini[disabled]{opacity:.45;cursor:not-allowed}
+    .note{white-space:normal;min-width:180px}
+    .footer{margin-top:16px;font-size:12px;color:var(--muted);text-align:center}
+    .date-review-actions{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:auto}
+    .date-review-actions button{min-height:27px;border-radius:8px;border:1px solid var(--line);background:#fff;font-weight:800;cursor:pointer;padding:2px}
+    .date-review-actions .date-ok{color:var(--ok)}
+    .date-review-actions .date-no{color:var(--danger)}
+    @media (max-width:900px){
+      .span3,.span4,.span5,.span6,.span7,.span8,.span12{grid-column:span 12}
+      .row,.row3,.row4{grid-template-columns:1fr}
+      .metric-value{font-size:26px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <div class="brand">天之道 Nature’s Dao</div>
+        <div class="sub">Daily Settlement</div>
+      </div>
+      <div id="currentStatusPill" class="pill pending">待验收</div>
+    </div>
+
+    <div class="grid">
+      <div class="card span12">
+        <h2>分行</h2>
+        <div class="branch-toggle">
+          <button class="branch-btn active" data-branch="Eco Botanic" type="button">
+            <strong>Eco Botanic</strong>
+          </button>
+          <button class="branch-btn" data-branch="Nusa Bestari" type="button">
+            <strong>Nusa Bestari</strong>
+          </button>
+        </div>
+      </div>
+
+      <div class="card span3">
+        <div class="metric-label">当前结账日期</div>
+        <div id="metricDate" class="metric-value" style="font-size:22px">-</div><div id="metricWeekday" class="helper" style="font-size:14px;font-weight:700;margin-top:4px">-</div>
+        <div class="helper">每天 12am 更新营业额</div>
+      </div>
+      <div class="card span3">
+        <div class="metric-label">Grand Total</div>
+        <div id="metricGrandTotal" class="metric-value">RM 0.00</div>
+      </div>
+      <div class="card span3">
+        <div class="metric-label">本月营业额</div>
+        <div id="metricMonthTotal" class="metric-value">RM 0.00</div>
+      </div>
+
+      <div class="card span8">
+                <div class="row">
+          <div>
+            <label>日期</label>
+            <input id="settlementDate" type="text" readonly>
+          </div>
+          <div>
+            <label>Cashier Balance</label>
+            <input id="cashierBalance" type="number" min="0" step="0.01" value="500">
+            <div style="height:10px"></div>
+            <input id="pettyOpening" type="hidden" value="200">
+          </div>
+        </div>
+
+        <div style="height:14px"></div>
+        <div class="row4">
+          <div><label>VISA</label><input class="money-field" id="visa" type="number" min="0" step="0.01" value="0"></div>
+          <div><label>MASTER</label><input class="money-field" id="master" type="number" min="0" step="0.01" value="0"></div>
+          <div><label>AMEX</label><input class="money-field" id="amex" type="number" min="0" step="0.01" value="0"></div>
+          <div><label>TNG</label><input class="money-field" id="tng" type="number" min="0" step="0.01" value="0"></div>
+          <div><label>CASH</label><input class="money-field" id="cash" type="number" min="0" step="0.01" value="0"></div>
+          <div><label>ZFB / ALIPAY</label><input class="money-field" id="alipay" type="number" min="0" step="0.01" value="0"></div>
+          <div><label>Online Credit Card</label><input class="money-field" id="onlineCard" type="number" min="0" step="0.01" value="0"></div>
+          <div><label>Bank Transfer</label><input class="money-field" id="bankTransfer" type="number" min="0" step="0.01" value="0"></div>
+          <div><label>Tips</label><input class="money-field" id="tips" type="number" min="0" step="0.01" value="0"></div>
+        </div>
+
+        <div style="height:14px"></div>
+        <div>
+          <label>Grand Total</label>
+          <input id="grandTotal" type="text" readonly>
+          <div style="height:10px"></div>
+          <label>Petty Cash 剩余</label>
+          <input id="pettyCashRemaining" type="text" readonly>
+        </div>
+        <div style="height:12px"></div>
+
+        <div style="height:14px"></div>
+        <div class="card" style="padding:14px;background:var(--soft)">
+          <h2 style="font-size:16px;margin-bottom:10px">Petty Cash 进 / 出</h2>
+          <div class="row3">
+            <div>
+              <label>类型</label>
+              <select id="pettyType">
+                <option value="out">出</option>
+                <option value="in">进</option>
+              </select>
+            </div>
+            <div id="pettyReasonWrap">
+              <label>出款原因</label>
+              <input id="pettyReason" type="text" placeholder="例如：买用品">
+            </div>
+            <div>
+              <label>数目 (RM)</label>
+              <input id="pettyAmount" type="number" min="0" step="0.01" value="0">
+            </div>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button id="addPettyBtn" class="btn soft" type="button">加入 Petty Cash</button>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <div><div class="metric-label">Petty Cash 进</div><div id="pettyInTotal" class="metric-value" style="font-size:22px">RM 0.00</div></div>
+            <div><div class="metric-label">Petty Cash 出</div><div id="pettyOutTotal" class="metric-value" style="font-size:22px">RM 0.00</div></div>
+          </div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>类型</th><th>原因</th><th>数目</th><th></th></tr></thead>
+              <tbody id="pettyBody"><tr><td colspan="4" style="color:#707070">还没有 Petty Cash 记录。</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card span4">
+        <div class="month-review-head" style="margin-top:0">
+          <div style="font-weight:800;font-size:18px">日期 / 验收</div>
+          <label style="margin:0;min-width:140px">月份
+            <input id="reviewMonth" type="month" style="margin-top:5px">
+          </label>
+        </div>
+        <div id="monthReviewGrid" class="month-review-grid"></div>
+        <div id="autoSaveState" class="helper" style="margin-top:12px">自动保存已开启</div>
+      </div>
+
+      <div class="card span12">
+        <div class="topbar" style="margin:0 0 10px 0">
+          <div>
+            <h2 style="margin:0">历史记录</h2>
+          </div>
+          <div class="actions">
+            <button id="exportBtn" class="btn" type="button">导出 CSV</button>
+            <button id="clearAllBtn" class="btn" type="button">清空本机记录</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>分行</th>
+                <th>Grand Total</th>
+                <th>Petty Cash</th>
+                <th>状态</th>
+                <th>Petty Cash 净额</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    
+  </div>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = 'natures_dao_daily_settlement_v2';
+      const META_KEY = 'natures_dao_daily_settlement_meta_v2';
+      const paymentIds = ['visa','master','amex','tng','cash','alipay','onlineCard','bankTransfer','tips'];
+      const root = document.body;
+      let editingId = null;
+      let currentStatus = 'pending';
+      let currentReviewChanged = false;
+      let currentBranch = 'Eco Botanic';
+      let pettyEntries = [];
+      let lastKnownDate = getTodayString();
+
+      const $ = (id) => document.getElementById(id);
+      const num = (id) => Number($(id).value || 0);
+      const money = (v) => 'RM ' + Number(v || 0).toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+
+      function formatDisplayDate(dateStr) {
+        if (!dateStr) return '-';
+        const [y,m,d] = dateStr.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      function formatWeekday(dateStr) {
+        if (!dateStr) return '-';
+        const [y,m,d] = dateStr.split('-').map(Number);
+        const dt = new Date(y, m-1, d);
+        return dt.toLocaleDateString('en-MY', { weekday:'long' });
+      }
+
+      function getTodayString() {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      }
+      function getYesterdayString() {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      }
+      function readRecords() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; }
+      }
+      function saveRecords(records) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      }
+      function readMeta() {
+        try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); } catch(e) { return {}; }
+      }
+      function saveMeta(meta) {
+        localStorage.setItem(META_KEY, JSON.stringify(meta));
+      }
+      function setStatus(status) {
+        currentStatus = status;
+        const pill = $('currentStatusPill');
+        const box = $('statusBox');
+        pill.className = 'pill ' + status;
+        if (status === 'accepted') {
+          pill.textContent = '✓ 正确';
+          if (box) box.textContent = '你已验收：正确。';
+        } else if (status === 'adjust') {
+          pill.textContent = '✕ 不正确';
+          if (box) box.textContent = '你已验收：不正确，需要员工调整。';
+        } else {
+          pill.textContent = '待验收';
+          if (box) box.textContent = '员工输入的资料会自动保存。';
+        }
+      }
+      function activateBranch(branch) {
+        currentBranch = branch;
+        document.querySelectorAll('.branch-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.branch === branch));
+        loadTodayOrBlank();
+      }
+      function recalc() {
+        const grandTotal = paymentIds.reduce((sum, id) => sum + Math.max(0, num(id)), 0);
+        const pettyIn = pettyEntries.filter(e => e.type === 'in').reduce((s,e)=>s+Number(e.amount||0),0);
+        const pettyOut = pettyEntries.filter(e => e.type === 'out').reduce((s,e)=>s+Number(e.amount||0),0);
+        const balance = Math.max(0, Number($('pettyOpening').value || 200)) + pettyIn - pettyOut;
+        $('pettyInTotal').textContent = money(pettyIn);
+        $('pettyOutTotal').textContent = money(pettyOut);
+        renderPettyEntries();
+        $('grandTotal').value = money(grandTotal);
+        if ($('pettyCashRemaining')) $('pettyCashRemaining').value = money(balance);
+        if ($('balance')) if ($('balance')) $('balance').value = money(balance);
+        $('metricGrandTotal').textContent = money(grandTotal);
+        if ($('metricBalance')) $('metricBalance').textContent = money(balance);
+        $('metricDate').textContent = formatDisplayDate($('settlementDate').value);
+        $('metricWeekday').textContent = formatWeekday($('settlementDate').value);
+        updateMonthMetric();
+      }
+      function getFormData() {
+        const grandTotal = paymentIds.reduce((sum, id) => sum + Math.max(0, num(id)), 0);
+        const pettyIn = pettyEntries.filter(e => e.type === 'in').reduce((s,e)=>s+Number(e.amount||0),0);
+        const pettyOut = pettyEntries.filter(e => e.type === 'out').reduce((s,e)=>s+Number(e.amount||0),0);
+        const balance = Math.max(0, Number($('pettyOpening').value || 200)) + pettyIn - pettyOut;
+        $('pettyInTotal').textContent = money(pettyIn);
+        $('pettyOutTotal').textContent = money(pettyOut);
+        renderPettyEntries();
+        return {
+          id: editingId || Date.now(),
+          date: $('settlementDate').value,
+          branch: currentBranch,
+          cashierBalance: Math.max(0, num('cashierBalance')),
+          visa: Math.max(0, num('visa')),
+          master: Math.max(0, num('master')),
+          amex: Math.max(0, num('amex')),
+          tng: Math.max(0, num('tng')),
+          cash: Math.max(0, num('cash')),
+          alipay: Math.max(0, num('alipay')),
+          onlineCard: Math.max(0, num('onlineCard')),
+          bankTransfer: Math.max(0, num('bankTransfer')),
+          tips: Math.max(0, num('tips')),
+          grandTotal,
+          pettyEntries: pettyEntries.map(e => ({...e})),
+          pettyIn,
+          pettyOut,
+          pettyOpening: Math.max(0, Number($('pettyOpening').value || 200)),
+          pettyNet: balance,
+          balance,
+          status: currentStatus,
+          reviewChanged: currentReviewChanged,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      function isMonthFirst(date) {
+        return String(date || '').slice(8,10) === '01';
+      }
+      function previousDateString(date) {
+        const [y,m,d] = date.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        dt.setDate(dt.getDate() - 1);
+        return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+      }
+      function carriedPettyOpening(date, branch) {
+        const records = readRecords().filter(r => r.branch === branch && r.date < date).sort((a,b) => b.date.localeCompare(a.date));
+        const prev = records[0];
+        return prev ? Number(prev.pettyNet ?? prev.balance ?? 0) : 200;
+      }
+      function applyPettyOpeningRule(date, branch, record) {
+        const input = $('pettyOpening');
+        const carried = carriedPettyOpening(date, branch);
+        const opening = record && Number.isFinite(Number(record.pettyOpening)) ? Number(record.pettyOpening) : carried;
+        input.value = Number.isFinite(opening) ? opening : 200;
+        if ($('pettyOpeningDisplay')) $('pettyOpeningDisplay').value = money(Number(input.value || 200));
+      }
+      function cascadePettyBalances(branch, yearMonth) {
+        const records = readRecords();
+        const same = records.filter(r => r.branch === branch).sort((a,b)=>a.date.localeCompare(b.date));
+        let previousBalance = 200;
+        let changed = false;
+        for (const r of same) {
+          const opening = previousBalance;
+          const balance = Number(opening || 0) + Number(r.pettyIn || 0) - Number(r.pettyOut || 0);
+          if (Number(r.pettyOpening || 0) !== opening || Number(r.pettyNet ?? r.balance ?? 0) !== balance) changed = true;
+          r.pettyOpening = opening;
+          r.pettyNet = balance;
+          r.balance = balance;
+          previousBalance = balance;
+        }
+        if (changed) saveRecords(records);
+      }
+
+      function fillForm(record) {
+        editingId = record?.id || null;
+        $('settlementDate').value = record?.date || getTodayString();
+        $('cashierBalance').value = record?.cashierBalance ?? 500;
+        $('visa').value = record?.visa ?? 0;
+        $('master').value = record?.master ?? 0;
+        $('amex').value = record?.amex ?? 0;
+        $('tng').value = record?.tng ?? 0;
+        $('cash').value = record?.cash ?? 0;
+        $('alipay').value = record?.alipay ?? 0;
+        $('onlineCard').value = record?.onlineCard ?? 0;
+        $('bankTransfer').value = record?.bankTransfer ?? 0;
+        $('tips').value = record?.tips ?? 0;
+        applyPettyOpeningRule(record?.date || getTodayString(), currentBranch, record);
+        pettyEntries = Array.isArray(record?.pettyEntries) ? record.pettyEntries.map(e => ({...e})) : [];
+        $('pettyType').value = 'out';
+        $('pettyReason').value = '';
+        $('pettyAmount').value = 0;
+        $('pettyReasonWrap').style.display = 'block';
+        currentReviewChanged = Boolean(record?.reviewChanged);
+        setStatus(record?.status || 'pending');
+        updateStatusChangedUi();
+        setFormLockForDate(record?.date || getTodayString());
+        recalc();
+      }
+      function blankFormCarryOver() {
+        const meta = readMeta();
+        editingId = null;
+        $('settlementDate').value = getTodayString();
+        $('cashierBalance').value = meta.lastCashierBalance ?? $('cashierBalance').value || 500;
+        paymentIds.forEach(id => $(id).value = 0);
+        applyPettyOpeningRule(getTodayString(), currentBranch, null);
+        pettyEntries = [];
+        $('pettyType').value = 'out';
+        $('pettyReason').value = '';
+        $('pettyAmount').value = 0;
+        $('pettyReasonWrap').style.display = 'block';
+        currentReviewChanged = false;
+        setStatus('pending');
+        updateStatusChangedUi();
+        setFormLockForDate(getTodayString());
+        recalc();
+      }
+      function upsertRecord(record) {
+        const records = readRecords();
+        const index = records.findIndex(r => r.id === record.id || (!editingId && r.date === record.date && r.branch === record.branch));
+        if (index >= 0) {
+          record.id = records[index].id;
+          records[index] = record;
+        } else {
+          records.push(record);
+        }
+        saveRecords(records);
+        saveMeta({ lastCashierBalance: record.cashierBalance });
+        cascadePettyBalances(record.branch, record.date.slice(0,7));
+        editingId = record.id;
+        renderHistory();
+        updateMonthMetric();
+      }
+      function saveCurrent(statusOverride, silent = false) {
+        let previousStatus = currentStatus;
+        if (editingId) {
+          const old = readRecords().find(r => r.id === editingId);
+          if (old) previousStatus = old.status || 'pending';
+        }
+        if (statusOverride) {
+          if ((previousStatus === 'accepted' || previousStatus === 'adjust') && previousStatus !== statusOverride) {
+            currentReviewChanged = true;
+          }
+          setStatus(statusOverride);
+          updateStatusChangedUi();
+        }
+        const record = getFormData();
+        upsertRecord(record);
+        renderMonthReview();
+        if (!silent && statusOverride) {
+          alert(statusOverride === 'accepted' ? '已验收：正确。' : '已验收：不正确。');
+        }
+      }
+
+      let autoSaveTimer = null;
+      function scheduleAutoSave() {
+        if (editingId && (currentStatus === 'accepted' || currentStatus === 'adjust')) {
+          currentReviewChanged = true;
+          setStatus('pending');
+          updateStatusChangedUi();
+        }
+        const state = $('autoSaveState');
+        if (state) state.textContent = '正在自动保存…';
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => {
+          saveCurrent(null, true);
+          if (state) state.textContent = '已自动保存 · ' + new Date().toLocaleTimeString('en-MY', {hour:'2-digit', minute:'2-digit'});
+        }, 350);
+      }
+      function updateStatusChangedUi() {
+        const pill = $('currentStatusPill');
+        if (currentReviewChanged) {
+          pill.textContent = (currentStatus === 'accepted' ? '✓ 正确' : currentStatus === 'adjust' ? '✕ 不正确' : '待验收') + ' · 已更改';
+        }
+      }
+      function setFormLockForDate(date) {
+        const editable = true;
+        const ids = ['cashierBalance','visa','master','amex','tng','cash','alipay','onlineCard','bankTransfer','tips','pettyType','pettyReason','pettyAmount','addPettyBtn'];
+        ids.forEach(id => {
+          const el = $(id);
+          if (!el) return;
+          el.disabled = !editable;
+        });
+        document.querySelectorAll('#pettyBody [data-petty-del]').forEach(btn => btn.disabled = !editable);
+      }
+      function monthDays(ym) {
+        const [y,m] = ym.split('-').map(Number);
+        return new Date(y, m, 0).getDate();
+      }
+      function reviewRecordFromCalendar(record, newStatus) {
+        const records = readRecords();
+        const index = records.findIndex(r => r.id === record.id);
+        if (index < 0) return;
+        const previousStatus = records[index].status || 'pending';
+        if ((previousStatus === 'accepted' || previousStatus === 'adjust') && previousStatus !== newStatus) {
+          records[index].reviewChanged = true;
+        }
+        records[index].status = newStatus;
+        records[index].reviewedAt = new Date().toISOString();
+        saveRecords(records);
+        if (editingId === record.id) {
+          currentStatus = newStatus;
+          currentReviewChanged = Boolean(records[index].reviewChanged);
+          setStatus(newStatus);
+          updateStatusChangedUi();
+        }
+        renderHistory();
+        renderMonthReview();
+      }
+      function renderMonthReview() {
+        const monthInput = $('reviewMonth');
+        if (!monthInput.value) monthInput.value = getTodayString().slice(0,7);
+        const ym = monthInput.value;
+        const days = monthDays(ym);
+        const records = readRecords().filter(r => r.branch === currentBranch && r.date.startsWith(ym));
+        const grid = $('monthReviewGrid');
+        grid.innerHTML = '';
+        for (let day=1; day<=days; day++) {
+          const date = ym + '-' + String(day).padStart(2,'0');
+          const rec = records.find(r => r.date === date);
+          const cell = document.createElement('div');
+          cell.className = 'review-day ' + (rec ? (rec.status || 'pending') : 'empty') + (rec?.reviewChanged ? ' changed' : '');
+          cell.style.cursor = 'pointer';
+          const label = !rec ? '未填写' : rec.status === 'accepted' ? '✓ 正确' : rec.status === 'adjust' ? '✕ 不正确' : '待验收';
+          cell.innerHTML = '<span class="d">' + day + '</span><span class="s">' + label + (rec?.reviewChanged ? '<br>已更改' : '') + '</span>';
+          if (rec) {
+            const actions = document.createElement('div');
+            actions.className = 'date-review-actions';
+            actions.innerHTML = '<button type="button" class="date-ok">✓</button><button type="button" class="date-no">✕</button>';
+            actions.querySelector('.date-ok').addEventListener('click', (e) => { e.stopPropagation(); reviewRecordFromCalendar(rec, 'accepted'); });
+            actions.querySelector('.date-no').addEventListener('click', (e) => { e.stopPropagation(); reviewRecordFromCalendar(rec, 'adjust'); });
+            cell.appendChild(actions);
+          }
+          cell.addEventListener('click', () => {
+            if (rec) {
+              currentBranch = rec.branch;
+              document.querySelectorAll('.branch-btn').forEach(el => el.classList.toggle('active', el.dataset.branch === currentBranch));
+              fillForm(rec);
+            } else {
+              editingId = null;
+              $('settlementDate').value = date;
+              $('cashierBalance').value = readMeta().lastCashierBalance ?? 500;
+              paymentIds.forEach(id => $(id).value = 0);
+              applyPettyOpeningRule(date, currentBranch, null);
+              pettyEntries = [];
+              currentReviewChanged = false;
+              setStatus('pending');
+              updateStatusChangedUi();
+              recalc();
+            }
+            window.scrollTo({top:0, behavior:'smooth'});
+          });
+          grid.appendChild(cell);
+        }
+      }
+      function updateMonthMetric() {
+        const ym = $('settlementDate').value.slice(0,7);
+        const records = readRecords();
+        const total = records.filter(r => r.branch === currentBranch && r.date.startsWith(ym)).reduce((sum, r) => sum + Number(r.grandTotal || 0), 0);
+        $('metricMonthTotal').textContent = money(total);
+        renderMonthReview();
+      }
+      function loadTodayOrBlank() {
+        const today = getTodayString();
+        const records = readRecords();
+        const todayRecord = records.find(r => r.date === today && r.branch === currentBranch);
+        if (todayRecord) fillForm(todayRecord);
+        else blankFormCarryOver();
+      }
+      function canEditRecord(record) {
+        return true;
+      }
+      function renderHistory() {
+        const tbody = $('historyBody');
+        const records = readRecords().sort((a,b) => (b.date + b.branch).localeCompare(a.date + a.branch));
+        tbody.innerHTML = '';
+        if (!records.length) {
+          tbody.innerHTML = '<tr><td colspan="7" style="color:#707070">还没有记录。</td></tr>';
+          return;
+        }
+        records.forEach(record => {
+          const tr = document.createElement('tr');
+          const canEdit = canEditRecord(record);
+          tr.innerHTML = `
+            <td>${record.date}</td>
+            <td>${record.branch}</td>
+            <td>${money(record.grandTotal)}</td>
+            <td>${money(record.balance)}</td>
+            <td><span class="badge ${record.status || 'pending'}">${record.status === 'accepted' ? '✓ 正确' : record.status === 'adjust' ? '✕ 不正确' : '待验收'}</span>${record.reviewChanged ? '<span class="badge changed">已更改</span>' : ''}</td>
+            <td>${money(record.pettyNet || 0)}</td>
+            <td>
+              <div class="inline-actions">
+                <button class="mini" data-view="${record.id}">查看</button>
+                <button class="mini" data-edit="${record.id}">修改数字</button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+        tbody.querySelectorAll('[data-view]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const record = readRecords().find(r => String(r.id) === btn.dataset.view);
+            if (!record) return;
+            currentBranch = record.branch;
+            document.querySelectorAll('.branch-btn').forEach(el => el.classList.toggle('active', el.dataset.branch === currentBranch));
+            fillForm(record);
+          });
+        });
+        tbody.querySelectorAll('[data-edit]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const record = readRecords().find(r => String(r.id) === btn.dataset.edit);
+            if (!record) return;
+            currentBranch = record.branch;
+            document.querySelectorAll('.branch-btn').forEach(el => el.classList.toggle('active', el.dataset.branch === currentBranch));
+            fillForm(record);
+          });
+        });
+      }
+      function renderPettyEntries() {
+        const body = $('pettyBody');
+        if (!body) return;
+        body.innerHTML = '';
+        if (!pettyEntries.length) {
+          body.innerHTML = '<tr><td colspan="4" style="color:#707070">还没有 Petty Cash 记录。</td></tr>';
+          return;
+        }
+        pettyEntries.forEach((e, index) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${e.type === 'in' ? '进' : '出'}</td><td>${e.type === 'out' ? (e.reason || '-') : '-'}</td><td>${money(e.amount)}</td><td><button class="mini" data-petty-del="${index}">删除</button></td>`;
+          body.appendChild(tr);
+        });
+        body.querySelectorAll('[data-petty-del]').forEach(btn => btn.addEventListener('click', () => {
+          pettyEntries.splice(Number(btn.dataset.pettyDel), 1);
+          recalc();
+          scheduleAutoSave();
+        }));
+      }
+      function addPettyEntry() {
+        const type = $('pettyType').value;
+        const amount = Math.max(0, Number($('pettyAmount').value) || 0);
+        const reason = $('pettyReason').value.trim();
+        if (amount <= 0) { alert('请输入 Petty Cash 数目。'); return; }
+        if (type === 'out' && !reason) { alert('Petty Cash 出必须填写原因。'); return; }
+        pettyEntries.push({type, amount, reason: type === 'out' ? reason : ''});
+        $('pettyAmount').value = 0;
+        $('pettyReason').value = '';
+        recalc();
+        scheduleAutoSave();
+      }
+      function exportCsv() {
+        const records = readRecords();
+        if (!records.length) { alert('目前没有记录可以导出。'); return; }
+        const headers = ['Date','Branch','Cashier Balance','VISA','MASTER','AMEX','TNG','CASH','ZFB/ALIPAY','Online Credit Card','Bank Transfer','Tips','Grand Total','Petty Cash Opening','Petty Cash In','Petty Cash Out','Petty Cash Net','Petty Cash','Status','Review Changed','Petty Cash Entries'];
+        const esc = v => '"' + String(v ?? '').replaceAll('"','""') + '"';
+        const lines = [headers.map(esc).join(',')];
+        records.forEach(r => {
+          lines.push([
+            r.date,r.branch,r.cashierBalance,r.visa,r.master,r.amex,r.tng,r.cash,r.alipay,r.onlineCard,r.bankTransfer||0,r.tips,r.grandTotal,r.pettyOpening||0,r.pettyIn||0,r.pettyOut||0,r.pettyNet||0,r.balance,r.status,r.reviewChanged?'已更改':'',(r.pettyEntries||[]).map(e => (e.type==='in'?'进':'出') + ':' + (e.reason?e.reason+' ':'') + 'RM' + e.amount).join(' | ')
+          ].map(esc).join(','));
+        });
+        const blob = new Blob(['\ufeff' + lines.join('\n')], {type:'text/csv;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'NatureDao_Daily_Settlement.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+      function clearAll() {
+        if (!confirm('确定清空这台设备里的所有记录？')) return;
+        localStorage.removeItem(STORAGE_KEY);
+        renderHistory();
+        renderMonthReview();
+        blankFormCarryOver();
+      }
+      function checkMidnightRollover() {
+        const today = getTodayString();
+        if (today !== lastKnownDate) {
+          if ($('settlementDate').value === lastKnownDate) saveCurrent(null, true);
+          lastKnownDate = today;
+          const meta = readMeta();
+          const keepCashier = $('cashierBalance').value || meta.lastCashierBalance || 500;
+          editingId = null;
+          $('settlementDate').value = today;
+          $('cashierBalance').value = keepCashier;
+          applyPettyOpeningRule(today, currentBranch, null);
+          paymentIds.forEach(id => $(id).value = 0);
+          pettyEntries = [];
+          $('pettyType').value = 'out';
+          $('pettyReason').value = '';
+          $('pettyAmount').value = 0;
+          $('pettyReasonWrap').style.display = 'block';
+          setStatus('pending');
+          recalc();
+          renderHistory();
+        }
+      }
+
+      document.querySelectorAll('.branch-btn').forEach(btn => btn.addEventListener('click', () => activateBranch(btn.dataset.branch)));
+      document.querySelectorAll('input, textarea').forEach(el => el.addEventListener('input', () => { recalc(); scheduleAutoSave(); }));
+      $('pettyType').addEventListener('change', () => { $('pettyReasonWrap').style.display = $('pettyType').value === 'out' ? 'block' : 'none'; });
+      $('addPettyBtn').addEventListener('click', addPettyEntry);
+      $('reviewMonth').value = getTodayString().slice(0,7);
+      $('reviewMonth').addEventListener('change', renderMonthReview);
+      $('exportBtn').addEventListener('click', exportCsv);
+      $('clearAllBtn').addEventListener('click', clearAll);
+
+      lastKnownDate = getTodayString();
+      $('settlementDate').value = lastKnownDate;
+      renderHistory();
+      renderMonthReview();
+      loadTodayOrBlank();
+      setInterval(checkMidnightRollover, 60000);
+    })();
+  </script>
+</body>
+</html>
