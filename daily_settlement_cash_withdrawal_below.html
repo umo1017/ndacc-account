@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nature's Dao Daily Settlement</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--line:#e6e3da;--text:#191919;--muted:#707070;--gold:#b58a2b;--soft:#faf8f2;--ok:#1f7a48;--danger:#b42318}
+*{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+.wrap{max-width:1240px;margin:auto;padding:18px} .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.brand{font-size:26px;font-weight:800} .sub,.helper,label{font-size:13px;color:var(--muted)} .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px} .span3{grid-column:span 3} .span4{grid-column:span 4} .span8{grid-column:span 8} .span12{grid-column:span 12}
+.metric-label{font-size:13px;color:var(--muted)} .metric-value{font-size:28px;font-weight:800;margin-top:5px} .branch-toggle,.actions{display:flex;gap:10px;flex-wrap:wrap}
+.branch-btn,.btn,.mini{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 14px;cursor:pointer;font-weight:700} .branch-btn.active{background:#f5edd7;border-color:#d8bf7b} .branch-btn{flex:1;min-width:150px}
+input,select{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;padding:11px 12px;font-size:16px;color:var(--text)} label{display:block;margin-bottom:5px;font-weight:600}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px} .row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px} .row4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.status{padding:10px 12px;border-radius:12px;background:var(--soft);border:1px solid var(--line);font-size:13px} .ok{color:var(--ok)} .bad{color:var(--danger)}
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px} .day{border:1px solid var(--line);border-radius:10px;min-height:56px;padding:6px;background:#fff;cursor:pointer;text-align:center;font-size:12px}
+.day strong{display:block} .day .review{display:flex;gap:3px;margin-top:5px} .day .review button{flex:1;border:1px solid var(--line);background:#fff;border-radius:7px;cursor:pointer}
+table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px solid var(--line);font-size:13px;text-align:left;white-space:nowrap} .table-wrap{overflow:auto}
+.auth-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px} .auth-card{max-width:420px;width:100%;background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px}
+.auth-card h2{margin-top:0} .auth-tabs{display:flex;gap:8px;margin-bottom:14px} .auth-tabs button{flex:1} .hidden{display:none!important}
+#syncState{font-size:12px;font-weight:700} @media(max-width:900px){.span3,.span4,.span8,.span12{grid-column:span 12} .row,.row3,.row4{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="authView" class="auth-shell">
+  <div class="auth-card">
+    <div class="brand">天之道 Nature’s Dao</div>
+    <div class="sub" style="margin-bottom:16px">Daily Settlement</div>
+    <div><label>Email</label><input id="authEmail" type="email" placeholder="staff@example.com"></div>
+    <div style="height:10px"></div>
+    <div><label>Password</label><input id="authPassword" type="password" placeholder="Minimum 6 characters"></div>
+    <div class="actions" style="margin-top:14px">
+      <button id="authSubmit" class="btn" type="button">Login</button>
+      <button id="forgotBtn" class="btn" type="button">Forgot Password</button>
+    </div>
+    <div id="authMsg" class="helper" style="margin-top:10px"></div>
+
+    <div id="resetBox" class="hidden" style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">
+      <div style="font-weight:700;margin-bottom:10px">Set New Password</div>
+      <div><label>New Password</label><input id="newPassword" type="password" placeholder="Minimum 6 characters"></div>
+      <div style="height:10px"></div>
+      <div><label>Confirm Password</label><input id="confirmPassword" type="password" placeholder="Repeat new password"></div>
+      <div class="actions" style="margin-top:12px">
+        <button id="saveNewPasswordBtn" class="btn" type="button">Save New Password</button>
+      </div>
+      <div id="resetMsg" class="helper" style="margin-top:8px"></div>
+    </div>
+  </div>
+</div>
+
+<div id="appView" class="wrap hidden">
+  <div class="topbar">
+    <div><div class="brand">天之道 Nature’s Dao</div><div class="sub">Daily Settlement</div></div>
+    <div style="text-align:right">
+      <div id="currentStatus" class="status">待验收</div>
+      <div id="syncState">正在连接云端…</div>
+      <button id="logoutBtn" class="mini" type="button" style="margin-top:6px">登出</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card span12">
+      <div class="branch-toggle">
+        <button type="button" class="branch-btn active" data-branch="Eco Botanic">Eco Botanic</button>
+        <button type="button" class="branch-btn" data-branch="Nusa Bestari">Nusa Bestari</button>
+      </div>
+    </div>
+
+    <div class="card span3"><div class="metric-label">当前日期</div><div id="metricDate" class="metric-value">-</div></div>
+    <div class="card span3"><div class="metric-label">Grand Total</div><div id="metricGrandTotal" class="metric-value">RM 0.00</div></div>
+    <div class="card span3"><div class="metric-label">本月营业额</div><div id="metricMonthTotal" class="metric-value">RM 0.00</div></div>
+    <div class="card span3"><div class="metric-label">Petty Cash 剩余</div><div id="metricPetty" class="metric-value">RM 0.00</div></div>
+
+    <div class="card span8">
+      <div class="row3">
+        <div><label>日期</label><input id="settlementDate" type="date"></div>
+        <div><label>Staff / 员工</label><input id="staff" type="text" placeholder="例如：Amy"></div>
+        <div><label>Cashier Balance</label><input id="cashierBalance" type="number" min="0" step="0.01" value="500"></div>
+      </div>
+      <input id="pettyOpening" type="hidden" value="0"><input id="cashOpening" type="hidden" value="0">
+
+      <div style="height:14px"></div>
+      <div class="row4">
+        <div><label>VISA</label><input class="money-field" id="visa" type="number" min="0" step="0.01" value="0"></div>
+        <div><label>MASTER</label><input class="money-field" id="master" type="number" min="0" step="0.01" value="0"></div>
+        <div><label>AMEX</label><input class="money-field" id="amex" type="number" min="0" step="0.01" value="0"></div>
+        <div><label>TNG</label><input class="money-field" id="tng" type="number" min="0" step="0.01" value="0"></div>
+        <div><label>CASH</label><input class="money-field" id="cash" type="number" min="0" step="0.01" value="0"></div>
+        <div><label>ZFB / ALIPAY</label><input class="money-field" id="alipay" type="number" min="0" step="0.01" value="0"></div>
+        <div><label>Online Credit Card</label><input class="money-field" id="onlineCard" type="number" min="0" step="0.01" value="0"></div>
+        <div><label>Bank Transfer</label><input class="money-field" id="bankTransfer" type="number" min="0" step="0.01" value="0"></div>
+        <div><label>Tips</label><input class="money-field" id="tips" type="number" min="0" step="0.01" value="0"></div>
+      </div>
+
+      <div style="height:14px"></div>
+      <div class="row3">
+        <div><label>Grand Total</label><input id="grandTotal" type="text" readonly></div>
+        <div>
+          <label>Cash Balance</label>
+          <input id="cashBalance" type="text" readonly>
+          <div class="helper">Previous balance + today CASH − withdrawal</div>
+          <div style="height:8px"></div>
+          <label>Cash Withdrawal</label>
+          <input class="money-field" id="cashWithdrawal" type="number" min="0" step="0.01" value="0">
+        </div>
+        <div><label>Petty Cash 剩余</label><input id="pettyRemaining" type="text" readonly></div>
+      </div>
+
+      <div style="height:14px"></div>
+      <div class="card" style="background:var(--soft)">
+        <h3 style="margin-top:0">Petty Cash 进 / 出</h3><div class="helper" style="margin-bottom:10px">Opening balance follows the latest previous record across months and years.</div>
+        <div class="row3">
+          <div><label>类型</label><select id="pettyType"><option value="out">出</option><option value="in">进</option></select></div>
+          <div><label>原因</label><input id="pettyReason" type="text" placeholder="例如：买用品"></div>
+          <div><label>数目 (RM)</label><input id="pettyAmount" type="number" min="0" step="0.01" value="0"></div>
+        </div>
+        <div class="actions" style="margin-top:10px"><button type="button" id="addPettyBtn" class="btn">加入 Petty Cash</button></div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table><thead><tr><th>类型</th><th>原因</th><th>数目</th><th></th></tr></thead><tbody id="pettyBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card span4">
+      <label>月份</label><input id="reviewMonth" type="month">
+      <div id="branchRecordState" class="helper" style="margin-top:10px;font-weight:700">Eco Botanic 独立记录</div>
+      <div id="monthGrid" class="month-grid"></div>
+      <div id="autoSaveState" class="helper" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card span12">
+      <div class="topbar" style="margin-bottom:8px">
+        <strong>历史记录</strong>
+        <div class="actions"><button type="button" id="refreshBtn" class="btn">刷新云端</button><button type="button" id="exportBtn" class="btn">导出 CSV</button></div>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>日期</th><th>分行</th><th>Staff</th><th>Grand Total</th><th>Cash Balance</th><th>Petty Cash</th><th>状态</th><th>操作</th></tr></thead><tbody id="historyBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const SUPABASE_URL = 'https://cofmjwsejcbfsgdrswku.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU';
+  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let currentBranch="Eco Botanic", currentStatus="pending", currentId=null, pettyEntries=[], allRows=[];
+  const paymentIds=["visa","master","amex","tng","cash","alipay","onlineCard","bankTransfer","tips"];
+  let saveTimer=null;
+
+  const $=id=>document.getElementById(id);
+  const money=v=>"RM "+(Number(v)||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const num=id=>Math.max(0,Number($(id).value)||0);
+  const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
+
+  function authMessage(msg,bad=false){$("authMsg").textContent=msg;$("authMsg").className=bad?"helper bad":"helper";}
+  function resetMessage(msg,bad=false){$("resetMsg").textContent=msg;$("resetMsg").className=bad?"helper bad":"helper";}
+  async function showSession(){
+    const {data:{session}}=await db.auth.getSession();
+    if(session){$("authView").classList.add("hidden");$("appView").classList.remove("hidden");await initApp();}
+    else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
+  }
+
+  let authMode="login";
+  $("authSubmit").onclick=async()=>{
+    const email=$("authEmail").value.trim(),password=$("authPassword").value;
+    if(!email||password.length<6){authMessage("请输入有效 Email，密码至少 6 个字符。",true);return;}
+    authMessage("处理中…");
+    const res=await db.auth.signInWithPassword({email,password});
+    if(res.error){authMessage(res.error.message,true);return;}
+    await showSession();
+  };
+
+  $("forgotBtn").onclick=async()=>{
+    const email=$("authEmail").value.trim();
+    if(!email){authMessage("Please enter your email first.",true);return;}
+    authMessage("Sending reset email…");
+    const redirectTo=window.location.origin+window.location.pathname;
+    const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo});
+    if(error){authMessage(error.message,true);return;}
+    authMessage("Password reset email sent. Please check your inbox.");
+  };
+
+  $("saveNewPasswordBtn").onclick=async()=>{
+    const p1=$("newPassword").value;
+    const p2=$("confirmPassword").value;
+    if(p1.length<6){resetMessage("Password must be at least 6 characters.",true);return;}
+    if(p1!==p2){resetMessage("Passwords do not match.",true);return;}
+    resetMessage("Saving…");
+    const {error}=await db.auth.updateUser({password:p1});
+    if(error){resetMessage(error.message,true);return;}
+    resetMessage("Password updated successfully.");
+    setTimeout(()=>location.reload(),800);
+  };
+
+  $("logoutBtn").onclick=async()=>{await db.auth.signOut();location.reload();};
+
+  async function fetchRows(){
+    $("syncState").textContent="正在同步…";
+    const {data,error}=await db.from("daily_settlements").select("*").order("settlement_date",{ascending:false});
+    if(error){$("syncState").textContent="同步失败："+error.message;$("syncState").className="bad";return false;}
+    allRows=data||[];$("syncState").textContent="云端已同步 ✓";$("syncState").className="ok";return true;
+  }
+
+  function calc(){
+    let total=0;
+    paymentIds.forEach(id=>total+=num(id));
+    let pin=0,pout=0;
+    pettyEntries.forEach(e=>e.type==="in"?pin+=Number(e.amount)||0:pout+=Number(e.amount)||0);
+    const pettyOpening=Number($("pettyOpening").value)||0;
+    const pettyRemaining=pettyOpening+pin-pout;
+    const cashOpening=Number($("cashOpening").value)||0;
+    const cashWithdrawal=num("cashWithdrawal");
+    const cashBalance=cashOpening+num("cash")-cashWithdrawal;
+    $("grandTotal").value=money(total);
+    $("cashBalance").value=money(cashBalance);
+    $("pettyRemaining").value=money(pettyRemaining);
+    $("metricGrandTotal").textContent=money(total);
+    $("metricPetty").textContent=money(pettyRemaining);
+    $("metricDate").textContent=$("settlementDate").value||"-";
+    renderPetty();
+    updateMonthTotal();
+  }
+
+  async function previousCashBalance(date){
+    const {data,error}=await db
+      .from("daily_settlements")
+      .select("settlement_date,cash_balance")
+      .eq("branch",currentBranch)
+      .lt("settlement_date",date)
+      .order("settlement_date",{ascending:false})
+      .limit(1);
+    if(error){
+      $("syncState").textContent="Cash carry-forward failed: "+error.message;
+      $("syncState").className="bad";
+      return 0;
+    }
+    if(!data || !data.length) return 0;
+    return Number(data[0].cash_balance ?? 0);
+  }
+
+  async function previousPetty(date){
+    const {data,error}=await db
+      .from("daily_settlements")
+      .select("settlement_date,petty_net")
+      .eq("branch",currentBranch)
+      .lt("settlement_date",date)
+      .order("settlement_date",{ascending:false})
+      .limit(1);
+
+    if(error){
+      $("syncState").textContent="Petty carry-forward failed: "+error.message;
+      $("syncState").className="bad";
+      return 0;
+    }
+
+    if(!data || !data.length) return 0;
+    return Number(data[0].petty_net ?? 0);
+  }
+
+  async function blankDate(date){
+    currentId=null;
+    currentStatus="pending";
+    pettyEntries=[];
+    $("settlementDate").value=date;
+    $("staff").value="";
+    $("cashierBalance").value=500;
+    paymentIds.forEach(id=>$(id).value=0);
+    $("cashWithdrawal").value=0;
+    const [pettyCarry,cashCarry]=await Promise.all([previousPetty(date),previousCashBalance(date)]);
+    $("pettyOpening").value=pettyCarry;
+    $("cashOpening").value=cashCarry;
+    $("pettyType").value="out";
+    $("pettyReason").value="";
+    $("pettyAmount").value=0;
+    $("currentStatus").textContent="待验收";
+    calc();
+  }
+
+  function loadRow(r){
+    currentId=r.id;
+    currentStatus=r.status||"pending";
+    currentBranch=r.branch;
+    document.querySelectorAll(".branch-btn").forEach(b=>b.classList.toggle("active",b.dataset.branch===currentBranch));
+    $("branchRecordState").textContent=currentBranch+" 独立记录";
+    $("settlementDate").value=r.settlement_date;
+    $("staff").value=r.staff||"";
+    $("cashierBalance").value=r.cashier_balance||0;
+    $("visa").value=r.visa||0;
+    $("master").value=r.master||0;
+    $("amex").value=r.amex||0;
+    $("tng").value=r.tng||0;
+    $("cash").value=r.cash||0;
+    $("alipay").value=r.alipay||0;
+    $("onlineCard").value=r.online_card||0;
+    $("bankTransfer").value=r.bank_transfer||0;
+    $("tips").value=r.tips||0;
+    $("cashWithdrawal").value=r.cash_withdrawal||0;
+    $("pettyOpening").value=(r.petty_opening ?? 0);
+    $("cashOpening").value=(r.cash_opening ?? 0);
+    pettyEntries=Array.isArray(r.petty_entries)?r.petty_entries:[];
+    $("currentStatus").textContent=currentStatus==="accepted"?"✓ 正确":currentStatus==="adjust"?"✕ 不正确":"待验收";
+    calc();
+  }
+
+  async function loadDate(date){
+    const r=allRows.find(x=>x.branch===currentBranch&&x.settlement_date===date);
+    if(r) loadRow(r);
+    else await blankDate(date);
+  }
+
+  function payload(){
+    let total=0,pin=0,pout=0;
+    paymentIds.forEach(id=>total+=num(id));
+    pettyEntries.forEach(e=>e.type==="in"?pin+=Number(e.amount)||0:pout+=Number(e.amount)||0);
+    const pettyOpening=Number($("pettyOpening").value)||0;
+    const cashOpening=Number($("cashOpening").value)||0;
+    const cashWithdrawal=num("cashWithdrawal");
+    const cashBalance=cashOpening+num("cash")-cashWithdrawal;
+    return {
+      settlement_date:$("settlementDate").value,
+      branch:currentBranch,
+      staff:$("staff").value.trim(),
+      cashier_balance:num("cashierBalance"),
+      visa:num("visa"),master:num("master"),amex:num("amex"),tng:num("tng"),cash:num("cash"),
+      alipay:num("alipay"),online_card:num("onlineCard"),bank_transfer:num("bankTransfer"),tips:num("tips"),
+      grand_total:total,
+      cash_opening:cashOpening,
+      cash_withdrawal:cashWithdrawal,
+      cash_balance:cashBalance,
+      petty_opening:pettyOpening,
+      petty_in:pin,petty_out:pout,petty_net:pettyOpening+pin-pout,petty_entries:pettyEntries,
+      status:currentStatus,review_changed:false
+    };
+  }
+
+  async function saveNow(){
+    $("syncState").textContent="正在保存…";
+    const p=payload();
+    const {data,error}=await db.from("daily_settlements").upsert(p,{onConflict:"settlement_date,branch"}).select().single();
+    if(error){$("syncState").textContent="保存失败："+error.message;$("syncState").className="bad";return;}
+    currentId=data.id;await fetchRows();renderAll();$("syncState").textContent="已保存到云端 ✓";
+  }
+  function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveNow,500);}
+
+  function renderPetty(){
+    const body=$("pettyBody");body.innerHTML="";
+    if(!pettyEntries.length){body.innerHTML='<tr><td colspan="4">还没有记录。</td></tr>';return;}
+    pettyEntries.forEach((e,i)=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${e.type==="in"?"进":"出"}</td><td>${e.reason||"-"}</td><td>${money(e.amount)}</td><td><button type="button" class="mini" data-del="${i}">删除</button></td>`;body.appendChild(tr);});
+    body.querySelectorAll("[data-del]").forEach(btn=>btn.onclick=()=>{pettyEntries.splice(Number(btn.dataset.del),1);calc();scheduleSave();});
+  }
+
+  function updateMonthTotal(){
+    const ym=($("settlementDate").value||today()).slice(0,7);
+    const sum=allRows.filter(r=>r.branch===currentBranch&&r.settlement_date.startsWith(ym)).reduce((s,r)=>s+Number(r.grand_total||0),0);
+    $("metricMonthTotal").textContent=money(sum);
+  }
+
+  async function setReview(id,status){
+    const {error}=await db.from("daily_settlements").update({status}).eq("id",id);
+    if(error){alert("验收保存失败："+error.message);return;} await fetchRows(); const r=allRows.find(x=>x.id===id); if(r) loadRow(r); renderAll();
+  }
+
+  function renderMonth(){
+    const ym=$("reviewMonth").value||today().slice(0,7);$("reviewMonth").value=ym;
+    const [y,m]=ym.split("-").map(Number),days=new Date(y,m,0).getDate(),grid=$("monthGrid");grid.innerHTML="";
+    for(let d=1;d<=days;d++){const date=ym+"-"+String(d).padStart(2,"0"),rec=allRows.find(r=>r.branch===currentBranch&&r.settlement_date===date),cell=document.createElement("div");cell.className="day";
+      cell.innerHTML=`<strong>${d}</strong><span>${rec?(rec.status==="accepted"?"✓ 正确":rec.status==="adjust"?"✕ 不正确":"待验收"):"未填写"}</span>`;
+      if(rec){const rv=document.createElement("div");rv.className="review";const a=document.createElement("button"),b=document.createElement("button");a.type=b.type="button";a.textContent="✓";b.textContent="✕";a.onclick=e=>{e.stopPropagation();setReview(rec.id,"accepted")};b.onclick=e=>{e.stopPropagation();setReview(rec.id,"adjust")};rv.append(a,b);cell.appendChild(rv);cell.onclick=()=>loadRow(rec);} else cell.onclick=async()=>await blankDate(date); grid.appendChild(cell);}
+  }
+
+  function renderHistory(){
+    const body=$("historyBody");body.innerHTML="";const rows=allRows.filter(r=>r.branch===currentBranch);
+    if(!rows.length){body.innerHTML='<tr><td colspan="8">还没有记录。</td></tr>';return;}
+    rows.forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${r.settlement_date}</td><td>${r.branch}</td><td>${r.staff||"-"}</td><td>${money(r.grand_total)}</td><td>${money(r.cash_balance)}</td><td>${money(r.petty_net)}</td><td>${r.status==="accepted"?"✓ 正确":r.status==="adjust"?"✕ 不正确":"待验收"}</td><td><button type="button" class="mini" data-open="${r.id}">打开</button></td>`;body.appendChild(tr);});
+    body.querySelectorAll("[data-open]").forEach(btn=>btn.onclick=()=>{const r=allRows.find(x=>String(x.id)===btn.dataset.open);if(r)loadRow(r);});
+  }
+  function renderAll(){renderHistory();renderMonth();updateMonthTotal();}
+
+  function exportCsv(){
+    const rows=allRows.filter(r=>r.branch===currentBranch);if(!rows.length){alert("目前没有记录");return;}
+    const cols=["settlement_date","branch","staff","cashier_balance","visa","master","amex","tng","cash","alipay","online_card","bank_transfer","tips","grand_total","cash_opening","cash_withdrawal","cash_balance","petty_net","status"];
+    const lines=[cols.join(",")];rows.forEach(r=>lines.push(cols.map(k=>'"'+String(r[k]??"").replace(/"/g,'""')+'"').join(",")));
+    const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="NatureDao_"+currentBranch+"_Settlement.csv";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+  }
+
+  async function initApp(){
+    $("settlementDate").value=today();$("reviewMonth").value=today().slice(0,7);$("branchRecordState").textContent=currentBranch+" 独立记录";
+    document.querySelectorAll(".branch-btn").forEach(btn=>btn.onclick=async()=>{currentBranch=btn.dataset.branch;document.querySelectorAll(".branch-btn").forEach(b=>b.classList.toggle("active",b===btn));$("branchRecordState").textContent=currentBranch+" 独立记录";await loadDate(today());renderAll();});
+    document.querySelectorAll("input").forEach(el=>{if(!["reviewMonth","settlementDate","pettyAmount","pettyReason"].includes(el.id))el.oninput=()=>{calc();scheduleSave();};});
+    $("settlementDate").onchange=async()=>{await loadDate($("settlementDate").value);$("reviewMonth").value=$("settlementDate").value.slice(0,7);renderMonth();};
+    $("reviewMonth").onchange=renderMonth;
+    $("addPettyBtn").onclick=()=>{const amount=num("pettyAmount"),type=$("pettyType").value,reason=$("pettyReason").value.trim();if(amount<=0){alert("请输入数目");return}if(type==="out"&&!reason){alert("请填写出款原因");return}pettyEntries.push({type,amount,reason});$("pettyAmount").value=0;$("pettyReason").value="";calc();scheduleSave();};
+    $("refreshBtn").onclick=async()=>{await fetchRows();renderAll();await loadDate($("settlementDate").value||today());};
+    $("exportBtn").onclick=exportCsv;
+    if(await fetchRows()){await loadDate(today());renderAll();}
+  }
+
+  db.auth.onAuthStateChange((event,session)=>{
+    if(event==="PASSWORD_RECOVERY"){
+      $("authView").classList.remove("hidden");
+      $("appView").classList.add("hidden");
+      $("resetBox").classList.remove("hidden");
+      authMessage("Enter a new password below.");
+      return;
+    }
+    showSession();
+  });
+  showSession();
+})();
+</script>
+</body>
+</html>
