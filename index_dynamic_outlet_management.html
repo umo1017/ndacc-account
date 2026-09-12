@@ -1,0 +1,2817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nature's Dao Daily Settlement</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--line:#e6e3da;--text:#191919;--muted:#707070;--gold:#b58a2b;--soft:#faf8f2;--ok:#1f7a48;--danger:#b42318}
+*{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+.wrap{max-width:1240px;margin:auto;padding:18px} .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.brand{font-size:26px;font-weight:800} .sub,.helper,label{font-size:13px;color:var(--muted)} .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px} .span3{grid-column:span 3} .span4{grid-column:span 4} .span8{grid-column:span 8} .span12{grid-column:span 12}
+.metric-label{font-size:13px;color:var(--muted)} .metric-value{font-size:28px;font-weight:800;margin-top:5px} .branch-toggle,.actions{display:flex;gap:10px;flex-wrap:wrap}
+.branch-btn,.btn,.mini{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 14px;cursor:pointer;font-weight:700} .branch-btn.active{background:#f5edd7;border-color:#d8bf7b} .branch-btn{flex:1;min-width:150px}
+input,select{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;padding:11px 12px;font-size:16px;color:var(--text)} label{display:block;margin-bottom:5px;font-weight:600}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px} .row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px} .row4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.money-line{display:grid;grid-template-columns:minmax(120px,1fr) minmax(130px,180px);gap:12px;align-items:center}.money-line label{margin:0}.money-wrap{position:relative}.money-wrap .rm-prefix{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--muted);pointer-events:none}.money-wrap input{padding-left:38px}
+.status{padding:10px 12px;border-radius:12px;background:var(--soft);border:1px solid var(--line);font-size:13px} .ok{color:var(--ok)} .bad{color:var(--danger)}
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px} .day{border:1px solid var(--line);border-radius:10px;min-height:56px;padding:6px;background:#fff;cursor:pointer;text-align:center;font-size:12px}
+.day strong{display:block} .day .review{display:flex;gap:3px;margin-top:5px} .day .review button{flex:1;border:1px solid var(--line);background:#fff;border-radius:7px;cursor:pointer}
+table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px solid var(--line);font-size:13px;text-align:left;white-space:nowrap} .table-wrap{overflow:auto}.inline-actions{display:flex;gap:6px;flex-wrap:wrap}.mini.correct{background:#e8fbf8;border-color:#8fd8cf;color:#087f72}.mini.error{background:#fff0ee;border-color:#efb0aa;color:#b42318}
+.auth-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px} .auth-card{max-width:420px;width:100%;background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px}
+.auth-card h2{margin-top:0} .auth-tabs{display:flex;gap:8px;margin-bottom:14px} .auth-tabs button{flex:1} .hidden{display:none!important}
+#syncState{font-size:12px;font-weight:700} @media(max-width:900px){.span3,.span4,.span8,.span12{grid-column:span 12} .row,.row3,.row4{grid-template-columns:1fr}}
+
+.petty-type-select option[value="out"]{color:var(--danger)}
+.petty-type-select option[value="in"]{color:#087f72}
+.petty-row{display:grid;grid-template-columns:minmax(90px,1fr) minmax(150px,220px);gap:12px;align-items:center}
+.petty-row label{margin:0}
+.petty-out-text{color:var(--danger);font-weight:800}
+.petty-in-text{color:#087f72;font-weight:800}
+
+
+.form-row{display:grid;grid-template-columns:minmax(110px,1fr) minmax(180px,240px);gap:12px;align-items:center}.form-row>input,.form-row>.money-wrap{width:100%}
+.form-row label{margin:0}
+.petty-action-wrap{display:flex;justify-content:flex-end;margin-top:14px}
+.petty-add-btn{min-width:180px;padding:13px 18px;border-radius:14px;background:var(--text);color:#fff;border-color:var(--text);font-weight:800}
+@media(max-width:700px){
+  .form-row{grid-template-columns:minmax(90px,1fr) minmax(150px,1.4fr)}.form-row>input,.form-row>.money-wrap{width:100%}
+  .petty-action-wrap{justify-content:stretch}
+  .petty-add-btn{width:100%;min-width:0}
+}
+
+
+/* ===== Integrated Sidebar + Salary ===== */
+.main-sidebar{
+  position:fixed;left:0;top:0;bottom:0;width:190px;background:#fff;
+  border-right:1px solid var(--line);z-index:1200;padding:18px 12px;
+  display:flex;flex-direction:column;gap:10px
+}
+.main-sidebar.hidden{display:none}
+.sidebar-brand{font-size:17px;font-weight:900;padding:8px 10px 16px}
+.sidebar-btn{
+  width:100%;height:42px;border:1px solid transparent;border-radius:12px;
+  background:transparent;text-align:left;padding:0 12px;font-weight:800;cursor:pointer
+}
+.sidebar-btn.active{background:var(--text);color:#fff}
+.mobile-sidebar-btn{
+  display:none;position:fixed;left:12px;top:12px;z-index:1300;width:42px;height:42px;
+  border:1px solid var(--line);background:#fff;border-radius:12px;font-size:20px
+}
+.sidebar-offset{margin-left:190px!important;max-width:calc(100% - 190px)!important}
+.salary-page{display:none;padding:18px;max-width:1240px;margin:0 auto}
+.salary-page.active{display:block}
+.salary-shell{display:grid;gap:14px}
+.salary-top{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:14px;
+  flex-wrap:wrap
+}
+.salary-title{font-size:24px;font-weight:900}
+.salary-right{display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap}
+.salary-card{
+  background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;
+  box-shadow:0 5px 18px rgba(0,0,0,.035)
+}
+.salary-card h3{font-size:17px;margin:0 0 12px}
+.salary-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.salary-toolbar .field{min-width:190px}
+.salary-lock{max-width:420px;margin:70px auto}
+.salary-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.salary-table{width:100%;border-collapse:collapse;min-width:980px}
+.salary-table.compact{min-width:650px}
+.salary-table th,.salary-table td{
+  border-bottom:1px solid var(--line);padding:10px 9px;text-align:left;
+  white-space:nowrap;font-size:13px;vertical-align:middle
+}
+.salary-table th{font-size:12px;color:var(--muted);font-weight:800}
+.salary-table input,.salary-table select{height:42px;min-width:120px}
+.outlet-title{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px
+}
+.pay-method-title{
+  font-size:14px;font-weight:900;letter-spacing:.03em;margin:18px 0 8px
+}
+.payroll-section-title{
+  font-size:15px;font-weight:900;margin:12px 0 8px
+}
+.salary-modal{
+  position:fixed;inset:0;background:rgba(0,0,0,.38);display:none;align-items:center;
+  justify-content:center;padding:18px;z-index:1500
+}
+.salary-modal.open{display:flex}
+.salary-dialog{
+  width:min(820px,100%);max-height:92vh;overflow:auto;background:#fff;
+  border-radius:18px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.18)
+}
+.salary-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.salary-form .full{grid-column:1/-1}
+.staff-group{margin:14px 0}
+.staff-group h4{margin:0 0 8px;font-size:15px}
+.manager-note{font-size:12px;color:var(--muted)}
+.payslip-sheet{
+  background:#fff;color:#111;padding:26px;max-width:820px;margin:auto;
+  font-family:Arial,sans-serif
+}
+.payslip-sheet h2{text-align:center;margin:0}
+.payslip-sheet .company{text-align:center;font-weight:800;margin-bottom:4px}
+.payslip-table{width:100%;border-collapse:collapse;margin-top:14px}
+.payslip-table td,.payslip-table th{
+  padding:6px;border-bottom:1px solid #ddd;font-size:13px;text-align:left
+}
+.confirmed-pill{
+  display:inline-block;padding:6px 9px;border-radius:999px;background:#edf7ef;
+  color:#1f7a48;font-size:12px;font-weight:800
+}
+@media(max-width:760px){
+  .main-sidebar{transform:translateX(-105%);transition:.18s ease;width:220px}
+  .main-sidebar.open{transform:translateX(0)}
+  .mobile-sidebar-btn{display:block}
+  .sidebar-offset{margin-left:0!important;max-width:100%!important}
+  .salary-page{padding:66px 12px 16px}
+  #appView.sidebar-offset{padding-top:66px}
+  .salary-form{grid-template-columns:1fr}
+  .salary-form .full{grid-column:auto}
+  .salary-title{font-size:22px}
+  .salary-right{font-size:12px}
+}
+@media print{
+  body.salary-print *{visibility:hidden!important}
+  body.salary-print #salaryPayslipPrint,body.salary-print #salaryPayslipPrint *{visibility:visible!important}
+  body.salary-print #salaryPayslipPrint{
+    position:absolute!important;left:0!important;top:0!important;width:100%!important;
+    display:block!important
+  }
+  body.salary-print #salaryPayslipPrint .payslip-sheet{max-width:none;padding:12mm}
+}
+
+
+/* ===== Premium Payslip ===== */
+.payslip-sheet{
+  background:#fff;
+  color:#171717;
+  max-width:820px;
+  margin:0 auto;
+  padding:34px 38px;
+  border:1px solid #e9e6df;
+  border-radius:18px;
+  box-shadow:0 18px 46px rgba(0,0,0,.07);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+}
+.payslip-sheet .company{
+  text-align:left;
+  font-size:20px;
+  font-weight:900;
+  letter-spacing:.08em;
+  margin-bottom:4px;
+}
+.payslip-sheet h2{
+  text-align:left;
+  margin:0;
+  font-size:12px;
+  letter-spacing:.24em;
+  color:#7b756c;
+  font-weight:800;
+}
+.payslip-sheet h4{
+  margin:24px 0 8px;
+  font-size:12px;
+  letter-spacing:.14em;
+  color:#6b665e;
+  text-transform:uppercase;
+  border-bottom:1px solid #d8d4cb;
+  padding-bottom:7px;
+}
+.payslip-table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  margin-top:18px;
+  border:1px solid #ece8df;
+  border-radius:12px;
+  overflow:hidden;
+}
+.payslip-table th{
+  background:#f7f5f0;
+  color:#5c574f;
+  font-size:11px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  font-weight:800;
+  padding:10px 12px;
+  border-bottom:1px solid #e5e1d8;
+}
+.payslip-table td{
+  padding:10px 12px;
+  font-size:13px;
+  border-bottom:1px solid #efebe3;
+}
+.payslip-table tr:last-child td{border-bottom:none}
+.payslip-table td:last-child,
+.payslip-table th:last-child{text-align:right}
+.payslip-table tr:nth-child(even) td{background:#fcfbf8}
+.payslip-table tr td:first-child{font-weight:600;color:#4e4a44}
+.payslip-table tr td:last-child{font-variant-numeric:tabular-nums}
+.payslip-summary{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+  margin-top:20px;
+}
+.payslip-summary .sum-card{
+  border:1px solid #e6e1d8;
+  border-radius:12px;
+  padding:14px 16px;
+  background:#fbfaf7;
+}
+.payslip-summary .sum-label{
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#7a756c;
+  margin-bottom:6px;
+}
+.payslip-summary .sum-value{
+  font-size:20px;
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+}
+.payslip-summary .net{
+  background:#191919;
+  color:#fff;
+  border-color:#191919;
+}
+.payslip-summary .net .sum-label{color:#d7d3cb}
+.payslip-section-note{
+  font-size:11px;
+  color:#8a847b;
+  margin-top:6px;
+}
+.payslip-footer{
+  margin-top:24px;
+  padding-top:16px;
+  border-top:1px solid #ded9d0;
+}
+@media(max-width:700px){
+  .payslip-sheet{padding:24px 18px;border-radius:14px}
+  .payslip-summary{grid-template-columns:1fr}
+  .payslip-table{min-width:0}
+}
+@media print{
+  .payslip-sheet{
+    box-shadow:none!important;
+    border:none!important;
+    border-radius:0!important;
+    padding:0!important;
+    max-width:none!important;
+  }
+  .payslip-summary .net{
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+}
+
+
+@media print{
+  @page{size:A4;margin:12mm}
+  html,body{background:#fff!important;margin:0!important;padding:0!important}
+  body.salary-print > *:not(#payslipModal){display:none!important}
+  body.salary-print #payslipModal{
+    display:block!important;position:static!important;inset:auto!important;
+    background:#fff!important;padding:0!important;margin:0!important;
+  }
+  body.salary-print #payslipModal .salary-dialog{
+    display:block!important;width:100%!important;max-width:none!important;
+    max-height:none!important;overflow:visible!important;padding:0!important;
+    margin:0!important;box-shadow:none!important;border-radius:0!important;
+  }
+  body.salary-print #payslipModal .no-print{display:none!important}
+  body.salary-print #salaryPayslipPrint{
+    display:block!important;position:static!important;width:100%!important;
+    margin:0!important;padding:0!important;
+  }
+  body.salary-print #salaryPayslipPrint *{visibility:visible!important}
+}
+
+
+@media print{
+  @page{size:A4;margin:12mm}
+
+  body.salary-print{
+    background:#fff!important;
+  }
+
+  body.salary-print > *{
+    display:none!important;
+  }
+
+  body.salary-print > #payslipModal{
+    display:block!important;
+    position:static!important;
+    inset:auto!important;
+    width:100%!important;
+    height:auto!important;
+    padding:0!important;
+    margin:0!important;
+    background:#fff!important;
+  }
+
+  body.salary-print #payslipModal > .salary-dialog{
+    display:block!important;
+    width:100%!important;
+    max-width:none!important;
+    max-height:none!important;
+    overflow:visible!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+  }
+
+  body.salary-print #payslipModal .no-print{
+    display:none!important;
+  }
+
+  body.salary-print #salaryPayslipPrint{
+    display:block!important;
+    position:static!important;
+    width:100%!important;
+    margin:0!important;
+    padding:0!important;
+    visibility:visible!important;
+  }
+
+  body.salary-print #salaryPayslipPrint .payslip-sheet{
+    display:block!important;
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    padding:0!important;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    background:#fff!important;
+  }
+}
+
+
+/* ===== A6 Payslip ===== */
+.payslip-sheet{
+  width:105mm;
+  min-height:148mm;
+  max-width:105mm;
+  margin:0 auto;
+  padding:7mm 6mm;
+  border-radius:10px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+}
+
+.payslip-sheet .company{
+  font-size:13px;
+  letter-spacing:.05em;
+  margin-bottom:2px;
+}
+
+.payslip-sheet h2{
+  font-size:8px;
+  letter-spacing:.18em;
+  margin-bottom:6px;
+}
+
+.payslip-sheet h4{
+  margin:10px 0 4px;
+  padding-bottom:3px;
+  font-size:7px;
+  letter-spacing:.08em;
+}
+
+.payslip-table{
+  margin-top:7px;
+  border-radius:7px;
+}
+
+.payslip-table th{
+  font-size:6.5px;
+  padding:4px 5px;
+  letter-spacing:.04em;
+}
+
+.payslip-table td{
+  font-size:7px;
+  padding:4px 5px;
+  line-height:1.2;
+}
+
+.payslip-summary{
+  gap:5px;
+  margin-top:8px;
+}
+
+.payslip-summary .sum-card{
+  padding:6px 7px;
+  border-radius:7px;
+}
+
+.payslip-summary .sum-label{
+  font-size:5.5px;
+  margin-bottom:2px;
+  letter-spacing:.04em;
+}
+
+.payslip-summary .sum-value{
+  font-size:10px;
+}
+
+.payslip-footer{
+  margin-top:9px;
+  padding-top:6px;
+}
+
+.payslip-section-note{
+  font-size:6px;
+}
+
+@media(max-width:700px){
+  .payslip-sheet{
+    width:100%;
+    max-width:105mm;
+    min-height:auto;
+    padding:7mm 6mm;
+    border-radius:10px;
+  }
+  .payslip-summary{
+    grid-template-columns:repeat(3,1fr);
+  }
+}
+
+@media print{
+  @page{
+    size:A6 portrait;
+    margin:0;
+  }
+
+  html,body{
+    width:105mm!important;
+    min-height:148mm!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+  }
+
+  body.salary-print > *{
+    display:none!important;
+  }
+
+  body.salary-print > #payslipModal{
+    display:block!important;
+    position:static!important;
+    width:105mm!important;
+    min-height:148mm!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+  }
+
+  body.salary-print #payslipModal .salary-dialog{
+    width:105mm!important;
+    max-width:105mm!important;
+    min-height:148mm!important;
+    padding:0!important;
+    margin:0!important;
+    overflow:visible!important;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+  }
+
+  body.salary-print #payslipModal .no-print{
+    display:none!important;
+  }
+
+  body.salary-print #salaryPayslipPrint{
+    display:block!important;
+    width:105mm!important;
+    min-height:148mm!important;
+    padding:0!important;
+    margin:0!important;
+  }
+
+  body.salary-print #salaryPayslipPrint .payslip-sheet{
+    width:105mm!important;
+    max-width:105mm!important;
+    min-height:148mm!important;
+    padding:7mm 6mm!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+  }
+}
+
+
+/* ===== Compact Payroll Slip ===== */
+.payslip-sheet{width:100%;max-width:920px;margin:0 auto;padding:18px 20px 16px;background:#fff;color:#111;border:0;border-radius:0;box-shadow:none;font-family:Arial,Helvetica,sans-serif}
+.payslip-head{display:grid;grid-template-columns:1fr 150px;gap:16px;align-items:start;margin-bottom:8px}.payslip-company{font-size:16px;font-weight:800;margin-bottom:4px}.payslip-title-box{text-align:center}.payslip-title-box .title{font-size:15px;font-weight:800;margin-bottom:4px}.payslip-title-box .box{border:1px solid #555;padding:4px 8px;font-size:11px;margin-bottom:4px}
+.payslip-meta-grid{display:grid;grid-template-columns:1.25fr .9fr;border:1px solid #555}.payslip-meta-grid .meta-left,.payslip-meta-grid .meta-right{padding:5px 7px}.payslip-meta-grid .meta-right{border-left:1px solid #555}.meta-row{display:grid;grid-template-columns:92px 1fr;gap:6px;font-size:11px;line-height:1.35}.meta-row .k{font-weight:700}
+.payslip-main-grid{display:grid;grid-template-columns:1fr 1fr 1fr;margin-top:6px;border-top:1px solid #555;border-bottom:1px solid #555}.payslip-col{min-height:215px;padding:0 7px 8px}.payslip-col+.payslip-col{border-left:1px solid #777}.payslip-col-head{display:grid;grid-template-columns:1fr 55px;font-size:10px;padding:4px 0;border-bottom:1px solid #777;text-transform:uppercase}.payslip-line{display:grid;grid-template-columns:1fr 65px;gap:6px;font-size:11px;padding:4px 0}.payslip-line .amt{text-align:right}.payslip-col-total{display:grid;grid-template-columns:1fr 70px;gap:6px;font-size:11px;font-weight:700;border-top:1px solid #777;padding-top:5px;margin-top:auto}
+.payslip-net-box{width:32%;min-width:250px;margin-left:32%;border:1px solid #555;margin-top:-1px}.payslip-net-row{display:grid;grid-template-columns:1fr 90px;font-size:11px;font-weight:700;padding:5px 7px}.payslip-net-row .amt{text-align:right}
+.payslip-bottom{display:grid;grid-template-columns:1.05fr 1.1fr .45fr;border-top:1px solid #555;margin-top:12px}.payslip-bottom-section{padding:6px 7px 4px;min-height:100px}.payslip-bottom-section+.payslip-bottom-section{border-left:1px solid #777}.payslip-bottom-title{text-align:center;font-size:9px;margin-bottom:6px}.payslip-mini-table{display:grid;grid-template-columns:70px repeat(4,1fr);gap:2px 5px;font-size:9px}.payslip-mini-table.ytd{grid-template-columns:62px repeat(6,1fr)}.payslip-mini-table .h{text-align:center}.payslip-mini-table .v{text-align:right}.payslip-received{font-size:10px;line-height:1.8}.payslip-bottom-note{display:flex;justify-content:center;gap:18px;font-size:9px;margin-top:7px}
+@media(max-width:700px){.payslip-sheet{min-width:760px;padding:14px}}
+@media print{@page{size:A5 landscape;margin:7mm}html,body{background:#fff!important;margin:0!important;padding:0!important}body.salary-print>*{display:none!important}body.salary-print>#payslipModal{display:block!important;position:static!important;inset:auto!important;width:100%!important;padding:0!important;margin:0!important;background:#fff!important}body.salary-print #payslipModal .salary-dialog{display:block!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important;border-radius:0!important}body.salary-print #payslipModal .no-print{display:none!important}body.salary-print #salaryPayslipPrint{display:block!important;width:100%!important;margin:0!important;padding:0!important}body.salary-print #salaryPayslipPrint .payslip-sheet{width:100%!important;max-width:none!important;min-width:0!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important}}
+
+
+/* 14th uses the compact reference layout; 7th retains previous A6 appearance */
+.payslip-sheet:not(.payslip-14-reference){
+  width:105mm; min-height:148mm; max-width:105mm; margin:0 auto;
+  padding:7mm 6mm; background:#fff; border:1px solid #e9e6df;
+  border-radius:10px; box-shadow:0 18px 46px rgba(0,0,0,.07);
+}
+
+
+/* ===== Unified Payslip Size ===== */
+.payslip-sheet,
+.payslip-sheet.payslip-14-reference{
+  width:105mm!important;
+  max-width:105mm!important;
+  min-height:148mm!important;
+  margin:0 auto!important;
+  box-sizing:border-box!important;
+}
+
+@media print{
+  @page{size:A6 portrait;margin:0}
+  html,body{
+    width:105mm!important;
+    min-height:148mm!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+  }
+  body.salary-print #salaryPayslipPrint,
+  body.salary-print #salaryPayslipPrint .payslip-sheet,
+  body.salary-print #salaryPayslipPrint .payslip-sheet.payslip-14-reference{
+    width:105mm!important;
+    max-width:105mm!important;
+    min-height:148mm!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+  }
+}
+
+
+/* ===== Final verified payslip sizing ===== */
+.payslip-sheet,
+.payslip-sheet.payslip-14-reference{
+  width:105mm!important;
+  max-width:105mm!important;
+  min-width:0!important;
+  box-sizing:border-box!important;
+}
+@media(max-width:700px){
+  .payslip-sheet,
+  .payslip-sheet.payslip-14-reference{
+    width:105mm!important;
+    max-width:105mm!important;
+    min-width:0!important;
+  }
+}
+
+
+/* ===== Unified landscape payslip size ===== */
+.payslip-sheet,
+.payslip-sheet.payslip-14-reference{
+  width:148mm!important;
+  max-width:148mm!important;
+  min-width:148mm!important;
+  min-height:105mm!important;
+  height:auto!important;
+  margin:0 auto!important;
+  box-sizing:border-box!important;
+}
+
+@media(max-width:700px){
+  .payslip-sheet,
+  .payslip-sheet.payslip-14-reference{
+    width:148mm!important;
+    max-width:148mm!important;
+    min-width:148mm!important;
+    min-height:105mm!important;
+    transform:none!important;
+  }
+}
+
+@media print{
+  @page{size:148mm 105mm landscape;margin:0}
+  html,body{
+    width:148mm!important;
+    min-height:105mm!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+  }
+  body.salary-print #salaryPayslipPrint,
+  body.salary-print #salaryPayslipPrint .payslip-sheet,
+  body.salary-print #salaryPayslipPrint .payslip-sheet.payslip-14-reference{
+    width:148mm!important;
+    max-width:148mm!important;
+    min-width:148mm!important;
+    min-height:105mm!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+  }
+}
+
+
+/* ===== Off Day compact input ===== */
+.offday-box{
+  display:inline-flex;
+  align-items:center;
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+  background:#fff;
+  min-width:118px;
+}
+.offday-box input{
+  width:72px!important;
+  min-width:72px!important;
+  height:40px!important;
+  border:0!important;
+  border-radius:0!important;
+  text-align:center;
+  padding:0 8px!important;
+}
+.offday-box .days-suffix{
+  height:40px;
+  display:flex;
+  align-items:center;
+  padding:0 10px;
+  border-left:1px solid var(--line);
+  background:var(--soft);
+  font-size:12px;
+  font-weight:700;
+  color:var(--muted);
+}
+.staff-action-wrap{display:flex;gap:6px;align-items:center}
+.staff-delete-btn{border-color:#efb0aa!important;color:#b42318!important;background:#fff5f3!important}
+
+
+/* ===== 7th Payslip wider layout ===== */
+.payslip-sheet:not(.payslip-14-reference){
+  width:180mm!important;
+  max-width:180mm!important;
+  min-width:180mm!important;
+  min-height:105mm!important;
+  padding:7mm 8mm!important;
+}
+.payslip-sheet:not(.payslip-14-reference) .payslip-main-grid{
+  grid-template-columns:1.15fr 1.15fr .9fr!important;
+}
+.payslip-sheet:not(.payslip-14-reference) .payslip-line{
+  grid-template-columns:minmax(0,1fr) 78px!important;
+  font-size:11px!important;
+}
+.payslip-sheet:not(.payslip-14-reference) .payslip-col-head{
+  grid-template-columns:minmax(0,1fr) 68px!important;
+}
+@media(max-width:700px){
+  .payslip-sheet:not(.payslip-14-reference){
+    width:180mm!important;
+    max-width:180mm!important;
+    min-width:180mm!important;
+  }
+}
+@media print{
+  body.salary-print #salaryPayslipPrint .payslip-sheet:not(.payslip-14-reference){
+    width:180mm!important;
+    max-width:180mm!important;
+    min-width:180mm!important;
+    min-height:105mm!important;
+  }
+}
+
+
+@media(max-width:700px){
+  }
+
+
+/* ===== Submit Staff: left label / right field ===== */
+#staffModal .salary-form{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+#staffModal .salary-form > div{
+  display:grid;
+  grid-template-columns:minmax(130px,1fr) minmax(180px,260px);
+  gap:12px;
+  align-items:center;
+}
+#staffModal .salary-form > div.full{
+  grid-column:auto;
+}
+#staffModal .salary-form > div > label{
+  margin:0;
+}
+#staffModal .salary-form > div > input,
+#staffModal .salary-form > div > select,
+#staffModal .salary-form > div > .money-wrap{
+  width:100%;
+}
+@media(max-width:700px){
+  #staffModal .salary-form > div{
+    grid-template-columns:minmax(110px,1fr) minmax(150px,1.35fr);
+  }
+}
+
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+</head>
+<body>
+<aside id="mainSidebar" class="main-sidebar hidden">
+  <div class="sidebar-brand">Nature's Dao</div>
+  <button id="sidebarDaily" class="sidebar-btn active" type="button">Daily Settlement</button>
+  <button id="sidebarSalary" class="sidebar-btn" type="button">Salary</button>
+</aside>
+<button id="mobileSidebarBtn" class="mobile-sidebar-btn" type="button">☰</button>
+
+<div id="authView" class="auth-shell">
+  <div class="auth-card">
+    <div class="brand">天之道 Nature’s Dao</div>
+    <div class="sub" style="margin-bottom:16px">Daily Settlement</div>
+    <div><label>Email</label><input id="authEmail" type="email" placeholder="staff@example.com"></div>
+    <div style="height:10px"></div>
+    <div><label>Password</label><input id="authPassword" type="password" placeholder="Minimum 6 characters"></div>
+    <div class="actions" style="margin-top:14px">
+      <button id="authSubmit" class="btn" type="button">Login</button>
+      <button id="forgotBtn" class="btn" type="button">Forgot Password</button>
+    </div>
+    <div id="authMsg" class="helper" style="margin-top:10px"></div>
+
+    <div id="resetBox" class="hidden" style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">
+      <div style="font-weight:700;margin-bottom:10px">Set New Password</div>
+      <div><label>New Password</label><input id="newPassword" type="password" placeholder="Minimum 6 characters"></div>
+      <div style="height:10px"></div>
+      <div><label>Confirm Password</label><input id="confirmPassword" type="password" placeholder="Repeat new password"></div>
+      <div class="actions" style="margin-top:12px">
+        <button id="saveNewPasswordBtn" class="btn" type="button">Save New Password</button>
+      </div>
+      <div id="resetMsg" class="helper" style="margin-top:8px"></div>
+    </div>
+  </div>
+</div>
+
+<div id="appView" class="wrap hidden">
+  <div class="topbar">
+    <div><div class="brand">天之道 Nature’s Dao</div><div class="sub">Daily Settlement</div></div>
+    <div style="text-align:right">
+      <div id="currentStatus" style="display:none"></div>
+      <div id="syncState">正在连接云端…</div><div class="helper">Cash memory v2</div>
+      <button id="logoutBtn" class="mini" type="button" style="margin-top:6px">登出</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card span12">
+      <div class="branch-toggle">
+        <button type="button" class="branch-btn active" data-branch="Eco Botanic">Eco Botanic</button>
+        <button type="button" class="branch-btn" data-branch="Nusa Bestari">Nusa Bestari</button>
+      </div>
+    </div>
+
+    
+    
+    
+    
+
+    <div class="card span8">
+      <div style="display:grid;gap:10px">
+        <div class="form-row">
+          <label for="settlementDate">Date / 日期</label>
+          <input id="settlementDate" type="date">
+        </div>
+        <div class="form-row">
+          <label for="staff">Staff / 员工</label>
+          <input id="staff" type="text" placeholder="备注">
+        </div>
+        <div class="form-row">
+          <label for="cashierBalance">Cashier Balance</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input id="cashierBalance" type="number" min="0" step="0.01" value="500"></div>
+        </div>
+      </div>
+      <input id="pettyOpening" type="hidden" value="0"><input id="cashOpening" type="hidden" value="0">
+
+      <div style="height:14px"></div>
+      <div class="row4">
+        <div class="money-line">
+          <label for="visa">VISA</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="visa" type="number" min="0" step="0.01" value=""></div>
+        </div>
+        <div class="money-line">
+          <label for="master">MASTER</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="master" type="number" min="0" step="0.01" value=""></div>
+        </div>
+        <div class="money-line">
+          <label for="amex">AMEX</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="amex" type="number" min="0" step="0.01" value=""></div>
+        </div>
+        <div class="money-line">
+          <label for="tng">TNG</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="tng" type="number" min="0" step="0.01" value=""></div>
+        </div>
+        <div class="money-line">
+          <label for="cash">CASH</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cash" type="number" min="0" step="0.01" value=""></div>
+        </div>
+        <div class="money-line">
+          <label for="alipay">ZFB / ALIPAY</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="alipay" type="number" min="0" step="0.01" value=""></div>
+        </div>
+        <div class="money-line">
+          <label for="onlineCard">Online Credit Card</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="onlineCard" type="number" min="0" step="0.01" value=""></div>
+        </div>
+        <div class="money-line">
+          <label for="bankTransfer">Bank Transfer</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="bankTransfer" type="number" min="0" step="0.01" value=""></div>
+        </div>
+        <div class="money-line">
+          <label for="tips">Tips</label>
+          <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="tips" type="number" min="0" step="0.01" value=""></div>
+        </div>
+      </div>
+
+      <div style="height:14px"></div>
+      <div class="row3">
+        <div><label>Grand Total</label><input id="grandTotal" type="text" readonly></div>
+        <div>
+          <label>Total Cash</label>
+          <input id="cashBalance" type="text" readonly>
+          <div class="helper">Previous Total Cash + Today CASH − Cash Withdrawal</div>
+        </div>
+        
+      </div>
+
+      <div style="height:14px"></div>
+      <div class="card" style="background:var(--soft)">
+        <h3 style="margin-top:0">Petty Cash 进 / 出</h3>
+        <div style="display:grid;gap:10px">
+          <div class="petty-row">
+            <label for="pettyType">类型</label>
+            <select id="pettyType" class="petty-type-select">
+              <option value="out">Out / 出</option>
+              <option value="in">In / 进</option>
+            </select>
+          </div>
+          <div class="petty-row">
+            <label for="pettyReason">原因</label>
+            <input id="pettyReason" type="text" placeholder="备注">
+          </div>
+          <div class="petty-row">
+            <label for="pettyAmount">数目</label>
+            <div class="money-wrap"><span class="rm-prefix">RM</span><input id="pettyAmount" type="number" min="0" step="0.01" value=""></div>
+          </div>
+        </div>
+        <div class="petty-action-wrap"><button type="button" id="addPettyBtn" class="btn petty-add-btn">加入 Petty Cash</button></div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table><thead><tr><th>类型</th><th>原因</th><th>数目</th><th></th></tr></thead><tbody id="pettyBody"></tbody></table>
+        </div>
+        <div style="margin-top:14px">
+          <label>Petty Cash 剩余</label>
+          <input id="pettyRemaining" type="text" readonly>
+        </div>
+      </div>
+    </div>
+    <div style="display:none">
+      <input id="reviewMonth" type="month">
+      <div id="branchRecordState"></div>
+      <div id="monthGrid"></div>
+      <div id="autoSaveState"></div>
+    </div>
+
+    <div class="card span12">
+      <div class="topbar" style="margin-bottom:8px">
+        <strong>历史记录</strong><span class="helper">All payment details · Manager can mark Correct / Error / Clear Day</span>
+        
+      </div>
+      <div class="card" style="background:var(--soft);margin-bottom:12px">
+        <label>Cash Withdrawal</label>
+        <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashWithdrawal" type="number" min="0" step="0.01" value=""></div>
+        <div id="cashWithdrawalAccess" class="helper">Salary access unlocked only</div>
+      </div>
+      
+<div style="display:none">
+  <button id="refreshBtn" type="button"></button>
+  <button id="exportBtn" type="button"></button>
+  <button id="clearDayBtn" type="button"></button>
+</div>
+<div class="table-wrap">
+        <table><thead><tr><th>日期</th><th>分行</th><th>Staff</th><th>VISA</th><th>MASTER</th><th>AMEX</th><th>TNG</th><th>CASH</th><th>ZFB / ALIPAY</th><th>Online Credit Card</th><th>Bank Transfer</th><th>Tips</th><th>Grand Total</th><th>Total Cash</th><th>Cash Withdrawal</th><th>Petty Cash</th><th>状态</th><th>Manager Action</th></tr></thead><tbody id="historyBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+<div style="display:none"><span id="metricDate"></span><span id="metricGrandTotal"></span><span id="metricMonthTotal"></span><span id="metricPetty"></span></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const SUPABASE_URL = 'https://cofmjwsejcbfsgdrswku.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU';
+  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const CASH_WITHDRAWAL_MANAGERS = new Set([
+    "mars83002566@gmail.com",
+    "umo1017@gmail.com"
+  ]);
+  let currentUserEmail="";
+  let isCashWithdrawalManager=false;
+  let currentBranch="Eco Botanic", currentStatus="pending", currentId=null, pettyEntries=[], allRows=[];
+  const paymentIds=["visa","master","amex","tng","cash","alipay","onlineCard","bankTransfer","tips"];
+  let saveTimer=null;
+
+  const $=id=>document.getElementById(id);
+  const money=v=>"RM "+(Number(v)||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const num=id=>Math.max(0,Number($(id).value)||0);
+  const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
+  const DAILY_ACTIVE_DATE_KEY="nd_daily_active_date_v1";
+  function dailyDateMemory(){
+    try{return JSON.parse(localStorage.getItem(DAILY_ACTIVE_DATE_KEY)||"{}")}catch(_){return {}}
+  }
+  function getActiveDailyDate(branch=currentBranch){
+    const mem=dailyDateMemory();
+    return mem[branch]||today();
+  }
+  function rememberActiveDailyDate(date,branch=currentBranch){
+    try{
+      const mem=dailyDateMemory();
+      mem[branch]=date;
+      localStorage.setItem(DAILY_ACTIVE_DATE_KEY,JSON.stringify(mem));
+    }catch(_){}
+  }
+
+
+  function authMessage(msg,bad=false){$("authMsg").textContent=msg;$("authMsg").className=bad?"helper bad":"helper";}
+  function applyCashWithdrawalAccess(){
+    const input=$("cashWithdrawal");
+    if(input){
+      input.disabled=!isCashWithdrawalManager;
+      input.style.opacity=isCashWithdrawalManager?"1":"0.55";
+      $("cashWithdrawalAccess").textContent=isCashWithdrawalManager
+        ?"Salary access unlocked"
+        :"Salary access unlocked only";
+    }
+
+    const clearBtn=$("clearDayBtn");
+    if(clearBtn){
+      clearBtn.disabled=false;
+      clearBtn.style.opacity="1";
+      clearBtn.title=isCashWithdrawalManager
+        ?"Clear the selected day for the current branch"
+        :"Salary access unlocked only";
+    }
+  }
+
+  function resetMessage(msg,bad=false){$("resetMsg").textContent=msg;$("resetMsg").className=bad?"helper bad":"helper";}
+  async function showSession(){
+    const {data:{session}}=await db.auth.getSession();
+    const sidebar=document.getElementById("mainSidebar");
+    const mobileMenu=document.getElementById("mobileSidebarBtn");
+    if(session){
+      currentUserEmail=(session.user?.email||"").toLowerCase();
+      isCashWithdrawalManager=CASH_WITHDRAWAL_MANAGERS.has(currentUserEmail);
+      $("authView").classList.add("hidden");
+      if(window.activeMainPage!=="salary") $("appView").classList.remove("hidden");
+      else $("appView").classList.add("hidden");
+      if(sidebar) sidebar.classList.remove("hidden");
+      if(mobileMenu) mobileMenu.style.display="";
+      $("appView").classList.add("sidebar-offset");
+      await initApp();
+      applyCashWithdrawalAccess();
+    } else {
+      currentUserEmail="";
+      isCashWithdrawalManager=false;
+      $("appView").classList.add("hidden");
+      $("authView").classList.remove("hidden");
+      if(sidebar) sidebar.classList.add("hidden");
+      if(mobileMenu) mobileMenu.style.display="none";
+      const salaryPage=document.getElementById("salaryPage");
+      if(salaryPage) salaryPage.classList.remove("active","sidebar-offset");
+      window.activeMainPage="daily";
+    }
+  }
+
+  let authMode="login";
+  $("authSubmit").onclick=async()=>{
+    const email=$("authEmail").value.trim(),password=$("authPassword").value;
+    if(!email||password.length<6){authMessage("请输入有效 Email，密码至少 6 个字符。",true);return;}
+    authMessage("处理中…");
+    const res=await db.auth.signInWithPassword({email,password});
+    if(res.error){authMessage(res.error.message,true);return;}
+    await showSession();
+  };
+
+  $("forgotBtn").onclick=async()=>{
+    const email=$("authEmail").value.trim();
+    if(!email){authMessage("Please enter your email first.",true);return;}
+    authMessage("Sending reset email…");
+    const redirectTo=window.location.origin+window.location.pathname;
+    const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo});
+    if(error){authMessage(error.message,true);return;}
+    authMessage("Password reset email sent. Please check your inbox.");
+  };
+
+  $("saveNewPasswordBtn").onclick=async()=>{
+    const p1=$("newPassword").value;
+    const p2=$("confirmPassword").value;
+    if(p1.length<6){resetMessage("Password must be at least 6 characters.",true);return;}
+    if(p1!==p2){resetMessage("Passwords do not match.",true);return;}
+    resetMessage("Saving…");
+    const {error}=await db.auth.updateUser({password:p1});
+    if(error){resetMessage(error.message,true);return;}
+    resetMessage("Password updated successfully.");
+    setTimeout(()=>location.reload(),800);
+  };
+
+  $("logoutBtn").onclick=async()=>{await db.auth.signOut();location.reload();};
+
+  async function fetchRows(){
+    $("syncState").textContent="正在同步…";
+    const {data,error}=await db.from("daily_settlements").select("*").order("settlement_date",{ascending:false});
+    if(error){$("syncState").textContent="同步失败："+error.message;$("syncState").className="bad";return false;}
+    allRows=data||[];$("syncState").textContent="云端已同步 ✓";$("syncState").className="ok";return true;
+  }
+
+  function calc(){
+    let total=0;
+    paymentIds.forEach(id=>total+=num(id));
+    let pin=0,pout=0;
+    pettyEntries.forEach(e=>e.type==="in"?pin+=Number(e.amount)||0:pout+=Number(e.amount)||0);
+    const pettyOpening=Number($("pettyOpening").value)||0;
+    const pettyRemaining=pettyOpening+pin-pout;
+    const cashOpening=Number($("cashOpening").value)||0;
+    const cashWithdrawal=num("cashWithdrawal");
+    const cashBalance=cashOpening+num("cash")-cashWithdrawal;
+    $("grandTotal").value=money(total);
+    $("cashBalance").value=money(cashBalance);
+    $("pettyRemaining").value=money(pettyRemaining);
+    $("metricGrandTotal").textContent=money(total);if($("metricCashBalance"))$("metricCashBalance").textContent=money(cashBalance);
+    $("metricPetty").textContent=money(pettyRemaining);
+    $("metricDate").textContent=$("settlementDate").value||"-";
+    renderPetty();
+    updateMonthTotal();
+  }
+
+  async function previousCashBalance(date){
+    const {data,error}=await db
+      .from("daily_settlements")
+      .select("settlement_date,cash_balance")
+      .eq("branch",currentBranch)
+      .lt("settlement_date",date)
+      .order("settlement_date",{ascending:false})
+      .limit(1);
+
+    if(error){
+      $("syncState").textContent="Cash carry-forward failed: "+error.message;
+      $("syncState").className="bad";
+      return 0;
+    }
+
+    if(!data || !data.length) return 0;
+    return Number(data[0].cash_balance ?? 0);
+  }
+
+  async function previousPetty(date){
+    const {data,error}=await db
+      .from("daily_settlements")
+      .select("settlement_date,petty_net")
+      .eq("branch",currentBranch)
+      .lt("settlement_date",date)
+      .order("settlement_date",{ascending:false})
+      .limit(1);
+
+    if(error){
+      $("syncState").textContent="Petty carry-forward failed: "+error.message;
+      $("syncState").className="bad";
+      return 0;
+    }
+
+    if(!data || !data.length) return 0;
+    return Number(data[0].petty_net ?? 0);
+  }
+
+  async function blankDate(date){
+    currentId=null;
+    currentStatus="pending";
+    pettyEntries=[];
+    $("settlementDate").value=date;
+    $("staff").value="";
+    $("cashierBalance").value=500;
+    paymentIds.forEach(id=>$(id).value="");
+    $("cashWithdrawal").value="";
+    const [pettyCarry,cashCarry]=await Promise.all([previousPetty(date),previousCashBalance(date)]);
+    $("pettyOpening").value=pettyCarry;
+    $("cashOpening").value=cashCarry;
+    $("pettyType").value="out";
+    $("pettyReason").value="";
+    $("pettyAmount").value="";
+    $("currentStatus").textContent="待验收";
+    calc();
+    applyCashWithdrawalAccess();
+  }
+
+  async function loadRow(r){
+    currentId=r.id;
+    currentStatus=r.status||"pending";
+    currentBranch=r.branch;
+
+    document.querySelectorAll(".branch-btn").forEach(b=>b.classList.toggle("active",b.dataset.branch===currentBranch));
+    $("branchRecordState").textContent=currentBranch+" 独立记录";
+
+    $("settlementDate").value=r.settlement_date;
+    $("staff").value=r.staff||"";
+    $("cashierBalance").value=r.cashier_balance||0;
+
+    $("visa").value=r.visa||0;
+    $("master").value=r.master||0;
+    $("amex").value=r.amex||0;
+    $("tng").value=r.tng||0;
+    $("cash").value=r.cash||0;
+    $("alipay").value=r.alipay||0;
+    $("onlineCard").value=r.online_card||0;
+    $("bankTransfer").value=r.bank_transfer||0;
+    $("tips").value=r.tips||0;
+
+    $("pettyOpening").value=(r.petty_opening ?? 0);
+    $("cashWithdrawal").value=(r.cash_withdrawal ?? 0);
+
+    // Always rebuild the opening cash balance from all earlier cash records.
+    $("cashOpening").value=(r.cash_opening ?? await previousCashBalance(r.settlement_date));
+
+    pettyEntries=Array.isArray(r.petty_entries)?r.petty_entries:[];
+    $("currentStatus").textContent=currentStatus==="accepted"?"✓ 正确":currentStatus==="adjust"?"✕ 不正确":"待验收";
+
+    calc();
+    applyCashWithdrawalAccess();
+  }
+
+  async function loadDate(date){
+    const r=allRows.find(x=>x.branch===currentBranch&&x.settlement_date===date);
+    if(r) await loadRow(r);
+    else await blankDate(date);
+  }
+
+  function payload(){
+    let total=0,pin=0,pout=0;
+    paymentIds.forEach(id=>total+=num(id));
+    pettyEntries.forEach(e=>e.type==="in"?pin+=Number(e.amount)||0:pout+=Number(e.amount)||0);
+
+    const pettyOpening=Number($("pettyOpening").value)||0;
+    const cashOpening=Number($("cashOpening").value)||0;
+    const cashWithdrawal=num("cashWithdrawal");
+    const cashBalance=cashOpening+num("cash")-cashWithdrawal;
+
+    return {
+      settlement_date:$("settlementDate").value,
+      branch:currentBranch,
+      staff:$("staff").value.trim(),
+      cashier_balance:num("cashierBalance"),
+
+      visa:num("visa"),
+      master:num("master"),
+      amex:num("amex"),
+      tng:num("tng"),
+      cash:num("cash"),
+      alipay:num("alipay"),
+      online_card:num("onlineCard"),
+      bank_transfer:num("bankTransfer"),
+      tips:num("tips"),
+      grand_total:total,
+
+      cash_opening:cashOpening,
+      cash_withdrawal:cashWithdrawal,
+      cash_balance:cashBalance,
+
+      petty_opening:pettyOpening,
+      petty_in:pin,
+      petty_out:pout,
+      petty_net:pettyOpening+pin-pout,
+      petty_entries:pettyEntries,
+
+      status:currentStatus,
+      review_changed:false
+    };
+  }
+
+  async function saveNow(){
+    $("syncState").textContent="正在保存…";
+    const p=payload();
+    const {data,error}=await db.from("daily_settlements").upsert(p,{onConflict:"settlement_date,branch"}).select().single();
+    if(error){$("syncState").textContent="保存失败："+error.message;$("syncState").className="bad";return;}
+    currentId=data.id;await fetchRows();await loadRow(data);renderAll();$("syncState").textContent="已保存到云端 ✓";
+  }
+  function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveNow,500);}
+
+  function renderPetty(){
+    const body=$("pettyBody");body.innerHTML="";
+    if(!pettyEntries.length){body.innerHTML='<tr><td colspan="4">还没有记录。</td></tr>';return;}
+    pettyEntries.forEach((e,i)=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${e.type==="in"?"进":"出"}</td><td>${e.reason||"-"}</td><td>${money(e.amount)}</td><td><button type="button" class="mini" data-del="${i}">删除</button></td>`;body.appendChild(tr);});
+    body.querySelectorAll("[data-del]").forEach(btn=>btn.onclick=()=>{pettyEntries.splice(Number(btn.dataset.del),1);calc();scheduleSave();});
+  }
+
+  function updateMonthTotal(){
+    const ym=($("settlementDate").value||today()).slice(0,7);
+    const sum=allRows.filter(r=>r.branch===currentBranch&&r.settlement_date.startsWith(ym)).reduce((s,r)=>s+Number(r.grand_total||0),0);
+    $("metricMonthTotal").textContent=money(sum);
+  }
+
+  async function setReview(id,status){
+    const {error}=await db.from("daily_settlements").update({status}).eq("id",id);
+    if(error){alert("验收保存失败："+error.message);return;} await fetchRows(); const r=allRows.find(x=>x.id===id); if(r) loadRow(r); renderAll();
+  }
+
+  function renderMonth(){
+    const ym=$("reviewMonth").value||today().slice(0,7);$("reviewMonth").value=ym;
+    const [y,m]=ym.split("-").map(Number),days=new Date(y,m,0).getDate(),grid=$("monthGrid");grid.innerHTML="";
+    for(let d=1;d<=days;d++){const date=ym+"-"+String(d).padStart(2,"0"),rec=allRows.find(r=>r.branch===currentBranch&&r.settlement_date===date),cell=document.createElement("div");cell.className="day";
+      cell.innerHTML=`<strong>${d}</strong><span>${rec?(rec.status==="accepted"?"✓ 正确":rec.status==="adjust"?"✕ 不正确":"待验收"):"未填写"}</span>`;
+      if(rec){const rv=document.createElement("div");rv.className="review";const a=document.createElement("button"),b=document.createElement("button");a.type=b.type="button";a.textContent="✓";b.textContent="✕";a.onclick=e=>{e.stopPropagation();setReview(rec.id,"accepted")};b.onclick=e=>{e.stopPropagation();setReview(rec.id,"adjust")};rv.append(a,b);cell.appendChild(rv);cell.onclick=async()=>await loadRow(rec);} else cell.onclick=async()=>await blankDate(date); grid.appendChild(cell);}
+  }
+
+  async function setPaymentStatus(id,field,status){
+    if(!isCashWithdrawalManager){
+      alert("Salary access unlocked only.");
+      return;
+    }
+
+    const record=allRows.find(r=>r.id===id);
+    if(!record) return;
+
+    const statuses={...(record.payment_statuses||{})};
+    statuses[field]=status;
+
+    const {error}=await db
+      .from("daily_settlements")
+      .update({payment_statuses:statuses})
+      .eq("id",id);
+
+    if(error){
+      alert("Update failed: "+error.message);
+      return;
+    }
+
+    await fetchRows();
+    renderAll();
+    $("syncState").textContent=status==="accepted" ? "Correct ✓" : "Error ✕";
+    $("syncState").className=status==="accepted" ? "ok" : "bad";
+  }
+
+  async function setHistoryRecordStatus(id,status){
+    if(!isCashWithdrawalManager){
+      alert("Salary access unlocked only.");
+      return;
+    }
+
+    const {error}=await db
+      .from("daily_settlements")
+      .update({status})
+      .eq("id",id);
+
+    if(error){
+      alert("Update failed: "+error.message);
+      return;
+    }
+
+    await fetchRows();
+    renderAll();
+
+    const current=allRows.find(r=>r.id===id);
+    if(current && currentId===id){
+      await loadRow(current);
+    }
+
+    $("syncState").textContent=status==="accepted" ? "Correct ✓" : "Error ✕";
+    $("syncState").className=status==="accepted" ? "ok" : "bad";
+  }
+
+  async function clearHistoryRecord(id){
+    if(!isCashWithdrawalManager){
+      alert("Salary access unlocked only.");
+      return;
+    }
+
+    const record=allRows.find(r=>r.id===id);
+    if(!record){
+      alert("Record not found.");
+      return;
+    }
+
+    const ok=confirm("Clear all records for "+record.settlement_date+" · "+record.branch+"?");
+    if(!ok) return;
+
+    const {error}=await db
+      .from("daily_settlements")
+      .delete()
+      .eq("id",id);
+
+    if(error){
+      alert("Clear failed: "+error.message);
+      return;
+    }
+
+    await fetchRows();
+
+    if(currentId===id){
+      currentBranch=record.branch;
+      await loadDate(record.settlement_date);
+    }
+
+    renderAll();
+    $("syncState").textContent="Day cleared ✓";
+    $("syncState").className="ok";
+  }
+
+  function paymentHistoryCell(r,field){
+    const value=Number(r[field]||0);
+    if(value<=0) return money(0);
+    const state=(r.payment_statuses||{})[field]||"";
+    const badge=state==="accepted" ? `<div class="helper" style="color:#087f72">✓ Correct</div>`
+      : state==="adjust" ? `<div class="helper" style="color:#b42318">✕ Error</div>` : "";
+    return `${money(value)}${badge}<div class="inline-actions" style="margin-top:5px">
+      <button type="button" class="mini correct" data-pay-status="${r.id}" data-pay-field="${field}" data-pay-value="accepted">Correct</button>
+      <button type="button" class="mini error" data-pay-status="${r.id}" data-pay-field="${field}" data-pay-value="adjust">Error</button>
+    </div>`;
+  }
+
+  function renderHistory(){
+    const body=$("historyBody");body.innerHTML="";const rows=allRows.filter(r=>r.branch===currentBranch);
+    if(!rows.length){body.innerHTML='<tr><td colspan="18">还没有记录。</td></tr>';return;}
+    rows.forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${r.settlement_date}</td>
+      <td>${r.branch}</td>
+      <td>${r.staff||"-"}</td>
+      <td>${paymentHistoryCell(r,"visa")}</td>
+      <td>${paymentHistoryCell(r,"master")}</td>
+      <td>${paymentHistoryCell(r,"amex")}</td>
+      <td>${paymentHistoryCell(r,"tng")}</td>
+      <td>${paymentHistoryCell(r,"cash")}</td>
+      <td>${paymentHistoryCell(r,"alipay")}</td>
+      <td>${paymentHistoryCell(r,"online_card")}</td>
+      <td>${paymentHistoryCell(r,"bank_transfer")}</td>
+      <td>${paymentHistoryCell(r,"tips")}</td>
+      <td>${money(r.grand_total)}</td>
+      <td>${money(r.cash_balance)}</td>
+      <td>${money(r.cash_withdrawal)}</td>
+      <td>${money(r.petty_net)}</td>
+      <td>${r.status==="accepted"?"✓ Correct":r.status==="adjust"?"✕ Error":"Pending"}</td>
+      <td>
+        <div class="inline-actions">
+          <button type="button" class="mini" data-open="${r.id}">Open</button>
+          <button type="button" class="mini" data-clear-row="${r.id}">Clear Day</button>
+        </div>
+      </td>`;body.appendChild(tr);});
+    body.querySelectorAll("[data-open]").forEach(btn=>btn.onclick=async()=>{const r=allRows.find(x=>String(x.id)===btn.dataset.open);if(r)await loadRow(r);});
+
+
+    body.querySelectorAll("[data-pay-status]").forEach(btn=>{
+      btn.onclick=()=>setPaymentStatus(
+        Number(btn.dataset.payStatus),
+        btn.dataset.payField,
+        btn.dataset.payValue
+      );
+    });
+
+    body.querySelectorAll("[data-clear-row]").forEach(btn=>{
+      btn.onclick=()=>clearHistoryRecord(Number(btn.dataset.clearRow));
+    });
+  }
+  function renderAll(){renderHistory();renderMonth();updateMonthTotal();}
+
+  async function clearSelectedDay(){
+    if(!isCashWithdrawalManager){
+      alert("Salary access unlocked only. Please login with an authorized manager account.");
+      return;
+    }
+
+    const date=$("settlementDate").value;
+    if(!date){
+      alert("Please select a date first.");
+      return;
+    }
+
+    const ok=confirm("Clear all records for "+date+" · "+currentBranch+"?");
+    if(!ok) return;
+
+    $("syncState").textContent="正在清空当天记录…";
+
+    const {error}=await db
+      .from("daily_settlements")
+      .delete()
+      .eq("settlement_date",date)
+      .eq("branch",currentBranch);
+
+    if(error){
+      $("syncState").textContent="清空失败："+error.message;
+      $("syncState").className="bad";
+      return;
+    }
+
+    await fetchRows();
+    await loadDate(date);
+    renderAll();
+    $("syncState").textContent="当天记录已清空 ✓";
+    $("syncState").className="ok";
+  }
+
+  function exportCsv(){
+    const rows=allRows.filter(r=>r.branch===currentBranch);if(!rows.length){alert("目前没有记录");return;}
+    const cols=["settlement_date","branch","staff","cashier_balance","visa","master","amex","tng","cash","alipay","online_card","bank_transfer","tips","grand_total","cash_opening","cash_withdrawal","cash_balance","petty_net","status"];
+    const lines=[cols.join(",")];rows.forEach(r=>lines.push(cols.map(k=>'"'+String(r[k]??"").replace(/"/g,'""')+'"').join(",")));
+    const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="NatureDao_"+currentBranch+"_Settlement.csv";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+  }
+
+  async function initApp(){
+    const activeDate=getActiveDailyDate();$("settlementDate").value=activeDate;$("reviewMonth").value=activeDate.slice(0,7);$("branchRecordState").textContent=currentBranch+" 独立记录";
+    document.querySelectorAll(".branch-btn").forEach(btn=>btn.onclick=async()=>{currentBranch=btn.dataset.branch;document.querySelectorAll(".branch-btn").forEach(b=>b.classList.toggle("active",b===btn));$("branchRecordState").textContent=currentBranch+" 独立记录";const d=getActiveDailyDate();$("settlementDate").value=d;$("reviewMonth").value=d.slice(0,7);await loadDate(d);renderAll();});
+    document.querySelectorAll("input").forEach(el=>{if(!["reviewMonth","settlementDate","pettyAmount","pettyReason"].includes(el.id))el.oninput=()=>{calc();scheduleSave();};});
+    $("settlementDate").onchange=async()=>{const d=$("settlementDate").value;rememberActiveDailyDate(d);await loadDate(d);$("reviewMonth").value=d.slice(0,7);renderMonth();};
+    $("reviewMonth").onchange=renderMonth;
+    $("cash").oninput=()=>{calc();scheduleSave();};
+    $("cashWithdrawal").oninput=()=>{calc();scheduleSave();};
+    $("addPettyBtn").onclick=()=>{const amount=num("pettyAmount"),type=$("pettyType").value,reason=$("pettyReason").value.trim();if(amount<=0){alert("请输入数目");return}if(type==="out"&&!reason){alert("请填写出款原因");return}pettyEntries.push({type,amount,reason});$("pettyAmount").value="";$("pettyReason").value="";calc();scheduleSave();};
+    $("refreshBtn").onclick=async()=>{await fetchRows();renderAll();await loadDate($("settlementDate").value||today());};
+    $("exportBtn").onclick=exportCsv;
+    $("clearDayBtn").onclick=clearSelectedDay;
+    if(await fetchRows()){const d=getActiveDailyDate();$("settlementDate").value=d;$("reviewMonth").value=d.slice(0,7);await loadDate(d);renderAll();applyCashWithdrawalAccess();}
+  }
+
+  db.auth.onAuthStateChange((event,session)=>{
+    if(event==="PASSWORD_RECOVERY"){
+      $("authView").classList.remove("hidden");
+      $("appView").classList.add("hidden");
+      $("resetBox").classList.remove("hidden");
+      authMessage("Enter a new password below.");
+      return;
+    }
+    showSession();
+  });
+  showSession();
+})();
+</script>
+
+<div id="salaryPage" class="salary-page">
+  <div id="salaryContent" class="salary-shell" style="display:grid">
+    <div class="salary-top">
+      <div>
+        <div class="salary-title">Salary</div>
+      </div>
+      <div class="salary-right">
+        <span id="salarySyncState">云端已同步 ✓</span>
+        <span>Cash Memory v2</span>
+        <button id="salaryLogoutBtn" class="btn" type="button">Logout</button>
+      </div>
+    </div>
+
+    <div class="salary-card">
+      <div class="salary-toolbar">
+        <div class="field">
+          <label>Month</label>
+          <input id="salaryMonth" type="month" min="2026-09">
+        </div>
+        <button id="submitStaffBtn" class="btn" type="button">Submit Staff</button>
+        <button id="staffListBtn" class="btn" type="button">Staff</button>
+        <button id="manageOutletBtn" class="btn" type="button" style="display:none">Manage Outlet</button>
+      </div>
+      <div id="salaryRoleNote" class="manager-note" style="margin-top:8px"></div>
+    </div>
+
+    <div id="salaryOutletRoot"></div>
+  </div>
+</div>
+
+<div id="staffModal" class="salary-modal">
+  <div class="salary-dialog">
+    <div class="outlet-title">
+      <h3 style="margin:0">Submit Staff</h3>
+      <button class="btn" id="closeStaffModal" type="button">Close</button>
+    </div>
+    <div class="salary-form">
+      <div><label>Employee No.</label><input id="empNo"></div>
+      <div><label>Join Date</label><input id="empJoinDate" type="date"></div>
+      <div><label>Last Working Date</label><input id="empLastDate" type="date"></div>
+      <div><label>Outlet</label><select id="empOutlet"></select></div>
+      <div><label>Name</label><input id="empName"></div>
+      <div><label>NRIC / Passport</label><input id="empNric"></div>
+      <div><label>Phone</label><input id="empPhone"></div>
+      <div><label>Pay By</label><select id="empPayBy"><option>Cash</option><option>Bank Transfer</option><option>TNG</option></select></div>
+      <div id="empBankNameWrap"><label>Bank Name</label><input id="empBankName"></div>
+      <div id="empBankAccountWrap"><label>Bank Account</label><input id="empBankAccount"></div>
+      
+      <div id="empSocsoWrap"><label>SOCSO No.</label><input id="empSocso"></div>
+      <div id="empEpfWrap"><label>KWSP / EPF No.</label><input id="empEpf"></div>
+      <div id="empTaxWrap"><label>Tax No.</label><input id="empTax"></div>
+      <div><label>Basic Pay</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="empGuaranteed" type="number" min="0" step="0.01"></div></div>
+      <div><label>Allowance</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="empAllowance" type="number" min="0" step="0.01"></div></div>
+      <div><label>Monthly Off Days</label><input id="empOffDays" type="number" min="0"></div>
+      
+    </div>
+    <button id="reviewStaffBtn" class="btn" type="button" style="width:100%;margin-top:14px">Review / 查看核对</button>
+    <div id="staffSaveMsg" class="helper" style="margin-top:8px"></div>
+  </div>
+</div>
+
+
+
+
+<div id="outletManageModal" class="salary-modal">
+  <div class="salary-dialog" style="width:min(700px,100%)">
+    <div class="outlet-title">
+      <h3 style="margin:0">Manage Outlet / 管理分行</h3>
+      <button class="btn" id="closeOutletManageModal" type="button">Close</button>
+    </div>
+
+    <div class="salary-card" style="box-shadow:none;margin-bottom:14px">
+      <div class="salary-form">
+        <div><label>Outlet Name</label><input id="newOutletName" type="text" placeholder="Outlet name"></div>
+      </div>
+      <button id="addOutletBtn" class="btn" type="button" style="width:100%;margin-top:12px">Add Outlet</button>
+      <div id="outletManageMsg" class="helper" style="margin-top:8px"></div>
+    </div>
+
+    <div id="outletManageList"></div>
+  </div>
+</div>
+
+<div id="editOutletModal" class="salary-modal">
+  <div class="salary-dialog" style="width:min(520px,100%)">
+    <div class="outlet-title">
+      <h3 style="margin:0">Edit Outlet</h3>
+      <button class="btn" id="closeEditOutletModal" type="button">Close</button>
+    </div>
+    <input id="editOutletId" type="hidden">
+    <div class="salary-form">
+      <div><label>Outlet Name</label><input id="editOutletName" type="text"></div>
+    </div>
+    <button id="saveOutletEditBtn" class="btn" type="button" style="width:100%;margin-top:12px">Save Changes</button>
+    <div id="editOutletMsg" class="helper" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div id="staffReviewModal" class="salary-modal">
+  <div class="salary-dialog" style="width:min(680px,100%)">
+    <div class="outlet-title">
+      <h3 style="margin:0">Review Staff / 核对员工资料</h3>
+      <button class="btn" id="closeStaffReviewModal" type="button">Back</button>
+    </div>
+    <div id="staffReviewContent" class="salary-table-wrap"></div>
+    <button id="confirmSubmitStaffBtn" class="btn" type="button" style="width:100%;margin-top:14px">
+      Confirm Submit / 确认提交
+    </button>
+    <div id="staffReviewMsg" class="helper" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div id="editStaffModal" class="salary-modal">
+  <div class="salary-dialog">
+    <div class="outlet-title">
+      <h3 style="margin:0">Edit Staff</h3>
+      <button class="btn" id="closeEditStaffModal" type="button">Close</button>
+    </div>
+    <input id="editEmpId" type="hidden">
+    <div class="salary-form">
+      <div><label>Employee No.</label><input id="editEmpNo"></div>
+      <div><label>Join Date</label><input id="editEmpJoinDate" type="date"></div>
+      <div><label>Last Working Date</label><input id="editEmpLastDate" type="date"></div>
+      <div><label>Outlet</label><select id="editEmpOutlet"></select></div>
+      <div><label>Name</label><input id="editEmpName"></div>
+      <div><label>NRIC / Passport</label><input id="editEmpNric"></div>
+      <div><label>Phone</label><input id="editEmpPhone"></div>
+      <div><label>Pay By</label><select id="editEmpPayBy"><option>Cash</option><option>Bank Transfer</option><option>TNG</option></select></div>
+      <div id="editEmpBankNameWrap"><label>Bank Name</label><input id="editEmpBankName"></div>
+      <div id="editEmpBankAccountWrap"><label>Bank Account</label><input id="editEmpBankAccount"></div>
+      <div><label>SOCSO No.</label><input id="editEmpSocso"></div>
+      <div><label>KWSP / EPF No.</label><input id="editEmpEpf"></div>
+      <div><label>Tax No.</label><input id="editEmpTax"></div>
+      <div><label>Basic Pay</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="editEmpGuaranteed" type="number" min="0" step="0.01"></div></div>
+      <div><label>Allowance</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="editEmpAllowance" type="number" min="0" step="0.01"></div></div>
+      <div><label>Monthly Off Days</label><input id="editEmpOffDays" type="number" min="0"></div>
+      <div class="full"><label>Notes</label><input id="editEmpNotes"></div>
+    </div>
+    <button id="updateStaffBtn" class="btn" type="button" style="width:100%;margin-top:14px">Save Changes</button>
+    <div id="editStaffMsg" class="helper" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div id="staffListModal" class="salary-modal">
+  <div class="salary-dialog" style="width:min(1100px,100%)">
+    <div class="outlet-title">
+      <h3 style="margin:0">Staff</h3>
+      <button class="btn" id="closeStaffListModal" type="button">Close</button>
+    </div>
+    <div id="staffListContent"></div>
+  </div>
+</div>
+
+
+
+<div id="payslipModal" class="salary-modal">
+  <div class="salary-dialog" style="width:min(920px,100%)">
+    <div class="outlet-title no-print">
+      <h3 style="margin:0">Payslip</h3>
+      <div>
+        <button id="downloadPayslipBtn" class="btn" type="button">Download PDF</button> <button id="shareWhatsAppBtn" class="btn" type="button">Share PDF to WhatsApp</button>
+        <button id="closePayslipModal" class="btn" type="button">Close</button>
+      </div>
+    </div>
+    <div id="salaryPayslipPrint"></div>
+  </div>
+</div>
+
+
+<script>
+(function(){
+"use strict";
+
+const salaryDb = window.supabase.createClient("https://cofmjwsejcbfsgdrswku.supabase.co", "sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU");
+const SOCSO_THRESHOLDS = [30, 50, 70, 100, 140, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500, 3600, 3700, 3800, 3900, 4000, 4100, 4200, 4300, 4400, 4500, 4600, 4700, 4800, 4900, 5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700, 5800, 5900, 6000, 999999999];
+const SOCSO_EMPLOYER = [0.4, 0.7, 1.1, 1.5, 2.1, 2.95, 4.35, 6.15, 7.85, 9.65, 11.35, 13.15, 14.85, 16.65, 18.35, 20.15, 21.85, 23.65, 25.35, 27.15, 28.85, 30.65, 32.35, 34.15, 35.85, 37.65, 39.35, 41.15, 42.85, 44.65, 46.35, 48.15, 49.85, 51.65, 53.35, 55.15, 56.85, 58.65, 60.35, 62.15, 63.85, 65.65, 67.35, 69.15, 70.85, 72.65, 74.35, 76.15, 77.85, 79.65, 81.35, 83.15, 84.85, 86.65, 88.35, 90.15, 91.85, 93.65, 95.35, 97.15, 98.85, 100.65, 102.35, 104.15, 104.15];
+const SOCSO_EMPLOYEE = [0.1, 0.2, 0.3, 0.4, 0.6, 0.85, 1.25, 1.75, 2.25, 2.75, 3.25, 3.75, 4.25, 4.75, 5.25, 5.75, 6.25, 6.75, 7.25, 7.75, 8.25, 8.75, 9.25, 9.75, 10.25, 10.75, 11.25, 11.75, 12.25, 12.75, 13.25, 13.75, 14.25, 14.75, 15.25, 15.75, 16.25, 16.75, 17.25, 17.75, 18.25, 18.75, 19.25, 19.75, 20.25, 20.75, 21.25, 21.75, 22.25, 22.75, 23.25, 23.75, 24.25, 24.75, 25.25, 25.75, 26.25, 26.75, 27.25, 27.75, 28.25, 28.75, 29.25, 29.75, 29.75];
+const EIS_EACH = [0.05, 0.1, 0.15, 0.2, 0.25, 0.35, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7, 1.9, 2.1, 2.3, 2.5, 2.7, 2.9, 3.1, 3.3, 3.5, 3.7, 3.9, 4.1, 4.3, 4.5, 4.7, 4.9, 5.1, 5.3, 5.5, 5.7, 5.9, 6.1, 6.3, 6.5, 6.7, 6.9, 7.1, 7.3, 7.5, 7.7, 7.9, 8.1, 8.3, 8.5, 8.7, 8.9, 9.1, 9.3, 9.5, 9.7, 9.9, 10.1, 10.3, 10.5, 10.7, 10.9, 11.1, 11.3, 11.5, 11.7, 11.9, 11.9];
+
+let salaryManager = true;
+let staffEditManager = false;
+let salaryAccess = {is_global:false,outlets:[]};
+const GLOBAL_MANAGER_EMAILS = [
+  "umo1017@gmail.com",
+  "mars83002566@gmail.com"
+];
+let salaryEmployees = [];
+let salaryMonthly = [];
+let salarySnapshots = [];
+let salaryYtdSnapshots = [];
+let salaryOutlets = [];
+
+const byId=id=>document.getElementById(id);
+const money=v=>"RM "+Number(v||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
+const SALARY_START_MONTH="2026-09";
+const monthKey=()=>{
+  const el=byId("salaryMonth");
+  let v=(el?.value||new Date().toISOString().slice(0,7));
+  if(v<SALARY_START_MONTH) v=SALARY_START_MONTH;
+  if(el && el.value!==v) el.value=v;
+  return v;
+};
+const monthDate=()=>monthKey()+"-01";
+function monthShortLabel(){
+  const [y,m]=monthKey().split("-").map(Number);
+  return new Date(y,m-1,1).toLocaleString("en-US",{month:"short"});
+}
+
+async function sha256Hex(s){
+  const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+function monthBounds(month){
+  const [y,m]=month.split("-").map(Number);
+  const start=`${month}-01`;
+  const end=new Date(y,m,0).toISOString().slice(0,10);
+  return {start,end};
+}
+function activeInMonth(e,month){
+  const {start,end}=monthBounds(month);
+  if(e.join_date && e.join_date>end) return false;
+  if(e.last_working_date && e.last_working_date<start) return false;
+  return true;
+}
+function bracketIndex(wage){
+  const w=Math.max(0,Number(wage||0));
+  return SOCSO_THRESHOLDS.findIndex(t=>w<=t);
+}
+function statutory(wage){
+  const i=Math.max(0,bracketIndex(wage));
+  return {
+    employee_socso:SOCSO_EMPLOYEE[i]||0,
+    employer_socso:SOCSO_EMPLOYER[i]||0,
+    employee_eis:EIS_EACH[i]||0,
+    employer_eis:EIS_EACH[i]||0
+  };
+}
+
+function kwspContributionFromBasicPay(basicPay, hasEpfNo){
+  const wage=Number(basicPay||0);
+  if(!hasEpfNo || wage<=10) return {employee:0, employer:0};
+
+  // KWSP Third Schedule Part A (Malaysian / PR below age 60).
+  // For wages up to RM20,000, use the statutory wage-range approach.
+  if(wage<=20000){
+    let upper;
+    if(wage<=5000){
+      upper=Math.ceil((wage-0.000001)/20)*20;
+    }else{
+      upper=Math.ceil((wage-0.000001)/100)*100;
+    }
+    return {
+      employee:Math.ceil(upper*0.11),
+      employer:Math.ceil(upper*(wage<=5000?0.13:0.12))
+    };
+  }
+
+  // Above RM20,000 KWSP allows exact percentage calculation,
+  // rounded upward to the next ringgit.
+  return {
+    employee:Math.ceil(wage*0.11),
+    employer:Math.ceil(wage*0.12)
+  };
+}
+
+function calculate7th(e,m={}){
+  const guaranteed=Number(e.guaranteed_pay||0);
+  const allowance=Number(e.allowance||0);
+  const ot=Number(m.ot||0);
+
+  const hasKwsp=!!String(e.epf_no||"").trim();
+  const statutoryRaw=statutory(guaranteed);
+  const st=hasKwsp ? statutoryRaw : {
+    employee_socso:0,
+    employer_socso:0,
+    employee_eis:0,
+    employer_eis:0
+  };
+  const kwsp=kwspContributionFromBasicPay(guaranteed, hasKwsp);
+  const employee_epf=kwsp.employee;
+  const employer_epf=kwsp.employer;
+
+  const hasTaxCode=!!String(e.tax_no||"").trim();
+  const tax=hasTaxCode ? Number(m.tax||0) : 0;
+
+  const allowedOffDays=Math.max(0,Number(e.monthly_off_days||0));
+  const offDaysTaken=Math.max(0,Number(m.off_days_taken||0));
+  const excessOffDays=Math.max(0,offDaysTaken-allowedOffDays);
+
+  const [year,month]=monthKey().split("-").map(Number);
+  const daysInMonth=new Date(year,month,0).getDate();
+  const scheduledWorkingDays=Math.max(1,daysInMonth-allowedOffDays);
+  const dailyRate=guaranteed/scheduledWorkingDays;
+  const offDayDeduction=+(dailyRate*excessOffDays).toFixed(2);
+
+  const gross=+(guaranteed+allowance+ot).toFixed(2);
+  const totalDeduction=+(
+    employee_epf+
+    st.employee_socso+
+    st.employee_eis+
+    tax+
+    offDayDeduction
+  ).toFixed(2);
+
+  return {
+    guaranteed_pay:guaranteed,
+    allowance,
+    ot,
+    employee_epf,
+    employer_epf,
+    ...st,
+    tax,
+    allowed_off_days:allowedOffDays,
+    off_days_taken:offDaysTaken,
+    excess_off_days:excessOffDays,
+    off_day_daily_rate:+dailyRate.toFixed(2),
+    off_day_deduction:offDayDeduction,
+    gross_pay:gross,
+    total_deduction:totalDeduction,
+    net_pay:+(gross-totalDeduction).toFixed(2)
+  };
+}
+function calculate14th(m={},snapshot=null){
+  const totalCommission=Number(m.total_commission||0);
+  const customer=Number(m.customer_referral||0);
+  const staff=Number(m.staff_referral||0);
+  const bonus=Number(m.reward||0);
+
+  const seventhGrossPay=Number(snapshot?.gross_pay||0);
+  const employerEpf=Number(snapshot?.employer_epf||0);
+  const employerSocso=Number(snapshot?.employer_socso||0);
+  const employerEis=Number(snapshot?.employer_eis||0);
+
+  const commission=+(
+    totalCommission + customer + staff
+    - seventhGrossPay
+    - employerEpf
+    - employerSocso
+    - employerEis
+  ).toFixed(2);
+
+  const netPay=+(commission + bonus).toFixed(2);
+
+  return {
+    total_commission:totalCommission,
+    customer_referral:customer,
+    staff_referral:staff,
+    bonus,
+    seventh_gross_pay:seventhGrossPay,
+    employer_epf:employerEpf,
+    employer_socso:employerSocso,
+    employer_eis:employerEis,
+    commission,
+    total_income:netPay,
+    net_pay:netPay
+  };
+}
+function monthlyFor(id){ return salaryMonthly.find(x=>Number(x.employee_id)===Number(id))||{}; }
+function snapshotFor(id){ return salarySnapshots.find(x=>Number(x.employee_id)===Number(id))||null; }
+
+async function determineManager(){
+  salaryManager=true;
+  const {data:{user}}=await salaryDb.auth.getUser();
+  const email=(user?.email||"").toLowerCase();
+
+  const {data,error}=await salaryDb.rpc("get_salary_access");
+  if(error){
+    salaryAccess={
+      is_global:GLOBAL_MANAGER_EMAILS.includes(email),
+      outlets:[]
+    };
+  }else{
+    salaryAccess={
+      is_global:!!data?.is_global,
+      outlets:Array.isArray(data?.outlets)?data.outlets:[]
+    };
+  }
+
+  staffEditManager=salaryAccess.is_global;
+
+  // Only Mars/Umo (Global) can open the full Staff list.
+  byId("staffListBtn").style.display=salaryAccess.is_global?"":"none";
+  byId("manageOutletBtn").style.display=salaryAccess.is_global?"":"none";
+
+  const visible = salaryAccess.is_global
+    ? "Global access"
+    : (salaryAccess.outlets.length ? salaryAccess.outlets.join(" / ")+" access" : "No Salary outlet access");
+  byId("salaryRoleNote").textContent=visible;
+}
+
+function setSidebarActive(page){
+  byId("sidebarDaily").classList.toggle("active",page==="daily");
+  byId("sidebarSalary").classList.toggle("active",page==="salary");
+}
+function closeMobileSidebar(){ byId("mainSidebar").classList.remove("open"); }
+
+function showDaily(){
+  window.activeMainPage="daily";
+  byId("salaryPage").classList.remove("active");
+  byId("salaryPage").classList.remove("sidebar-offset");
+  byId("appView").classList.remove("hidden");
+  byId("appView").classList.add("sidebar-offset");
+  setSidebarActive("daily");
+  closeMobileSidebar();
+}
+function showSalary(){
+  window.activeMainPage="salary";
+  byId("appView").classList.add("hidden");
+  byId("salaryPage").classList.add("active","sidebar-offset");
+  setSidebarActive("salary");
+  closeMobileSidebar();
+  byId("salaryContent").style.display="grid";
+  loadSalaryData();
+}
+
+
+
+
+async function loadSalaryOutlets(){
+  const {data,error}=await salaryDb
+    .from("salary_outlets")
+    .select("*")
+    .eq("is_active",true)
+    .order("sort_order",{ascending:true})
+    .order("name",{ascending:true});
+
+  if(error){
+    console.error("Outlet load failed:",error);
+    salaryOutlets=[];
+    return;
+  }
+
+  salaryOutlets=data||[];
+  populateOutletSelects();
+}
+
+function allowedOutletRows(){
+  if(salaryAccess.is_global) return salaryOutlets;
+  return salaryOutlets.filter(o=>salaryAccess.outlets.includes(o.name));
+}
+
+function populateOutletSelects(){
+  const rows=allowedOutletRows();
+
+  [byId("empOutlet"),byId("editEmpOutlet")].forEach(sel=>{
+    if(!sel) return;
+    const current=sel.value;
+    sel.innerHTML=rows.map(o=>`<option value="${o.name}">${o.name}</option>`).join("");
+    if(rows.some(o=>o.name===current)) sel.value=current;
+  });
+}
+
+async function renderOutletManagement(){
+  if(!salaryAccess.is_global) return;
+
+  const {data,error}=await salaryDb
+    .from("salary_outlets")
+    .select("*")
+    .order("sort_order",{ascending:true})
+    .order("name",{ascending:true});
+
+  if(error){
+    byId("outletManageList").innerHTML=`<div class="bad">${error.message}</div>`;
+    return;
+  }
+
+  const rows=data||[];
+  byId("outletManageList").innerHTML=rows.length
+    ? `<div class="salary-table-wrap"><table class="salary-table compact">
+        <thead><tr><th>Outlet</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>${rows.map(o=>`<tr>
+          <td>${o.name}</td>
+          <td>${o.is_active?"Active":"Inactive"}</td>
+          <td><div class="staff-action-wrap">
+            <button class="btn" data-edit-outlet="${o.id}">Edit</button>
+            <button class="btn staff-delete-btn" data-delete-outlet="${o.id}" data-outlet-name="${o.name}">Delete</button>
+          </div></td>
+        </tr>`).join("")}</tbody>
+      </table></div>`
+    : '<div class="helper">No outlet</div>';
+}
+
+async function addOutlet(){
+  if(!salaryAccess.is_global) return;
+
+  const name=byId("newOutletName").value.trim();
+  if(!name){
+    byId("outletManageMsg").textContent="Please enter outlet name.";
+    return;
+  }
+
+  const {error}=await salaryDb.from("salary_outlets").insert({name});
+  if(error){
+    byId("outletManageMsg").textContent="Add failed: "+error.message;
+    return;
+  }
+
+  byId("newOutletName").value="";
+  byId("outletManageMsg").textContent="Outlet added ✓";
+  await loadSalaryOutlets();
+  await renderOutletManagement();
+  await loadSalaryData();
+}
+
+async function openEditOutlet(outletId){
+  if(!salaryAccess.is_global) return;
+
+  const {data,error}=await salaryDb
+    .from("salary_outlets")
+    .select("*")
+    .eq("id",outletId)
+    .single();
+
+  if(error){
+    alert("Load outlet failed: "+error.message);
+    return;
+  }
+
+  byId("editOutletId").value=data.id;
+  byId("editOutletName").value=data.name||"";
+  byId("editOutletMsg").textContent="";
+  byId("editOutletModal").classList.add("open");
+}
+
+async function saveOutletEdit(){
+  if(!salaryAccess.is_global) return;
+
+  const id=Number(byId("editOutletId").value);
+  const name=byId("editOutletName").value.trim();
+  if(!name){
+    byId("editOutletMsg").textContent="Outlet name is required.";
+    return;
+  }
+
+  const {data:oldRow,error:loadErr}=await salaryDb
+    .from("salary_outlets")
+    .select("*")
+    .eq("id",id)
+    .single();
+
+  if(loadErr){
+    byId("editOutletMsg").textContent="Load failed: "+loadErr.message;
+    return;
+  }
+
+  const oldName=oldRow.name;
+
+  const {error}=await salaryDb.rpc("rename_salary_outlet",{
+    p_outlet_id:id,
+    p_new_name:name
+  });
+
+  if(error){
+    byId("editOutletMsg").textContent="Update failed: "+error.message;
+    return;
+  }
+
+  byId("editOutletModal").classList.remove("open");
+  await loadSalaryOutlets();
+  await renderOutletManagement();
+  await loadSalaryData();
+}
+
+async function deleteOutlet(outletId,outletName){
+  if(!salaryAccess.is_global) return;
+
+  if(!confirm(`Delete outlet ${outletName}?`)) return;
+  if(!confirm(`Second confirmation: Delete ${outletName} permanently?`)) return;
+
+  const {data,error}=await salaryDb.rpc("delete_salary_outlet",{
+    p_outlet_id:Number(outletId)
+  });
+
+  if(error){
+    alert("Delete failed: "+error.message);
+    return;
+  }
+
+  if(data?.deleted!==true){
+    alert(data?.message||"Outlet was not deleted.");
+    return;
+  }
+
+  await loadSalaryOutlets();
+  await renderOutletManagement();
+  await loadSalaryData();
+}
+
+async function loadSalaryData(){
+  await determineManager();
+  await loadSalaryOutlets();
+
+  const month=monthKey(), year=month.slice(0,4);
+  const [empsRes,monthlyRes,snapRes,ytdRes]=await Promise.all([
+    salaryDb.from("employees").select("*").order("outlet").order("name"),
+    salaryDb.from("employee_salary_monthly").select("*").eq("salary_month",month+"-01"),
+    salaryDb.from("payroll_snapshot").select("*").eq("salary_month",month+"-01"),
+    salaryDb.from("payroll_snapshot").select("*")
+      .gte("salary_month",year+"-01-01").lte("salary_month",month+"-01")
+  ]);
+  const err=empsRes.error||monthlyRes.error||snapRes.error||ytdRes.error;
+  if(err){
+    byId("salarySyncState").textContent="Salary sync failed";
+    byId("salaryOutletRoot").innerHTML=`<div class="salary-card"><div class="bad">${err.message}</div></div>`;
+    return;
+  }
+  salaryEmployees=(empsRes.data||[]).filter(e=>{
+    if(salaryAccess.is_global) return true;
+    return salaryAccess.outlets.includes(e.outlet);
+  });
+  salaryMonthly=monthlyRes.data||[];
+  salarySnapshots=snapRes.data||[];
+  salaryYtdSnapshots=ytdRes.data||[];
+  byId("salarySyncState").textContent="云端已同步 ✓";
+  renderSalary();
+}
+
+function summaryForOutlet(emps){
+  const out={seven:{Cash:0,"Bank Transfer":0,TNG:0},fourteen:{Cash:0,"Bank Transfer":0,TNG:0}};
+  emps.forEach(e=>{
+    const m=monthlyFor(e.id);
+    const s=snapshotFor(e.id)||calculate7th(e,m);
+    const c=calculate14th(m,snapshotFor(e.id));
+    const pm=e.payment_method||"Cash";
+    out.seven[pm]=(out.seven[pm]||0)+Number(s.net_pay||0);
+    out.fourteen[pm]=(out.fourteen[pm]||0)+Number(c.net_pay||0);
+  });
+  return out;
+}
+
+function editInput(empId,field,value,disabled=false){
+  return `<input type="number" min="0" step="0.01" value="${Number(value||0)}" data-month-edit="${empId}" data-field="${field}">`;
+}
+
+
+function offDayInput(empId,value,locked=false){
+  const n=Number(value||0);
+  if(locked){
+    return `<div class="offday-box"><input type="number" value="${n}" disabled><span class="days-suffix">Days</span></div>`;
+  }
+  return `<div class="offday-box"><input type="number" min="0" step="1" value="${n}" data-month-edit="${empId}" data-field="off_days_taken"><span class="days-suffix">Days</span></div>`;
+}
+
+function renderSevenTable(emps){
+  if(!emps.length) return '';
+  return `<div class="salary-table-wrap"><table class="salary-table">
+    <thead><tr>
+      <th>Name</th><th>Off Day</th><th>Basic Pay</th><th>Allowance</th>
+      <th>Employee EPF</th><th>Employer EPF</th>
+      <th>Employee SOCSO</th><th>Employer SOCSO</th>
+      <th>Employee EIS</th><th>Employer EIS</th>
+      <th>Off Day Deduction</th>
+      <th>PCB / Tax</th><th>OT</th><th>Gross Pay</th><th>Total Deduction</th><th>Net Pay</th>
+      <th>Confirm</th><th>7th Monthly Payslip</th>
+    </tr></thead><tbody>
+    ${emps.map(e=>{
+      const m=monthlyFor(e.id), snap=snapshotFor(e.id), s=snap||calculate7th(e,m);
+      return `<tr>
+        <td>${e.name||"-"}</td>
+        <td>${offDayInput(e.id, snap?Number(s.off_days_taken||0):Number(m.off_days_taken||0), !!snap)}</td>
+        <td>${money(s.guaranteed_pay)}</td><td>${money(s.allowance)}</td>
+        <td>${money(s.employee_epf)}</td><td>${money(s.employer_epf)}</td>
+        <td>${money(s.employee_socso)}</td><td>${money(s.employer_socso)}</td>
+        <td>${money(s.employee_eis)}</td><td>${money(s.employer_eis)}</td>
+        <td>${money(s.off_day_deduction||0)}</td>
+        <td>${String(e.tax_no||"").trim() ? money(s.tax) : ""}</td>
+        <td>${snap?money(s.ot||0):editInput(e.id,"ot",m.ot)}</td>
+        <td>${money(s.gross_pay)}</td><td>${money(s.total_deduction)}</td><td>${money(s.net_pay)}</td>
+        <td>${snap?'<span class="confirmed-pill">Confirmed</span>':`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`}</td>
+        <td><button class="btn" data-payslip7="${e.id}">7th Payslip</button></td>
+      </tr>`;
+    }).join("")}
+    </tbody></table></div>`;
+}
+
+function renderFourteenTable(emps){
+  if(!emps.length) return '';
+  return `<div class="salary-table-wrap"><table class="salary-table">
+    <thead><tr>
+      <th>Name</th><th>Total Commission</th><th>Customer Referral</th>
+      <th>Staff Referral</th><th>Bonus</th><th>Commission</th><th>14th Commission Payslip</th>
+    </tr></thead><tbody>
+    ${emps.map(e=>{
+      const m=monthlyFor(e.id), c=calculate14th(m,snapshotFor(e.id));
+      return `<tr>
+        <td>${e.name||"-"}</td>
+        <td>${editInput(e.id,"total_commission",m.total_commission)}</td>
+        <td>${editInput(e.id,"customer_referral",m.customer_referral)}</td>
+        <td>${editInput(e.id,"staff_referral",m.staff_referral)}</td>
+        <td>${editInput(e.id,"reward",m.reward)}</td>
+        <td>${money(c.commission)}</td>
+        <td><button class="btn" data-payslip14="${e.id}">14th Payslip</button></td>
+      </tr>`;
+    }).join("")}
+    </tbody></table></div>`;
+}
+
+function renderSalary(){
+  const active=salaryEmployees.filter(e=>activeInMonth(e,monthKey()));
+  const visibleOutlets=allowedOutletRows().map(o=>o.name);
+  byId("salaryOutletRoot").innerHTML=visibleOutlets.map(outlet=>{
+    const all=active.filter(e=>e.outlet===outlet);
+    const sum=summaryForOutlet(all);
+    const total7=Object.values(sum.seven).reduce((a,b)=>a+b,0);
+    const total14=Object.values(sum.fourteen).reduce((a,b)=>a+b,0);
+    return `<div class="salary-card" style="margin-top:14px">
+      <div class="outlet-title"><h3>${outlet.toUpperCase()}</h3></div>
+      <div class="salary-table-wrap">
+        <table class="salary-table compact">
+          <thead><tr><th>Pay Day</th><th>Cash</th><th>Bank Transfer</th><th>TNG</th><th>Total</th></tr></thead>
+          <tbody>
+            <tr><td>7th</td><td>${money(sum.seven.Cash)}</td><td>${money(sum.seven["Bank Transfer"])}</td><td>${money(sum.seven.TNG)}</td><td>${money(total7)}</td></tr>
+            <tr><td>14th</td><td>${money(sum.fourteen.Cash)}</td><td>${money(sum.fourteen["Bank Transfer"])}</td><td>${money(sum.fourteen.TNG)}</td><td>${money(total14)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      ${["Cash","Bank Transfer","TNG"].map(method=>{
+        const emps=all.filter(e=>e.payment_method===method);
+        if(!emps.length) return "";
+        return `<div class="pay-method-title">${method.toUpperCase()}</div>
+          <div class="payroll-section-title">7TH — MONTHLY PAYROLL</div>
+          ${renderSevenTable(emps)}
+          <div class="payroll-section-title">14TH — COMMISSION PAYROLL</div>
+          ${renderFourteenTable(emps)}`;
+      }).join("")}
+    </div>`;
+  }).join("");
+  bindSalaryTableActions();
+}
+
+function bindSalaryTableActions(){
+  document.querySelectorAll("[data-month-edit]").forEach(inp=>{
+    inp.onchange=()=>saveMonthlyField(Number(inp.dataset.monthEdit),inp.dataset.field,Number(inp.value||0));
+  });
+  document.querySelectorAll("[data-confirm7]").forEach(btn=>btn.onclick=()=>confirm7th(Number(btn.dataset.confirm7)));
+  document.querySelectorAll("[data-payslip7]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip7),7));
+  document.querySelectorAll("[data-payslip14]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip14),14));
+}
+
+
+async function refreshSalaryStayHere(){
+  const savedMonth = byId("salaryMonth").value;
+  const savedScroll = window.scrollY;
+  window.activeMainPage = "salary";
+  await loadSalaryData();
+  byId("salaryMonth").value = savedMonth;
+  requestAnimationFrame(()=>window.scrollTo(0, savedScroll));
+}
+
+async function saveMonthlyField(employee_id,field,value){
+  const row={employee_id,salary_month:monthDate(),[field]:value};
+  const {error}=await salaryDb.from("employee_salary_monthly").upsert(row,{onConflict:"employee_id,salary_month"});
+  if(error){ alert("Save failed: "+error.message); return; }
+  await refreshSalaryStayHere();
+}
+
+async function confirm7th(empId){
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!e || snapshotFor(empId)) return;
+  const calc=calculate7th(e,monthlyFor(empId));
+  const {error}=await salaryDb.from("payroll_snapshot").insert({
+    employee_id:e.id,salary_month:monthDate(),...calc
+  });
+  if(error){ alert("Confirm failed: "+error.message); return; }
+  await refreshSalaryStayHere();
+}
+
+
+function updateSubmitStaffPaymentFields(){
+  const method=byId("empPayBy").value;
+  const bankNameWrap=byId("empBankNameWrap");
+  const bankAccountWrap=byId("empBankAccountWrap");
+
+  const socsoWrap=byId("empSocsoWrap");
+  const epfWrap=byId("empEpfWrap");
+  const taxWrap=byId("empTaxWrap");
+
+  if(method==="Cash"){
+    bankNameWrap.style.display="none";
+    bankAccountWrap.style.display="none";
+    socsoWrap.style.display="none";
+    epfWrap.style.display="none";
+    taxWrap.style.display="none";
+    byId("empBankName").value="";
+    byId("empBankAccount").value="";
+    byId("empSocso").value="";
+    byId("empEpf").value="";
+    byId("empTax").value="";
+  }else if(method==="TNG"){
+    socsoWrap.style.display="";
+    epfWrap.style.display="";
+    taxWrap.style.display="";
+    bankNameWrap.style.display="none";
+    bankAccountWrap.style.display="";
+    byId("empBankName").value="";
+  }else{
+    bankNameWrap.style.display="";
+    bankAccountWrap.style.display="";
+    socsoWrap.style.display="";
+    epfWrap.style.display="";
+    taxWrap.style.display="";
+  }
+}
+
+function updateEditStaffPaymentFields(){
+  const method=byId("editEmpPayBy").value;
+  const bankNameWrap=byId("editEmpBankNameWrap");
+  const bankAccountWrap=byId("editEmpBankAccountWrap");
+
+  if(method==="Cash"){
+    bankNameWrap.style.display="none";
+    bankAccountWrap.style.display="none";
+    byId("editEmpBankName").value="";
+    byId("editEmpBankAccount").value="";
+  }else if(method==="TNG"){
+    bankNameWrap.style.display="none";
+    bankAccountWrap.style.display="";
+    byId("editEmpBankName").value="";
+  }else{
+    bankNameWrap.style.display="";
+    bankAccountWrap.style.display="";
+  }
+}
+
+
+function collectSubmitStaffPayload(){
+  const payment=byId("empPayBy").value;
+  return {
+    join_date:byId("empJoinDate").value||null,
+    last_working_date:byId("empLastDate").value||null,
+    outlet:byId("empOutlet").value,
+    name:byId("empName").value.trim(),
+    nric_passport:byId("empNric").value.trim(),
+    phone:byId("empPhone").value.trim(),
+    payment_method:payment,
+    bank_name:payment==="Bank Transfer"?byId("empBankName").value.trim():"",
+    bank_account:payment==="Cash"?"":byId("empBankAccount").value.trim(),
+    employee_no:byId("empNo").value.trim(),
+    socso_no:payment==="Cash"?"":byId("empSocso").value.trim(),
+    epf_no:payment==="Cash"?"":byId("empEpf").value.trim(),
+    tax_no:payment==="Cash"?"":byId("empTax").value.trim(),
+    guaranteed_pay:Number(byId("empGuaranteed").value||0),
+    allowance:Number(byId("empAllowance").value||0),
+    monthly_off_days:Number(byId("empOffDays").value||0),
+    notes:""
+  };
+}
+
+function reviewSubmitStaff(){
+  const p=collectSubmitStaffPayload();
+  if(!p.name){
+    byId("staffSaveMsg").textContent="Name is required.";
+    return;
+  }
+
+  // Outlet access check before review.
+  if(!salaryAccess.is_global && !salaryAccess.outlets.includes(p.outlet)){
+    byId("staffSaveMsg").textContent="You do not have access to submit staff for this outlet.";
+    return;
+  }
+
+  const rows=[
+    ["Employee No.",p.employee_no||"-"],
+    ["Name",p.name||"-"],
+    ["Outlet",p.outlet||"-"],
+    ["Join Date",p.join_date||"-"],
+    ["Last Working Date",p.last_working_date||"-"],
+    ["NRIC / Passport",p.nric_passport||"-"],
+    ["Phone",p.phone||"-"],
+    ["Pay By",p.payment_method||"-"],
+    ["Bank Name",p.bank_name||"-"],
+    ["Bank Account",p.bank_account||"-"],
+    ["SOCSO No.",p.socso_no||"-"],
+    ["KWSP / EPF No.",p.epf_no||"-"],
+    ["Tax No.",p.tax_no||"-"],
+    ["Basic Pay",money(p.guaranteed_pay)],
+    ["Allowance",money(p.allowance)],
+    ["Monthly Off Days",String(p.monthly_off_days||0)]
+  ];
+
+  byId("staffReviewContent").innerHTML=
+    `<table class="salary-table compact"><tbody>${
+      rows.map(r=>`<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join("")
+    }</tbody></table>`;
+
+  byId("staffReviewMsg").textContent="";
+  byId("staffReviewModal").classList.add("open");
+}
+
+async function saveStaff(){
+  const payload=collectSubmitStaffPayload();
+
+  if(!payload.name){
+    byId("staffReviewMsg").textContent="Name is required.";
+    return;
+  }
+
+  if(!salaryAccess.is_global && !salaryAccess.outlets.includes(payload.outlet)){
+    byId("staffReviewMsg").textContent="You do not have access to submit staff for this outlet.";
+    return;
+  }
+
+  const {error}=await salaryDb.from("employees").insert(payload);
+  if(error){
+    byId("staffReviewMsg").textContent="Save failed: "+error.message;
+    return;
+  }
+
+  byId("staffReviewMsg").textContent="Staff submitted ✓";
+  byId("staffReviewModal").classList.remove("open");
+  byId("staffModal").classList.remove("open");
+
+  // Clear form after successful submit.
+  [
+    "empNo","empJoinDate","empLastDate","empName","empNric","empPhone",
+    "empBankName","empBankAccount","empSocso","empEpf","empTax",
+    "empGuaranteed","empAllowance","empOffDays"
+  ].forEach(id=>{ const el=byId(id); if(el) el.value=""; });
+
+  updateSubmitStaffPaymentFields();
+  await refreshSalaryStayHere();
+}
+
+
+function openEditStaff(empId){
+  if(!staffEditManager){
+    alert("Management access only.");
+    return;
+  }
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!e) return;
+  byId("editEmpId").value=e.id;
+  byId("editEmpNo").value=e.employee_no||"";
+  byId("editEmpJoinDate").value=e.join_date||"";
+  byId("editEmpLastDate").value=e.last_working_date||"";
+  byId("editEmpOutlet").value=e.outlet||"Eco Botanic";
+  byId("editEmpName").value=e.name||"";
+  byId("editEmpNric").value=e.nric_passport||"";
+  byId("editEmpPhone").value=e.phone||"";
+  byId("editEmpPayBy").value=e.payment_method||"Cash";
+  byId("editEmpBankName").value=e.bank_name||"";
+  byId("editEmpBankAccount").value=e.bank_account||"";
+  byId("editEmpSocso").value=e.socso_no||"";
+  byId("editEmpEpf").value=e.epf_no||"";
+  byId("editEmpTax").value=e.tax_no||"";
+  byId("editEmpGuaranteed").value=Number(e.guaranteed_pay||0);
+  byId("editEmpAllowance").value=Number(e.allowance||0);
+  byId("editEmpOffDays").value=Number(e.monthly_off_days||0);
+  byId("editEmpNotes").value=e.notes||"";
+  byId("editStaffMsg").textContent="";
+  updateEditStaffPaymentFields();
+  byId("editStaffModal").classList.add("open");
+}
+
+async function updateStaff(){
+  if(!staffEditManager){
+    alert("Management access only.");
+    return;
+  }
+  const id=Number(byId("editEmpId").value);
+  const payload={
+    employee_no:byId("editEmpNo").value.trim(),
+    join_date:byId("editEmpJoinDate").value||null,
+    last_working_date:byId("editEmpLastDate").value||null,
+    outlet:byId("editEmpOutlet").value,
+    name:byId("editEmpName").value.trim(),
+    nric_passport:byId("editEmpNric").value.trim(),
+    phone:byId("editEmpPhone").value.trim(),
+    payment_method:byId("editEmpPayBy").value,
+    bank_name:byId("editEmpBankName").value.trim(),
+    bank_account:byId("editEmpBankAccount").value.trim(),
+    socso_no:byId("editEmpSocso").value.trim(),
+    epf_no:byId("editEmpEpf").value.trim(),
+    tax_no:byId("editEmpTax").value.trim(),
+    guaranteed_pay:Number(byId("editEmpGuaranteed").value||0),
+    allowance:Number(byId("editEmpAllowance").value||0),
+    monthly_off_days:Number(byId("editEmpOffDays").value||0),
+    notes:byId("editEmpNotes").value.trim()
+  };
+  const {error}=await salaryDb.from("employees").update(payload).eq("id",id);
+  if(error){
+    byId("editStaffMsg").textContent="Update failed: "+error.message;
+    return;
+  }
+  byId("editStaffModal").classList.remove("open");
+  await refreshSalaryStayHere();
+  renderStaffList();
+  
+}
+
+
+async function deleteStaff(empId){
+  if(!staffEditManager){
+    alert("Management access only.");
+    return;
+  }
+
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!e){
+    alert("Staff record not found.");
+    return;
+  }
+
+  if(!confirm(`Delete staff ${e.name||""}?`)) return;
+  if(!confirm(`Second confirmation: Delete ${e.name||""} permanently?`)) return;
+
+  const savedMonth=byId("salaryMonth").value;
+  const savedScroll=window.scrollY;
+
+  const {data,error}=await salaryDb.rpc("delete_staff_with_payroll",{
+    p_employee_id:empId
+  });
+
+  if(error){
+    alert("Delete failed: "+error.message);
+    return;
+  }
+
+  if(!data || data.deleted!==true){
+    alert("Delete failed: "+(data?.message||"No record was deleted."));
+    return;
+  }
+
+  byId("staffListModal").classList.remove("open");
+  window.activeMainPage="salary";
+  byId("salaryMonth").value=savedMonth;
+  await loadSalaryData();
+  byId("salaryMonth").value=savedMonth;
+  requestAnimationFrame(()=>window.scrollTo(0,savedScroll));
+
+  alert("Staff deleted successfully.");
+}
+
+
+
+function renderStaffList(){
+  if(!salaryAccess.is_global){
+    byId("staffListContent").innerHTML='<div class="manager-note">Global access only.</div>';
+    return;
+  }
+
+  byId("staffListContent").innerHTML=["Eco Botanic","Nusa Bestari"].map(outlet=>{
+    const rows=salaryEmployees.filter(e=>e.outlet===outlet);
+    return `<div class="staff-group"><h4>${outlet}</h4>
+      <div class="salary-table-wrap"><table class="salary-table">
+      <thead><tr><th>Name</th><th>Join Date</th><th>Last Working Date</th><th>Payment Method</th><th>Basic Pay</th><th>Allowance</th><th>Bank Name</th><th>Bank Account</th><th>NRIC / Passport</th><th>Phone</th><th>Employee No.</th><th>SOCSO No.</th><th>KWSP / EPF No.</th><th>Tax No.</th><th>Action</th></tr></thead>
+      <tbody>${rows.map(e=>`<tr><td>${e.name||"-"}</td><td>${e.join_date||"-"}</td><td>${e.last_working_date||"-"}</td><td>${e.payment_method||"-"}</td><td>${money(e.guaranteed_pay)}</td><td>${money(e.allowance)}</td><td>${e.payment_method==="Bank Transfer"?(e.bank_name||"-"):"-"}</td><td>${e.payment_method==="Cash"?"-":(e.bank_account||"-")}</td><td>${e.nric_passport||"-"}</td><td>${e.phone||"-"}</td><td>${e.employee_no||"-"}</td><td>${e.socso_no||"-"}</td><td>${e.epf_no||"-"}</td><td>${e.tax_no||"-"}</td><td>${staffEditManager?`<div class="staff-action-wrap">
+  <button class="btn" data-edit-staff="${e.id}">Edit</button>
+  <button class="btn staff-delete-btn" data-delete-staff="${e.id}">Delete</button>
+</div>`:"—"}</td></tr>`).join("") || '<tr><td colspan="14"></td></tr>'}</tbody></table></div></div>`;
+  }).join("");
+}
+
+function ytdSum(empId,key){
+  return salaryYtdSnapshots
+    .filter(x=>Number(x.employee_id)===Number(empId))
+    .reduce((a,x)=>a+Number(x[key]||0),0);
+}
+
+function metaRows(e,type){
+  return `<table class="payslip-table">
+    <tr><td>Month :</td><td>${monthShortLabel()}</td></tr>
+    <tr><td>${type}</td><td></td></tr>
+    <tr><td>Name :</td><td>${e.name||""}</td></tr>
+    <tr><td>NRIC :</td><td>${e.nric_passport||""}</td></tr>
+    <tr><td>DEPT :</td><td>DEFAULT - Default Department</td></tr>
+    <tr><td>EMPLOYEE NO :</td><td>${e.employee_no||""}</td></tr>
+    <tr><td>SOCSO NO :</td><td>${e.socso_no||""}</td></tr>
+    <tr><td>KWSP / EPF NO :</td><td>${e.epf_no||""}</td></tr>
+    <tr><td>TAX NO :</td><td>${e.tax_no||""}</td></tr>
+    ${type==="Monthly"?`<tr><td>PAY BY :</td><td>${e.payment_method||""}</td></tr>`:""}
+  </table>`;
+}
+
+async function openPayslip(empId,type){
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId)); if(!e) return;
+  if(type===7){
+    const s=snapshotFor(empId)||calculate7th(e,monthlyFor(empId));
+    byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
+<div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div><div style="height:140px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(s.gross_pay||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Tax</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Extra Off Day</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">${Number(s.total_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div><div class="payslip-line"><span>OT</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div></div></div>
+<div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${Number(s.net_pay||0).toFixed(2)}</span></div></div>
+<div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;----------CURRENT MONTH----------&gt;</div><div class="payslip-mini-table"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Tax</div><div>EMPLOYEE</div><div class="v">${Number(s.employee_epf||0).toFixed(2)}</div><div class="v">${Number(s.employee_socso||0).toFixed(2)}</div><div class="v">${Number(s.employee_eis||0).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div><div>EMPLOYER</div><div class="v">${Number(s.employer_epf||0).toFixed(2)}</div><div class="v">${Number(s.employer_socso||0).toFixed(2)}</div><div class="v">${Number(s.employer_eis||0).toFixed(2)}</div><div class="v"></div><div>TOTAL</div><div class="v">${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_socso||0)+Number(s.employer_socso||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div></div><div style="font-size:9px;margin-top:8px">Note:</div></div><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;---------------YEAR-TO-DATE---------------&gt;</div><div class="payslip-mini-table ytd"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Tax</div><div class="h">GROSS PAY</div><div class="h">NET PAY</div><div></div><div class="v">${(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis")).toFixed(2)}</div><div class="v">${ytdSum(empId,"tax").toFixed(2)}</div><div class="v">${ytdSum(empId,"gross_pay").toFixed(2)}</div><div class="v">${ytdSum(empId,"net_pay").toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div></div>`;
+  } else {
+    const sevenSnapshot=snapshotFor(empId);
+    const c=calculate14th(monthlyFor(empId),sevenSnapshot);
+    byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
+<div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Commission</span><span class="amt">${Number(c.commission||0).toFixed(2)}</span></div><div class="payslip-line"><span>Bonus</span><span class="amt">${Number(c.bonus||0).toFixed(2)}</span></div><div style="height:140px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(c.total_income||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">0.00</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">0.00</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">0.00</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">0.00</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
+<div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${Number(c.net_pay||0).toFixed(2)}</span></div></div>
+<div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div></div>`;
+  }
+  byId("payslipModal").classList.add("open");
+}
+
+async function initialize(){
+  window.activeMainPage=window.activeMainPage||"daily";
+  const now=new Date();
+  byId("salaryMonth").value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+
+  byId("sidebarDaily").onclick=showDaily;
+  byId("sidebarSalary").onclick=showSalary;
+  byId("mobileSidebarBtn").onclick=()=>byId("mainSidebar").classList.toggle("open");
+};
+  byId("salaryMonth").onchange=async()=>{ 
+    window.activeMainPage="salary";
+    await loadSalaryData();
+  };
+  byId("submitStaffBtn").onclick=()=>byId("staffModal").classList.add("open");
+  byId("closeStaffModal").onclick=()=>byId("staffModal").classList.remove("open");
+  byId("reviewStaffBtn").onclick=reviewSubmitStaff;
+  byId("closeStaffReviewModal").onclick=()=>byId("staffReviewModal").classList.remove("open");
+  byId("confirmSubmitStaffBtn").onclick=saveStaff;
+byId("empPayBy").onchange=updateSubmitStaffPaymentFields;
+  byId("editEmpPayBy").onchange=updateEditStaffPaymentFields;
+  updateSubmitStaffPaymentFields();
+  byId("staffListBtn").onclick=()=>{ renderStaffList(); byId("staffListModal").classList.add("open"); };
+  byId("manageOutletBtn").onclick=async()=>{
+    if(!salaryAccess.is_global) return;
+    await renderOutletManagement();
+    byId("outletManageModal").classList.add("open");
+  };
+  byId("closeOutletManageModal").onclick=()=>byId("outletManageModal").classList.remove("open");
+  byId("addOutletBtn").onclick=addOutlet;
+
+  byId("outletManageList").onclick=(e)=>{
+    const editBtn=e.target.closest("[data-edit-outlet]");
+    if(editBtn){
+      openEditOutlet(Number(editBtn.dataset.editOutlet));
+      return;
+    }
+
+    const delBtn=e.target.closest("[data-delete-outlet]");
+    if(delBtn){
+      deleteOutlet(Number(delBtn.dataset.deleteOutlet),delBtn.dataset.outletName||"");
+    }
+  };
+
+  byId("closeEditOutletModal").onclick=()=>byId("editOutletModal").classList.remove("open");
+  byId("saveOutletEditBtn").onclick=saveOutletEdit;
+
+byId("closeStaffListModal").onclick=()=>byId("staffListModal").classList.remove("open");
+
+  byId("staffListContent").onclick=(e)=>{
+    const editBtn=e.target.closest("[data-edit-staff]");
+    if(editBtn){
+      openEditStaff(Number(editBtn.dataset.editStaff));
+      return;
+    }
+    const delBtn=e.target.closest("[data-delete-staff]");
+    if(delBtn){
+      deleteStaff(Number(delBtn.dataset.deleteStaff));
+    }
+  };
+
+  byId("closeEditStaffModal").onclick=()=>byId("editStaffModal").classList.remove("open");
+  byId("updateStaffBtn").onclick=updateStaff;
+  byId("closePayslipModal").onclick=()=>byId("payslipModal").classList.remove("open");
+  byId("downloadPayslipBtn").onclick=async()=>{
+    try{
+      const file=await buildPayslipPdfFile();
+      const url=URL.createObjectURL(file);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=file.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(err){
+      alert("Unable to create PDF: "+err.message);
+    }
+  };
+  byId("salaryLogoutBtn").onclick=async()=>{
+        await salaryDb.auth.signOut();
+    location.reload();
+  };
+
+  const {data:{session}}=await salaryDb.auth.getSession();
+  if(session){
+    byId("mainSidebar").classList.remove("hidden");
+    byId("appView").classList.add("sidebar-offset");
+  } else {
+    byId("mobileSidebarBtn").style.display="none";
+  }
+}
+
+salaryDb.auth.onAuthStateChange((event,session)=>{
+  if(!session){
+    byId("mainSidebar").classList.add("hidden");
+    byId("salaryPage").classList.remove("active","sidebar-offset");
+    window.activeMainPage="daily";
+  } else {
+    byId("mainSidebar").classList.remove("hidden");
+    if(window.activeMainPage==="salary") byId("appView").classList.add("hidden");
+  }
+});
+
+document.addEventListener("DOMContentLoaded",initialize);
+})();
+
+async function buildPayslipPdfFile(){
+  const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
+  if(!slip) throw new Error("Payslip not found");
+  if(typeof html2canvas!=="function") throw new Error("PDF renderer not loaded");
+  if(!window.jspdf?.jsPDF) throw new Error("PDF library not loaded");
+
+  const canvas=await html2canvas(slip,{
+    scale:2,
+    backgroundColor:"#ffffff",
+    useCORS:true
+  });
+
+  const widthMm=slip.getBoundingClientRect().width * 25.4 / 96;
+  const heightMm=slip.getBoundingClientRect().height * 25.4 / 96;
+
+  const {jsPDF}=window.jspdf;
+  const orientation=widthMm>heightMm ? "landscape" : "portrait";
+
+  const pdf=new jsPDF({
+    orientation,
+    unit:"mm",
+    format:[widthMm,heightMm]
+  });
+
+  const img=canvas.toDataURL("image/jpeg",0.96);
+  pdf.addImage(img,"JPEG",0,0,widthMm,heightMm);
+
+  const blob=pdf.output("blob");
+  const type=slip.dataset.payslipType||"Payslip";
+  const monthInput=document.getElementById("salaryMonth")?.value || "";
+  let monthLabel="Payslip";
+  if(monthInput){
+    const parts=monthInput.split("-").map(Number);
+    if(parts.length===2 && parts[0] && parts[1]){
+      monthLabel=new Date(parts[0],parts[1]-1,1).toLocaleString("en-US",{month:"short"});
+    }
+  }
+  const filename=`Natures_Dao_${type}_${monthLabel}.pdf`;
+  return new File([blob],filename,{type:"application/pdf"});
+}
+
+async function sharePayslipWhatsApp(){
+  try{
+    const file=await buildPayslipPdfFile();
+
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({
+        files:[file],
+        title:"Nature's Dao Payslip"
+      });
+      return;
+    }
+
+    const url=URL.createObjectURL(file);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+
+    alert("PDF downloaded. Please attach the PDF in WhatsApp.");
+  }catch(err){
+    alert("Unable to share PDF: "+err.message);
+  }
+}
+
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded",()=>{
+  const b=document.getElementById("shareWhatsAppBtn");
+  if(b) b.onclick=sharePayslipWhatsApp;
+});
+</script>
+
+
+<script>
+(function(){
+  const PAGE_KEY="nd_last_page_v2";
+  const MONTH_KEY="nd_salary_month_v2";
+  const SCROLL_KEY="nd_scroll_v2";
+
+  function saveState(){
+    try{
+      localStorage.setItem(PAGE_KEY, window.activeMainPage || "daily");
+      const m=document.getElementById("salaryMonth");
+      if(m && m.value) localStorage.setItem(MONTH_KEY,m.value);
+      localStorage.setItem(SCROLL_KEY,String(window.scrollY||0));
+    }catch(e){}
+  }
+
+  function restoreState(){
+    try{
+      const savedPage=localStorage.getItem(PAGE_KEY)||"daily";
+      const savedMonth=localStorage.getItem(MONTH_KEY);
+      const savedScroll=Number(localStorage.getItem(SCROLL_KEY)||0);
+
+      const month=document.getElementById("salaryMonth");
+      if(month && savedMonth) month.value=(savedMonth<"2026-09"?"2026-09":savedMonth);
+
+      // Use the actual navigation buttons in this app.
+      if(savedPage==="salary"){
+        const btn=document.getElementById("sidebarSalary");
+        if(btn) btn.click();
+      }else{
+        const btn=document.getElementById("sidebarDaily");
+        if(btn) btn.click();
+      }
+
+      setTimeout(()=>window.scrollTo(0,savedScroll),500);
+    }catch(e){}
+  }
+
+  window.addEventListener("beforeunload",saveState);
+  window.addEventListener("pagehide",saveState);
+
+  document.addEventListener("click",(e)=>{
+    if(e.target.closest("#sidebarSalary")){
+      try{ localStorage.setItem(PAGE_KEY,"salary"); }catch(_){}
+    }
+    if(e.target.closest("#sidebarDaily")){
+      try{ localStorage.setItem(PAGE_KEY,"daily"); }catch(_){}
+    }
+  });
+
+  document.addEventListener("change",(e)=>{
+    if(e.target && e.target.id==="salaryMonth"){
+      try{ if(e.target.value<"2026-09") e.target.value="2026-09"; localStorage.setItem(MONTH_KEY,e.target.value||""); }catch(_){}
+    }
+  });
+
+  let scrollTimer;
+  window.addEventListener("scroll",()=>{
+    clearTimeout(scrollTimer);
+    scrollTimer=setTimeout(()=>{
+      try{ localStorage.setItem(SCROLL_KEY,String(window.scrollY||0)); }catch(_){}
+    },150);
+  },{passive:true});
+
+  // Wait for auth/session initialization and sidebar rendering.
+  window.addEventListener("load",()=>{
+    setTimeout(restoreState,1200);
+  });
+})();
+</script>
+
+</body>
+</html>
