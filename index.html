@@ -3847,37 +3847,58 @@ window.openMonthlyRosterPage=function(ev){
 
 
 async function loadSalaryBranches(){
-  const {data,error}=await salaryDb.from("salary_outlets").select("*").order("sort_order").order("name");
-  if(error){
-    console.error("salary_outlets load failed", error);
-    salaryBranches=[];
-    accessibleSalaryOutlets=isGlobalAdmin ? [...new Set(["Eco Botanic","Nusa Bestari","Global",...salaryBranches.map(b=>b.name).filter(Boolean)])] : [];
-    salaryUserAccessRows=[];
-    branchAccessMap=new Map();
-    populateOutletSelects();
-    return;
+  // Load the user's salary access independently from salary_outlets.
+  // This prevents the Salary menu from disappearing just because salary_outlets
+  // has a temporary RLS/read problem.
+  let accessQ=salaryDb.from("salary_user_access").select("email,outlet");
+
+  if(!isPayrollManager && currentSalaryUserEmail){
+    // Case-insensitive email match. Saved access may contain different casing.
+    accessQ=accessQ.ilike("email",currentSalaryUserEmail.trim());
   }
 
-  salaryBranches=data||[];
+  const [branchRes,accessRes]=await Promise.all([
+    salaryDb.from("salary_outlets").select("*").order("sort_order").order("name"),
+    accessQ
+  ]);
 
-  // salary_user_access is the database source of truth for branch salary visibility.
-  // Salary Managers need the full list for Branch Management; normal users only load their own rows.
-  let accessQ=salaryDb.from("salary_user_access").select("email,outlet");
-  if(!isPayrollManager && currentSalaryUserEmail) accessQ=accessQ.eq("email",currentSalaryUserEmail);
-  const accessRes=await accessQ;
   salaryUserAccessRows=accessRes.error?[]:(accessRes.data||[]);
 
   branchAccessMap=new Map();
   salaryUserAccessRows.forEach(r=>{
-    const outlet=String(r.outlet||"");
-    const email=String(r.email||"").toLowerCase();
+    const outlet=String(r.outlet||"").trim();
+    const email=String(r.email||"").trim().toLowerCase();
     if(!outlet||!email) return;
     if(!branchAccessMap.has(outlet)) branchAccessMap.set(outlet,[]);
     if(!branchAccessMap.get(outlet).includes(email)) branchAccessMap.get(outlet).push(email);
   });
 
-  // One-time compatibility: when an owner/manager opens Branch Management, copy legacy
-  // salary_outlets.manager_emails into salary_user_access so existing branch permissions keep working.
+  if(branchRes.error){
+    console.error("salary_outlets load failed", branchRes.error);
+
+    salaryBranches=[];
+
+    // IMPORTANT: normal users can still see Salary from salary_user_access.
+    if(isGlobalAdmin){
+      accessibleSalaryOutlets=["Eco Botanic","Nusa Bestari","Global"];
+    }else{
+      accessibleSalaryOutlets=[...new Set(
+        salaryUserAccessRows
+          .filter(r=>String(r.email||"").trim().toLowerCase()===String(currentSalaryUserEmail||"").trim().toLowerCase())
+          .map(r=>String(r.outlet||"").trim())
+          .filter(x=>x && x!=="Global")
+      )];
+    }
+
+    populateOutletSelects();
+    updateSalaryNavVisibility();
+    return;
+  }
+
+  salaryBranches=branchRes.data||[];
+
+  // One-time compatibility: when an owner opens the page, copy legacy
+  // salary_outlets.manager_emails into salary_user_access.
   if(isGlobalAdmin){
     const missing=[];
     salaryBranches.forEach(b=>{
@@ -3888,6 +3909,7 @@ async function loadSalaryBranches(){
         if(!known.includes(email)) missing.push({email,outlet:b.name});
       });
     });
+
     if(missing.length){
       const syncRes=await salaryDb.from("salary_user_access").upsert(missing,{onConflict:"email,outlet"});
       if(!syncRes.error){
@@ -3896,7 +3918,8 @@ async function loadSalaryBranches(){
           salaryUserAccessRows=reload.data||[];
           branchAccessMap=new Map();
           salaryUserAccessRows.forEach(r=>{
-            const outlet=String(r.outlet||""), email=String(r.email||"").toLowerCase();
+            const outlet=String(r.outlet||"").trim();
+            const email=String(r.email||"").trim().toLowerCase();
             if(!outlet||!email) return;
             if(!branchAccessMap.has(outlet)) branchAccessMap.set(outlet,[]);
             if(!branchAccessMap.get(outlet).includes(email)) branchAccessMap.get(outlet).push(email);
@@ -3910,10 +3933,12 @@ async function loadSalaryBranches(){
     accessibleSalaryOutlets=salaryBranches.filter(b=>!b.is_global).map(b=>b.name);
     accessibleSalaryOutlets.push("Global");
   }else{
+    const loginEmail=String(currentSalaryUserEmail||"").trim().toLowerCase();
     accessibleSalaryOutlets=[...new Set(
       salaryUserAccessRows
-        .filter(r=>String(r.email||"").toLowerCase()===currentSalaryUserEmail && r.outlet!=="Global")
-        .map(r=>r.outlet)
+        .filter(r=>String(r.email||"").trim().toLowerCase()===loginEmail)
+        .map(r=>String(r.outlet||"").trim())
+        .filter(x=>x && x!=="Global")
     )];
   }
 
