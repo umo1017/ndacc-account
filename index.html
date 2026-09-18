@@ -4444,7 +4444,7 @@ function renderSevenTable(emps){
         <td>${taxCellHtml(e,s,snap)}</td>
         <td>${snap?money(s.ot||0):editInput(e.id,"ot",m.ot)}</td>
         <td>${money(s.gross_pay)}</td><td>${money(s.total_deduction)}</td><td>${money(s.net_pay)}</td>
-        <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isPayrollManager?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isPayrollManager?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">Manager only</span>`)}</td>
+        <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
         <td>${snap?`<button class="btn" data-payslip7="${e.id}">7th Payslip</button>`:`<span class="helper">Confirm first</span>`}</td>
         <td><span class="pay-method-pill">${e.payment_method||"Cash"}</span></td>
         <td>${snap
@@ -4475,7 +4475,7 @@ function renderFourteenTable(emps){
         <td>${fld("reward",cs?cs.bonus:m.reward)}</td>
         <td data-live-commission="${e.id}">${money(c.commission)}</td>
         <td data-live-netpay14="${e.id}">${money(c.net_pay)}</td>
-        <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isPayrollManager?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isPayrollManager?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">Manager only</span>`)}</td>
+        <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
         <td>${cs?`<button class="btn" data-payslip14="${e.id}">14th Payslip</button>`:`<span class="helper">Confirm first</span>`}</td>
         <td><span class="pay-method-pill">${e.payment_method||"Cash"}</span></td>
         <td>${cs
@@ -4997,7 +4997,7 @@ async function toggleSalaryPayment(type,empId){
   await refreshSalaryStayHere();
 }
 async function reset7th(empId){
-  if(!isPayrollManager){alert("Manager only.");return;}
+  if(!isGlobalAdmin){alert("No Confirm permission.");return;}
   if(!confirm("Reset confirmed 7th payroll?")) return;
   if(!confirm("Second confirmation: recalculate this employee's 7th payroll for the selected month?")) return;
 
@@ -5016,7 +5016,7 @@ async function reset7th(empId){
 }
 
 async function confirm7th(empId){
-  if(!isPayrollManager){alert("Manager only.");return;}
+  if(!isGlobalAdmin){alert("No Confirm permission.");return;}
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || snapshotFor(empId)) return;
   if((e.employment_type||"full_time")==="part_time") return;
@@ -5029,7 +5029,7 @@ async function confirm7th(empId){
 }
 
 async function confirm14th(empId){
-  if(!isPayrollManager){alert("Manager only.");return;}
+  if(!isGlobalAdmin){alert("No Confirm permission.");return;}
   if(commissionPendingChanges.has(Number(empId))){
     alert("Please Submit Commission Changes first.");
     return;
@@ -5044,7 +5044,7 @@ async function confirm14th(empId){
   await refreshSalaryStayHere();
 }
 async function reset14th(empId){
-  if(!isPayrollManager){alert("Manager only.");return;}
+  if(!isGlobalAdmin){alert("No Confirm permission.");return;}
   if(!confirm("Reset confirmed 14th commission payroll?")) return;
   const {error}=await salaryDb.from("payroll_commission_snapshot").delete().eq("employee_id",empId).eq("salary_month",monthDate());
   if(error){alert("Reset 14th failed: "+error.message);return;}
