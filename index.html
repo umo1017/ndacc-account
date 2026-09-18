@@ -2888,7 +2888,7 @@ return `<div class="history-date-card">
 <div class="settings-section-body">
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <input id="settingsSalaryManagerName" placeholder="Manager name" style="flex:1;min-width:180px" type="text"/>
-<input id="settingsSalaryManagerEmail" placeholder="email@example.com" style="flex:1;min-width:240px" type="email"/>
+<input id="settingsSalaryManagerEmail" placeholder="Login email used for ndacc.us" style="flex:1;min-width:240px" type="email"/>
 <button class="btn" id="settingsAddSalaryManagerBtn" type="button">Add</button>
 </div>
 <div class="branch-admin-panel" id="settingsSalaryManagerList" style="margin-top:12px"></div>
@@ -3669,29 +3669,50 @@ async function ownerAddHistoryAccess(){
   byId("settingsHistoryEmail").value="";
   await renderOwnerSettings();
 }
+async function validateSalaryLoginEmail(email){
+  email=String(email||"").trim().toLowerCase();
+  if(!email || !email.includes("@")){
+    return {ok:false,message:"Please enter the actual login email used for ndacc.us."};
+  }
+
+  const {data,error}=await salaryDb.rpc("salary_login_email_exists",{p_email:email});
+  if(error){
+    console.error("salary_login_email_exists failed",error);
+    return {ok:false,message:"Unable to verify this login email. Please check the Supabase RPC setup."};
+  }
+
+  if(!data){
+    return {ok:false,message:`This email is not an ndacc.us login account: ${email}`};
+  }
+
+  return {ok:true,email};
+}
+
 async function ownerAddSalaryManager(){
   if(!isGlobalAdmin) return;
+
   const name=(byId("settingsSalaryManagerName")?.value||"").trim();
-  let email=(byId("settingsSalaryManagerEmail")?.value||"").trim().toLowerCase();
+  const email=(byId("settingsSalaryManagerEmail")?.value||"").trim().toLowerCase();
 
   if(!name) return alert("Enter manager name.");
 
-  // Auto-fill a suggested email if left blank.
-  if(!email){
-    const slug=name.toLowerCase().replace(/[^a-z0-9]+/g,"").trim();
-    email=`${slug||"manager"}@naturesdao.online`;
-    byId("settingsSalaryManagerEmail").value=email;
-  }
+  // IMPORTANT: never invent @naturesdao.online addresses.
+  // Salary access must use the exact email that the person uses to log in to ndacc.us.
+  const check=await validateSalaryLoginEmail(email);
+  if(!check.ok) return alert(check.message);
 
-  if(!email.includes("@")) return alert("Enter a valid email.");
+  const loginEmail=check.email;
 
   const p=await salaryDb.from("salary_manager_profiles").upsert(
-    {name,email,is_owner:false},
+    {name,email:loginEmail,is_owner:false},
     {onConflict:"email"}
   );
   if(p.error) return alert(p.error.message);
 
-  const {error}=await salaryDb.from("salary_management_admins").upsert({email},{onConflict:"email"});
+  const {error}=await salaryDb.from("salary_management_admins").upsert(
+    {email:loginEmail},
+    {onConflict:"email"}
+  );
   if(error) return alert(error.message);
 
   byId("settingsSalaryManagerName").value="";
@@ -3707,18 +3728,22 @@ async function ownerEditSalaryManagerProfile(id,oldName,oldEmail){
   if(emailInput===null) return;
   const newName=String(name||"").trim();
   const newEmail=String(emailInput||"").trim().toLowerCase();
-  if(!newName || !newEmail.includes("@")) return alert("Name and valid email are required.");
+  if(!newName) return alert("Manager name is required.");
+
+  const check=await validateSalaryLoginEmail(newEmail);
+  if(!check.ok) return alert(check.message);
+  const verifiedEmail=check.email;
 
   const upd=await salaryDb.from("salary_manager_profiles")
-    .update({name:newName,email:newEmail})
+    .update({name:newName,email:verifiedEmail})
     .eq("id",id);
   if(upd.error) return alert(upd.error.message);
 
-  if(newEmail!==oldEmail){
+  if(verifiedEmail!==String(oldEmail||"").trim().toLowerCase()){
     const accessRows=(salaryUserAccessRows||[]).filter(x=>String(x.email||"").toLowerCase()===oldEmail)
-      .map(x=>({email:newEmail,outlet:x.outlet}));
+      .map(x=>({email:verifiedEmail,outlet:x.outlet}));
 
-    await salaryDb.from("salary_management_admins").upsert({email:newEmail},{onConflict:"email"});
+    await salaryDb.from("salary_management_admins").upsert({email:verifiedEmail},{onConflict:"email"});
     if(accessRows.length){
       await salaryDb.from("salary_user_access").upsert(accessRows,{onConflict:"email,outlet"});
     }
@@ -3773,6 +3798,10 @@ async function ownerSaveManagerBranchAccess(email){
   if(!isGlobalAdmin) return;
   email=String(email||"").trim().toLowerCase();
   if(!email) return;
+
+  const check=await validateSalaryLoginEmail(email);
+  if(!check.ok) return alert(check.message);
+  email=check.email;
 
   const boxes=[...document.querySelectorAll("[data-manager-branch-email]")]
     .filter(x=>String(x.dataset.managerBranchEmail||"").toLowerCase()===email);
