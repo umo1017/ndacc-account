@@ -929,6 +929,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
 <button class="sidebar-btn" id="sidebarRoster" type="button">Monthly Roster</button>
 <button class="sidebar-btn" id="sidebarSalary" style="display:none" type="button">Salary</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
+<button class="sidebar-btn" id="sidebarOrders" type="button">订货 / Orders</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Setting</button>
 </aside>
 <button class="mobile-sidebar-btn" id="mobileSidebarBtn" type="button">☰</button>
@@ -2663,10 +2664,67 @@ return `<div class="history-date-card">
 .settlement-expense-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(120px,180px);gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .settlement-project-row{display:grid;grid-template-columns:minmax(160px,1fr) minmax(110px,160px) auto;gap:8px;align-items:center;margin-top:8px}
 .settlement-profit{font-size:26px;font-weight:950}
+
+/* Monthly Expenses payment tracking */
+#settlementExpenseForm{
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  padding-bottom:8px;
+}
+.settlement-expense-head,
+.settlement-expense-row{
+  min-width:900px;
+  display:grid;
+  grid-template-columns:minmax(280px,1.4fr) 180px 190px 150px;
+  gap:12px;
+  align-items:center;
+}
+.settlement-expense-head{
+  padding:8px 0 10px;
+  border-bottom:1px solid var(--line);
+  font-size:12px;
+  font-weight:900;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.settlement-expense-row{
+  padding:10px 0;
+  border-bottom:1px solid var(--line);
+}
+.settlement-expense-row > input[type="number"],
+.settlement-expense-row > .settlement-amount-cell input[type="number"]{
+  width:100%;
+  min-width:0;
+}
+.settlement-payment-date{
+  width:100%;
+  min-width:165px;
+}
+.settlement-paid-btn{
+  width:100%;
+  min-width:130px;
+  white-space:nowrap;
+  font-weight:900;
+}
+.settlement-paid-btn.paid{
+  border-color:#1f8f4d;
+  background:#eaf8ef;
+  color:#176d3b;
+}
+.settlement-paid-btn.unpaid{
+  border-style:dashed;
+}
+.settlement-scroll-note{
+  display:none;
+  font-size:12px;
+  color:var(--muted);
+  margin:6px 0 2px;
+}
 @media(max-width:700px){
   .settlement-kpis{grid-template-columns:1fr 1fr}
-  .settlement-expense-row{grid-template-columns:1fr 130px}
   .settlement-project-row{grid-template-columns:1fr 110px auto}
+  .settlement-scroll-note{display:block}
 }
 </style>
 <div class="salary-page" id="settlementPage">
@@ -2704,62 +2762,69 @@ return `<div class="history-date-card">
 </div>
 <div class="salary-card">
 <div class="outlet-title"><div style="display:flex;align-items:center;gap:8px"><strong>Monthly Expenses</strong><span class="branch-chip">FIXED</span></div><span id="settlementExpenseTotal">RM 0.00</span></div>
+<div class="settlement-scroll-note">← Swipe sideways to view Payment Date / Paid Status →</div>
 <div id="settlementExpenseForm" style="margin-top:10px">
-<div class="settlement-expense-row">
+<div class="settlement-expense-head">
+  <div>Expense</div>
+  <div>Amount</div>
+  <div>Payment Date</div>
+  <div>Status</div>
+</div>
+<div class="settlement-expense-row" data-expense-payment-key="rent">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_rent">Rent</strong><button class="mini" data-expense-name-edit="rent" type="button">✎</button><button class="mini" data-expense-edit="rent" type="button">✎</button></div>
 <input data-finance-field="rent" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="salary7">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 <strong>Branch Salary 7th</strong><span class="branch-chip">AUTO</span>
 </div>
 <input disabled="" id="settlementSalary7Input" readonly="" type="number"/>
-</div><div class="settlement-expense-row">
+</div><div class="settlement-expense-row" data-expense-payment-key="salary14">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 <strong>Branch Salary 14th</strong><span class="branch-chip">AUTO</span>
 </div>
 <input disabled="" id="settlementSalary14Input" readonly="" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="petty_cash">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 <strong>Petty Cash Record</strong>
 <span class="branch-chip">AUTO</span>
 </div>
 <input disabled="" id="settlementPettyInput" readonly="" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="water">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_water">Water</strong><button class="mini" data-expense-name-edit="water" type="button">✎</button><button class="mini" data-expense-edit="water" type="button">✎</button></div>
 <input data-finance-field="water" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="electricity">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_electricity">Electricity</strong><button class="mini" data-expense-name-edit="electricity" type="button">✎</button><button class="mini" data-expense-edit="electricity" type="button">✎</button></div>
 <input data-finance-field="electricity" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="internet">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_internet">Internet</strong><button class="mini" data-expense-name-edit="internet" type="button">✎</button><button class="mini" data-expense-edit="internet" type="button">✎</button></div>
 <input data-finance-field="internet" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="advertising">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_advertising">Advertising</strong><button class="mini" data-expense-name-edit="advertising" type="button">✎</button><button class="mini" data-expense-edit="advertising" type="button">✎</button></div>
 <input data-finance-field="advertising" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="maintenance">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_maintenance">Maintenance</strong><button class="mini" data-expense-name-edit="maintenance" type="button">✎</button><button class="mini" data-expense-edit="maintenance" type="button">✎</button></div>
 <input data-finance-field="maintenance" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="secretary_fee">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_secretary_fee">Secretary</strong><button class="mini" data-expense-name-edit="secretary_fee" type="button">✎</button><button class="mini" data-expense-edit="secretary_fee" type="button">✎</button></div>
 <input data-finance-field="secretary_fee" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="machine_fee">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_machine_fee">Machine</strong><button class="mini" data-expense-name-edit="machine_fee" type="button">✎</button><button class="mini" data-expense-edit="machine_fee" type="button">✎</button></div>
 <input data-finance-field="machine_fee" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="tax">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_tax">Tax</strong><button class="mini" data-expense-name-edit="tax" type="button">✎</button><button class="mini" data-expense-edit="tax" type="button">✎</button></div>
 <input data-finance-field="tax" min="0" readonly="" step="0.01" type="number"/>
 </div>
-<div class="settlement-expense-row">
+<div class="settlement-expense-row" data-expense-payment-key="other_amount">
 <div style="display:flex;align-items:center;gap:6px">
 <strong id="settlementLabel_other_amount">Other</strong><button class="mini" data-expense-name-edit="other_amount" type="button">✎</button>
 </div>
@@ -2827,6 +2892,120 @@ return `<div class="history-date-card">
 </div>
 </div>
 </div>
+
+<style>
+.orders-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.orders-grid .wide{grid-column:span 2}
+.orders-list-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.orders-table{min-width:980px;width:100%;border-collapse:collapse}
+.orders-table th,.orders-table td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.orders-table th{font-size:12px;color:var(--muted);font-weight:900}
+.orders-status{font-weight:900;border-radius:999px;padding:6px 10px;border:1px solid var(--line);background:#fff}
+.orders-total{font-weight:900}
+@media(max-width:700px){
+  .orders-grid{grid-template-columns:1fr 1fr}
+  .orders-grid .wide{grid-column:span 2}
+}
+</style>
+
+<div class="salary-page" id="ordersPage">
+  <div class="salary-shell" style="display:grid">
+    <div class="salary-top">
+      <div>
+        <div class="salary-title">订货 / Orders</div>
+        <div class="helper" id="ordersAccessNote">自己添加的订货记录</div>
+      </div>
+      <div class="salary-right">
+        <button class="btn" id="ordersRefreshBtn" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div class="salary-card">
+      <div class="outlet-title">
+        <strong>新增订货</strong>
+        <span class="branch-chip">自己添加</span>
+      </div>
+
+      <div class="orders-grid" style="margin-top:12px">
+        <div>
+          <label>Date</label>
+          <input id="orderDate" type="date"/>
+        </div>
+        <div>
+          <label>Branch</label>
+          <select id="orderBranch"></select>
+        </div>
+        <div class="wide">
+          <label>Item / 产品</label>
+          <input id="orderItem" placeholder="Item name"/>
+        </div>
+
+        <div>
+          <label>Quantity</label>
+          <input id="orderQty" type="number" min="0" step="1" value="1"/>
+        </div>
+        <div>
+          <label>Unit Price (RM)</label>
+          <input id="orderUnitPrice" type="number" min="0" step="0.01" value="0"/>
+        </div>
+        <div>
+          <label>Total (RM)</label>
+          <input id="orderTotal" type="number" readonly value="0.00"/>
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="orderStatus">
+            <option value="Pending">Pending</option>
+            <option value="Ordered">Ordered</option>
+            <option value="Received">Received</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </div>
+
+        <div class="wide">
+          <label>Supplier / 供应商</label>
+          <input id="orderSupplier" placeholder="Supplier"/>
+        </div>
+        <div class="wide">
+          <label>Notes / 备注</label>
+          <input id="orderNotes" placeholder="Notes"/>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px">
+        <button class="btn" id="orderAddBtn" type="button">Add Order</button>
+        <span class="helper" id="orderSaveState"></span>
+      </div>
+    </div>
+
+    <div class="salary-card">
+      <div class="outlet-title">
+        <strong id="ordersListTitle">My Orders</strong>
+        <span class="helper" id="ordersCount"></span>
+      </div>
+      <div class="orders-list-wrap" style="margin-top:10px">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Branch</th>
+              <th>Item</th>
+              <th>Qty</th>
+              <th>Unit</th>
+              <th>Total</th>
+              <th>Supplier</th>
+              <th>Status</th>
+              <th>Created By</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="salary-page" id="settingsPage">
 <div class="salary-shell" style="display:grid">
 <div class="salary-top">
@@ -2879,6 +3058,22 @@ return `<div class="history-date-card">
 <button class="btn" id="settingsAddHistoryBtn" type="button">Add</button>
 </div>
 <div class="branch-admin-panel" id="settingsHistoryList" style="margin-top:12px"></div>
+</div>
+</section>
+
+<section class="settings-section">
+<button class="settings-section-head" type="button">
+<span>Order View Access</span><span class="settings-chevron">⌄</span>
+</button>
+<div class="settings-section-body">
+  <div class="helper" style="margin-bottom:8px">
+    每个人都可以添加并查看自己的订货；这里添加的账号可以查看全部人的订货记录。
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <input id="settingsOrderAccessEmail" placeholder="Actual ndacc.us login email" style="flex:1;min-width:240px" type="email"/>
+    <button class="btn" id="settingsAddOrderAccessBtn" type="button">Add View Access</button>
+  </div>
+  <div class="branch-admin-panel" id="settingsOrderAccessList" style="margin-top:12px"></div>
 </div>
 </section>
 <section class="settings-section">
@@ -3414,6 +3609,7 @@ function setSidebarActive(page){
   byId("sidebarSalary").classList.toggle("active",page==="salary");
   byId("sidebarRoster")?.classList.toggle("active",page==="roster");
   byId("sidebarSettlement")?.classList.toggle("active",page==="settlement");
+  byId("sidebarOrders")?.classList.toggle("active",page==="orders");
   byId("sidebarSettings")?.classList.toggle("active",page==="settings");
 }
 function closeMobileSidebar(){ byId("mainSidebar").classList.remove("open"); }
@@ -5673,6 +5869,7 @@ async function initialize(){
   byId("sidebarSalary").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","salary");}catch(_){} showSalary();};
   byId("sidebarRoster").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","roster");}catch(_){} showRoster();};
   byId("sidebarSettlement").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","settlement");}catch(_){} showSettlement();};
+  byId("sidebarOrders").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","orders");}catch(_){} showOrders();};
   byId("sidebarSettings").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","settings");}catch(_){} showSettings();};
   byId("settingsLogoutBtn").onclick=async()=>{
     try{localStorage.removeItem("nd_last_page_v2");}catch(_){}
@@ -6607,6 +6804,9 @@ document.addEventListener("DOMContentLoaded",()=>{
     if(e.target.closest("#sidebarSettlement")){
       try{ localStorage.setItem(PAGE_KEY,"settlement"); }catch(_){}
     }
+    if(e.target.closest("#sidebarOrders")){
+      try{ localStorage.setItem(PAGE_KEY,"orders"); }catch(_){}
+    }
     if(e.target.closest("#sidebarSettings")){
       try{ localStorage.setItem(PAGE_KEY,"settings"); }catch(_){}
     }
@@ -6657,6 +6857,9 @@ document.addEventListener("DOMContentLoaded",()=>{
           let ok=false; try{ok=await refreshSettlementAccess();}catch(_){}
           if(ok){await showSettlement();ndRestoreDone=true;break;}
         }
+        if(saved==="orders" && typeof showOrders==="function"){
+          await showOrders(); ndRestoreDone=true; break;
+        }
         if(saved==="settings" && typeof showSettings==="function"){
           try{await determineManager();}catch(_){}
           if(isGlobalAdmin){await showSettings();ndRestoreDone=true;break;}
@@ -6689,6 +6892,7 @@ let settlementProjects=[];
 let settlementAuto={revenue:0,salary:0,petty_cash:0};
 let settlementRecord=null;
 let settlementCarrySource=null;
+let settlementPaymentMeta={};
 
 const SETTLEMENT_OWNERS=["umo1017@gmail.com","mars83002566@gmail.com"];
 const SETTLEMENT_EXPENSE_FIELDS=[
@@ -6718,6 +6922,78 @@ function settlementMonthDate(){
 function settlementNumber(field){
   const el=document.querySelector(`[data-finance-field="${field}"]`);
   return Number(el?.value||0);
+}
+
+function settlementTodayISO(){
+  const d=new Date();
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,"0");
+  const day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+
+function settlementEnsurePaymentControls(){
+  const form=document.getElementById("settlementExpenseForm");
+  if(!form) return;
+
+  form.querySelectorAll(".settlement-expense-row[data-expense-payment-key]").forEach(row=>{
+    const key=row.dataset.expensePaymentKey;
+    if(!key) return;
+
+    // Amount stays as the second column; append payment date + status columns once.
+    if(!row.querySelector("[data-payment-date]")){
+      const date=document.createElement("input");
+      date.type="date";
+      date.className="settlement-payment-date";
+      date.dataset.paymentDate=key;
+      date.title="Payment Date";
+      row.appendChild(date);
+    }
+
+    if(!row.querySelector("[data-payment-paid]")){
+      const btn=document.createElement("button");
+      btn.type="button";
+      btn.className="btn settlement-paid-btn unpaid";
+      btn.dataset.paymentPaid=key;
+      btn.textContent="Not Paid";
+      row.appendChild(btn);
+    }
+  });
+}
+
+function settlementRenderPaymentMeta(){
+  settlementEnsurePaymentControls();
+  document.querySelectorAll("[data-expense-payment-key]").forEach(row=>{
+    const key=row.dataset.expensePaymentKey;
+    const meta=settlementPaymentMeta?.[key]||{};
+    const date=row.querySelector("[data-payment-date]");
+    const btn=row.querySelector("[data-payment-paid]");
+
+    if(date) date.value=String(meta.date||"");
+    if(btn){
+      const paid=meta.paid===true;
+      btn.textContent=paid?"Paid ✓":"Not Paid";
+      btn.classList.toggle("paid",paid);
+      btn.classList.toggle("unpaid",!paid);
+    }
+  });
+}
+
+function settlementCollectPaymentMeta(){
+  settlementEnsurePaymentControls();
+  const out={};
+
+  document.querySelectorAll("[data-expense-payment-key]").forEach(row=>{
+    const key=row.dataset.expensePaymentKey;
+    const date=row.querySelector("[data-payment-date]")?.value||"";
+    const paid=row.querySelector("[data-payment-paid]")?.classList.contains("paid")||false;
+
+    // Keep every key so unpaid rows and cleared dates persist correctly.
+    out[key]={paid:Boolean(paid),date:String(date||"")};
+  });
+
+  settlementPaymentMeta=out;
+  return out;
 }
 function settlementManualExpense(){
   return SETTLEMENT_EXPENSE_FIELDS.reduce((s,f)=>s+settlementNumber(f),0);
@@ -6915,6 +7191,14 @@ async function loadSettlementMonth(){
   settlementRecord=recordRes.data||null;
   settlementCarrySource=null;
 
+  // Payment status/date belongs to the selected month only.
+  // Do NOT carry "Paid" status from a previous month.
+  settlementPaymentMeta=(
+    settlementRecord?.payment_meta &&
+    typeof settlementRecord.payment_meta==="object" &&
+    !Array.isArray(settlementRecord.payment_meta)
+  ) ? settlementRecord.payment_meta : {};
+
   // If this month has no saved expense row, carry the most recent prior month's
   // standard expenses forward automatically.
   let effective=settlementRecord;
@@ -6960,6 +7244,7 @@ async function loadSettlementMonth(){
         ? settlementCarrySource.projects.map(p=>({name:String(p?.name||""),amount:Number(p?.amount||0)}))
         : []);
   renderSettlementProjects();
+  settlementRenderPaymentMeta();
   settlementRecalculate();
 
   if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()}`;
@@ -6979,6 +7264,7 @@ async function saveSettlementMonth(){
       month_date:settlementMonthDate(),
       other_label:document.getElementById("settlementOtherLabelText")?.textContent||"Other / 其他",
       projects:settlementProjects,
+      payment_meta:settlementCollectPaymentMeta(),
       updated_at:new Date().toISOString()
     };
     SETTLEMENT_EXPENSE_FIELDS.forEach(f=>row[f]=settlementNumber(f));
@@ -7213,9 +7499,36 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.getElementById("settlementYear")?.addEventListener("change",loadSettlementYear);
   document.getElementById("settlementYearRefreshBtn")?.addEventListener("click",loadSettlementYear);
 
-  document.getElementById("settlementExpenseForm")?.addEventListener("input",settlementRecalculate);
+  document.getElementById("settlementExpenseForm")?.addEventListener("input",e=>{
+    if(e.target?.matches?.("[data-payment-date]")){
+      settlementCollectPaymentMeta();
+      return;
+    }
+    settlementRecalculate();
+  });
 
-  document.getElementById("settlementExpenseForm")?.addEventListener("click",e=>{
+  settlementEnsurePaymentControls();
+
+  document.getElementById("settlementExpenseForm")?.addEventListener("click",async e=>{
+    const paidBtn=e.target.closest("[data-payment-paid]");
+    if(paidBtn){
+      const row=paidBtn.closest("[data-expense-payment-key]");
+      const date=row?.querySelector("[data-payment-date]");
+      const willBePaid=!paidBtn.classList.contains("paid");
+
+      paidBtn.classList.toggle("paid",willBePaid);
+      paidBtn.classList.toggle("unpaid",!willBePaid);
+      paidBtn.textContent=willBePaid?"Paid ✓":"Not Paid";
+
+      if(willBePaid && date && !date.value) date.value=settlementTodayISO();
+      if(!willBePaid && date) date.value="";
+
+      settlementCollectPaymentMeta();
+
+      // Paid button saves immediately so it remains after refresh.
+      await saveSettlementMonth();
+      return;
+    }
     const nameBtn=e.target.closest("[data-expense-name-edit]");
     if(nameBtn){
       const field=nameBtn.dataset.expenseNameEdit;
@@ -7730,6 +8043,7 @@ document.addEventListener("click",(ev)=>{
     ["#sidebarRoster","roster"],
     ["#sidebarSalary","salary"],
     ["#sidebarSettlement","settlement"],
+    ["#sidebarOrders","orders"],
     ["#sidebarSettings","settings"]
   ];
   for(const [selector,page] of pairs){
@@ -7740,5 +8054,266 @@ document.addEventListener("click",(ev)=>{
   }
 });
 </script>
+
+<script>
+// ===== Orders / 订货 =====
+let ordersCanViewAll=false;
+let ordersCurrentEmail="";
+let ordersRows=[];
+
+function ordersDb(){
+  if(window.salaryDb) return window.salaryDb;
+  throw new Error("Database connection is not ready.");
+}
+function ordersEsc(v){
+  return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+function ordersMoney(v){
+  return "RM "+Number(v||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function ordersToday(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function ordersRecalc(){
+  const q=Number(document.getElementById("orderQty")?.value||0);
+  const p=Number(document.getElementById("orderUnitPrice")?.value||0);
+  const t=document.getElementById("orderTotal");
+  if(t) t.value=(q*p).toFixed(2);
+}
+async function refreshOrdersAccess(){
+  const db=ordersDb();
+  const {data:{session}}=await db.auth.getSession();
+  ordersCurrentEmail=String(session?.user?.email||"").trim().toLowerCase();
+  if(!ordersCurrentEmail) return false;
+
+  const ownerEmails=["umo1017@gmail.com","mars83002566@gmail.com"];
+  if(ownerEmails.includes(ordersCurrentEmail)){
+    ordersCanViewAll=true;
+  }else{
+    const {data,error}=await db
+      .from("order_view_access")
+      .select("email")
+      .eq("email",ordersCurrentEmail)
+      .maybeSingle();
+    ordersCanViewAll=!error && !!data;
+  }
+
+  const note=document.getElementById("ordersAccessNote");
+  const title=document.getElementById("ordersListTitle");
+  if(note) note.textContent=ordersCanViewAll
+    ? "有查看权限：可查看全部订货记录，也可以自己添加"
+    : "只显示自己添加的订货记录";
+  if(title) title.textContent=ordersCanViewAll?"All Orders":"My Orders";
+  return true;
+}
+
+async function loadOrderBranches(){
+  const sel=document.getElementById("orderBranch");
+  if(!sel) return;
+  const {data,error}=await ordersDb().from("daily_outlets")
+    .select("name,is_active").eq("is_active",true).order("id");
+  if(error) return;
+  const current=sel.value;
+  sel.innerHTML=(data||[]).map(x=>`<option value="${ordersEsc(x.name)}">${ordersEsc(x.name)}</option>`).join("");
+  if(current && [...sel.options].some(o=>o.value===current)) sel.value=current;
+}
+
+async function loadOrders(){
+  await refreshOrdersAccess();
+  const db=ordersDb();
+
+  // RLS controls whether this returns only own rows or all rows.
+  const {data,error}=await db.from("purchase_orders")
+    .select("*")
+    .order("order_date",{ascending:false})
+    .order("created_at",{ascending:false});
+
+  const body=document.getElementById("ordersTableBody");
+  const count=document.getElementById("ordersCount");
+  if(error){
+    if(body) body.innerHTML=`<tr><td colspan="10"><div class="bad">${ordersEsc(error.message)}</div></td></tr>`;
+    return;
+  }
+
+  ordersRows=data||[];
+  if(count) count.textContent=`${ordersRows.length} record${ordersRows.length===1?"":"s"}`;
+
+  if(!body) return;
+  body.innerHTML=ordersRows.map(r=>{
+    const mine=String(r.created_by||"").toLowerCase()===ordersCurrentEmail;
+    const canEdit=mine || ["umo1017@gmail.com","mars83002566@gmail.com"].includes(ordersCurrentEmail);
+    return `<tr>
+      <td>${ordersEsc(r.order_date||"")}</td>
+      <td>${ordersEsc(r.branch||"")}</td>
+      <td><strong>${ordersEsc(r.item_name||"")}</strong><div class="helper">${ordersEsc(r.notes||"")}</div></td>
+      <td>${Number(r.quantity||0)}</td>
+      <td>${ordersMoney(r.unit_price)}</td>
+      <td class="orders-total">${ordersMoney(r.total_amount)}</td>
+      <td>${ordersEsc(r.supplier||"")}</td>
+      <td>
+        ${canEdit
+          ? `<select class="orders-status" data-order-status="${r.id}">
+              ${["Pending","Ordered","Received","Cancelled"].map(s=>`<option value="${s}" ${r.status===s?"selected":""}>${s}</option>`).join("")}
+             </select>`
+          : `<span class="orders-status">${ordersEsc(r.status||"Pending")}</span>`}
+      </td>
+      <td>${ordersEsc(r.created_by||"")}</td>
+      <td>${canEdit?`<button class="btn staff-delete-btn" type="button" data-order-delete="${r.id}">Delete</button>`:"View"}</td>
+    </tr>`;
+  }).join("") || '<tr><td colspan="10"><div class="helper">No orders yet.</div></td></tr>';
+}
+
+async function addOrder(){
+  const state=document.getElementById("orderSaveState");
+  const date=document.getElementById("orderDate")?.value||ordersToday();
+  const branch=document.getElementById("orderBranch")?.value||"";
+  const item=(document.getElementById("orderItem")?.value||"").trim();
+  const qty=Number(document.getElementById("orderQty")?.value||0);
+  const unit=Number(document.getElementById("orderUnitPrice")?.value||0);
+  const supplier=(document.getElementById("orderSupplier")?.value||"").trim();
+  const notes=(document.getElementById("orderNotes")?.value||"").trim();
+  const status=document.getElementById("orderStatus")?.value||"Pending";
+
+  if(!item){ if(state) state.textContent="Item is required."; return; }
+  if(qty<=0){ if(state) state.textContent="Quantity must be more than 0."; return; }
+
+  await refreshOrdersAccess();
+  if(!ordersCurrentEmail){ if(state) state.textContent="Please login again."; return; }
+
+  if(state) state.textContent="Saving...";
+
+  const {error}=await ordersDb().from("purchase_orders").insert({
+    order_date:date,
+    branch,
+    item_name:item,
+    quantity:qty,
+    unit_price:unit,
+    total_amount:+(qty*unit).toFixed(2),
+    supplier,
+    notes,
+    status,
+    created_by:ordersCurrentEmail
+  });
+
+  if(error){ if(state) state.textContent=error.message; return; }
+
+  document.getElementById("orderItem").value="";
+  document.getElementById("orderQty").value="1";
+  document.getElementById("orderUnitPrice").value="0";
+  document.getElementById("orderTotal").value="0.00";
+  document.getElementById("orderSupplier").value="";
+  document.getElementById("orderNotes").value="";
+  document.getElementById("orderStatus").value="Pending";
+  if(state) state.textContent="Saved ✓";
+  setTimeout(()=>{if(state) state.textContent="";},1500);
+  await loadOrders();
+}
+
+async function showOrders(){
+  try{localStorage.setItem("nd_last_page_v2","orders");}catch(_){}
+  window.activeMainPage="orders";
+
+  document.getElementById("appView")?.classList.add("hidden");
+  document.getElementById("salaryPage")?.classList.remove("active","sidebar-offset");
+  document.getElementById("rosterPage")?.classList.remove("active","sidebar-offset");
+  document.getElementById("settlementPage")?.classList.remove("active","sidebar-offset");
+  document.getElementById("settingsPage")?.classList.remove("active","sidebar-offset");
+
+  const p=document.getElementById("ordersPage");
+  p?.classList.add("active","sidebar-offset");
+  if(p) p.style.display="block";
+
+  try{setSidebarActive("orders");}catch(_){}
+  try{closeMobileSidebar();}catch(_){}
+
+  const d=document.getElementById("orderDate");
+  if(d && !d.value) d.value=ordersToday();
+
+  await loadOrderBranches();
+  await loadOrders();
+}
+window.showOrders=showOrders;
+
+async function renderOrderViewAccess(){
+  const root=document.getElementById("settingsOrderAccessList");
+  if(!root || !window.isGlobalAdmin) return;
+
+  const {data,error}=await ordersDb().from("order_view_access").select("email,created_at").order("email");
+  if(error){ root.innerHTML=`<div class="bad">${ordersEsc(error.message)}</div>`; return; }
+
+  root.innerHTML=(data||[]).map(x=>`
+    <div class="branch-admin-row">
+      <div><strong>${ordersEsc(x.email)}</strong></div>
+      <button class="btn staff-delete-btn" type="button" data-order-access-delete="${ordersEsc(x.email)}">Delete</button>
+    </div>
+  `).join("") || '<div class="helper">No extra view access.</div>';
+}
+
+async function addOrderViewAccess(){
+  if(!window.isGlobalAdmin) return;
+  const input=document.getElementById("settingsOrderAccessEmail");
+  const email=String(input?.value||"").trim().toLowerCase();
+  if(!email || !email.includes("@")) return alert("Enter a valid login email.");
+
+  // Reuse the real-login verification RPC already added for Salary.
+  const {data:exists,error:checkError}=await ordersDb().rpc("salary_login_email_exists",{p_email:email});
+  if(checkError) return alert("Unable to verify login email: "+checkError.message);
+  if(!exists) return alert("This email is not an ndacc.us login account.");
+
+  const {error}=await ordersDb().from("order_view_access").upsert({email},{onConflict:"email"});
+  if(error) return alert(error.message);
+  if(input) input.value="";
+  await renderOrderViewAccess();
+}
+
+document.addEventListener("DOMContentLoaded",()=>{
+  const q=document.getElementById("orderQty");
+  const p=document.getElementById("orderUnitPrice");
+  q?.addEventListener("input",ordersRecalc);
+  p?.addEventListener("input",ordersRecalc);
+  document.getElementById("orderAddBtn")?.addEventListener("click",addOrder);
+  document.getElementById("ordersRefreshBtn")?.addEventListener("click",loadOrders);
+
+  document.getElementById("ordersTableBody")?.addEventListener("change",async e=>{
+    const sel=e.target.closest("[data-order-status]");
+    if(!sel) return;
+    const {error}=await ordersDb().from("purchase_orders")
+      .update({status:sel.value,updated_at:new Date().toISOString()})
+      .eq("id",Number(sel.dataset.orderStatus));
+    if(error){alert(error.message);await loadOrders();}
+  });
+
+  document.getElementById("ordersTableBody")?.addEventListener("click",async e=>{
+    const btn=e.target.closest("[data-order-delete]");
+    if(!btn) return;
+    if(!confirm("Delete this order?")) return;
+    const {error}=await ordersDb().from("purchase_orders").delete().eq("id",Number(btn.dataset.orderDelete));
+    if(error) return alert(error.message);
+    await loadOrders();
+  });
+
+  document.getElementById("settingsAddOrderAccessBtn")?.addEventListener("click",addOrderViewAccess);
+  document.getElementById("settingsOrderAccessList")?.addEventListener("click",async e=>{
+    const btn=e.target.closest("[data-order-access-delete]");
+    if(!btn || !window.isGlobalAdmin) return;
+    const email=String(btn.dataset.orderAccessDelete||"");
+    const {error}=await ordersDb().from("order_view_access").delete().eq("email",email);
+    if(error) return alert(error.message);
+    await renderOrderViewAccess();
+  });
+
+  // When opening Settings, refresh this access list.
+  document.getElementById("sidebarSettings")?.addEventListener("click",()=>setTimeout(renderOrderViewAccess,250));
+
+  // Any other main navigation closes Orders cleanly.
+  ["sidebarDaily","sidebarRoster","sidebarSalary","sidebarSettlement","sidebarSettings"].forEach(id=>{
+    document.getElementById(id)?.addEventListener("click",()=>{
+      document.getElementById("ordersPage")?.classList.remove("active","sidebar-offset");
+    },true);
+  });
+});
+</script>
+
 </body>
 </html>
