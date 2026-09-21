@@ -929,7 +929,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
 <button class="sidebar-btn" id="sidebarRoster" type="button">Monthly Roster</button>
 <button class="sidebar-btn" id="sidebarSalary" style="display:none" type="button">Salary</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
-<button class="sidebar-btn" id="sidebarOrders" type="button">订货 / Orders</button>
+<button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">订货 / Orders</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Setting</button>
 </aside>
 <button class="mobile-sidebar-btn" id="mobileSidebarBtn" type="button">☰</button>
@@ -8060,6 +8060,30 @@ document.addEventListener("click",(ev)=>{
 let ordersCanViewAll=false;
 let ordersCurrentEmail="";
 let ordersRows=[];
+const ORDERS_OWNER_EMAIL="umo1017@gmail.com";
+
+async function refreshOrdersVisibility(){
+  const btn=document.getElementById("sidebarOrders");
+  try{
+    const {data:{session}}=await ordersDb().auth.getSession();
+    const email=String(session?.user?.email||"").trim().toLowerCase();
+    const allowed=email===ORDERS_OWNER_EMAIL;
+
+    if(btn) btn.style.display=allowed?"":"none";
+    window.canViewOrders=allowed;
+
+    if(!allowed && window.activeMainPage==="orders"){
+      try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
+      if(typeof showDaily==="function") showDaily();
+    }
+
+    return allowed;
+  }catch(_){
+    if(btn) btn.style.display="none";
+    window.canViewOrders=false;
+    return false;
+  }
+}
 
 function ordersDb(){
   if(window.salaryDb) return window.salaryDb;
@@ -8211,6 +8235,12 @@ async function addOrder(){
 }
 
 async function showOrders(){
+  if(!(await refreshOrdersVisibility())){
+    try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
+    if(typeof showDaily==="function") showDaily();
+    return;
+  }
+
   try{localStorage.setItem("nd_last_page_v2","orders");}catch(_){}
   window.activeMainPage="orders";
 
@@ -8268,6 +8298,8 @@ async function addOrderViewAccess(){
 }
 
 document.addEventListener("DOMContentLoaded",()=>{
+  setTimeout(()=>refreshOrdersVisibility(),150);
+
   const q=document.getElementById("orderQty");
   const p=document.getElementById("orderUnitPrice");
   q?.addEventListener("input",ordersRecalc);
