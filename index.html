@@ -929,7 +929,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
 <button class="sidebar-btn" id="sidebarRoster" type="button">Monthly Roster</button>
 <button class="sidebar-btn" id="sidebarSalary" style="display:none" type="button">Salary</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
-<button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">订货 / Orders</button>
+<button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">Orders</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Setting</button>
 </aside>
 <button class="mobile-sidebar-btn" id="mobileSidebarBtn" type="button">☰</button>
@@ -2762,7 +2762,7 @@ return `<div class="history-date-card">
 </div>
 <div class="salary-card">
 <div class="outlet-title"><div style="display:flex;align-items:center;gap:8px"><strong>Monthly Expenses</strong><span class="branch-chip">FIXED</span></div><span id="settlementExpenseTotal">RM 0.00</span></div>
-<div class="settlement-scroll-note">← Swipe sideways to view Payment Date / Paid Status →</div>
+<div class="settlement-scroll-note">← Swipe sideways · Payment Date 只需设定一次，每个月自动沿用 →</div>
 <div id="settlementExpenseForm" style="margin-top:10px">
 <div class="settlement-expense-head">
   <div>Expense</div>
@@ -2893,117 +2893,106 @@ return `<div class="history-date-card">
 </div>
 </div>
 
+
+
 <style>
-.orders-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.orders-grid .wide{grid-column:span 2}
+.orders-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.orders-toolbar .field{min-width:170px}
+.orders-brand-tabs,.orders-view-tabs{display:flex;gap:8px;flex-wrap:wrap}
+.orders-tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 13px;font-weight:850;cursor:pointer}
+.orders-tab.active{background:#111;color:#fff;border-color:#111}
 .orders-list-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.orders-table{min-width:980px;width:100%;border-collapse:collapse}
-.orders-table th,.orders-table td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
-.orders-table th{font-size:12px;color:var(--muted);font-weight:900}
-.orders-status{font-weight:900;border-radius:999px;padding:6px 10px;border:1px solid var(--line);background:#fff}
-.orders-total{font-weight:900}
+.orders-table{min-width:1380px;width:100%;border-collapse:collapse}
+.orders-table th,.orders-table td{padding:9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.orders-table th{font-size:12px;color:var(--muted);font-weight:900;white-space:nowrap}
+.orders-table input,.orders-table select{min-width:100px}
+.orders-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.orders-summary .box{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}
+.orders-summary .k{font-size:12px;color:var(--muted);font-weight:800}
+.orders-summary .v{font-size:20px;font-weight:950;margin-top:5px}
+.orders-scroll-note{display:none;font-size:12px;color:var(--muted);margin-top:8px}
+.orders-product-name{font-weight:850;min-width:190px}
+.orders-brand-label{font-size:11px;color:var(--muted);margin-top:3px}
+
+.orders-po-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0}
+.orders-po-summary .box{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}
+.orders-po-summary .k{font-size:11px;color:var(--muted);font-weight:800}
+.orders-po-summary .v{font-size:17px;font-weight:950;margin-top:4px}
+.orders-po-no{font-weight:950;white-space:nowrap}
+.orders-po-group{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px;background:#fff}
+.orders-po-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px}
+.orders-po-items{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.orders-po-items table{min-width:760px;width:100%;border-collapse:collapse}
+.orders-po-items th,.orders-po-items td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 @media(max-width:700px){
-  .orders-grid{grid-template-columns:1fr 1fr}
-  .orders-grid .wide{grid-column:span 2}
+ .orders-summary{grid-template-columns:1fr 1fr}
+ .orders-scroll-note{display:block}
 }
 </style>
 
 <div class="salary-page" id="ordersPage">
-  <div class="salary-shell" style="display:grid">
-    <div class="salary-top">
-      <div>
-        <div class="salary-title">订货 / Orders</div>
-        <div class="helper" id="ordersAccessNote">自己添加的订货记录</div>
-      </div>
-      <div class="salary-right">
-        <button class="btn" id="ordersRefreshBtn" type="button">Refresh</button>
-      </div>
+ <div class="salary-shell" style="display:grid">
+  <div class="salary-top">
+   <div>
+    <div class="salary-title">Orders</div>
+    <div class="helper">Monthly Inventory · Branch Stock · Order Submission</div>
+   </div>
+   <div class="salary-right"><button class="btn" id="ordersRefreshBtn" type="button">Refresh</button></div>
+  </div>
+
+  <div class="salary-card">
+   <div class="orders-toolbar">
+    <div class="field"><label>Month</label><input id="ordersMonth" type="month"/></div>
+    <div class="field">
+      <label>Branch</label>
+      <select id="ordersBranch">
+        <option value="Eco Botanic">Eco Botanic</option>
+        <option value="Nusa Bestari">Nusa Bestari</option>
+      </select>
     </div>
+    <button class="btn" id="ordersLoadPrevBtn" type="button">Load Previous Month</button>
+    <button class="btn" id="ordersSaveAllBtn" type="button">Save Inventory</button>
+    <button class="btn" id="ordersSubmitBtn" type="button">Submit Order</button>
+    <span class="helper" id="ordersSaveState"></span>
+   </div>
+  </div>
 
-    <div class="salary-card">
-      <div class="outlet-title">
-        <strong>新增订货</strong>
-        <span class="branch-chip">自己添加</span>
-      </div>
-
-      <div class="orders-grid" style="margin-top:12px">
-        <div>
-          <label>Date</label>
-          <input id="orderDate" type="date"/>
-        </div>
-        <div>
-          <label>Branch</label>
-          <select id="orderBranch"></select>
-        </div>
-        <div class="wide">
-          <label>Item / 产品</label>
-          <input id="orderItem" placeholder="Item name"/>
-        </div>
-
-        <div>
-          <label>Quantity</label>
-          <input id="orderQty" type="number" min="0" step="1" value="1"/>
-        </div>
-        <div>
-          <label>Unit Price (RM)</label>
-          <input id="orderUnitPrice" type="number" min="0" step="0.01" value="0"/>
-        </div>
-        <div>
-          <label>Total (RM)</label>
-          <input id="orderTotal" type="number" readonly value="0.00"/>
-        </div>
-        <div>
-          <label>Status</label>
-          <select id="orderStatus">
-            <option value="Pending">Pending</option>
-            <option value="Ordered">Ordered</option>
-            <option value="Received">Received</option>
-            <option value="Cancelled">Cancelled</option>
-          </select>
-        </div>
-
-        <div class="wide">
-          <label>Supplier / 供应商</label>
-          <input id="orderSupplier" placeholder="Supplier"/>
-        </div>
-        <div class="wide">
-          <label>Notes / 备注</label>
-          <input id="orderNotes" placeholder="Notes"/>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px">
-        <button class="btn" id="orderAddBtn" type="button">Add Order</button>
-        <span class="helper" id="orderSaveState"></span>
-      </div>
-    </div>
-
-    <div class="salary-card">
-      <div class="outlet-title">
-        <strong id="ordersListTitle">My Orders</strong>
-        <span class="helper" id="ordersCount"></span>
-      </div>
-      <div class="orders-list-wrap" style="margin-top:10px">
-        <table class="orders-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Branch</th>
-              <th>Item</th>
-              <th>Qty</th>
-              <th>Unit</th>
-              <th>Total</th>
-              <th>Supplier</th>
-              <th>Status</th>
-              <th>Created By</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="ordersTableBody"></tbody>
-        </table>
-      </div>
+  <div class="salary-card">
+    <div class="outlet-title"><strong>View</strong></div>
+    <div class="orders-view-tabs" style="margin-top:10px">
+      <button class="orders-tab active" type="button" data-orders-view="branch">Branch Inventory</button>
+      <button class="orders-tab" type="button" data-orders-view="total">Total Inventory</button>
+      <button class="orders-tab" type="button" data-orders-view="submitted">Purchase Orders</button>
     </div>
   </div>
+
+  <div class="salary-card" id="ordersBrandCard">
+    <div class="outlet-title"><strong>Brand</strong><span class="helper">Select a brand to filter products</span></div>
+    <div class="orders-brand-tabs" id="ordersBrandTabs" style="margin-top:10px"></div>
+  </div>
+
+  <div class="orders-summary">
+    <div class="box"><div class="k">Products</div><div class="v" id="ordersProductCount">0</div></div>
+    <div class="box"><div class="k">Previous Stock</div><div class="v" id="ordersOpeningTotal">0</div></div>
+    <div class="box"><div class="k">Order Qty</div><div class="v" id="ordersOrderedTotal">0</div></div>
+    <div class="box"><div class="k">Out Qty</div><div class="v" id="ordersOutTotal">0</div></div>
+    <div class="box"><div class="k">Current Stock</div><div class="v" id="ordersClosingTotal">0</div></div>
+  </div>
+
+  <div class="salary-card">
+    <div class="outlet-title">
+      <strong id="ordersTableTitle">Branch Inventory</strong>
+      <span class="helper" id="ordersMonthLabel"></span>
+    </div>
+    <div class="orders-scroll-note">← Swipe sideways to view all columns →</div>
+    <div class="orders-list-wrap" style="margin-top:10px">
+      <table class="orders-table">
+        <thead id="ordersTableHead"></thead>
+        <tbody id="ordersInventoryBody"></tbody>
+      </table>
+    </div>
+  </div>
+ </div>
 </div>
 
 <div class="salary-page" id="settingsPage">
@@ -3067,7 +3056,7 @@ return `<div class="history-date-card">
 </button>
 <div class="settings-section-body">
   <div class="helper" style="margin-bottom:8px">
-    每个人都可以添加并查看自己的订货；这里添加的账号可以查看全部人的订货记录。
+    Every user can add and view their own orders. Accounts added here can view all orders.
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <input id="settingsOrderAccessEmail" placeholder="Actual ndacc.us login email" style="flex:1;min-width:240px" type="email"/>
@@ -6893,6 +6882,7 @@ let settlementAuto={revenue:0,salary:0,petty_cash:0};
 let settlementRecord=null;
 let settlementCarrySource=null;
 let settlementPaymentMeta={};
+let settlementPaymentSchedule={};
 
 const SETTLEMENT_OWNERS=["umo1017@gmail.com","mars83002566@gmail.com"];
 const SETTLEMENT_EXPENSE_FIELDS=[
@@ -6932,6 +6922,66 @@ function settlementTodayISO(){
   return `${y}-${m}-${day}`;
 }
 
+function settlementScheduledDateForMonth(day){
+  const ym=settlementCurrentMonth();
+  if(!ym || !day) return "";
+  const [y,m]=ym.split("-").map(Number);
+  const last=new Date(y,m,0).getDate();
+  const safeDay=Math.max(1,Math.min(last,Number(day)||1));
+  return `${ym}-${String(safeDay).padStart(2,"0")}`;
+}
+
+async function loadSettlementPaymentSchedule(){
+  settlementPaymentSchedule={};
+  if(!settlementCurrentOutlet || settlementCurrentOutlet==="__TOTAL__") return;
+
+  const {data,error}=await settlementDb()
+    .from("settlement_payment_schedule")
+    .select("expense_key,payment_day")
+    .eq("outlet",settlementCurrentOutlet);
+
+  if(error){
+    console.warn("Payment schedule load failed",error);
+    return;
+  }
+
+  (data||[]).forEach(r=>{
+    const key=String(r.expense_key||"");
+    const day=Number(r.payment_day||0);
+    if(key && day>0) settlementPaymentSchedule[key]=day;
+  });
+}
+
+async function saveSettlementPaymentDay(key,dateValue){
+  if(!key) return;
+  if(!dateValue){
+    delete settlementPaymentSchedule[key];
+    const {error}=await settlementDb()
+      .from("settlement_payment_schedule")
+      .delete()
+      .eq("outlet",settlementCurrentOutlet)
+      .eq("expense_key",key);
+    if(error) alert("Payment date save failed: "+error.message);
+    return;
+  }
+
+  const day=Number(String(dateValue).slice(-2));
+  if(!day || day<1 || day>31) return;
+
+  settlementPaymentSchedule[key]=day;
+
+  const {error}=await settlementDb()
+    .from("settlement_payment_schedule")
+    .upsert({
+      outlet:settlementCurrentOutlet,
+      expense_key:key,
+      payment_day:day,
+      updated_at:new Date().toISOString()
+    },{onConflict:"outlet,expense_key"});
+
+  if(error) alert("Payment date save failed: "+error.message);
+}
+
 function settlementEnsurePaymentControls(){
   const form=document.getElementById("settlementExpenseForm");
   if(!form) return;
@@ -6969,7 +7019,13 @@ function settlementRenderPaymentMeta(){
     const date=row.querySelector("[data-payment-date]");
     const btn=row.querySelector("[data-payment-paid]");
 
-    if(date) date.value=String(meta.date||"");
+    if(date){
+      const fixedDay=Number(settlementPaymentSchedule?.[key]||0);
+      date.value=fixedDay ? settlementScheduledDateForMonth(fixedDay) : "";
+      date.title=fixedDay
+        ? `Fixed payment day: ${fixedDay} (set once, reused every month)`
+        : "Set payment date once; the day will repeat every month";
+    }
     if(btn){
       const paid=meta.paid===true;
       btn.textContent=paid?"Paid ✓":"Not Paid";
@@ -7191,7 +7247,10 @@ async function loadSettlementMonth(){
   settlementRecord=recordRes.data||null;
   settlementCarrySource=null;
 
-  // Payment status/date belongs to the selected month only.
+  // Fixed payment day is stored once per outlet + expense and reused every month.
+  await loadSettlementPaymentSchedule();
+
+  // Paid status belongs to the selected month only.
   // Do NOT carry "Paid" status from a previous month.
   settlementPaymentMeta=(
     settlementRecord?.payment_meta &&
@@ -7499,11 +7558,18 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.getElementById("settlementYear")?.addEventListener("change",loadSettlementYear);
   document.getElementById("settlementYearRefreshBtn")?.addEventListener("click",loadSettlementYear);
 
-  document.getElementById("settlementExpenseForm")?.addEventListener("input",e=>{
+  document.getElementById("settlementExpenseForm")?.addEventListener("change",async e=>{
     if(e.target?.matches?.("[data-payment-date]")){
+      const key=String(e.target.dataset.paymentDate||"");
+      await saveSettlementPaymentDay(key,e.target.value||"");
+      settlementRenderPaymentMeta();
       settlementCollectPaymentMeta();
       return;
     }
+  });
+
+  document.getElementById("settlementExpenseForm")?.addEventListener("input",e=>{
+    if(e.target?.matches?.("[data-payment-date]")) return;
     settlementRecalculate();
   });
 
@@ -7520,8 +7586,12 @@ document.addEventListener("DOMContentLoaded",()=>{
       paidBtn.classList.toggle("unpaid",!willBePaid);
       paidBtn.textContent=willBePaid?"Paid ✓":"Not Paid";
 
-      if(willBePaid && date && !date.value) date.value=settlementTodayISO();
-      if(!willBePaid && date) date.value="";
+      if(willBePaid && date && !date.value){
+        date.value=settlementTodayISO();
+        await saveSettlementPaymentDay(String(date.dataset.paymentDate||""),date.value);
+        settlementRenderPaymentMeta();
+      }
+      // Unpaid does NOT clear the fixed payment date. Only the monthly paid status changes.
 
       settlementCollectPaymentMeta();
 
@@ -8056,295 +8126,338 @@ document.addEventListener("click",(ev)=>{
 </script>
 
 <script>
-// ===== Orders / 订货 =====
-let ordersCanViewAll=false;
-let ordersCurrentEmail="";
-let ordersRows=[];
+// ===== Orders / Branch Inventory / Submission =====
 const ORDERS_OWNER_EMAIL="umo1017@gmail.com";
+const ORDER_PRODUCT_CATALOG=[{"sku_id":"1815748","product_name":"磨砂粉","brand":"泡澡","category":"磨砂","price":0.0},{"sku_id":"1815745","product_name":"养生泡脚","brand":"泡澡","category":"手脚护理","price":0.0},{"sku_id":"1815744","product_name":"脚膜","brand":"泡澡","category":"手脚护理","price":28.0},{"sku_id":"1815743","product_name":"手膜","brand":"泡澡","category":"手脚护理","price":28.0},{"sku_id":"1815742","product_name":"红酒","brand":"泡澡","category":"红酒","price":0.0},{"sku_id":"1815741","product_name":"红酒泡澡","brand":"泡澡","category":"泡澡","price":0.0},{"sku_id":"1815740","product_name":"玫瑰泡澡","brand":"泡澡","category":"泡澡","price":0.0},{"sku_id":"1815739","product_name":"养生泡澡","brand":"泡澡","category":"泡澡","price":0.0},{"sku_id":"1815738","product_name":"牛奶泡澡","brand":"泡澡","category":"泡澡","price":0.0},{"sku_id":"1815737","product_name":"玫瑰","brand":"泡澡","category":"泡澡","price":0.0},{"sku_id":"1815736","product_name":"护发液","brand":"头疗","category":"院线操作","price":0.0},{"sku_id":"1815735","product_name":"洗发水","brand":"头疗","category":"院线操作","price":0.0},{"sku_id":"1815734","product_name":"单粒七星灸","brand":"养生","category":"七星灸","price":0.0},{"sku_id":"1815729","product_name":"关节","brand":"养生","category":"能量草本","price":0.0},{"sku_id":"1815728","product_name":"酸痛","brand":"养生","category":"能量草本","price":0.0},{"sku_id":"1815727","product_name":"按摩油","brand":"养生","category":"精油","price":0.0},{"sku_id":"1815726","product_name":"泥灸","brand":"养生","category":"草本泥灸","price":0.0},{"sku_id":"1815725","product_name":"暖宫","brand":"养生","category":"能量草本","price":0.0},{"sku_id":"1815723","product_name":"(Sample)洁脸霜","brand":"AMYLEE/DEEP","category":"操作sample","price":0.0},{"sku_id":"1815722","product_name":"(Sample)操作四件套","brand":"AMYLEE/DEEP","category":"操作sample","price":0.0},{"sku_id":"1815721","product_name":"(Sample)操作素颜霜","brand":"AMYLEE/DEEP","category":"操作sample","price":0.0},{"sku_id":"1815720","product_name":"(Sample)操作小V水","brand":"AMYLEE/DEEP","category":"操作sample","price":0.0},{"sku_id":"1815718","product_name":"(Sample)操作Q弹面膜","brand":"AMYLEE/DEEP","category":"操作sample","price":0.0},{"sku_id":"1786906","product_name":"粉色四件套","brand":"AMYLEE/DEEP","category":"居家产品","price":999.0},{"sku_id":"1767861","product_name":"TRIAL NMN* 10P","brand":"赠品","category":"体验装","price":95.0},{"sku_id":"1767446","product_name":"TRIAL PACK","brand":"赠品","category":"体验装","price":199.0},{"sku_id":"1767434","product_name":"保温杯  Thermos","brand":"赠品","category":"周边产品","price":80.0},{"sku_id":"1767427","product_name":"枕头 PILLOW","brand":"赠品","category":"周边产品","price":50.0},{"sku_id":"1767421","product_name":"笔 PEN","brand":"赠品","category":"周边产品","price":10.0},{"sku_id":"1746729","product_name":"AMLEE @ 金手指 定制精华","brand":"AMYLEE/DEEP","category":"金手指","price":188.0},{"sku_id":"1746728","product_name":"AMLEE @ 金手指 头皮精华","brand":"AMYLEE/DEEP","category":"金手指","price":169.0},{"sku_id":"1746722","product_name":"提拉霜 AMLEE @ NANO LIFTING CREAM 50ML","brand":"AMYLEE/DEEP","category":"居家产品","price":499.0},{"sku_id":"1746720","product_name":"防晒 AMLEE @ SUM MOISTURIZING","brand":"AMYLEE/DEEP","category":"居家产品","price":219.0},{"sku_id":"1746719","product_name":"洁脸霜 AMLEE @ AMINO ACID CLEANSING MOUSSE","brand":"AMYLEE/DEEP","category":"居家产品","price":219.0},{"sku_id":"1746718","product_name":"水光面膜 AMLEE @ SILK PROTEIN PEPTIDE SERUM MASK*1","brand":"AMYLEE/DEEP","category":"面膜","price":33.8},{"sku_id":"1735731","product_name":"水光珍珠乳 @50ML","brand":"AMYLEE/DEEP","category":"居家产品","price":298.0},{"sku_id":"1730315","product_name":"退红修护喷雾 SKIN CLAMING SPRAY 100ML @AMTHYS","brand":"AMTHYS","category":"居家产品","price":258.0},{"sku_id":"1730313","product_name":"INTIMATE MIST","brand":"CARECELLA","category":"CARECELLA","price":88.0},{"sku_id":"1706798","product_name":"IROSE -7天体验装（绿）","brand":"口服保养品","category":"体验装","price":75.0},{"sku_id":"1706797","product_name":"NMN-10天体验装","brand":"口服保养品","category":"体验装","price":95.0},{"sku_id":"1706789","product_name":"IROSE -7天体验装（粉）","brand":"口服保养品","category":"体验装","price":88.0},{"sku_id":"1679165","product_name":"无比加革 UBI JAGA EXTRACT","brand":"口服保养品","category":"私密保养","price":129.0},{"sku_id":"1679154","product_name":"紧密密 MANJAKANI ASLI -12 CAPSULES","brand":"口服保养品","category":"私密保养","price":88.0},{"sku_id":"1679145","product_name":"祛风霜 JADE HEALING CREAM 60G","brand":"养生","category":"精油","price":99.0},{"sku_id":"1679143","product_name":"蜜滋露 HONEY NOURISHING ESSENCE 100ML","brand":"CARECELLA","category":"私密保养","price":88.0},{"sku_id":"1679142","product_name":"蜜精油 NATURES HERBS LADY OIL 5ML","brand":"CARECELLA","category":"私密保养","price":88.0},{"sku_id":"1679141","product_name":"水蜜宝 LADY SECRET - 30 CAPSULES","brand":"口服保养品","category":"私密保养","price":99.0},{"sku_id":"1619820","product_name":"服务折扣券 RM10","brand":"赠品","category":"折扣券","price":0.0},{"sku_id":"1609958","product_name":"小V水 @ 50ML","brand":"AMYLEE/DEEP","category":"居家产品","price":399.0},{"sku_id":"1603312","product_name":"360 NANO MIST 100ML @AMTHYS","brand":"AMTHYS","category":"居家产品","price":188.0},{"sku_id":"1584000","product_name":"(GREEN) IROSE VTRUE 排毒瘦身","brand":"口服保养品","category":"皮肤保养","price":160.0},{"sku_id":"1583998","product_name":"(PINK) IROSE STEM CELL 玫瑰干细胞","brand":"口服保养品","category":"皮肤保养","price":190.0},{"sku_id":"1577489","product_name":"亮白 / 紧致 ampoule","brand":"院线操作","category":"高级 AMPOULE","price":68.0},{"sku_id":"1577487","product_name":"补水 / 舒缓 ampoule","brand":"院线操作","category":"高级 AMPOULE","price":38.0},{"sku_id":"1577466","product_name":"祛痘 · 控油 · 抗炎 ampoule","brand":"院线操作","category":"高级 AMPOULE","price":60.0},{"sku_id":"1561712","product_name":"HYDRA SOOTHING MASK PACK@5P","brand":"CARECELLA","category":"CARECELLA","price":79.0},{"sku_id":"1553216","product_name":"COCONUT OIL @ DOTERRA","brand":"养生","category":"DOTELLA","price":0.0},{"sku_id":"1553215","product_name":"PASTTENSE @ DOTERRA","brand":"养生","category":"DOTELLA","price":0.0},{"sku_id":"1553214","product_name":"PEPPERMINT @ DOTERRA","brand":"养生","category":"DOTELLA","price":0.0},{"sku_id":"1553213","product_name":"LAVENDER @ DOTERRA","brand":"养生","category":"DOTELLA","price":0.0},{"sku_id":"1551328","product_name":"DAY+NIGHT@FEMOIRE","brand":"口服保养品","category":"皮肤保养","price":688.0},{"sku_id":"1551325","product_name":"ISODUCE@FEMOIRE","brand":"口服保养品","category":"私密保养","price":229.0},{"sku_id":"1551324","product_name":"ALL IN ONE BOI MIST @ CARECELLA","brand":"CARECELLA","category":"CARECELLA","price":0.0},{"sku_id":"1533941","product_name":"NMN-GLOW AGE @ELLECARE","brand":"口服保养品","category":"口服健康","price":190.0},{"sku_id":"1523855","product_name":"SUNSCREEN SPF50+ @DR.ESLEE","brand":"CARECELLA","category":"DR.ELSEE","price":189.0},{"sku_id":"1453516","product_name":"HYDRA AMPOULE 2ml","brand":"院线操作","category":"普通 AMPOULE","price":10.0},{"sku_id":"1453514","product_name":"BRIGHTENING AMPOULE 2ml","brand":"院线操作","category":"普通 AMPOULE","price":10.0},{"sku_id":"1453513","product_name":"BRIGHTENING SERUM 2ml","brand":"院线操作","category":"普通 AMPOULE","price":10.0},{"sku_id":"1453510","product_name":"HYDRA SERUM 2ml","brand":"院线操作","category":"普通 AMPOULE","price":10.0},{"sku_id":"1453494","product_name":"COLLAGEN AMPOULE 2ml","brand":"院线操作","category":"普通 AMPOULE","price":10.0},{"sku_id":"1453486","product_name":"SOOTHING SERUM 2ml","brand":"院线操作","category":"普通 AMPOULE","price":10.0},{"sku_id":"1447466","product_name":"Q弹面膜 @ AMLEE","brand":"AMYLEE/DEEP","category":"面膜","price":319.0},{"sku_id":"1447464","product_name":"气垫 @ AMLEE","brand":"AMYLEE/DEEP","category":"居家产品","price":0.0},{"sku_id":"1447463","product_name":"小V水 @ 100ML","brand":"AMYLEE/DEEP","category":"居家产品","price":699.0},{"sku_id":"1435357","product_name":"FOAM CLEEANSER @CARECELLA","brand":"CARECELLA","category":"CARECELLA","price":105.0},{"sku_id":"1435346","product_name":"BB CREAM @CARECELLA","brand":"CARECELLA","category":"CARECELLA","price":134.0},{"sku_id":"1435342","product_name":"CLEANSING OIL @CARECELLA","brand":"CARECELLA","category":"CARECELLA","price":134.0},{"sku_id":"1429649","product_name":"1.再生CLINIC HYALURONIC ACID 5ml*1","brand":"CLARENA","category":"MTS再生","price":172.0},{"sku_id":"1429647","product_name":"2.再生CLINIC NEUROPEPT BTX 5ml","brand":"CLARENA","category":"MTS再生","price":188.0},{"sku_id":"1429644","product_name":"3.维他命CLINIC VITAMIN C+A,B&E 5ml","brand":"CLARENA","category":"MTS再生","price":128.0},{"sku_id":"1427877","product_name":"PEPTIDE PROTEIN SERUM 2 @AMLEE 10ml","brand":"AMYLEE/DEEP","category":"水光针","price":0.0},{"sku_id":"1427875","product_name":"PEPTIDE PROTEIN MASK @AMLEE 10ml","brand":"AMYLEE/DEEP","category":"水光针","price":0.0},{"sku_id":"1427873","product_name":"PEPTIDE PROTEIN SERUM 1 @AMLEE 10ml","brand":"AMYLEE/DEEP","category":"水光针","price":0.0},{"sku_id":"1427871","product_name":"徒手灯泡肌 @AMLEE","brand":"AMYLEE/DEEP","category":"灯泡肌","price":0.0},{"sku_id":"1427610","product_name":"REBORN HYDRATING MASK","brand":"CLARENA","category":"MTS再生","price":27.14},{"sku_id":"1409423","product_name":"GOLD SUPERSTAR MASK爆水金箔冻龄膜@AMTHYS","brand":"AMTHYS","category":"面膜","price":139.0},{"sku_id":"1409422","product_name":"CHAMOMILE SUPERSTAR MASK纳米洋甘菊冻龄膜@AMTHYS","brand":"AMTHYS","category":"面膜","price":139.0},{"sku_id":"1409420","product_name":"LIMONIUM SUPERSTAR MASK爆水勿忘我冻龄膜@AMTHYS","brand":"AMTHYS","category":"面膜","price":139.0},{"sku_id":"1409417","product_name":"CHARCOAL SUPERSTAR MASK纳米木炭金冻龄膜@AMTHYS","brand":"AMTHYS","category":"面膜","price":139.0},{"sku_id":"1409411","product_name":"ROSE SUPERSTAR MASK爆水玫瑰冻龄膜@AMTHYS","brand":"AMTHYS","category":"面膜","price":139.0},{"sku_id":"1409401","product_name":"HYPER HYDRATION MASK医美级水润面膜 1pcs@AMTHY PINK","brand":"AMTHYS","category":"面膜","price":19.0},{"sku_id":"1409395","product_name":"COOL DOWIN SHEET MASK医美级急救冰膜 1pcs@AMTHYS  BLUE","brand":"AMTHYS","category":"面膜","price":19.0},{"sku_id":"1408139","product_name":"MESOTHERAPY HYALURON 3D COCKTAIL，30ML@INSIDERS","brand":"CLARENA","category":"院线操作","price":137.8},{"sku_id":"1408087","product_name":"SENSI PEPTIDE SERUM,3ML@INSIDERS 小青","brand":"CLARENA","category":"AMPOULE","price":48.0},{"sku_id":"1406179","product_name":"小蓝 MAX SEBUM CONTROL SERUM","brand":"CLARENA","category":"AMPOULE","price":48.0},{"sku_id":"1406177","product_name":"小粉 VIT U STOP COUPEROSE SERUM","brand":"CLARENA","category":"AMPOULE","price":48.0},{"sku_id":"1406176","product_name":"小紫MENOSHE SERUM","brand":"CLARENA","category":"AMPOULE","price":48.0},{"sku_id":"1406174","product_name":"CRISTAL HYLURON 3D CONCENTRATE@CLARENA","brand":"CLARENA","category":"AMPOULE","price":48.0},{"sku_id":"1406128","product_name":"牛奶面膜 DUAL-PHASE SECRET MASK(1PCS)@AMTHYS","brand":"AMTHYS","category":"面膜","price":45.6},{"sku_id":"1406064","product_name":"纤连蛋白修复乳 BARRIER LOTION 5g@AMTHYS","brand":"AMTHYS","category":"小钢炮","price":68.0},{"sku_id":"1406063","product_name":"高端蓝铜精油 COPPER PEPTIDE ESSENTIAL OIL 5ml@AMTHYS","brand":"AMTHYS","category":"小钢炮","price":68.0},{"sku_id":"1406059","product_name":"急救凝晶膜 CRYSTAL SOS GEL MASK 10g","brand":"AMTHYS","category":"小钢炮","price":55.0},{"sku_id":"1406054","product_name":"亮白水晶膜 VITALGLOW CRYSTAL MASK10g","brand":"AMTHYS","category":"小钢炮","price":55.0},{"sku_id":"1406047","product_name":"草本净痘草膜 HERBAL LAVENDER MASK 10g","brand":"AMTHYS","category":"小钢炮","price":58.3},{"sku_id":"1406036","product_name":"草本祛斑膜 HERBAL PIGMENT MASK 10g","brand":"AMTHYS","category":"小钢炮","price":58.3},{"sku_id":"1406033","product_name":"高端亮肤精油 BRIGHTENING ESSENTIAL OIL 3ml@AMTHYS","brand":"AMTHYS","category":"小钢炮","price":68.0},{"sku_id":"1406021","product_name":"生长因子修复液 EGF CONCENTRATE 3ml@AMTHYS","brand":"AMTHYS","category":"小钢炮","price":68.0},{"sku_id":"1406018","product_name":"万能液 REJUVENATE ESSWENCE（ 2 ） 3ml@AMTHYS","brand":"AMTHYS","category":"小钢炮","price":68.0},{"sku_id":"1406017","product_name":"排色液 REJUVENATE COMPLEX（ 1 ） 3ml@AMTHYS","brand":"AMTHYS","category":"小钢炮","price":68.0},{"sku_id":"1405111","product_name":"水光嫩肤霜HYDRO ENERGY CREAM 15g@AMTHYS","brand":"AMTHYS","category":"居家产品","price":128.0},{"sku_id":"1405107","product_name":"屏障重建蛋白霜DAILY RECOVERY MOIST 50ml@AMTHYS","brand":"AMTHYS","category":"居家产品","price":258.0},{"sku_id":"1405103","product_name":"屏障重建肌底液DAILY REPAIRING SERUM 30ml@AMTHYS","brand":"AMTHYS","category":"居家产品","price":218.0},{"sku_id":"1405099","product_name":"紧致调理精华 PLATINUM LIFT 5ml@AMTHYS*1","brand":"AMTHYS","category":"院线操作","price":38.0},{"sku_id":"1405094","product_name":"修复调理精华PHYTO REPAIR 5ml@AMTHYS*1","brand":"AMTHYS","category":"院线操作","price":38.0},{"sku_id":"1405092","product_name":"祛痘调理精华ACNE PRO 5ml@AMTHYS","brand":"AMTHYS","category":"院线操作","price":38.0},{"sku_id":"1405090","product_name":"水光调理精华HA PLUS 5ml@AMTHYS","brand":"AMTHYS","category":"院线操作","price":38.0},{"sku_id":"1405086","product_name":"粉钻微针小钢炮ADVANCED MIVCRO DEEP REPAIR 2@AMTHYS","brand":"AMTHYS","category":"小钢炮","price":168.0},{"sku_id":"1404617","product_name":"极光焕颜霜LUMIGLOW RENEWAL CREAM@AMTHYS","brand":"AMTHYS","category":"居家产品","price":198.0},{"sku_id":"1404614","product_name":"祛斑美白霜FRECKLE CREAM@AMTHYS","brand":"AMTHYS","category":"居家产品","price":228.0},{"sku_id":"1404613","product_name":"溶斑精华油FRECKLE OIL@AMTHYS","brand":"AMTHYS","category":"居家产品","price":228.0},{"sku_id":"1404609","product_name":"祛痘小粉水ANTI-ACNE POWDER WATER@AMTHYS","brand":"AMTHYS","category":"居家产品","price":108.0},{"sku_id":"1404608","product_name":"棕钻微针小钢炮ADVANCED MICRO 1@AMTHYS","brand":"AMTHYS","category":"小钢炮","price":168.0},{"sku_id":"1404607","product_name":"青春焕活眼部凝霜YOUTH BOOST@AMTHYS","brand":"AMTHYS","category":"居家产品","price":188.0},{"sku_id":"1404606","product_name":"活力弹弹水PERFECT TONIQUE@AMTHYS","brand":"AMTHYS","category":"居家产品","price":118.0},{"sku_id":"1404599","product_name":"平衡洁面慕斯JUICY CLEANSING MOUSSE@AMTHYS","brand":"AMTHYS","category":"居家产品","price":118.0},{"sku_id":"1404598","product_name":"水润洁面奶GENTLE GLOW CLEANSING MILK@AMTHYS","brand":"AMTHYS","category":"居家产品","price":188.0},{"sku_id":"1404597","product_name":"清洁紧致泥膜MACADAMIA MUD MASK@AMTHYS","brand":"AMTHYS","category":"面膜","price":68.0},{"sku_id":"1404594","product_name":"沉香透骨油","brand":"养生","category":"精油","price":30.0},{"sku_id":"1404592","product_name":"草本滋养霜","brand":"养生","category":"精油","price":88.0},{"sku_id":"1404231","product_name":"头皮 SOOTHING AMPOULE@ESSENZA","brand":"头疗","category":"院线操作","price":48.0},{"sku_id":"1403100","product_name":"鲜炖燕窝  BIRD'S NEST 50ML","brand":"口服保养品","category":"高级燕窝","price":21.2},{"sku_id":"1402699","product_name":"Herbal Soothing Eye Mist","brand":"院线操作","category":"养生产品","price":20.0}];
+const ORDER_BRANDS=["AMTHYS","AMYLEE/DEEP","CARECELLA","CLARENA","养生","口服保养品","头疗","泡澡","赠品","院线操作"];
+let ordersCurrentEmail="";
+let ordersInventory=[];
+let ordersSelectedBrand="All";
+let ordersViewMode="branch";
+
+function ordersDb(){ if(window.salaryDb) return window.salaryDb; throw new Error("Database connection is not ready."); }
+function ordersEsc(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function ordersCurrentMonth(){const e=document.getElementById("ordersMonth");if(e?.value)return e.value;const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;}
+function ordersPreviousMonth(ym){const [y,m]=ym.split("-").map(Number);const d=new Date(y,m-2,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;}
+function ordersBranch(){return document.getElementById("ordersBranch")?.value||"Eco Botanic";}
+function ordersCalcCurrent(r){return Math.max(0,Number(r.previous_stock||0)+Number(r.received_qty||0)-Number(r.out_qty||0));}
 
 async function refreshOrdersVisibility(){
-  const btn=document.getElementById("sidebarOrders");
-  try{
-    const {data:{session}}=await ordersDb().auth.getSession();
-    const email=String(session?.user?.email||"").trim().toLowerCase();
-    const allowed=email===ORDERS_OWNER_EMAIL;
-
-    if(btn) btn.style.display=allowed?"":"none";
-    window.canViewOrders=allowed;
-
-    if(!allowed && window.activeMainPage==="orders"){
-      try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
-      if(typeof showDaily==="function") showDaily();
-    }
-
-    return allowed;
-  }catch(_){
-    if(btn) btn.style.display="none";
-    window.canViewOrders=false;
-    return false;
-  }
-}
-
-function ordersDb(){
-  if(window.salaryDb) return window.salaryDb;
-  throw new Error("Database connection is not ready.");
-}
-function ordersEsc(v){
-  return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-}
-function ordersMoney(v){
-  return "RM "+Number(v||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
-}
-function ordersToday(){
-  const d=new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-function ordersRecalc(){
-  const q=Number(document.getElementById("orderQty")?.value||0);
-  const p=Number(document.getElementById("orderUnitPrice")?.value||0);
-  const t=document.getElementById("orderTotal");
-  if(t) t.value=(q*p).toFixed(2);
-}
-async function refreshOrdersAccess(){
-  const db=ordersDb();
-  const {data:{session}}=await db.auth.getSession();
+ const btn=document.getElementById("sidebarOrders");
+ try{
+  const {data:{session}}=await ordersDb().auth.getSession();
   ordersCurrentEmail=String(session?.user?.email||"").trim().toLowerCase();
-  if(!ordersCurrentEmail) return false;
-
-  const ownerEmails=["umo1017@gmail.com","mars83002566@gmail.com"];
-  if(ownerEmails.includes(ordersCurrentEmail)){
-    ordersCanViewAll=true;
-  }else{
-    const {data,error}=await db
-      .from("order_view_access")
-      .select("email")
-      .eq("email",ordersCurrentEmail)
-      .maybeSingle();
-    ordersCanViewAll=!error && !!data;
-  }
-
-  const note=document.getElementById("ordersAccessNote");
-  const title=document.getElementById("ordersListTitle");
-  if(note) note.textContent=ordersCanViewAll
-    ? "有查看权限：可查看全部订货记录，也可以自己添加"
-    : "只显示自己添加的订货记录";
-  if(title) title.textContent=ordersCanViewAll?"All Orders":"My Orders";
-  return true;
+  const allowed=ordersCurrentEmail===ORDERS_OWNER_EMAIL;
+  if(btn)btn.style.display=allowed?"":"none";
+  window.canViewOrders=allowed;
+  return allowed;
+ }catch(_){if(btn)btn.style.display="none";return false;}
 }
 
-async function loadOrderBranches(){
-  const sel=document.getElementById("orderBranch");
-  if(!sel) return;
-  const {data,error}=await ordersDb().from("daily_outlets")
-    .select("name,is_active").eq("is_active",true).order("id");
-  if(error) return;
-  const current=sel.value;
-  sel.innerHTML=(data||[]).map(x=>`<option value="${ordersEsc(x.name)}">${ordersEsc(x.name)}</option>`).join("");
-  if(current && [...sel.options].some(o=>o.value===current)) sel.value=current;
+function renderOrdersBrandTabs(){
+ const root=document.getElementById("ordersBrandTabs");if(!root)return;
+ root.innerHTML=["All",...ORDER_BRANDS].map(b=>`<button type="button" class="orders-tab ${ordersSelectedBrand===b?"active":""}" data-order-brand="${ordersEsc(b)}">${ordersEsc(b)}</button>`).join("");
 }
 
-async function loadOrders(){
-  await refreshOrdersAccess();
-  const db=ordersDb();
-
-  // RLS controls whether this returns only own rows or all rows.
-  const {data,error}=await db.from("purchase_orders")
-    .select("*")
-    .order("order_date",{ascending:false})
-    .order("created_at",{ascending:false});
-
-  const body=document.getElementById("ordersTableBody");
-  const count=document.getElementById("ordersCount");
-  if(error){
-    if(body) body.innerHTML=`<tr><td colspan="10"><div class="bad">${ordersEsc(error.message)}</div></td></tr>`;
-    return;
-  }
-
-  ordersRows=data||[];
-  if(count) count.textContent=`${ordersRows.length} record${ordersRows.length===1?"":"s"}`;
-
-  if(!body) return;
-  body.innerHTML=ordersRows.map(r=>{
-    const mine=String(r.created_by||"").toLowerCase()===ordersCurrentEmail;
-    const canEdit=mine || ["umo1017@gmail.com","mars83002566@gmail.com"].includes(ordersCurrentEmail);
-    return `<tr>
-      <td>${ordersEsc(r.order_date||"")}</td>
-      <td>${ordersEsc(r.branch||"")}</td>
-      <td><strong>${ordersEsc(r.item_name||"")}</strong><div class="helper">${ordersEsc(r.notes||"")}</div></td>
-      <td>${Number(r.quantity||0)}</td>
-      <td>${ordersMoney(r.unit_price)}</td>
-      <td class="orders-total">${ordersMoney(r.total_amount)}</td>
-      <td>${ordersEsc(r.supplier||"")}</td>
-      <td>
-        ${canEdit
-          ? `<select class="orders-status" data-order-status="${r.id}">
-              ${["Pending","Ordered","Received","Cancelled"].map(s=>`<option value="${s}" ${r.status===s?"selected":""}>${s}</option>`).join("")}
-             </select>`
-          : `<span class="orders-status">${ordersEsc(r.status||"Pending")}</span>`}
-      </td>
-      <td>${ordersEsc(r.created_by||"")}</td>
-      <td>${canEdit?`<button class="btn staff-delete-btn" type="button" data-order-delete="${r.id}">Delete</button>`:"View"}</td>
-    </tr>`;
-  }).join("") || '<tr><td colspan="10"><div class="helper">No orders yet.</div></td></tr>';
+function filteredOrdersRows(){
+ return ordersSelectedBrand==="All"?ordersInventory:ordersInventory.filter(r=>r.brand===ordersSelectedBrand);
 }
 
-async function addOrder(){
-  const state=document.getElementById("orderSaveState");
-  const date=document.getElementById("orderDate")?.value||ordersToday();
-  const branch=document.getElementById("orderBranch")?.value||"";
-  const item=(document.getElementById("orderItem")?.value||"").trim();
-  const qty=Number(document.getElementById("orderQty")?.value||0);
-  const unit=Number(document.getElementById("orderUnitPrice")?.value||0);
-  const supplier=(document.getElementById("orderSupplier")?.value||"").trim();
-  const notes=(document.getElementById("orderNotes")?.value||"").trim();
-  const status=document.getElementById("orderStatus")?.value||"Pending";
-
-  if(!item){ if(state) state.textContent="Item is required."; return; }
-  if(qty<=0){ if(state) state.textContent="Quantity must be more than 0."; return; }
-
-  await refreshOrdersAccess();
-  if(!ordersCurrentEmail){ if(state) state.textContent="Please login again."; return; }
-
-  if(state) state.textContent="Saving...";
-
-  const {error}=await ordersDb().from("purchase_orders").insert({
-    order_date:date,
-    branch,
-    item_name:item,
-    quantity:qty,
-    unit_price:unit,
-    total_amount:+(qty*unit).toFixed(2),
-    supplier,
-    notes,
-    status,
-    created_by:ordersCurrentEmail
-  });
-
-  if(error){ if(state) state.textContent=error.message; return; }
-
-  document.getElementById("orderItem").value="";
-  document.getElementById("orderQty").value="1";
-  document.getElementById("orderUnitPrice").value="0";
-  document.getElementById("orderTotal").value="0.00";
-  document.getElementById("orderSupplier").value="";
-  document.getElementById("orderNotes").value="";
-  document.getElementById("orderStatus").value="Pending";
-  if(state) state.textContent="Saved ✓";
-  setTimeout(()=>{if(state) state.textContent="";},1500);
-  await loadOrders();
+function ordersSummary(rows){
+ const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=String(v)};
+ set("ordersProductCount",rows.length);
+ set("ordersOpeningTotal",rows.reduce((s,r)=>s+Number(r.previous_stock||0),0));
+ set("ordersOrderedTotal",rows.reduce((s,r)=>s+Number(r.order_qty||0),0));
+ set("ordersOutTotal",rows.reduce((s,r)=>s+Number(r.out_qty||0),0));
+ set("ordersClosingTotal",rows.reduce((s,r)=>s+Number(r.current_stock??ordersCalcCurrent(r)),0));
 }
 
+function renderBranchInventory(){
+ const head=document.getElementById("ordersTableHead"),body=document.getElementById("ordersInventoryBody");
+ if(!head||!body)return;
+ head.innerHTML=`<tr><th>Product</th><th>Price</th><th>Previous Stock</th><th>Order Qty</th><th>Received Qty</th><th>Out Qty</th><th>Current Stock</th><th>Order Status</th><th>Shipping Status</th><th>Supplier</th><th>Notes</th></tr>`;
+ const rows=filteredOrdersRows();
+ body.innerHTML=rows.map(r=>{
+   const i=ordersInventory.indexOf(r);
+   return `<tr data-order-row="${i}">
+    <td><div class="orders-product-name">${ordersEsc(r.product_name)}</div><div class="orders-brand-label">${ordersEsc(r.brand)} · ${ordersEsc(r.category||"")}</div></td>
+    <td>RM ${Number(r.price||0).toFixed(2)}</td>
+    <td><input data-prev="${i}" type="number" min="0" value="${Number(r.previous_stock||0)}"></td>
+    <td><input data-order="${i}" type="number" min="0" value="${Number(r.order_qty||0)}"></td>
+    <td><input data-received="${i}" type="number" min="0" value="${Number(r.received_qty||0)}"></td>
+    <td><input data-out="${i}" type="number" min="0" value="${Number(r.out_qty||0)}"></td>
+    <td><strong data-current="${i}">${ordersCalcCurrent(r)}</strong></td>
+    <td><select data-order-status="${i}">${["Not Ordered","Pending","Ordered","Partially Received","Received","Cancelled"].map(s=>`<option ${r.order_status===s?"selected":""}>${s}</option>`).join("")}</select></td>
+    <td><select data-ship-status="${i}">${["Not Shipped","Preparing","Partially Shipped","Shipped","Delivered"].map(s=>`<option ${r.shipping_status===s?"selected":""}>${s}</option>`).join("")}</select></td>
+    <td><input data-supplier="${i}" value="${ordersEsc(r.supplier||"")}"></td>
+    <td><input data-notes="${i}" value="${ordersEsc(r.notes||"")}"></td>
+   </tr>`;
+ }).join("");
+ ordersSummary(rows);
+}
+
+async function renderTotalInventory(){
+ const ym=ordersCurrentMonth();
+ const {data,error}=await ordersDb().from("order_monthly_inventory").select("*").eq("month_key",ym);
+ const head=document.getElementById("ordersTableHead"),body=document.getElementById("ordersInventoryBody");
+ if(error){body.innerHTML=`<tr><td>${ordersEsc(error.message)}</td></tr>`;return;}
+ const grouped={};
+ (data||[]).forEach(r=>{
+  const k=String(r.sku_id||r.product_name);
+  if(!grouped[k])grouped[k]={sku_id:r.sku_id,product_name:r.product_name,brand:r.brand,category:r.category,price:Number(r.price||0),eco:0,nusa:0,total:0};
+  const q=Number(r.current_stock||0);
+  if(r.branch==="Eco Botanic")grouped[k].eco+=q;
+  if(r.branch==="Nusa Bestari")grouped[k].nusa+=q;
+  grouped[k].total+=q;
+ });
+ let rows=Object.values(grouped);
+ if(ordersSelectedBrand!=="All")rows=rows.filter(r=>r.brand===ordersSelectedBrand);
+ head.innerHTML=`<tr><th>Product</th><th>Price</th><th>Eco Botanic</th><th>Nusa Bestari</th><th>Total Stock</th></tr>`;
+ body.innerHTML=rows.map(r=>`<tr><td><strong>${ordersEsc(r.product_name)}</strong><div class="orders-brand-label">${ordersEsc(r.brand)} · ${ordersEsc(r.category||"")}</div></td><td>RM ${r.price.toFixed(2)}</td><td>${r.eco}</td><td>${r.nusa}</td><td><strong>${r.total}</strong></td></tr>`).join("");
+ ordersSummary(rows.map(r=>({previous_stock:0,order_qty:0,out_qty:0,current_stock:r.total})));
+}
+
+async function renderSubmittedOrders(){
+ const ym=ordersCurrentMonth();
+ const {data,error}=await ordersDb().from("order_submissions").select("*").eq("month_key",ym).order("submitted_at",{ascending:false});
+ const head=document.getElementById("ordersTableHead"),body=document.getElementById("ordersInventoryBody");
+ if(error){body.innerHTML=`<tr><td>${ordersEsc(error.message)}</td></tr>`;return;}
+
+ let rows=data||[];
+ if(ordersSelectedBrand!=="All")rows=rows.filter(r=>r.brand===ordersSelectedBrand);
+
+ // Group rows into a formal Purchase Order by po_number.
+ const groups={};
+ rows.forEach(r=>{
+   const key=r.po_number||`OLD-${r.id}`;
+   if(!groups[key]) groups[key]={
+     po_number:key,
+     branch:r.branch,
+     submitted_at:r.submitted_at,
+     submitted_by:r.submitted_by,
+     status:r.po_status||r.status||"Submitted",
+     items:[]
+   };
+   groups[key].items.push(r);
+ });
+
+ const pos=Object.values(groups).sort((a,b)=>new Date(b.submitted_at)-new Date(a.submitted_at));
+ head.innerHTML=`<tr><th>Purchase Order</th></tr>`;
+
+ body.innerHTML=pos.map(po=>{
+   const qty=po.items.reduce((s,x)=>s+Number(x.quantity||0),0);
+   const total=po.items.reduce((s,x)=>s+(Number(x.quantity||0)*Number(x.price||0)),0);
+   const suppliers=[...new Set(po.items.map(x=>String(x.supplier||"").trim()).filter(Boolean))];
+
+   return `<tr><td>
+     <div class="orders-po-group">
+       <div class="orders-po-head">
+         <div>
+           <div class="orders-po-no">${ordersEsc(po.po_number)}</div>
+           <div class="helper">${ordersEsc(po.branch||"")} · ${new Date(po.submitted_at).toLocaleString()}</div>
+         </div>
+         <div><strong>${ordersEsc(po.status)}</strong></div>
+       </div>
+
+       <div class="orders-po-summary">
+         <div class="box"><div class="k">Products</div><div class="v">${po.items.length}</div></div>
+         <div class="box"><div class="k">Total Qty</div><div class="v">${qty}</div></div>
+         <div class="box"><div class="k">Total Amount</div><div class="v">RM ${total.toFixed(2)}</div></div>
+         <div class="box"><div class="k">Supplier</div><div class="v" style="font-size:13px">${ordersEsc(suppliers.join(", ")||"-")}</div></div>
+       </div>
+
+       <div class="orders-po-items">
+         <table>
+           <thead><tr><th>Product</th><th>Brand</th><th>Qty</th><th>Unit Price</th><th>Amount</th><th>Supplier</th></tr></thead>
+           <tbody>
+             ${po.items.map(x=>`
+               <tr>
+                 <td><strong>${ordersEsc(x.product_name)}</strong></td>
+                 <td>${ordersEsc(x.brand||"")}</td>
+                 <td>${Number(x.quantity||0)}</td>
+                 <td>RM ${Number(x.price||0).toFixed(2)}</td>
+                 <td><strong>RM ${(Number(x.quantity||0)*Number(x.price||0)).toFixed(2)}</strong></td>
+                 <td>${ordersEsc(x.supplier||"-")}</td>
+               </tr>`).join("")}
+           </tbody>
+         </table>
+       </div>
+
+       <div class="helper" style="margin-top:8px">Submitted by ${ordersEsc(po.submitted_by||"")}</div>
+     </div>
+   </td></tr>`;
+ }).join("") || `<tr><td>No purchase orders submitted for this month.</td></tr>`;
+
+ ordersSummary([]);
+}
+async function renderOrders(){
+ renderOrdersBrandTabs();
+ const title=document.getElementById("ordersTableTitle");
+ document.getElementById("ordersMonthLabel").textContent=`${ordersCurrentMonth()} · ${ordersViewMode==="total"?"All Branches":ordersBranch()}`;
+ if(ordersViewMode==="branch"){title.textContent=`${ordersBranch()} Inventory`;renderBranchInventory();}
+ else if(ordersViewMode==="total"){title.textContent="Total Inventory";await renderTotalInventory();}
+ else{title.textContent="Purchase Orders";await renderSubmittedOrders();}
+}
+
+async function loadOrdersMonth(){
+ if(!(await refreshOrdersVisibility()))return;
+ const ym=ordersCurrentMonth(),branch=ordersBranch();
+ const {data,error}=await ordersDb().from("order_monthly_inventory").select("*").eq("month_key",ym).eq("branch",branch).order("sort_order");
+ if(error){document.getElementById("ordersSaveState").textContent=error.message;return;}
+ const saved=new Map((data||[]).map(r=>[String(r.sku_id),r]));
+ ordersInventory=ORDER_PRODUCT_CATALOG.map((p,i)=>{
+  const r=saved.get(String(p.sku_id));
+  return {
+   id:r?.id||null,sku_id:p.sku_id,product_name:p.product_name,brand:p.brand,category:p.category,price:Number(r?.price??p.price??0),
+   previous_stock:Number(r?.previous_stock||0),order_qty:Number(r?.order_qty||0),received_qty:Number(r?.received_qty||0),out_qty:Number(r?.out_qty||0),
+   current_stock:Number(r?.current_stock||0),order_status:r?.order_status||"Not Ordered",shipping_status:r?.shipping_status||"Not Shipped",
+   supplier:r?.supplier||"",notes:r?.notes||"",sort_order:i
+  };
+ });
+ await renderOrders();
+}
+
+async function loadPreviousMonthProducts(){
+ const ym=ordersCurrentMonth(),prev=ordersPreviousMonth(ym),branch=ordersBranch();
+ const {data,error}=await ordersDb().from("order_monthly_inventory").select("*").eq("month_key",prev).eq("branch",branch);
+ if(error)return alert(error.message);
+ const m=new Map((data||[]).map(r=>[String(r.sku_id),r]));
+ ordersInventory.forEach(r=>{
+   const old=m.get(String(r.sku_id));
+   if(old){
+    r.price=Number(old.price??r.price);
+    r.previous_stock=Number(old.current_stock||0);
+    r.order_qty=0;r.received_qty=0;r.out_qty=0;r.current_stock=Number(old.current_stock||0);
+    r.order_status="Not Ordered";r.shipping_status="Not Shipped";r.supplier=old.supplier||"";
+   }
+ });
+ renderOrders();
+ document.getElementById("ordersSaveState").textContent=`Loaded stock from ${prev} ✓`;
+}
+
+function syncOrderRow(i){
+ const row=document.querySelector(`[data-order-row="${i}"]`),r=ordersInventory[i];if(!row||!r)return;
+ r.previous_stock=Number(row.querySelector(`[data-prev="${i}"]`)?.value||0);
+ r.order_qty=Number(row.querySelector(`[data-order="${i}"]`)?.value||0);
+ r.received_qty=Number(row.querySelector(`[data-received="${i}"]`)?.value||0);
+ r.out_qty=Number(row.querySelector(`[data-out="${i}"]`)?.value||0);
+ r.current_stock=ordersCalcCurrent(r);
+ r.order_status=row.querySelector(`[data-order-status="${i}"]`)?.value||"Not Ordered";
+ r.shipping_status=row.querySelector(`[data-ship-status="${i}"]`)?.value||"Not Shipped";
+ r.supplier=row.querySelector(`[data-supplier="${i}"]`)?.value||"";
+ r.notes=row.querySelector(`[data-notes="${i}"]`)?.value||"";
+ const c=row.querySelector(`[data-current="${i}"]`);if(c)c.textContent=r.current_stock;
+ ordersSummary(filteredOrdersRows());
+}
+
+async function saveOrdersMonth(){
+ if(!(await refreshOrdersVisibility()))return;
+ document.querySelectorAll("[data-order-row]").forEach(x=>syncOrderRow(Number(x.dataset.orderRow)));
+ const ym=ordersCurrentMonth(),branch=ordersBranch(),state=document.getElementById("ordersSaveState");
+ state.textContent="Saving...";
+ const rows=ordersInventory.map((r,i)=>({
+  month_key:ym,branch,sku_id:String(r.sku_id),product_name:r.product_name,brand:r.brand,category:r.category,price:r.price,
+  previous_stock:r.previous_stock,order_qty:r.order_qty,received_qty:r.received_qty,out_qty:r.out_qty,current_stock:ordersCalcCurrent(r),
+  order_status:r.order_status,shipping_status:r.shipping_status,supplier:r.supplier,notes:r.notes,sort_order:i,
+  created_by:ordersCurrentEmail,updated_at:new Date().toISOString()
+ }));
+ const {error}=await ordersDb().from("order_monthly_inventory").upsert(rows,{onConflict:"month_key,branch,sku_id"});
+ state.textContent=error?error.message:"Saved ✓";
+ if(!error)setTimeout(()=>{if(state)state.textContent=""},1500);
+}
+
+async function submitOrders(){
+ await saveOrdersMonth();
+
+ const qtyRows=ordersInventory.filter(r=>Number(r.order_qty||0)>0);
+ if(!qtyRows.length) return alert("No order quantity to submit.");
+
+ const totalQty=qtyRows.reduce((s,r)=>s+Number(r.order_qty||0),0);
+ const totalAmount=qtyRows.reduce((s,r)=>s+(Number(r.order_qty||0)*Number(r.price||0)),0);
+
+ if(!confirm(
+   `Submit Purchase Order?\n\n`+
+   `Branch: ${ordersBranch()}\n`+
+   `Products: ${qtyRows.length}\n`+
+   `Total Qty: ${totalQty}\n`+
+   `Total Amount: RM ${totalAmount.toFixed(2)}`
+ )) return;
+
+ const ym=ordersCurrentMonth(),branch=ordersBranch();
+
+ // One PO number for every product submitted in this click.
+ const stamp=new Date();
+ const poNumber=`PO-${ym.replace("-","")}-${String(stamp.getDate()).padStart(2,"0")}${String(stamp.getHours()).padStart(2,"0")}${String(stamp.getMinutes()).padStart(2,"0")}${String(stamp.getSeconds()).padStart(2,"0")}`;
+
+ const rows=qtyRows.map(r=>({
+   po_number:poNumber,
+   month_key:ym,
+   branch,
+   sku_id:String(r.sku_id),
+   product_name:r.product_name,
+   brand:r.brand,
+   price:Number(r.price||0),
+   quantity:Number(r.order_qty||0),
+   supplier:r.supplier||"",
+   status:"Submitted",
+   po_status:"Submitted",
+   submitted_by:ordersCurrentEmail
+ }));
+
+ const {error}=await ordersDb().from("order_submissions").insert(rows);
+ if(error) return alert(error.message);
+
+ // Clear Order Qty after successful submission so the same order is not accidentally submitted twice.
+ ordersInventory.forEach(r=>{
+   if(Number(r.order_qty||0)>0){
+     r.order_qty=0;
+     r.order_status="Ordered";
+   }
+ });
+
+ await saveOrdersMonth();
+
+ alert(
+   `Purchase Order submitted successfully.\n\n`+
+   `${poNumber}\n`+
+   `Products: ${qtyRows.length}\n`+
+   `Total Qty: ${totalQty}\n`+
+   `Total Amount: RM ${totalAmount.toFixed(2)}`
+ );
+
+ ordersViewMode="submitted";
+ document.querySelectorAll("[data-orders-view]").forEach(b=>b.classList.toggle("active",b.dataset.ordersView==="submitted"));
+ await renderOrders();
+}
 async function showOrders(){
-  if(!(await refreshOrdersVisibility())){
-    try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
-    if(typeof showDaily==="function") showDaily();
-    return;
-  }
-
-  try{localStorage.setItem("nd_last_page_v2","orders");}catch(_){}
-  window.activeMainPage="orders";
-
-  document.getElementById("appView")?.classList.add("hidden");
-  document.getElementById("salaryPage")?.classList.remove("active","sidebar-offset");
-  document.getElementById("rosterPage")?.classList.remove("active","sidebar-offset");
-  document.getElementById("settlementPage")?.classList.remove("active","sidebar-offset");
-  document.getElementById("settingsPage")?.classList.remove("active","sidebar-offset");
-
-  const p=document.getElementById("ordersPage");
-  p?.classList.add("active","sidebar-offset");
-  if(p) p.style.display="block";
-
-  try{setSidebarActive("orders");}catch(_){}
-  try{closeMobileSidebar();}catch(_){}
-
-  const d=document.getElementById("orderDate");
-  if(d && !d.value) d.value=ordersToday();
-
-  await loadOrderBranches();
-  await loadOrders();
+ if(!(await refreshOrdersVisibility()))return;
+ try{localStorage.setItem("nd_last_page_v2","orders")}catch(_){}
+ window.activeMainPage="orders";
+ document.getElementById("appView")?.classList.add("hidden");
+ ["salaryPage","rosterPage","settlementPage","settingsPage"].forEach(id=>document.getElementById(id)?.classList.remove("active","sidebar-offset"));
+ const p=document.getElementById("ordersPage");p?.classList.add("active","sidebar-offset");if(p)p.style.display="block";
+ try{setSidebarActive("orders")}catch(_){}
+ try{closeMobileSidebar()}catch(_){}
+ const m=document.getElementById("ordersMonth");if(m&&!m.value){const d=new Date();m.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;}
+ await loadOrdersMonth();
 }
 window.showOrders=showOrders;
 
-async function renderOrderViewAccess(){
-  const root=document.getElementById("settingsOrderAccessList");
-  if(!root || !window.isGlobalAdmin) return;
-
-  const {data,error}=await ordersDb().from("order_view_access").select("email,created_at").order("email");
-  if(error){ root.innerHTML=`<div class="bad">${ordersEsc(error.message)}</div>`; return; }
-
-  root.innerHTML=(data||[]).map(x=>`
-    <div class="branch-admin-row">
-      <div><strong>${ordersEsc(x.email)}</strong></div>
-      <button class="btn staff-delete-btn" type="button" data-order-access-delete="${ordersEsc(x.email)}">Delete</button>
-    </div>
-  `).join("") || '<div class="helper">No extra view access.</div>';
-}
-
-async function addOrderViewAccess(){
-  if(!window.isGlobalAdmin) return;
-  const input=document.getElementById("settingsOrderAccessEmail");
-  const email=String(input?.value||"").trim().toLowerCase();
-  if(!email || !email.includes("@")) return alert("Enter a valid login email.");
-
-  // Reuse the real-login verification RPC already added for Salary.
-  const {data:exists,error:checkError}=await ordersDb().rpc("salary_login_email_exists",{p_email:email});
-  if(checkError) return alert("Unable to verify login email: "+checkError.message);
-  if(!exists) return alert("This email is not an ndacc.us login account.");
-
-  const {error}=await ordersDb().from("order_view_access").upsert({email},{onConflict:"email"});
-  if(error) return alert(error.message);
-  if(input) input.value="";
-  await renderOrderViewAccess();
-}
-
 document.addEventListener("DOMContentLoaded",()=>{
-  setTimeout(()=>refreshOrdersVisibility(),150);
-
-  const q=document.getElementById("orderQty");
-  const p=document.getElementById("orderUnitPrice");
-  q?.addEventListener("input",ordersRecalc);
-  p?.addEventListener("input",ordersRecalc);
-  document.getElementById("orderAddBtn")?.addEventListener("click",addOrder);
-  document.getElementById("ordersRefreshBtn")?.addEventListener("click",loadOrders);
-
-  document.getElementById("ordersTableBody")?.addEventListener("change",async e=>{
-    const sel=e.target.closest("[data-order-status]");
-    if(!sel) return;
-    const {error}=await ordersDb().from("purchase_orders")
-      .update({status:sel.value,updated_at:new Date().toISOString()})
-      .eq("id",Number(sel.dataset.orderStatus));
-    if(error){alert(error.message);await loadOrders();}
-  });
-
-  document.getElementById("ordersTableBody")?.addEventListener("click",async e=>{
-    const btn=e.target.closest("[data-order-delete]");
-    if(!btn) return;
-    if(!confirm("Delete this order?")) return;
-    const {error}=await ordersDb().from("purchase_orders").delete().eq("id",Number(btn.dataset.orderDelete));
-    if(error) return alert(error.message);
-    await loadOrders();
-  });
-
-  document.getElementById("settingsAddOrderAccessBtn")?.addEventListener("click",addOrderViewAccess);
-  document.getElementById("settingsOrderAccessList")?.addEventListener("click",async e=>{
-    const btn=e.target.closest("[data-order-access-delete]");
-    if(!btn || !window.isGlobalAdmin) return;
-    const email=String(btn.dataset.orderAccessDelete||"");
-    const {error}=await ordersDb().from("order_view_access").delete().eq("email",email);
-    if(error) return alert(error.message);
-    await renderOrderViewAccess();
-  });
-
-  // When opening Settings, refresh this access list.
-  document.getElementById("sidebarSettings")?.addEventListener("click",()=>setTimeout(renderOrderViewAccess,250));
-
-  // Any other main navigation closes Orders cleanly.
-  ["sidebarDaily","sidebarRoster","sidebarSalary","sidebarSettlement","sidebarSettings"].forEach(id=>{
-    document.getElementById(id)?.addEventListener("click",()=>{
-      document.getElementById("ordersPage")?.classList.remove("active","sidebar-offset");
-    },true);
-  });
+ setTimeout(refreshOrdersVisibility,150);
+ document.getElementById("ordersMonth")?.addEventListener("change",loadOrdersMonth);
+ document.getElementById("ordersBranch")?.addEventListener("change",loadOrdersMonth);
+ document.getElementById("ordersRefreshBtn")?.addEventListener("click",loadOrdersMonth);
+ document.getElementById("ordersLoadPrevBtn")?.addEventListener("click",loadPreviousMonthProducts);
+ document.getElementById("ordersSaveAllBtn")?.addEventListener("click",saveOrdersMonth);
+ document.getElementById("ordersSubmitBtn")?.addEventListener("click",submitOrders);
+ document.getElementById("ordersBrandTabs")?.addEventListener("click",e=>{const b=e.target.closest("[data-order-brand]");if(!b)return;ordersSelectedBrand=b.dataset.orderBrand;renderOrders();});
+ document.querySelector(".orders-view-tabs")?.addEventListener("click",e=>{const b=e.target.closest("[data-orders-view]");if(!b)return;ordersViewMode=b.dataset.ordersView;document.querySelectorAll("[data-orders-view]").forEach(x=>x.classList.toggle("active",x===b));renderOrders();});
+ document.getElementById("ordersInventoryBody")?.addEventListener("input",e=>{const row=e.target.closest("[data-order-row]");if(row)syncOrderRow(Number(row.dataset.orderRow));});
+ document.getElementById("ordersInventoryBody")?.addEventListener("change",e=>{const row=e.target.closest("[data-order-row]");if(row)syncOrderRow(Number(row.dataset.orderRow));});
+ ["sidebarDaily","sidebarRoster","sidebarSalary","sidebarSettlement","sidebarSettings"].forEach(id=>document.getElementById(id)?.addEventListener("click",()=>document.getElementById("ordersPage")?.classList.remove("active","sidebar-offset"),true));
 });
+try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100))}catch(_){}
 </script>
 
 </body>
