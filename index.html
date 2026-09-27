@@ -1019,6 +1019,14 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
 </div><div class="money-line">
 <label for="amex">AMEX</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="amex" min="0" step="0.01" type="number" value=""/></div>
+</div>
+<div class="money-line">
+<label for="bedFee">Bed Fee</label>
+<div style="display:grid;grid-template-columns:minmax(130px,1fr) minmax(160px,1.25fr);gap:8px">
+  <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="bedFee" min="0" step="0.01" type="number" value=""/></div>
+  <input id="bedFeeMerchant" type="text" list="bedFeeMerchantList" placeholder="Merchant / 商家"/>
+  <datalist id="bedFeeMerchantList"></datalist>
+</div>
 </div></div>
 <div style="height:14px"></div>
 <div class="row3">
@@ -1107,7 +1115,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
   let isSystemAdmin=false;
   const DAILY_BRANCH_KEY="nd_daily_branch_v1";
   let currentBranch=(()=>{try{return localStorage.getItem(DAILY_BRANCH_KEY)||"Eco Botanic"}catch(_){return "Eco Botanic"}})(), currentStatus="pending", currentId=null, pettyEntries=[], allRows=[], dailyOutlets=["Eco Botanic","Nusa Bestari"];
-  const paymentIds=["visa","amex","tng","cash","alipay","onlineCard","bankTransfer","tips"];
+  const paymentIds=["visa","amex","bedFee","tng","cash","alipay","onlineCard","bankTransfer","tips"];
   let saveTimer=null;
 
   const $=id=>document.getElementById(id);
@@ -1373,6 +1381,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
     const fields=[
       ["visa_master","VISA / MASTER"],
       ["amex","AMEX"],
+      ["bed_fee","Bed Fee"],
       ["tng","TNG"],
       ["cash","CASH"],
       ["alipay","ALIPAY"],
@@ -1383,7 +1392,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
       ["cash_withdrawal","Cash Withdrawal"]
     ];
 
-    const reviewableFields=["visa_master","amex","cash","alipay","online_card","bank_transfer","tips"];
+    const reviewableFields=["visa_master","amex","bed_fee","cash","alipay","online_card","bank_transfer","tips"];
 
     const pendingTotalFor=(branch)=>{
       let total=0;
@@ -1588,6 +1597,7 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
           <td>${paymentHistoryCell(r,"alipay")}</td>
           <td>${paymentHistoryCell(r,"online_card")}</td>
           <td>${paymentHistoryCell(r,"amex")}</td>
+          <td>${bedFeeHistoryCell(r)}</td>
           <td>${money(r.grand_total)}</td>
           <td>${money(r.cash_withdrawal)}</td>
           <td>${money(r.petty_net)}</td>
@@ -1603,7 +1613,7 @@ return `<div class="history-date-card">
               <tr>
                 <th>Branch</th><th>Staff</th><th>VISA / MASTER</th>
                 <th>TNG</th><th>CASH</th><th>Bank Transfer</th><th>Tips</th>
-                <th>ALIPAY</th><th>Online Card</th><th>AMEX</th><th>Grand Total</th>
+                <th>ALIPAY</th><th>Online Card</th><th>AMEX</th><th>Bed Fee</th><th>Grand Total</th>
                 <th>Cash Withdrawal</th><th>Petty Cash</th><th>Status</th><th>Order</th>
               </tr>
             </thead>
@@ -1899,6 +1909,7 @@ return `<div class="history-date-card">
     $("staff").value=await rosterStaffForDaily(currentBranch,date);
     $("cashierBalance").value=500;
     paymentIds.forEach(id=>$(id).value="");
+    $("bedFeeMerchant").value="";
     $("cashWithdrawal").value="";
     const [pettyCarry,cashCarry]=await Promise.all([previousPetty(date),previousCashBalance(date)]);
     $("pettyOpening").value=pettyCarry;
@@ -1926,6 +1937,9 @@ return `<div class="history-date-card">
     $("visa").value=Number(r.visa||0)+Number(r.master||0);
     $("master").value=0;
     $("amex").value=r.amex||0;
+    $("bedFee").value=r.bed_fee||0;
+    $("bedFeeMerchant").value=r.bed_fee_merchant||"";
+    rememberBedFeeMerchant(r.bed_fee_merchant||"");
     $("tng").value=r.tng||0;
     $("cash").value=r.cash||0;
     $("alipay").value=r.alipay||0;
@@ -1953,6 +1967,14 @@ return `<div class="history-date-card">
   }
 
   function payload(){
+    const bedFeeAmount=num("bedFee");
+    const bedFeeMerchant=String($("bedFeeMerchant")?.value||"").trim();
+    if(bedFeeAmount>0 && !bedFeeMerchant){
+      alert("Bed Fee 有填写金额时，必须填写 Merchant / 商家。");
+      $("bedFeeMerchant")?.focus();
+      return null;
+    }
+
     let total=0,pin=0,pout=0;
     paymentIds.forEach(id=>total+=num(id));
     pettyEntries.forEach(e=>e.type==="in"?pin+=Number(e.amount)||0:pout+=Number(e.amount)||0);
@@ -1971,6 +1993,8 @@ return `<div class="history-date-card">
       visa:num("visa"),
       master:0,
       amex:num("amex"),
+      bed_fee:bedFeeAmount,
+      bed_fee_merchant:bedFeeMerchant,
       tng:num("tng"),
       cash:num("cash"),
       alipay:num("alipay"),
@@ -2009,7 +2033,7 @@ return `<div class="history-date-card">
     if(error) throw error;
 
     for(const r of (rows||[])){
-      const grand=["visa","master","amex","tng","cash","alipay","online_card","bank_transfer","tips"]
+      const grand=["visa","master","amex","bed_fee","tng","cash","alipay","online_card","bank_transfer","tips"]
         .reduce((sum,k)=>sum+Number(r[k]||0),0);
       const cashBalance=carryCash+Number(r.cash||0)-Number(r.cash_withdrawal||0);
       const pettyNet=carryPetty+Number(r.petty_in||0)-Number(r.petty_out||0);
@@ -2035,6 +2059,7 @@ return `<div class="history-date-card">
     }
     $("syncState").textContent="Saving...";
     const p=payload();
+    if(!p) return;
     const oldRow=allRows.find(r=>r.branch===p.branch&&r.settlement_date===p.settlement_date);
     if(oldRow){
       const statuses={...(oldRow.payment_statuses||{})};
@@ -2276,6 +2301,37 @@ return `<div class="history-date-card">
   }
 
 
+  function bedFeeHistoryCell(r){
+    const value=Number(r.bed_fee||0);
+    const merchant=String(r.bed_fee_merchant||"").trim();
+    if(value<=0) return merchant?`<div>${money(0)}</div><div class="helper">${escHtml(merchant)}</div>`:money(0);
+    const state=(r.payment_statuses||{}).bed_fee||"";
+    const badge=state==="accepted" ? `<div class="helper" style="color:#087f72">✓ Correct</div>`
+      : state==="adjust" ? `<div class="helper" style="color:#b42318">✕ Error</div>` : "";
+    return `${money(value)}${merchant?`<div class="helper">${escHtml(merchant)}</div>`:""}${badge}<div class="inline-actions" style="margin-top:5px">
+      <button type="button" class="mini correct" data-pay-status="${r.id}" data-pay-field="bed_fee" data-pay-value="accepted">Correct</button>
+      <button type="button" class="mini error" data-pay-status="${r.id}" data-pay-field="bed_fee" data-pay-value="adjust">Error</button>
+    </div>`;
+  }
+
+  const BED_FEE_MERCHANT_KEY="nd_bed_fee_merchants_v1";
+  function bedFeeMerchants(){
+    try{return JSON.parse(localStorage.getItem(BED_FEE_MERCHANT_KEY)||"[]")||[];}catch(_){return [];}
+  }
+  function rememberBedFeeMerchant(name){
+    name=String(name||"").trim(); if(!name)return;
+    const arr=bedFeeMerchants();
+    if(!arr.some(x=>String(x).toLowerCase()===name.toLowerCase())){
+      arr.push(name);
+      try{localStorage.setItem(BED_FEE_MERCHANT_KEY,JSON.stringify(arr));}catch(_){}
+    }
+    renderBedFeeMerchantList();
+  }
+  function renderBedFeeMerchantList(){
+    const dl=$("bedFeeMerchantList"); if(!dl)return;
+    dl.innerHTML=bedFeeMerchants().map(x=>`<option value="${escHtml(x)}"></option>`).join("");
+  }
+
   function paymentHistoryCell(r,field){
     if(field==="visa_master"){
       const total=Number(r.visa||0)+Number(r.master||0);
@@ -2308,6 +2364,7 @@ return `<div class="history-date-card">
       <td>${r.staff||"-"}</td>
       <td>${paymentHistoryCell(r,"visa_master")}</td>
       <td>${paymentHistoryCell(r,"amex")}</td>
+      <td>${bedFeeHistoryCell(r)}</td>
       <td>${paymentHistoryCell(r,"tng")}</td>
       <td>${paymentHistoryCell(r,"cash")}</td>
       <td>${paymentHistoryCell(r,"alipay")}</td>
@@ -3077,6 +3134,14 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </style>
 
 
+<div class="salary-modal" id="ordersAddBranchModal">
+ <div class="salary-dialog" style="width:min(460px,94vw)">
+  <div class="outlet-title"><strong>Add Branch</strong><button class="main-page-close" id="ordersCloseBranchModal" type="button">×</button></div>
+  <div class="field" style="margin-top:12px"><label>Branch Name</label><input id="ordersNewBranchName" placeholder="Branch Name"></div>
+  <div style="margin-top:12px"><button class="btn" id="ordersSaveBranchBtn" type="button">Save Branch</button></div>
+ </div>
+</div>
+
 <div class="salary-page" id="ordersPage">
  <div class="salary-shell" style="display:grid">
   <div class="salary-top">
@@ -3092,10 +3157,10 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <div class="field"><label>Month</label><input id="ordersMonth" type="month"/></div>
       <div class="field"><label>Branch</label>
         <select id="ordersBranch">
-          <option value="Eco Botanic">Eco Botanic</option>
-          <option value="Nusa Bestari">Nusa Bestari</option>
+          <option value="__ALL__">All Branches</option>
         </select>
       </div>
+      <button class="btn" id="ordersAddBranchBtn" type="button">+ Add Branch</button>
       <button class="btn orders-tab active" id="ordersManageBtn" type="button">Orders</button>
       <button class="btn orders-tab" id="ordersMonthlyBtn" type="button">Monthly Order Records</button>
       <button class="btn orders-tab" id="ordersTotalQtyBtn" type="button">Total Order Quantity</button>
@@ -3765,7 +3830,23 @@ function setSidebarActive(page){
   byId("sidebarOrders")?.classList.toggle("active",page==="orders");
   byId("sidebarSettings")?.classList.toggle("active",page==="settings");
 }
-function closeMobileSidebar(){ byId("mainSidebar").classList.remove("open"); }
+function closeMobileSidebar(){
+ const sb=byId("mainSidebar");
+ if(sb) sb.classList.remove("open");
+}
+function forceSidebarClosed(){
+ const sb=byId("mainSidebar");
+ if(sb) sb.classList.remove("open");
+}
+document.addEventListener("click",e=>{
+ if(e.target.closest?.(".sidebar-btn")) setTimeout(forceSidebarClosed,0);
+},true);
+document.addEventListener("DOMContentLoaded",()=>{
+  setTimeout(forceSidebarClosed,50);
+  setTimeout(renderBedFeeMerchantList,100);
+  document.getElementById("bedFeeMerchant")?.addEventListener("change",e=>rememberBedFeeMerchant(e.target.value));
+});
+window.addEventListener("pageshow",()=>setTimeout(forceSidebarClosed,0));
 
 let mainPageBackNavigation=false;
 function rememberPreviousMainPage(target){
@@ -8621,7 +8702,31 @@ let selectedLoanProduct=null;
 function ordersDb(){ if(window.salaryDb) return window.salaryDb; throw new Error("Database connection is not ready."); }
 function ordersEsc(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function ordersMonth(){const e=document.getElementById("ordersMonth");if(e?.value)return e.value;const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;}
-function ordersBranch(){return document.getElementById("ordersBranch")?.value||"Eco Botanic";}
+function ordersBranch(){return document.getElementById("ordersBranch")?.value||"__ALL__";}
+function ordersIsAllBranches(){return ordersBranch()==="__ALL__";}
+
+async function loadOrderBranches(){
+ const sel=document.getElementById("ordersBranch"); if(!sel)return;
+ const current=sel.value||"__ALL__";
+ const {data,error}=await ordersDb().from("order_branches").select("*").eq("is_active",true).order("sort_order",{ascending:true}).order("branch_name",{ascending:true});
+ if(error){console.warn("Order branches:",error);return;}
+ sel.innerHTML='<option value="__ALL__">All Branches</option>'+(data||[]).map(r=>`<option value="${ordersEsc(r.branch_name)}">${ordersEsc(r.branch_name)}</option>`).join("");
+ sel.value=[...sel.options].some(o=>o.value===current)?current:"__ALL__";
+}
+async function saveOrderBranch(){
+ const input=document.getElementById("ordersNewBranchName");
+ const name=String(input?.value||"").trim();
+ if(!name)return alert("Please enter Branch Name.");
+ const {data:maxRows}=await ordersDb().from("order_branches").select("sort_order").order("sort_order",{ascending:false}).limit(1);
+ const sort=(Number(maxRows?.[0]?.sort_order||0)+1);
+ const {error}=await ordersDb().from("order_branches").insert({branch_name:name,is_active:true,sort_order:sort});
+ if(error)return alert(error.message);
+ if(input)input.value="";
+ document.getElementById("ordersAddBranchModal")?.classList.remove("open");
+ await loadOrderBranches();
+ document.getElementById("ordersBranch").value=name;
+ setOrdersMode(ordersMode);
+}
 
 async function refreshOrdersVisibility(){
  const btn=document.getElementById("sidebarOrders");
@@ -8658,6 +8763,7 @@ function renderProductSearch(inputId,resultId,type){
 }
 
 async function addWorkingOrder(){
+ if(ordersIsAllBranches())return alert("Please select a branch before adding an order.");
  if(!selectedOrderProduct)return alert("Please select a product.");
  const qty=Number(document.getElementById("orderAddQty")?.value||0); if(qty<=0)return alert("Please enter Order Qty.");
  const row={
@@ -8674,10 +8780,12 @@ async function addWorkingOrder(){
 
 async function renderWorkingOrders(){
  const root=document.getElementById("orderWorkingList");if(!root)return;
- const {data,error}=await ordersDb().from("order_working_items").select("*").eq("branch",ordersBranch()).neq("status","Arrived").order("created_at",{ascending:false});
+ let q=ordersDb().from("order_working_items").select("*").neq("status","Arrived").order("created_at",{ascending:false});
+ if(!ordersIsAllBranches())q=q.eq("branch",ordersBranch());
+ const {data,error}=await q;
  if(error){root.innerHTML=`<div class="bad">${ordersEsc(error.message)}</div>`;return;}
  const groups={};(data||[]).forEach(r=>{(groups[r.brand||"Other"]??=[]).push(r);});
- root.innerHTML=Object.entries(groups).map(([brand,rows])=>`<div class="orders-po-group"><div class="orders-po-head"><strong>${ordersEsc(brand)}</strong><span class="helper">${rows.length} product(s)</span></div><div class="orders-list-wrap"><table class="orders-table"><thead><tr><th>Product</th><th>Qty</th><th>Supplier</th><th>Note</th><th>Order Status</th><th>Arrival</th></tr></thead><tbody>${rows.map(r=>`<tr><td><strong>${ordersEsc(r.product_name)}</strong></td><td>${Number(r.quantity||0)}</td><td>${ordersEsc(r.supplier||"-")}</td><td>${ordersEsc(r.note||"-")}</td><td><button class="btn ${r.status==="Ordered"?"paid":""}" data-toggle-ordered="${r.id}">${r.status==="Ordered"?"Ordered ✓":"Not Ordered"}</button></td><td>${r.status==="Ordered"?`<button class="btn" data-confirm-arrival="${r.id}">Confirm Arrival</button>`:"-"}</td></tr>`).join("")}</tbody></table></div></div>`).join("")||'<div class="helper">No order items.</div>';
+ root.innerHTML=Object.entries(groups).map(([brand,rows])=>`<div class="orders-po-group"><div class="orders-po-head"><strong>${ordersEsc(brand)}</strong><span class="helper">${rows.length} product(s)</span></div><div class="orders-list-wrap"><table class="orders-table"><thead><tr>${ordersIsAllBranches()?"<th>Branch</th>":""}<th>Product</th><th>Qty</th><th>Supplier</th><th>Note</th><th>Order Status</th><th>Arrival</th></tr></thead><tbody>${rows.map(r=>`<tr>${ordersIsAllBranches()?`<td>${ordersEsc(r.branch)}</td>`:""}<td><strong>${ordersEsc(r.product_name)}</strong></td><td>${Number(r.quantity||0)}</td><td>${ordersEsc(r.supplier||"-")}</td><td>${ordersEsc(r.note||"-")}</td><td><button class="btn ${r.status==="Ordered"?"paid":""}" data-toggle-ordered="${r.id}">${r.status==="Ordered"?"Ordered ✓":"Not Ordered"}</button></td><td>${r.status==="Ordered"?`<button class="btn" data-confirm-arrival="${r.id}">Confirm Arrival</button>`:"-"}</td></tr>`).join("")}</tbody></table></div></div>`).join("")||'<div class="helper">No order items.</div>';
 }
 
 async function markOrdered(id){
@@ -8698,12 +8806,14 @@ async function confirmArrival(id){
 
 async function renderMonthlyOrders(){
  const head=document.getElementById("ordersMonthlyHead"),body=document.getElementById("ordersMonthlyBody");if(!head||!body)return;
- const {data,error}=await ordersDb().from("order_submissions").select("*").eq("month_key",ordersMonth()).eq("branch",ordersBranch()).order("submitted_at",{ascending:false});
+ let q=ordersDb().from("order_submissions").select("*").eq("month_key",ordersMonth()).order("submitted_at",{ascending:false});
+ if(!ordersIsAllBranches())q=q.eq("branch",ordersBranch());
+ const {data,error}=await q;
  if(error){body.innerHTML=`<tr><td>${ordersEsc(error.message)}</td></tr>`;return;}
  let rows=data||[];const q=String(document.getElementById("ordersMonthlySearch")?.value||"").trim().toLowerCase();
  if(q)rows=rows.filter(r=>[r.product_name,r.brand,r.supplier].some(v=>String(v||"").toLowerCase().includes(q)));
- head.innerHTML='<tr><th>Date</th><th>Brand</th><th>Product</th><th>Qty</th><th>Supplier</th></tr>';
- body.innerHTML=rows.map(r=>`<tr><td>${new Date(r.submitted_at).toLocaleDateString()}</td><td>${ordersEsc(r.brand)}</td><td><strong>${ordersEsc(r.product_name)}</strong></td><td>${Number(r.quantity||0)}</td><td>${ordersEsc(r.supplier||"-")}</td></tr>`).join("")||'<tr><td colspan="5">No confirmed orders for this month.</td></tr>';
+ head.innerHTML=`<tr><th>Date</th>${ordersIsAllBranches()?"<th>Branch</th>":""}<th>Brand</th><th>Product</th><th>Qty</th><th>Supplier</th></tr>`;
+ body.innerHTML=rows.map(r=>`<tr><td>${new Date(r.submitted_at).toLocaleDateString()}</td>${ordersIsAllBranches()?`<td>${ordersEsc(r.branch)}</td>`:""}<td>${ordersEsc(r.brand)}</td><td><strong>${ordersEsc(r.product_name)}</strong></td><td>${Number(r.quantity||0)}</td><td>${ordersEsc(r.supplier||"-")}</td></tr>`).join("")||'<tr><td colspan="5">No confirmed orders for this month.</td></tr>';
 }
 async function renderTotalOrderQty(){
  const head=document.getElementById("ordersTotalHead"),body=document.getElementById("ordersTotalBody");if(!head||!body)return;
@@ -8715,6 +8825,7 @@ async function renderTotalOrderQty(){
 }
 
 async function addLoan(){
+ if(ordersIsAllBranches())return alert("Please select a branch before adding Loan Stock.");
  if(!selectedLoanProduct)return alert("Please select a product.");
  const borrower=String(document.getElementById("loanBorrower")?.value||"").trim();if(!borrower)return alert("Please enter Borrower.");
  const qty=Number(document.getElementById("loanQty")?.value||0);if(qty<=0)return alert("Please enter Qty.");
@@ -8725,7 +8836,9 @@ async function addLoan(){
 }
 async function renderLoanStock(){
  const head=document.getElementById("loanHead"),body=document.getElementById("loanBody");if(!head||!body)return;
- const {data,error}=await ordersDb().from("loan_stock_records").select("*").eq("branch",ordersBranch()).order("loaned_at",{ascending:false});
+ let q=ordersDb().from("loan_stock_records").select("*").order("loaned_at",{ascending:false});
+ if(!ordersIsAllBranches())q=q.eq("branch",ordersBranch());
+ const {data,error}=await q;
  if(error){body.innerHTML=`<tr><td>${ordersEsc(error.message)}</td></tr>`;return;}
 
  const rows=(data||[]).filter(r=>Number(r.loan_qty||0)>Number(r.returned_qty||0));
@@ -8760,6 +8873,7 @@ async function renderLoanStock(){
            <thead>
              <tr>
                <th>Date</th>
+               ${ordersIsAllBranches()?"<th>Branch</th>":""}
                <th>Brand</th>
                <th>Product</th>
                <th>Loan Qty</th>
@@ -8774,6 +8888,7 @@ async function renderLoanStock(){
                const outstanding=Number(r.loan_qty||0)-Number(r.returned_qty||0);
                return `<tr>
                  <td>${new Date(r.loaned_at).toLocaleDateString()}</td>
+                 ${ordersIsAllBranches()?`<td>${ordersEsc(r.branch)}</td>`:""}
                  <td>${ordersEsc(r.brand||"-")}</td>
                  <td><strong>${ordersEsc(r.product_name)}</strong></td>
                  <td>${Number(r.loan_qty||0)}</td>
@@ -8811,6 +8926,7 @@ async function showOrders(){
  const p=document.getElementById("ordersPage");p?.classList.add("active","sidebar-offset");if(p)p.style.display="block";
  try{setSidebarActive("orders")}catch(_){} try{closeMobileSidebar()}catch(_){}
  const m=document.getElementById("ordersMonth");if(m&&!m.value){const d=new Date();m.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;}
+ await loadOrderBranches();
  setOrdersMode(ordersMode||"manage");
 }
 window.showOrders=showOrders;
@@ -8821,7 +8937,10 @@ document.addEventListener("DOMContentLoaded",()=>{
  document.getElementById("ordersMonthlyBtn")?.addEventListener("click",()=>setOrdersMode("monthly"));
  document.getElementById("ordersTotalQtyBtn")?.addEventListener("click",()=>setOrdersMode("total"));
  document.getElementById("ordersLoanBtn")?.addEventListener("click",()=>setOrdersMode("loan"));
- document.getElementById("ordersRefreshBtn")?.addEventListener("click",()=>setOrdersMode(ordersMode));
+ document.getElementById("ordersRefreshBtn")?.addEventListener("click",async()=>{await loadOrderBranches();setOrdersMode(ordersMode);});
+ document.getElementById("ordersAddBranchBtn")?.addEventListener("click",()=>document.getElementById("ordersAddBranchModal")?.classList.add("open"));
+ document.getElementById("ordersCloseBranchModal")?.addEventListener("click",()=>document.getElementById("ordersAddBranchModal")?.classList.remove("open"));
+ document.getElementById("ordersSaveBranchBtn")?.addEventListener("click",saveOrderBranch);
  document.getElementById("ordersMonth")?.addEventListener("change",()=>setOrdersMode(ordersMode));
  document.getElementById("ordersBranch")?.addEventListener("change",()=>setOrdersMode(ordersMode));
  document.getElementById("ordersMonthlySearch")?.addEventListener("input",renderMonthlyOrders);
