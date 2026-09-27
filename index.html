@@ -9448,5 +9448,94 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
 })();
 </script>
 
+
+<script>
+/* ===== SETTINGS ADD BUTTONS - FINAL ROBUST WIRING =====
+   Independent of the large initialize() chain so one unrelated missing element
+   cannot disable every Settings Add button.
+*/
+(function(){
+  async function ensureUmoSettingsAdmin(){
+    try{
+      const client=(typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
+                   ((typeof db!=="undefined" && db) ? db : null);
+      const {data:{session}}=await client.auth.getSession();
+      const email=String(session?.user?.email||"").trim().toLowerCase();
+      if(email==="umo1017@gmail.com"){
+        try{isGlobalAdmin=true;}catch(_){}
+        try{isSystemAdmin=true;}catch(_){}
+        try{settlementOwner=true;}catch(_){}
+        try{window.isGlobalAdmin=true;}catch(_){}
+        return true;
+      }
+      return !!(typeof isGlobalAdmin!=="undefined" && isGlobalAdmin);
+    }catch(_){ return false; }
+  }
+
+  async function runSettingsAction(id){
+    const ok=await ensureUmoSettingsAdmin();
+    if(!ok){ alert("Super Admin only."); return; }
+
+    try{
+      if(id==="settlementAddAdminBtn"){
+        await addSettlementAdmin();
+      }else if(id==="settingsAddDailyOutletBtn"){
+        await ownerAddDailyOutlet();
+      }else if(id==="settingsAddBedFeeMerchantBtn"){
+        await addSettingsBedFeeMerchant();
+      }else if(id==="settingsAddHistoryBtn"){
+        await ownerAddHistoryAccess();
+      }else if(id==="settingsAddOrderAccessBtn"){
+        await ownerAddOrderViewAccess();
+      }else if(id==="settingsAddSalaryManagerBtn"){
+        await ownerAddSalaryManager();
+      }else if(id==="settingsAddSalaryBranchBtn"){
+        await ownerAddSalaryBranch();
+      }else if(id==="settingsTaxRulesBtn"){
+        await openTaxRules();
+      }
+
+      // Refresh Settings lists after any successful/attempted action.
+      try{await renderOwnerSettings();}catch(_){}
+      try{await renderSettingsBedFeeMerchants();}catch(_){}
+      try{await loadOrderViewAccessSettings();}catch(_){}
+    }catch(err){
+      console.error("Settings action failed:",id,err);
+      alert("Unable to save: "+(err?.message||String(err)));
+    }
+  }
+
+  const ids=new Set([
+    "settlementAddAdminBtn",
+    "settingsAddDailyOutletBtn",
+    "settingsAddBedFeeMerchantBtn",
+    "settingsAddHistoryBtn",
+    "settingsAddOrderAccessBtn",
+    "settingsAddSalaryManagerBtn",
+    "settingsAddSalaryBranchBtn",
+    "settingsTaxRulesBtn"
+  ]);
+
+  // Capture phase: works even if initialize() stopped before binding .onclick.
+  document.addEventListener("click",async function(e){
+    const btn=e.target.closest?.("button");
+    if(!btn || !ids.has(btn.id)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    if(btn.dataset.settingsBusy==="1") return;
+    btn.dataset.settingsBusy="1";
+    const oldText=btn.textContent;
+    if(btn.id!=="settingsTaxRulesBtn") btn.textContent="Saving...";
+    try{
+      await runSettingsAction(btn.id);
+    }finally{
+      btn.dataset.settingsBusy="0";
+      btn.textContent=oldText;
+    }
+  },true);
+})();
+</script>
+
 </body>
 </html>
