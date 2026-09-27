@@ -1120,8 +1120,12 @@ input,select,textarea,button{
 <label for="bedFee">Bed Fee</label>
 <div style="display:grid;grid-template-columns:minmax(130px,1fr) minmax(160px,1.25fr);gap:8px">
   <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="bedFee" min="0" step="0.01" type="number" value=""/></div>
-  <input id="bedFeeMerchant" type="text" list="bedFeeMerchantList" placeholder="Merchant / 商家"/>
-  <datalist id="bedFeeMerchantList"></datalist>
+  <div style="display:grid;gap:6px;min-width:0">
+    <select id="bedFeeMerchant" style="min-width:0;width:100%">
+      <option value="">Select Merchant</option>
+    </select>
+    <button class="btn" id="addBedFeeMerchantBtn" type="button" style="width:100%">+ Add</button>
+  </div>
 </div>
 </div></div>
 <div style="height:14px"></div>
@@ -2078,8 +2082,11 @@ return `<div class="history-date-card">
     $("master").value=0;
     $("amex").value=r.amex||0;
     $("bedFee").value=r.bed_fee||0;
-    $("bedFeeMerchant").value=r.bed_fee_merchant||"";
-    rememberBedFeeMerchant(r.bed_fee_merchant||"");
+    const historicalMerchant=String(r.bed_fee_merchant||"").trim();
+    if(historicalMerchant && ![...$("bedFeeMerchant").options].some(o=>o.value===historicalMerchant)){
+      const opt=document.createElement("option"); opt.value=historicalMerchant; opt.textContent=historicalMerchant; $("bedFeeMerchant").appendChild(opt);
+    }
+    $("bedFeeMerchant").value=historicalMerchant;
     $("tng").value=r.tng||0;
     $("cash").value=r.cash||0;
     $("alipay").value=r.alipay||0;
@@ -2455,22 +2462,84 @@ return `<div class="history-date-card">
     </div>`;
   }
 
-  const BED_FEE_MERCHANT_KEY="nd_bed_fee_merchants_v1";
-  function bedFeeMerchants(){
-    try{return JSON.parse(localStorage.getItem(BED_FEE_MERCHANT_KEY)||"[]")||[];}catch(_){return [];}
+  let bedFeeMerchantRows=[];
+
+  async function renderSettingsBedFeeMerchants(){
+    const root=$("settingsBedFeeMerchantList"); if(!root)return;
+    const {data,error}=await db.from("bed_fee_merchants").select("*").order("sort_order",{ascending:true}).order("merchant_name",{ascending:true});
+    if(error){root.innerHTML=`<div class="bad">${escHtml(error.message)}</div>`;return;}
+    const rows=data||[];
+    root.innerHTML=rows.map(r=>`<div class="branch-admin-row">
+      <div>
+        <strong>${escHtml(r.merchant_name)}</strong>
+        ${r.is_active===false?'<span class="helper"> · Hidden</span>':''}
+      </div>
+    </div>`).join("")||'<div class="helper">No Merchant.</div>';
   }
-  function rememberBedFeeMerchant(name){
-    name=String(name||"").trim(); if(!name)return;
-    const arr=bedFeeMerchants();
-    if(!arr.some(x=>String(x).toLowerCase()===name.toLowerCase())){
-      arr.push(name);
-      try{localStorage.setItem(BED_FEE_MERCHANT_KEY,JSON.stringify(arr));}catch(_){}
+
+  async function addSettingsBedFeeMerchant(){
+    const input=$("settingsBedFeeMerchantName");
+    const name=String(input?.value||"").trim();
+    if(!name)return alert("Please enter Merchant Name.");
+
+    const {data:existing,error:findErr}=await db.from("bed_fee_merchants").select("id,merchant_name,is_active").ilike("merchant_name",name).limit(1);
+    if(findErr)return alert(findErr.message);
+    if(existing?.length){
+      if(existing[0].is_active===false){
+        const {error}=await db.from("bed_fee_merchants").update({is_active:true}).eq("id",existing[0].id);
+        if(error)return alert(error.message);
+      }
+      input.value="";
+      await loadBedFeeMerchants();
+      await renderSettingsBedFeeMerchants();
+      return;
     }
-    renderBedFeeMerchantList();
+
+    const {data:maxRows}=await db.from("bed_fee_merchants").select("sort_order").order("sort_order",{ascending:false}).limit(1);
+    const sort=Number(maxRows?.[0]?.sort_order||0)+1;
+    const {error}=await db.from("bed_fee_merchants").insert({merchant_name:name,is_active:true,sort_order:sort});
+    if(error)return alert("Add Merchant failed: "+error.message);
+    input.value="";
+    await loadBedFeeMerchants();
+    await renderSettingsBedFeeMerchants();
   }
-  function renderBedFeeMerchantList(){
-    const dl=$("bedFeeMerchantList"); if(!dl)return;
-    dl.innerHTML=bedFeeMerchants().map(x=>`<option value="${escHtml(x)}"></option>`).join("");
+
+  async function loadBedFeeMerchants(){
+    const sel=$("bedFeeMerchant"); if(!sel)return;
+    const current=String(sel.value||"");
+    const {data,error}=await db.from("bed_fee_merchants").select("*").eq("is_active",true).order("sort_order",{ascending:true}).order("merchant_name",{ascending:true});
+    if(error){
+      console.warn("Merchant load failed:",error.message);
+      return;
+    }
+    bedFeeMerchantRows=data||[];
+    sel.innerHTML='<option value="">Select Merchant</option>'+bedFeeMerchantRows.map(r=>`<option value="${escHtml(r.merchant_name)}">${escHtml(r.merchant_name)}</option>`).join("");
+    if([...sel.options].some(o=>o.value===current)) sel.value=current;
+  }
+
+  async function addBedFeeMerchant(){
+    const input=$("newBedFeeMerchantName");
+    const name=String(input?.value||"").trim();
+    if(!name)return alert("Please enter Merchant Name.");
+
+    const exists=bedFeeMerchantRows.some(r=>String(r.merchant_name||"").trim().toLowerCase()===name.toLowerCase());
+    if(exists){
+      await loadBedFeeMerchants();
+      $("bedFeeMerchant").value=bedFeeMerchantRows.find(r=>String(r.merchant_name||"").trim().toLowerCase()===name.toLowerCase())?.merchant_name||name;
+      $("bedFeeMerchantModal")?.classList.remove("open");
+      if(input)input.value="";
+      return;
+    }
+
+    const {data:maxRows}=await db.from("bed_fee_merchants").select("sort_order").order("sort_order",{ascending:false}).limit(1);
+    const sort=Number(maxRows?.[0]?.sort_order||0)+1;
+    const {error}=await db.from("bed_fee_merchants").insert({merchant_name:name,is_active:true,sort_order:sort});
+    if(error)return alert("Add Merchant failed: "+error.message);
+
+    if(input)input.value="";
+    $("bedFeeMerchantModal")?.classList.remove("open");
+    await loadBedFeeMerchants();
+    $("bedFeeMerchant").value=name;
   }
 
   function paymentHistoryCell(r,field){
@@ -2732,6 +2801,24 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 </div>
 </div>
+<div class="salary-modal" id="bedFeeMerchantModal">
+<div class="salary-dialog" style="width:min(460px,94vw)">
+  <div class="outlet-title">
+    <div><h3 style="margin:0">Add Merchant</h3></div>
+    <button class="main-page-close" id="closeBedFeeMerchantModal" type="button">×</button>
+  </div>
+  <div class="salary-card" style="box-shadow:none">
+    <div class="field">
+      <label>Merchant Name</label>
+      <input id="newBedFeeMerchantName" type="text" placeholder="Merchant Name"/>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn" id="saveBedFeeMerchantBtn" type="button">Save Merchant</button>
+    </div>
+  </div>
+</div>
+</div>
+
 <div class="salary-modal" id="historyModal">
 <div class="salary-dialog" style="width:min(1250px,96vw)">
 <div class="outlet-title">
@@ -3402,6 +3489,18 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </section>
 <section class="settings-section">
 <button class="settings-section-head" type="button">
+<span>Bed Fee Merchants</span><span class="settings-chevron">⌄</span>
+</button>
+<div class="settings-section-body">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <input id="settingsBedFeeMerchantName" placeholder="Merchant Name" style="flex:1;min-width:220px"/>
+    <button class="btn" id="settingsAddBedFeeMerchantBtn" type="button">+ Add</button>
+  </div>
+  <div class="branch-admin-panel" id="settingsBedFeeMerchantList" style="margin-top:12px"></div>
+</div>
+</section>
+<section class="settings-section">
+<button class="settings-section-head" type="button">
 <span>Monthly Roster Settings</span><span class="settings-chevron">⌄</span>
 </button>
 <div class="settings-section-body">
@@ -3985,8 +4084,12 @@ document.addEventListener("click",e=>{
 },true);
 document.addEventListener("DOMContentLoaded",()=>{
   setTimeout(forceSidebarClosed,50);
-  setTimeout(renderBedFeeMerchantList,100);
-  document.getElementById("bedFeeMerchant")?.addEventListener("change",e=>rememberBedFeeMerchant(e.target.value));
+  setTimeout(loadBedFeeMerchants,100);
+  document.getElementById("addBedFeeMerchantBtn")?.addEventListener("click",()=>document.getElementById("bedFeeMerchantModal")?.classList.add("open"));
+  document.getElementById("closeBedFeeMerchantModal")?.addEventListener("click",()=>document.getElementById("bedFeeMerchantModal")?.classList.remove("open"));
+  document.getElementById("saveBedFeeMerchantBtn")?.addEventListener("click",addBedFeeMerchant);
+  document.getElementById("settingsAddBedFeeMerchantBtn")?.addEventListener("click",addSettingsBedFeeMerchant);
+  setTimeout(renderSettingsBedFeeMerchants,150);
 });
 window.addEventListener("pageshow",()=>setTimeout(forceSidebarClosed,0));
 
