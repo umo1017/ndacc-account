@@ -9472,6 +9472,28 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
     }catch(_){ return false; }
   }
 
+  function settingsSaveState(text,bad=false){
+    const msg=document.getElementById("settingsMsg");
+    if(msg){
+      msg.textContent=text||"";
+      msg.className=bad?"helper bad":"helper ok";
+    }
+  }
+
+  async function refreshAllSettingsAfterSave(){
+    try{ if(typeof renderOwnerSettings==="function") await renderOwnerSettings(); }catch(_){}
+    try{ if(typeof renderSettingsBedFeeMerchants==="function") await renderSettingsBedFeeMerchants(); }catch(_){}
+    try{ if(typeof loadOrderViewAccessSettings==="function") await loadOrderViewAccessSettings(); }catch(_){}
+    try{ if(typeof loadSalaryBranches==="function") await loadSalaryBranches(); }catch(_){}
+    try{
+      if(typeof refreshSettlementAccess==="function"){
+        await refreshSettlementAccess();
+        if(typeof settlementOwner!=="undefined" && settlementOwner &&
+           typeof loadSettlementAdmins==="function") await loadSettlementAdmins();
+      }
+    }catch(_){}
+  }
+
   async function runSettingsAction(id){
     const ok=await ensureUmoSettingsAdmin();
     if(!ok){ alert("Super Admin only."); return; }
@@ -9579,12 +9601,13 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
         await openTaxRules();
       }
 
-      // Refresh Settings lists after any successful/attempted action.
-      try{await renderOwnerSettings();}catch(_){}
-      try{await renderSettingsBedFeeMerchants();}catch(_){}
-      try{await loadOrderViewAccessSettings();}catch(_){}
+      if(id!=="settingsTaxRulesBtn"){
+        await refreshAllSettingsAfterSave();
+        settingsSaveState("Saved ✓");
+      }
     }catch(err){
       console.error("Settings action failed:",id,err);
+      settingsSaveState("Unable to save: "+(err?.message||String(err)),true);
       alert("Unable to save: "+(err?.message||String(err)));
     }
   }
@@ -9619,6 +9642,17 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
     }
   },true);
 })();
+</script>
+
+
+<script>
+/* SETTINGS ARE INDEPENDENT FROM DAILY SETTLEMENT SUBMIT */
+document.addEventListener("DOMContentLoaded",()=>{
+  const msg=document.getElementById("settingsMsg");
+  if(msg && !msg.textContent.trim()){
+    msg.textContent="Settings changes save directly to the database.";
+  }
+});
 </script>
 
 </body>
