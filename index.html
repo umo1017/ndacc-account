@@ -9486,7 +9486,34 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
       }else if(id==="settingsAddHistoryBtn"){
         await ownerAddHistoryAccess();
       }else if(id==="settingsAddOrderAccessBtn"){
-        await ownerAddOrderViewAccess();
+        // Self-contained Order View Access save.
+        // Do not depend on ownerAddOrderViewAccess being visible in this script scope.
+        const input=document.getElementById("settingsOrderAccessEmail");
+        const email=String(input?.value||"").trim().toLowerCase();
+        if(!email || !email.includes("@")){
+          alert("Enter a valid login email.");
+          return;
+        }
+        const client=(typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
+                     ((typeof db!=="undefined" && db) ? db : null);
+        if(!client) throw new Error("Database connection is not available.");
+        const {error}=await client.from("order_view_access")
+          .upsert({email},{onConflict:"email"});
+        if(error) throw error;
+        if(input) input.value="";
+        const root=document.getElementById("settingsOrderAccessList");
+        if(root){
+          const res=await client.from("order_view_access")
+            .select("email,created_at").order("email");
+          if(res.error) throw res.error;
+          root.innerHTML=(res.data||[]).map(x=>`
+            <div class="branch-admin-row">
+              <div><strong>${String(x.email||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}</strong></div>
+              <button class="btn staff-delete-btn" type="button"
+                data-remove-order-access="${String(x.email||"").toLowerCase()}">Remove</button>
+            </div>`).join("") || '<div class="helper">No extra Order View Access.</div>';
+        }
+        try{ if(typeof refreshOrdersVisibility==="function") await refreshOrdersVisibility(); }catch(_){}
       }else if(id==="settingsAddSalaryManagerBtn"){
         await ownerAddSalaryManager();
       }else if(id==="settingsAddSalaryBranchBtn"){
