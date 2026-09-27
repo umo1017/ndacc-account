@@ -1016,6 +1016,73 @@ input,select,textarea,button{
   }
 }
 
+
+/* ===== FINAL FULL PAGE CONTENT / MOBILE VIEW FIX ===== */
+html,body{
+  width:100%;
+  max-width:100%;
+  min-height:100%;
+  overflow-x:hidden !important;
+}
+body{
+  min-height:100dvh;
+  overflow-y:auto !important;
+}
+#appView,
+.salary-page,
+#ordersPage,
+#salaryPage,
+#rosterPage,
+#settlementPage,
+#settingsPage{
+  width:100% !important;
+  max-width:100% !important;
+  min-height:100dvh;
+  height:auto !important;
+  max-height:none !important;
+  overflow-x:hidden !important;
+  overflow-y:visible !important;
+  box-sizing:border-box !important;
+}
+.salary-page.active{
+  display:block !important;
+}
+.salary-shell{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  height:auto !important;
+  max-height:none !important;
+  overflow:visible !important;
+  box-sizing:border-box !important;
+  padding-bottom:48px !important;
+}
+.salary-card,.card,.panel,.settings-section{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+}
+.table-wrap,.salary-table-wrap,.history-table-wrap,.orders-list-wrap{
+  width:100%;
+  max-width:100%;
+  overflow-x:auto !important;
+  overflow-y:visible !important;
+  -webkit-overflow-scrolling:touch;
+}
+@media(max-width:700px){
+  #appView,.salary-page{
+    padding-bottom:40px !important;
+  }
+  .salary-shell{
+    padding-left:10px !important;
+    padding-right:10px !important;
+  }
+  .salary-top,.salary-toolbar,.orders-toolbar{
+    max-width:100% !important;
+  }
+}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -9062,14 +9129,15 @@ async function refreshOrdersVisibility(){
  try{
   const {data:{session}}=await ordersDb().auth.getSession();
   ordersCurrentEmail=String(session?.user?.email||"").trim().toLowerCase();
-  let allowed=ordersCurrentEmail===ORDERS_OWNER_EMAIL;
+  const isUmo=ordersCurrentEmail==="umo1017@gmail.com";
+  let allowed=isUmo || ordersCurrentEmail===String(ORDERS_OWNER_EMAIL||"").trim().toLowerCase();
   if(!allowed && ordersCurrentEmail){
     const {data,error}=await ordersDb().from("order_view_access").select("email").eq("email",ordersCurrentEmail).maybeSingle();
     if(!error && data) allowed=true;
   }
   if(btn)btn.style.display=allowed?"":"none";
   window.canViewOrders=allowed;
-  window.canManageOrders=ordersCurrentEmail===ORDERS_OWNER_EMAIL;
+  window.canManageOrders=(ordersCurrentEmail==="umo1017@gmail.com" || ordersCurrentEmail===String(ORDERS_OWNER_EMAIL||"").trim().toLowerCase());
   return allowed;
  }catch(_){if(btn)btn.style.display="none";return false;}
 }
@@ -9253,7 +9321,14 @@ async function returnLoan(id){
 }
 
 async function showOrders(){
- if(!(await refreshOrdersVisibility()))return;
+ const allowed=await refreshOrdersVisibility();
+ const {data:{session}}=await ordersDb().auth.getSession();
+ const currentEmail=String(session?.user?.email||"").trim().toLowerCase();
+ const isUmo=currentEmail==="umo1017@gmail.com";
+ if(!allowed && !isUmo){
+   alert("No Order View Access.");
+   return;
+ }
  try{localStorage.setItem("nd_last_page_v2","orders")}catch(_){}
  window.activeMainPage="orders";
  document.getElementById("appView")?.classList.add("hidden");
