@@ -1118,15 +1118,10 @@ input,select,textarea,button{
 </div>
 <div class="money-line">
 <label for="bedFee">Bed Fee</label>
-<div style="display:grid;grid-template-columns:minmax(130px,1fr) minmax(160px,1.25fr);gap:8px">
-  <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="bedFee" min="0" step="0.01" type="number" value=""/></div>
-  <div style="display:grid;gap:6px;min-width:0">
-    <select id="bedFeeMerchant" style="min-width:0;width:100%">
-      <option value="">Select Merchant</option>
-    </select>
-    <button class="btn" id="addBedFeeMerchantBtn" type="button" style="width:100%">+ Add</button>
-  </div>
-</div>
+<div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="bedFee" min="0" step="0.01" type="number" value="" placeholder="0.00"/></div>
+<select id="bedFeeMerchant" style="width:100%;margin-top:6px">
+<option value="">Select Merchant</option>
+</select>
 </div></div>
 <div style="height:14px"></div>
 <div class="row3">
@@ -2117,7 +2112,7 @@ return `<div class="history-date-card">
     const bedFeeAmount=num("bedFee");
     const bedFeeMerchant=String($("bedFeeMerchant")?.value||"").trim();
     if(bedFeeAmount>0 && !bedFeeMerchant){
-      alert("Bed Fee 有填写金额时，必须填写 Merchant / 商家。");
+      alert("Bed Fee 有填写金额时，必须选择一个 Merchant。");
       $("bedFeeMerchant")?.focus();
       return null;
     }
@@ -2512,9 +2507,14 @@ return `<div class="history-date-card">
       console.warn("Merchant load failed:",error.message);
       return;
     }
-    bedFeeMerchantRows=data||[];
-    sel.innerHTML='<option value="">Select Merchant</option>'+bedFeeMerchantRows.map(r=>`<option value="${escHtml(r.merchant_name)}">${escHtml(r.merchant_name)}</option>`).join("");
+    bedFeeMerchantRows=(data||[]).sort((a,b)=>{
+      const aa=String(a.merchant_name||"").trim().toUpperCase()==="AMLEE" ? -1 : 0;
+      const bb=String(b.merchant_name||"").trim().toUpperCase()==="AMLEE" ? -1 : 0;
+      return aa-bb || Number(a.sort_order||0)-Number(b.sort_order||0) || String(a.merchant_name||"").localeCompare(String(b.merchant_name||""));
+    });
+    sel.innerHTML=bedFeeMerchantRows.map(r=>`<option value="${escHtml(r.merchant_name)}">${escHtml(r.merchant_name)}</option>`).join("");
     if([...sel.options].some(o=>o.value===current)) sel.value=current;
+    else if([...sel.options].some(o=>o.value==="AMLEE")) sel.value="AMLEE";
   }
 
   async function addBedFeeMerchant(){
@@ -4085,9 +4085,6 @@ document.addEventListener("click",e=>{
 document.addEventListener("DOMContentLoaded",()=>{
   setTimeout(forceSidebarClosed,50);
   setTimeout(loadBedFeeMerchants,100);
-  document.getElementById("addBedFeeMerchantBtn")?.addEventListener("click",()=>document.getElementById("bedFeeMerchantModal")?.classList.add("open"));
-  document.getElementById("closeBedFeeMerchantModal")?.addEventListener("click",()=>document.getElementById("bedFeeMerchantModal")?.classList.remove("open"));
-  document.getElementById("saveBedFeeMerchantBtn")?.addEventListener("click",addBedFeeMerchant);
   document.getElementById("settingsAddBedFeeMerchantBtn")?.addEventListener("click",addSettingsBedFeeMerchant);
   setTimeout(renderSettingsBedFeeMerchants,150);
 });
