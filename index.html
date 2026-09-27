@@ -9482,7 +9482,64 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
       }else if(id==="settingsAddDailyOutletBtn"){
         await ownerAddDailyOutlet();
       }else if(id==="settingsAddBedFeeMerchantBtn"){
-        await addSettingsBedFeeMerchant();
+        const input=document.getElementById("settingsBedFeeMerchantName");
+        const merchantName=String(input?.value||"").trim();
+        if(!merchantName){ alert("Please enter Merchant Name."); return; }
+
+        const client=(typeof db!=="undefined" && db) ? db :
+                     ((typeof salaryDb!=="undefined" && salaryDb) ? salaryDb : null);
+        if(!client) throw new Error("Database connection is not available.");
+
+        const existing=await client.from("bed_fee_merchants")
+          .select("id,merchant_name,is_active")
+          .ilike("merchant_name",merchantName).limit(1);
+        if(existing.error) throw existing.error;
+
+        if(existing.data?.length){
+          if(existing.data[0].is_active===false){
+            const reactivate=await client.from("bed_fee_merchants")
+              .update({is_active:true}).eq("id",existing.data[0].id);
+            if(reactivate.error) throw reactivate.error;
+          }
+        }else{
+          const maxRes=await client.from("bed_fee_merchants")
+            .select("sort_order").order("sort_order",{ascending:false}).limit(1);
+          if(maxRes.error) throw maxRes.error;
+          const sort=Number(maxRes.data?.[0]?.sort_order||0)+1;
+          const ins=await client.from("bed_fee_merchants")
+            .insert({merchant_name:merchantName,is_active:true,sort_order:sort});
+          if(ins.error) throw ins.error;
+        }
+
+        if(input) input.value="";
+
+        // Refresh Settings list directly, without relying on hidden-scope functions.
+        const list=document.getElementById("settingsBedFeeMerchantList");
+        if(list){
+          const res=await client.from("bed_fee_merchants").select("*")
+            .order("sort_order",{ascending:true})
+            .order("merchant_name",{ascending:true});
+          if(res.error) throw res.error;
+          list.innerHTML=(res.data||[]).map(r=>`
+            <div class="branch-admin-row">
+              <div><strong>${String(r.merchant_name||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}</strong>
+              ${r.is_active===false?'<span class="helper"> · Hidden</span>':''}</div>
+            </div>`).join("") || '<div class="helper">No Merchant.</div>';
+        }
+
+        // Refresh Daily Bed Fee dropdown directly.
+        const sel=document.getElementById("bedFeeMerchant");
+        if(sel){
+          const active=await client.from("bed_fee_merchants").select("*")
+            .eq("is_active",true)
+            .order("sort_order",{ascending:true})
+            .order("merchant_name",{ascending:true});
+          if(active.error) throw active.error;
+          const current=String(sel.value||"");
+          sel.innerHTML='<option value="">Select Merchant</option>'+
+            (active.data||[]).map(r=>`<option value="${String(r.merchant_name||"")}">${String(r.merchant_name||"")}</option>`).join("");
+          if([...sel.options].some(o=>o.value===current)) sel.value=current;
+        }
       }else if(id==="settingsAddHistoryBtn"){
         await ownerAddHistoryAccess();
       }else if(id==="settingsAddOrderAccessBtn"){
