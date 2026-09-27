@@ -2559,6 +2559,26 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 
 
+
+<div class="salary-modal" id="expenseWebsiteModal">
+  <div class="salary-dialog" style="width:min(520px,94vw)">
+    <div class="outlet-title">
+      <div><h3 style="margin:0">Website</h3></div>
+      <button class="main-page-close" id="closeExpenseWebsiteModal" type="button">×</button>
+    </div>
+    <div class="salary-card" style="box-shadow:none">
+      <div class="field">
+        <label>Website Address</label>
+        <input id="expenseWebsiteUrl" type="url" placeholder="https://">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+        <button class="btn" id="saveExpenseWebsiteBtn" type="button">Save</button>
+        <span class="helper" id="expenseWebsiteSaveState"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="salary-modal" id="transferDetailsModal">
   <div class="salary-dialog" style="width:min(520px,94vw)">
     <div class="outlet-title">
@@ -2893,7 +2913,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
   <div>Amount</div>
   <div>Payment Date</div>
   <div>Status</div>
-  <div>Transfer Details</div>
+  <div>Payment Details</div>
   <div>Payment</div>
 </div>
 <div class="settlement-expense-row" data-expense-payment-key="rent">
@@ -6354,12 +6374,25 @@ function setupSalaryCloudSync(){
 }
 
 document.addEventListener("click",e=>{
-  const btn=e.target.closest?.("[data-transfer-details]");
-  if(btn) openSettlementTransferDetails(btn.dataset.transferDetails);
+  const btn=e.target.closest?.("[data-payment-details]");
+  if(!btn) return;
+  const key=btn.dataset.paymentDetails;
+  if(settlementIsRentKey(key)){
+    openSettlementTransferDetails(key);
+    return;
+  }
+  const website=settlementGetWebsite(key);
+  if(website){
+    window.open(website,"_blank","noopener,noreferrer");
+  }else{
+    openSettlementWebsite(key);
+  }
 });
 document.addEventListener("DOMContentLoaded",()=>{
   document.getElementById("closeTransferDetailsModal")?.addEventListener("click",()=>document.getElementById("transferDetailsModal")?.classList.remove("open"));
   document.getElementById("saveTransferDetailsBtn")?.addEventListener("click",saveSettlementTransferDetails);
+  document.getElementById("closeExpenseWebsiteModal")?.addEventListener("click",()=>document.getElementById("expenseWebsiteModal")?.classList.remove("open"));
+  document.getElementById("saveExpenseWebsiteBtn")?.addEventListener("click",saveSettlementWebsite);
 });
 
 document.addEventListener("DOMContentLoaded",()=>{initialize();});
@@ -7176,12 +7209,12 @@ function settlementEnsurePaymentControls(){
       row.appendChild(status);
     }
 
-    if(!row.querySelector("[data-transfer-details]")){
+    if(!row.querySelector("[data-payment-details]")){
       const details=document.createElement("button");
       details.type="button";
       details.className="btn";
-      details.dataset.transferDetails=key;
-      details.textContent="Transfer Details";
+      details.dataset.paymentDetails=key;
+      details.textContent=settlementIsRentKey(key)?"Transfer Details":"Website";
       row.appendChild(details);
     }
 
@@ -7197,9 +7230,44 @@ function settlementEnsurePaymentControls(){
 }
 
 
+
+let settlementWebsiteEditKey="";
+function settlementIsRentKey(key){ return key==="rent"; }
+function settlementWebsiteStorageKey(key){
+  return "ndacc_expense_website_"+String(key||"");
+}
+function settlementGetWebsite(key){
+  try{return String(localStorage.getItem(settlementWebsiteStorageKey(key))||"");}catch(_){return "";}
+}
+function openSettlementWebsite(key){
+  settlementWebsiteEditKey=String(key||"");
+  const input=document.getElementById("expenseWebsiteUrl");
+  if(input) input.value=settlementGetWebsite(settlementWebsiteEditKey);
+  const state=document.getElementById("expenseWebsiteSaveState");
+  if(state) state.textContent="";
+  document.getElementById("expenseWebsiteModal")?.classList.add("open");
+}
+function saveSettlementWebsite(){
+  const key=settlementWebsiteEditKey;
+  const input=document.getElementById("expenseWebsiteUrl");
+  let url=String(input?.value||"").trim();
+  if(!url){alert("Please enter Website Address.");return;}
+  if(!/^https?:\/\//i.test(url)) url="https://"+url;
+  try{new URL(url);}catch(_){alert("Please enter a valid website address.");return;}
+  try{localStorage.setItem(settlementWebsiteStorageKey(key),url);}catch(_){}
+  const state=document.getElementById("expenseWebsiteSaveState");
+  if(state) state.textContent="Saved ✓";
+  settlementRenderPaymentMeta();
+  setTimeout(()=>document.getElementById("expenseWebsiteModal")?.classList.remove("open"),300);
+}
+
 let settlementTransferEditKey="";
 
 function settlementTransferStorageKey(key){
+  // Rent payment details are independent for Eco Botanic and Nusa Bestari.
+  if(settlementIsRentKey(key)){
+    return "ndacc_fixed_transfer_"+String(settlementCurrentOutlet||"")+"_"+String(key||"");
+  }
   return "ndacc_fixed_transfer_"+String(key||"");
 }
 function settlementGetFixedTransfer(key){
@@ -7249,13 +7317,20 @@ function settlementRenderPaymentMeta(){
   document.querySelectorAll("[data-expense-payment-key]").forEach(row=>{
     const key=row.dataset.expensePaymentKey;
     const meta=settlementPaymentMeta?.[key]||{};
-    const transferBtn=row.querySelector("[data-transfer-details]");
-    if(transferBtn){
-      const isSalary=typeof settlementIsSalaryPaymentKey==="function" && settlementIsSalaryPaymentKey(key);
-      transferBtn.style.display=isSalary?"none":"";
-      if(!isSalary){
+    const detailsBtn=row.querySelector("[data-payment-details]");
+    if(detailsBtn){
+      const isSalary=settlementIsSalaryPaymentKey(key);
+      detailsBtn.style.display=isSalary?"none":"";
+      if(!isSalary && settlementIsRentKey(key)){
         const fixed=settlementGetFixedTransfer(key);
-        transferBtn.textContent=(fixed.name&&fixed.bank&&fixed.account)?`${fixed.name} · ${fixed.bank} · ${fixed.account}`:"Transfer Details";
+        detailsBtn.textContent=(fixed.name&&fixed.bank&&fixed.account)
+          ? `${fixed.name} · ${fixed.bank} · ${fixed.account}`
+          : "Transfer Details";
+        detailsBtn.title=`${settlementCurrentOutlet||""} Rent`;
+      }else if(!isSalary){
+        const website=settlementGetWebsite(key);
+        detailsBtn.textContent=website?"Open Website":"Add Website";
+        detailsBtn.title=website||"Add Website Address";
       }
     }
     if(!settlementIsSalaryPaymentKey(key)){
