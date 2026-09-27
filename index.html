@@ -9563,7 +9563,44 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
           if([...sel.options].some(o=>o.value===current)) sel.value=current;
         }
       }else if(id==="settingsAddHistoryBtn"){
-        await ownerAddHistoryAccess();
+        // Self-contained Daily History Access save.
+        // Do not depend on ownerAddHistoryAccess being visible in this script scope.
+        const input=document.getElementById("settingsHistoryEmail");
+        const email=String(input?.value||"").trim().toLowerCase();
+        if(!email || !email.includes("@")){
+          alert("Enter a valid login email.");
+          return;
+        }
+
+        const client=(typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
+                     ((typeof db!=="undefined" && db) ? db : null);
+        if(!client) throw new Error("Database connection is not available.");
+
+        const save=await client.from("daily_history_access")
+          .upsert({email},{onConflict:"email"});
+        if(save.error) throw save.error;
+
+        if(input) input.value="";
+
+        // Re-read database immediately and render the saved record.
+        const root=document.getElementById("settingsHistoryList");
+        if(root){
+          const res=await client.from("daily_history_access")
+            .select("email,created_at").order("email");
+          if(res.error) throw res.error;
+          root.innerHTML=(res.data||[]).map(x=>`
+            <div class="branch-admin-row">
+              <div><strong>${String(x.email||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}</strong></div>
+              <button class="btn staff-delete-btn" type="button"
+                data-settings-delete-history="${String(x.email||"").toLowerCase()}">Remove</button>
+            </div>`).join("") || '<div class="helper">No access emails.</div>';
+        }
+
+        // Keep Daily History permission state in sync.
+        try{
+          if(typeof refreshDailyHistoryPermission==="function")
+            await refreshDailyHistoryPermission();
+        }catch(_){}
       }else if(id==="settingsAddOrderAccessBtn"){
         // Self-contained Order View Access save.
         // Do not depend on ownerAddOrderViewAccess being visible in this script scope.
