@@ -2558,6 +2558,33 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 </div>
 
+
+<div class="salary-modal" id="transferDetailsModal">
+  <div class="salary-dialog" style="width:min(520px,94vw)">
+    <div class="outlet-title">
+      <div>
+        <h3 style="margin:0">Transfer Details</h3>
+        <div class="helper" id="transferDetailsContext"></div>
+      </div>
+      <button class="main-page-close" id="closeTransferDetailsModal" type="button">×</button>
+    </div>
+    <div class="salary-card" style="box-shadow:none">
+      <div class="field">
+        <label>Name</label>
+        <input id="transferDetailsName" type="text" placeholder="Transfer Name">
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>Account No.</label>
+        <input id="transferDetailsAccount" type="text" placeholder="Account No.">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+        <button class="btn" id="saveTransferDetailsBtn" type="button">Save</button>
+        <span class="helper" id="transferDetailsSaveState"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="salary-modal" id="dailyOrderModal">
 <div class="salary-dialog" style="width:min(620px,94vw)">
 <div class="outlet-title">
@@ -2763,7 +2790,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 .settlement-expense-row{
   min-width:900px;
   display:grid;
-  grid-template-columns:minmax(280px,1.4fr) 180px 190px 140px 180px 150px;
+  grid-template-columns:minmax(280px,1.4fr) 180px 190px 190px 150px;
   gap:12px;
   align-items:center;
 }
@@ -2789,7 +2816,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
   width:100%;
   min-width:165px;
 }
-.settlement-payment-status{font-weight:900;text-align:center;white-space:nowrap}
+.settlement-payment-status{display:none!important;font-weight:900;text-align:center;white-space:nowrap}
 .settlement-payment-status.paid{color:#176d3b}
 .settlement-payment-status.overdue{color:#b42318}
 .settlement-payment-status.pending{color:#8a6d1d}
@@ -6317,6 +6344,16 @@ salaryDb.auth.onAuthStateChange((event,session)=>{
 function setupSalaryCloudSync(){
   // Realtime is handled by the single global ndacc-live-sync channel below.
 }
+
+document.addEventListener("click",e=>{
+  const btn=e.target.closest?.("[data-transfer-details]");
+  if(btn) openSettlementTransferDetails(btn.dataset.transferDetails);
+});
+document.addEventListener("DOMContentLoaded",()=>{
+  document.getElementById("closeTransferDetailsModal")?.addEventListener("click",()=>document.getElementById("transferDetailsModal")?.classList.remove("open"));
+  document.getElementById("saveTransferDetailsBtn")?.addEventListener("click",saveSettlementTransferDetails);
+});
+
 document.addEventListener("DOMContentLoaded",()=>{initialize();});
 
 function safeSalaryFilePart(v){
@@ -7120,14 +7157,13 @@ function settlementEnsurePaymentControls(){
       row.appendChild(status);
     }
 
-    if(!row.querySelector("[data-payment-method]")){
-      const method=document.createElement("input");
-      method.type="text";
-      method.className="settlement-payment-method";
-      method.dataset.paymentMethod=key;
-      method.placeholder="Transfer Name";
-      method.title="Transfer Name";
-      row.appendChild(method);
+    if(!row.querySelector("[data-transfer-details]")){
+      const details=document.createElement("button");
+      details.type="button";
+      details.className="btn";
+      details.dataset.transferDetails=key;
+      details.textContent="Transfer Details";
+      row.appendChild(details);
     }
 
     if(!row.querySelector("[data-payment-paid]")){
@@ -7141,11 +7177,64 @@ function settlementEnsurePaymentControls(){
   });
 }
 
+
+let settlementTransferEditKey="";
+
+function settlementTransferStorageKey(key){
+  return "ndacc_fixed_transfer_"+String(key||"");
+}
+function settlementGetFixedTransfer(key){
+  try{return JSON.parse(localStorage.getItem(settlementTransferStorageKey(key))||"{}")||{};}
+  catch(_){return {};}
+}
+function settlementSetFixedTransfer(key,name,account){
+  try{
+    localStorage.setItem(settlementTransferStorageKey(key),JSON.stringify({
+      name:String(name||"").trim(),
+      account:String(account||"").trim()
+    }));
+  }catch(_){}
+}
+function openSettlementTransferDetails(key){
+  if(settlementIsSalaryPaymentKey?.(key)) return;
+  settlementTransferEditKey=String(key||"");
+  const fixed=settlementGetFixedTransfer(settlementTransferEditKey);
+  const name=document.getElementById("transferDetailsName");
+  const account=document.getElementById("transferDetailsAccount");
+  const context=document.getElementById("transferDetailsContext");
+  if(name) name.value=fixed.name||"";
+  if(account) account.value=fixed.account||"";
+  if(context) context.textContent="Fill once. It will be reused every month.";
+  document.getElementById("transferDetailsSaveState").textContent="";
+  document.getElementById("transferDetailsModal")?.classList.add("open");
+}
+function saveSettlementTransferDetails(){
+  const key=settlementTransferEditKey;
+  if(!key) return;
+  const name=String(document.getElementById("transferDetailsName")?.value||"").trim();
+  const account=String(document.getElementById("transferDetailsAccount")?.value||"").trim();
+  if(!name || !account){alert("Please enter Name and Account No.");return;}
+  settlementSetFixedTransfer(key,name,account);
+  const state=document.getElementById("transferDetailsSaveState");
+  if(state) state.textContent="Saved ✓";
+  settlementRenderPaymentMeta();
+  setTimeout(()=>document.getElementById("transferDetailsModal")?.classList.remove("open"),350);
+}
+
 function settlementRenderPaymentMeta(){
   settlementEnsurePaymentControls();
   document.querySelectorAll("[data-expense-payment-key]").forEach(row=>{
     const key=row.dataset.expensePaymentKey;
     const meta=settlementPaymentMeta?.[key]||{};
+    const transferBtn=row.querySelector("[data-transfer-details]");
+    if(transferBtn){
+      const isSalary=typeof settlementIsSalaryPaymentKey==="function" && settlementIsSalaryPaymentKey(key);
+      transferBtn.style.display=isSalary?"none":"";
+      if(!isSalary){
+        const fixed=settlementGetFixedTransfer(key);
+        transferBtn.textContent=(fixed.name&&fixed.account)?`${fixed.name} · ${fixed.account}`:"Transfer Details";
+      }
+    }
     if(!settlementIsSalaryPaymentKey(key)){
       try{
         const fixed=JSON.parse(localStorage.getItem("ndacc_settlement_transfer_"+key)||"{}");
