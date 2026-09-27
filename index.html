@@ -9483,7 +9483,21 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
   async function refreshAllSettingsAfterSave(){
     try{ if(typeof renderOwnerSettings==="function") await renderOwnerSettings(); }catch(_){}
     try{ if(typeof renderSettingsBedFeeMerchants==="function") await renderSettingsBedFeeMerchants(); }catch(_){}
-    try{ if(typeof loadOrderViewAccessSettings==="function") await loadOrderViewAccessSettings(); }catch(_){}
+    try{
+      const client=(typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
+                   ((typeof db!=="undefined" && db) ? db : null);
+      const root=document.getElementById("settingsOrderAccessList");
+      if(client && root){
+        const r=await client.from("order_view_access").select("email,created_at").order("email");
+        if(r.error) throw r.error;
+        root.innerHTML=(r.data||[]).map(x=>`
+          <div class="branch-admin-row">
+            <div><strong>${String(x.email||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}</strong></div>
+            <button class="btn staff-delete-btn" type="button"
+              data-remove-order-access="${String(x.email||"").toLowerCase()}">Remove</button>
+          </div>`).join("") || '<div class="helper">No extra Order View Access.</div>';
+      }
+    }catch(err){ throw err; }
     try{ if(typeof loadSalaryBranches==="function") await loadSalaryBranches(); }catch(_){}
     try{
       if(typeof refreshSettlementAccess==="function"){
@@ -9613,9 +9627,21 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
         const client=(typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
                      ((typeof db!=="undefined" && db) ? db : null);
         if(!client) throw new Error("Database connection is not available.");
-        const {error}=await client.from("order_view_access")
-          .upsert({email},{onConflict:"email"});
-        if(error) throw error;
+        const saveRes=await client.from("order_view_access")
+          .upsert({email},{onConflict:"email"})
+          .select("email,created_at");
+        if(saveRes.error) throw saveRes.error;
+
+        // Verify persistence before reporting Saved.
+        const verify=await client.from("order_view_access")
+          .select("email,created_at")
+          .eq("email",email)
+          .maybeSingle();
+        if(verify.error) throw verify.error;
+        if(!verify.data){
+          throw new Error("Order View Access was not stored in the database.");
+        }
+
         if(input) input.value="";
         const root=document.getElementById("settingsOrderAccessList");
         if(root){
@@ -9690,6 +9716,138 @@ document.addEventListener("DOMContentLoaded",()=>{
     msg.textContent="Settings changes save directly to the database.";
   }
 });
+</script>
+
+
+<style>
+/* ===== FINAL: FULL CONTENT + USER ZOOM + STAY SAME PAGE ===== */
+
+/* Never crop a main page vertically. */
+html{
+  width:100%;
+  min-height:100%;
+  overflow-x:hidden;
+  overflow-y:auto;
+}
+body{
+  width:100%;
+  min-height:100dvh;
+  height:auto !important;
+  max-height:none !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+}
+
+/* All principal screens must expand with their content. */
+#appView,
+#salaryPage,
+#rosterPage,
+#settlementPage,
+#ordersPage,
+#settingsPage,
+.salary-page,
+.salary-shell{
+  width:100% !important;
+  max-width:100% !important;
+  min-height:100dvh !important;
+  height:auto !important;
+  max-height:none !important;
+  overflow-y:visible !important;
+  box-sizing:border-box !important;
+}
+
+/* Avoid content disappearing behind fixed/mobile bars. */
+#appView,
+#salaryPage,
+#rosterPage,
+#settlementPage,
+#ordersPage,
+#settingsPage{
+  padding-bottom:max(90px, env(safe-area-inset-bottom)) !important;
+}
+
+/* Wide data stays readable without pushing outside background. */
+table{
+  max-width:none;
+}
+.table-wrap,
+.salary-table-wrap,
+.history-table-wrap,
+.orders-list-wrap,
+[class*="table-wrap"]{
+  width:100%;
+  max-width:100%;
+  overflow-x:auto !important;
+  overflow-y:visible !important;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* Do not clip cards/panels when browser zoom/text zoom is enlarged. */
+.card,
+.panel,
+.salary-card,
+.settings-section,
+.settings-section-body,
+.branch-admin-panel{
+  max-height:none !important;
+  box-sizing:border-box !important;
+}
+
+/* Mobile: allow controls/text to remain visible at larger zoom levels. */
+@media (max-width:700px){
+  input,select,textarea,button{
+    max-width:100%;
+    box-sizing:border-box;
+  }
+  .settings-section-body{
+    overflow:visible !important;
+  }
+}
+</style>
+
+<script>
+/* ===== FINAL SAME-PAGE REFRESH MEMORY ===== */
+(function(){
+  const KEY="nd_last_page_v3";
+  const OLDKEY="nd_last_page_v2";
+  const valid=new Set(["daily","roster","salary","settlement","orders","settings"]);
+
+  function remember(page){
+    if(!valid.has(page)) return;
+    window.activeMainPage=page;
+    try{
+      localStorage.setItem(KEY,page);
+      localStorage.setItem(OLDKEY,page);
+    }catch(_){}
+  }
+
+  document.addEventListener("click",function(e){
+    const map={
+      sidebarDaily:"daily",
+      sidebarRoster:"roster",
+      sidebarSalary:"salary",
+      sidebarSettlement:"settlement",
+      sidebarOrders:"orders",
+      sidebarSettings:"settings"
+    };
+    for(const [id,page] of Object.entries(map)){
+      if(e.target.closest?.("#"+id)){
+        remember(page);
+        break;
+      }
+    }
+  },true);
+
+  window.addEventListener("pagehide",()=>{
+    const p=window.activeMainPage;
+    if(valid.has(p)) remember(p);
+  });
+
+  window.addEventListener("beforeunload",()=>{
+    const p=window.activeMainPage;
+    if(valid.has(p)) remember(p);
+  });
+})();
 </script>
 
 </body>
