@@ -3556,7 +3556,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </button>
 <div class="settings-section-body">
   <div class="helper" style="margin-bottom:8px">
-    Every user can add and view their own orders. Accounts added here can view all orders.
+    Only Umo manages Orders. Accounts added here receive Order View Access.
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <input id="settingsOrderAccessEmail" placeholder="Actual ndacc.us login email" style="flex:1;min-width:240px" type="email"/>
@@ -4333,6 +4333,53 @@ async function renderOwnerSettings(){
 
 }
 
+
+async function loadOrderViewAccessSettings(){
+  const root=byId("settingsOrderAccessList");
+  if(!root) return;
+  const {data,error}=await salaryDb.from("order_view_access").select("email,created_at").order("email");
+  if(error){
+    root.innerHTML=`<div class="bad">${escHtml(error.message)}</div>`;
+    return;
+  }
+  root.innerHTML=(data||[]).map(x=>`
+    <div class="branch-admin-row">
+      <div><strong>${escHtml(String(x.email||"").toLowerCase())}</strong></div>
+      <button class="btn staff-delete-btn" type="button"
+        data-remove-order-access="${escHtml(String(x.email||"").toLowerCase())}">Remove</button>
+    </div>`).join("") || '<div class="helper">No extra Order View Access.</div>';
+}
+
+async function ownerAddOrderViewAccess(){
+  if(!isGlobalAdmin) return;
+  const input=byId("settingsOrderAccessEmail");
+  const email=String(input?.value||"").trim().toLowerCase();
+  if(!email || !email.includes("@")) return alert("Enter a valid login email.");
+
+  // Verify that this is an actual Supabase login email when the RPC exists.
+  try{
+    const check=await validateSalaryLoginEmail(email);
+    if(check && check.ok===false) return alert(check.message||"Login email not found.");
+  }catch(_){}
+
+  const {error}=await salaryDb.from("order_view_access").upsert({email},{onConflict:"email"});
+  if(error) return alert("Add Order View Access failed: "+error.message);
+
+  if(input) input.value="";
+  await loadOrderViewAccessSettings();
+  await refreshOrdersVisibility();
+}
+
+async function ownerRemoveOrderViewAccess(email){
+  if(!isGlobalAdmin) return;
+  email=String(email||"").trim().toLowerCase();
+  if(!email) return;
+  const {error}=await salaryDb.from("order_view_access").delete().eq("email",email);
+  if(error) return alert("Remove failed: "+error.message);
+  await loadOrderViewAccessSettings();
+  await refreshOrdersVisibility();
+}
+
 async function showSettings(){
   try{window.activeMainPage="settings"; localStorage.setItem("nd_last_page_v2","settings");}catch(_){}
   try{localStorage.setItem("nd_last_page_v2","settings");}catch(_){}
@@ -4356,6 +4403,8 @@ async function showSettings(){
   closeMobileSidebar();
   await loadSalaryBranches();
   await renderOwnerSettings();
+  await loadOrderViewAccessSettings();
+  await renderSettingsBedFeeMerchants();
   try{
     await refreshSettlementAccess();
     if(settlementOwner) await loadSettlementAdmins();
@@ -6451,6 +6500,8 @@ byId("empPayBy").onchange=updateSubmitStaffPaymentFields;
   byId("addBranchBtn").onclick=addBranch;
 
   
+  if(byId("settingsAddOrderAccessBtn")) byId("settingsAddOrderAccessBtn").onclick=ownerAddOrderViewAccess;
+
   const settingsAccordion=byId("settingsAccordion");
   if(settingsAccordion){
     settingsAccordion.addEventListener("click",(e)=>{
@@ -6466,6 +6517,12 @@ byId("empPayBy").onchange=updateSubmitStaffPaymentFields;
 
 byId("settingsPage").onclick=async(e)=>{
     if(!isGlobalAdmin) return;
+
+    const removeOrderAccess=e.target.closest("[data-remove-order-access]");
+    if(removeOrderAccess){
+      await ownerRemoveOrderViewAccess(removeOrderAccess.dataset.removeOrderAccess);
+      return;
+    }
 
 
     const editOutlet=e.target.closest("[data-settings-edit-outlet]");
@@ -9005,9 +9062,15 @@ async function refreshOrdersVisibility(){
  try{
   const {data:{session}}=await ordersDb().auth.getSession();
   ordersCurrentEmail=String(session?.user?.email||"").trim().toLowerCase();
-  const allowed=ordersCurrentEmail===ORDERS_OWNER_EMAIL;
+  let allowed=ordersCurrentEmail===ORDERS_OWNER_EMAIL;
+  if(!allowed && ordersCurrentEmail){
+    const {data,error}=await ordersDb().from("order_view_access").select("email").eq("email",ordersCurrentEmail).maybeSingle();
+    if(!error && data) allowed=true;
+  }
   if(btn)btn.style.display=allowed?"":"none";
-  window.canViewOrders=allowed; return allowed;
+  window.canViewOrders=allowed;
+  window.canManageOrders=ordersCurrentEmail===ORDERS_OWNER_EMAIL;
+  return allowed;
  }catch(_){if(btn)btn.style.display="none";return false;}
 }
 
@@ -9199,6 +9262,8 @@ async function showOrders(){
  try{setSidebarActive("orders")}catch(_){} try{closeMobileSidebar()}catch(_){}
  const m=document.getElementById("ordersMonth");if(m&&!m.value){const d=new Date();m.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;}
  await loadOrderBranches();
+ const addBranchBtn=document.getElementById("ordersAddBranchBtn");
+ if(addBranchBtn) addBranchBtn.style.display=window.canManageOrders?"":"none";
  setOrdersMode(ordersMode||"manage");
 }
 window.showOrders=showOrders;
