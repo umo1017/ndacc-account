@@ -13926,5 +13926,124 @@ html,body{max-width:100%;overflow-x:hidden!important}
 })();
 </script>
 
+
+<style>
+/* ===== LOAN STOCK BRAND FILTER ===== */
+#loanBrandFilterWrap{
+  margin:0 0 10px!important;
+  padding:8px 10px!important;
+  border:1px solid #e7e2d8!important;
+  border-radius:10px!important;
+  background:#faf9f6!important;
+}
+#loanBrandFilterWrap label{
+  display:block!important;margin:0 0 5px!important;
+  font-size:10px!important;font-weight:800!important;
+}
+#loanBrandFilter{
+  width:100%!important;max-width:260px!important;
+  height:34px!important;min-height:34px!important;
+  padding:5px 8px!important;border-radius:8px!important;font-size:11px!important;
+}
+@media(max-width:700px){
+  #loanBrandFilterWrap{
+    display:grid!important;
+    grid-template-columns:68px minmax(0,1fr)!important;
+    align-items:center!important;gap:7px!important;
+    padding:7px 8px!important;
+  }
+  #loanBrandFilterWrap label{margin:0!important;font-size:9.5px!important}
+  #loanBrandFilter{max-width:100%!important;height:32px!important;min-height:32px!important}
+}
+</style>
+
+<script>
+/* Loan Stock brand filter: All Brands + brands found in the product catalog.
+   This filters the Loan Stock product search and the visible Outstanding cards. */
+(function(){
+  const KEY="nd_loan_brand_filter_v1";
+
+  function brands(){
+    const vals=(Array.isArray(window.ORDER_PRODUCT_CATALOG)?window.ORDER_PRODUCT_CATALOG:
+      (typeof ORDER_PRODUCT_CATALOG!=="undefined" && Array.isArray(ORDER_PRODUCT_CATALOG)?ORDER_PRODUCT_CATALOG:[]))
+      .map(p=>String(p.brand||"").trim()).filter(Boolean);
+    return [...new Set(vals)].sort((a,b)=>a.localeCompare(b));
+  }
+
+  function ensureBrandFilter(){
+    const panel=document.getElementById("ordersLoanPanel");
+    if(!panel)return;
+    let wrap=document.getElementById("loanBrandFilterWrap");
+    if(!wrap){
+      wrap=document.createElement("div");
+      wrap.id="loanBrandFilterWrap";
+      wrap.innerHTML='<label for="loanBrandFilter">Brand</label><select id="loanBrandFilter"></select>';
+      const branch=document.getElementById("loanBranchPickerWrap");
+      if(branch)branch.insertAdjacentElement("afterend",wrap);
+      else panel.querySelector(".salary-card")?.insertBefore(wrap,panel.querySelector(".salary-card")?.firstChild);
+    }
+    const sel=document.getElementById("loanBrandFilter");
+    const list=brands();
+    sel.innerHTML='<option value="__ALL__">All Brands</option>'+
+      list.map(b=>`<option value="${ordersEsc(b)}">${ordersEsc(b)}</option>`).join("");
+    let saved="__ALL__";
+    try{saved=localStorage.getItem(KEY)||"__ALL__"}catch(_){}
+    sel.value=[...sel.options].some(o=>o.value===saved)?saved:"__ALL__";
+    applyOutstandingBrand();
+  }
+
+  function chosen(){
+    return document.getElementById("loanBrandFilter")?.value||"__ALL__";
+  }
+
+  function applyOutstandingBrand(){
+    const wanted=chosen();
+    document.querySelectorAll("#loanBody .orders-po-group .orders-table tbody tr").forEach(tr=>{
+      const brandCell=tr.querySelector('[data-loan-field="brand"]');
+      const brand=String(brandCell?.textContent||"").trim();
+      tr.style.display=(wanted==="__ALL__"||brand===wanted)?"":"none";
+    });
+  }
+
+  document.addEventListener("change",e=>{
+    if(e.target?.id==="loanBrandFilter"){
+      try{localStorage.setItem(KEY,e.target.value)}catch(_){}
+      applyOutstandingBrand();
+      /* Clear prior product choice/search so the next search follows the selected brand. */
+      if(typeof selectedLoanProduct!=="undefined") selectedLoanProduct=null;
+      const q=document.getElementById("loanProductSearch");
+      const r=document.getElementById("loanProductSearchResults");
+      if(q)q.value="";
+      if(r)r.innerHTML="";
+    }
+  });
+
+  /* Capture Loan product typing and replace results with brand-filtered catalog matches. */
+  document.addEventListener("input",e=>{
+    if(e.target?.id!=="loanProductSearch")return;
+    const root=document.getElementById("loanProductSearchResults");
+    if(!root)return;
+    const q=String(e.target.value||"").trim().toLowerCase();
+    const wanted=chosen();
+    const catalog=(typeof ORDER_PRODUCT_CATALOG!=="undefined" && Array.isArray(ORDER_PRODUCT_CATALOG))?ORDER_PRODUCT_CATALOG:[];
+    const rows=catalog.filter(p=>{
+      const brand=String(p.brand||"").trim();
+      const brandOk=wanted==="__ALL__"||brand===wanted;
+      const text=(String(p.product_name||"")+" "+brand+" "+String(p.category||"")).toLowerCase();
+      return brandOk && q && text.includes(q);
+    }).slice(0,12);
+    root.innerHTML=rows.map(p=>`<button type="button" class="btn" style="display:block;width:100%;text-align:left;margin:3px 0" data-pick-loan="${ordersEsc(p.sku_id)}"><strong>${ordersEsc(p.product_name)}</strong><br><span class="helper">${ordersEsc(p.brand||"")} · ${ordersEsc(p.category||"")}</span></button>`).join("");
+  },true);
+
+  const obs=new MutationObserver(()=>applyOutstandingBrand());
+  document.addEventListener("DOMContentLoaded",()=>{
+    setTimeout(ensureBrandFilter,1000);
+    const body=document.getElementById("loanBody");
+    if(body)obs.observe(body,{childList:true,subtree:true});
+  });
+  document.getElementById("ordersLoanBtn")?.addEventListener("click",()=>setTimeout(ensureBrandFilter,250));
+})();
+</script>
+
 </body>
 </html>
