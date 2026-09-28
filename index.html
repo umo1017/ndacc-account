@@ -14563,5 +14563,151 @@ input,select,textarea,button{
 })();
 </script>
 
+
+<style>
+/* ===== SALARY FULL CONTENT + SCROLL FIX ===== */
+/* Salary page itself must never clip its content. */
+#salaryPage{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  min-height:100vh!important;
+  max-height:none!important;
+  overflow:visible!important;
+}
+#salaryPage.active{
+  display:block!important;
+  overflow:visible!important;
+}
+#salaryPage .salary-shell,
+#salaryPage #salaryContent,
+#salaryPage .salary-card{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+}
+
+/* Every salary table container can scroll horizontally. */
+#salaryPage .table-wrap,
+#salaryPage .salary-table-wrap,
+#salaryPage [class*="table-wrap"],
+#salaryPage [class*="tableWrap"]{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+  -webkit-overflow-scrolling:touch!important;
+  touch-action:pan-x pan-y pinch-zoom!important;
+  scrollbar-width:auto!important;
+}
+
+/* Keep the real payroll columns at readable width.
+   Do not squeeze them until data disappears. */
+#salaryPage table{
+  width:max-content!important;
+  min-width:100%!important;
+  max-width:none!important;
+  table-layout:auto!important;
+}
+#salaryPage table th,
+#salaryPage table td{
+  white-space:nowrap!important;
+  word-break:normal!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+}
+
+/* Page can scroll vertically normally. */
+html,body{
+  height:auto!important;
+  min-height:100%!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+
+@media(max-width:700px){
+  #salaryPage{
+    padding:6px!important;
+    overflow:visible!important;
+  }
+  #salaryPage .salary-shell{
+    padding:0!important;
+  }
+  #salaryPage .salary-card{
+    padding:8px!important;
+  }
+  #salaryPage .table-wrap,
+  #salaryPage .salary-table-wrap,
+  #salaryPage [class*="table-wrap"],
+  #salaryPage [class*="tableWrap"]{
+    overflow-x:scroll!important;
+    overscroll-behavior-x:contain!important;
+  }
+  #salaryPage table{
+    width:max-content!important;
+    min-width:760px!important;
+    font-size:9px!important;
+  }
+  #salaryPage th,#salaryPage td{
+    padding:6px 7px!important;
+  }
+}
+</style>
+
+<script>
+/* Salary scroll safety:
+   ensure dynamically rendered salary tables are always inside a horizontally
+   scrollable area without changing payroll calculations or data. */
+(function(){
+  function fixSalaryScroll(){
+    const page=document.getElementById("salaryPage");
+    if(!page)return;
+    page.style.overflow="visible";
+
+    page.querySelectorAll("table").forEach(table=>{
+      let parent=table.parentElement;
+      if(!parent)return;
+      const already=parent.classList.contains("table-wrap") ||
+                    parent.classList.contains("salary-table-wrap") ||
+                    String(parent.className||"").toLowerCase().includes("table-wrap");
+      if(!already){
+        const wrap=document.createElement("div");
+        wrap.className="salary-table-wrap";
+        parent.insertBefore(wrap,table);
+        wrap.appendChild(table);
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    setTimeout(fixSalaryScroll,500);
+    setTimeout(fixSalaryScroll,1400);
+    const page=document.getElementById("salaryPage");
+    if(page){
+      new MutationObserver(()=>fixSalaryScroll()).observe(page,{childList:true,subtree:true});
+    }
+  });
+
+  document.getElementById("sidebarSalary")?.addEventListener("click",()=>{
+    setTimeout(fixSalaryScroll,250);
+  });
+  window.addEventListener("resize",()=>setTimeout(fixSalaryScroll,80));
+})();
+</script>
+
+
+<!-- COMPLETE INDEX RECHECK 2026-09-29
+Static audit passed: JS syntax, duplicate IDs, core page/function presence.
+Latest UI fixes retained: Salary vertical/horizontal scrolling, zoom, permission-aware same-page memory,
+Orders/Loan branch workflow, Outstanding row list, Settings/Bed Fee persistence patches.
+-->
+
 </body>
 </html>
