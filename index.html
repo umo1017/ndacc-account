@@ -3622,7 +3622,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
           <div id="orderProductSearchResults" style="margin-top:6px"></div>
         </div>
         <div class="field"><label>Order Qty</label><input id="orderAddQty" type="number" min="1" value="1"></div>
-        <div class="field" style="min-width:180px"><label>Supplier</label><input id="orderAddSupplier" placeholder="Optional"></div>
+        
         <div class="field" style="min-width:180px"><label>Note</label><input id="orderAddNote" placeholder="Optional"></div>
         <button class="btn" id="orderAddProductBtn" type="button">+ Add Product</button>
       </div>
@@ -13119,6 +13119,243 @@ html,body{max-width:100%;overflow-x:hidden!important}
   border-radius:8px!important;
 }
 </style>
+
+
+<style>
+/* ===== ORDERS PAGE RECHECK 2026-09-28 ===== */
+
+/* Branches are shown as their own buttons; original select remains as state source. */
+#ordersBranch{display:none!important}
+#ordersBranchButtons{
+  display:flex!important;
+  flex-wrap:wrap!important;
+  gap:7px!important;
+  align-items:center!important;
+}
+#ordersBranchButtons .orders-branch-choice{
+  width:auto!important;
+  min-width:76px!important;
+  padding:7px 11px!important;
+  border-radius:8px!important;
+}
+#ordersBranchButtons .orders-branch-choice.active{
+  background:#111!important;
+  color:#fff!important;
+  border-color:#111!important;
+}
+
+/* Loan Stock gets a proper usable workspace instead of a tiny panel. */
+#ordersLoanPanel{
+  width:100%!important;
+  max-width:100%!important;
+}
+#ordersLoanPanel .salary-card{
+  width:100%!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+}
+#ordersLoanPanel .orders-toolbar{
+  display:grid!important;
+  grid-template-columns:minmax(190px,.8fr) minmax(300px,1.5fr) 90px minmax(180px,.8fr) auto!important;
+  gap:10px!important;
+  align-items:end!important;
+}
+#ordersLoanPanel .orders-toolbar .field{
+  min-width:0!important;
+  width:100%!important;
+}
+#ordersLoanPanel input{
+  width:100%!important;
+  min-width:0!important;
+}
+#ordersLoanPanel .orders-list-wrap{
+  width:100%!important;
+  overflow-x:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+#ordersLoanPanel .orders-table{
+  width:100%!important;
+  min-width:760px!important;
+}
+
+/* Supplier input is intentionally removed from Add Order. */
+#orderAddSupplier{display:none!important}
+
+@media(max-width:700px){
+  #ordersPage{
+    width:100%!important;
+    max-width:100%!important;
+    padding:8px!important;
+    box-sizing:border-box!important;
+  }
+  #ordersPage .salary-shell,
+  #ordersPage .salary-card{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+  }
+  #ordersPage .orders-toolbar{
+    gap:7px!important;
+  }
+  #ordersBranchButtons{
+    width:100%!important;
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    padding-bottom:3px!important;
+  }
+  #ordersBranchButtons .orders-branch-choice{
+    flex:0 0 auto!important;
+    min-width:72px!important;
+    height:34px!important;
+    padding:5px 9px!important;
+    font-size:10px!important;
+  }
+
+  /* Loan form: large enough to use, one field per row on phone. */
+  #ordersLoanPanel .orders-toolbar{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:8px!important;
+  }
+  #ordersLoanPanel .orders-toolbar .field{
+    width:100%!important;
+    min-width:0!important;
+  }
+  #ordersLoanPanel input{
+    width:100%!important;
+    height:38px!important;
+    min-height:38px!important;
+    font-size:12px!important;
+  }
+  #ordersLoanPanel #loanQty{
+    max-width:110px!important;
+  }
+  #ordersLoanPanel #loanAddBtn{
+    width:110px!important;
+    min-height:36px!important;
+  }
+  #ordersLoanPanel .orders-list-wrap{
+    overflow-x:auto!important;
+  }
+}
+</style>
+
+<script>
+/* ORDERS: branch buttons + full page/subpage memory */
+(function(){
+  const PAGE_KEY="nd_last_page_v2";
+  const MODE_KEY="nd_orders_mode_v3";
+  const BRANCH_KEY="nd_orders_branch_v3";
+  const MONTH_KEY="nd_orders_month_v3";
+
+  function saveOrdersState(){
+    try{
+      localStorage.setItem(PAGE_KEY,"orders");
+      sessionStorage.setItem(PAGE_KEY,"orders");
+      localStorage.setItem(MODE_KEY,String(window.ordersMode||ordersMode||"manage"));
+      const b=document.getElementById("ordersBranch")?.value;
+      if(b)localStorage.setItem(BRANCH_KEY,b);
+      const m=document.getElementById("ordersMonth")?.value;
+      if(m)localStorage.setItem(MONTH_KEY,m);
+      window.activeMainPage="orders";
+    }catch(_){}
+  }
+
+  function branchLabel(v){ return v==="__ALL__" ? "All Branches" : v; }
+
+  function renderBranchButtons(){
+    const sel=document.getElementById("ordersBranch");
+    if(!sel)return;
+    let root=document.getElementById("ordersBranchButtons");
+    if(!root){
+      root=document.createElement("div");
+      root.id="ordersBranchButtons";
+      sel.insertAdjacentElement("afterend",root);
+    }
+    root.innerHTML=[...sel.options].map(o=>
+      `<button type="button" class="btn orders-branch-choice ${o.value===sel.value?"active":""}" data-order-branch="${ordersEsc(o.value)}">${ordersEsc(branchLabel(o.value))}</button>`
+    ).join("");
+  }
+
+  async function restoreOrdersState(){
+    const sel=document.getElementById("ordersBranch");
+    const month=document.getElementById("ordersMonth");
+    try{
+      const savedMonth=localStorage.getItem(MONTH_KEY)||"";
+      if(savedMonth && month) month.value=savedMonth;
+
+      const savedBranch=localStorage.getItem(BRANCH_KEY)||"";
+      if(savedBranch && sel && [...sel.options].some(o=>o.value===savedBranch)){
+        sel.value=savedBranch;
+      }
+      const savedMode=localStorage.getItem(MODE_KEY)||"manage";
+      if(["manage","monthly","total","loan"].includes(savedMode)){
+        setOrdersMode(savedMode);
+      }
+    }catch(_){}
+    renderBranchButtons();
+  }
+
+  document.addEventListener("click",async e=>{
+    const branchBtn=e.target.closest?.("[data-order-branch]");
+    if(branchBtn){
+      const sel=document.getElementById("ordersBranch");
+      if(sel){
+        sel.value=branchBtn.dataset.orderBranch;
+        sel.dispatchEvent(new Event("change",{bubbles:true}));
+      }
+      renderBranchButtons();
+      saveOrdersState();
+      return;
+    }
+
+    const modes={
+      ordersManageBtn:"manage",
+      ordersMonthlyBtn:"monthly",
+      ordersTotalQtyBtn:"total",
+      ordersLoanBtn:"loan"
+    };
+    for(const [id,mode] of Object.entries(modes)){
+      if(e.target.closest?.("#"+id)){
+        try{localStorage.setItem(MODE_KEY,mode)}catch(_){}
+        saveOrdersState();
+        break;
+      }
+    }
+    if(e.target.closest?.("#sidebarOrders")) saveOrdersState();
+  },true);
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    /* Supplier field is gone, but legacy addWorkingOrder expects the element.
+       Keep a hidden compatibility input so existing save code does not break. */
+    if(!document.getElementById("orderAddSupplier")){
+      const hidden=document.createElement("input");
+      hidden.type="hidden";
+      hidden.id="orderAddSupplier";
+      hidden.value="";
+      document.getElementById("ordersManagePanel")?.appendChild(hidden);
+    }
+
+    document.getElementById("ordersMonth")?.addEventListener("change",saveOrdersState);
+    document.getElementById("ordersBranch")?.addEventListener("change",()=>{
+      renderBranchButtons();
+      saveOrdersState();
+    });
+
+    /* Wait for DB branch list to finish loading, then restore exact branch/mode. */
+    setTimeout(async()=>{
+      try{
+        if(typeof loadOrderBranches==="function") await loadOrderBranches();
+      }catch(_){}
+      await restoreOrdersState();
+    },700);
+  });
+
+  window.addEventListener("beforeunload",saveOrdersState);
+  window.addEventListener("pagehide",saveOrdersState);
+})();
+</script>
 
 </body>
 </html>
