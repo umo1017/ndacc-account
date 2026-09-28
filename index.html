@@ -11731,5 +11731,85 @@ html,body{max-width:100%;overflow-x:hidden!important}
 })();
 </script>
 
+
+<style>
+/* ===== CLICKABLE PAYMENT DESTINATION ===== */
+#settlementExpenseForm [data-payment-details]{
+  cursor:pointer!important;
+}
+#settlementExpenseForm [data-payment-details].nd-payment-link{
+  color:#2563eb!important;
+  text-decoration:none!important;
+}
+#settlementExpenseForm [data-payment-details].nd-payment-link:hover{
+  text-decoration:underline!important;
+}
+</style>
+<script>
+/* CLICK WEBSITE / BANK PAYMENT DESTINATION */
+(function(){
+  function branch(){
+    return String(window.settlementCurrentOutlet||settlementCurrentOutlet||"");
+  }
+  function storageKey(expenseKey){
+    return "ndacc_payment_destination_"+branch()+"_"+String(expenseKey||"");
+  }
+  function getDestination(expenseKey){
+    try{return JSON.parse(localStorage.getItem(storageKey(expenseKey))||"{}")||{}}catch(_){return {}}
+  }
+  function bankSearchUrl(d){
+    const q=[d.bank,d.name,d.account].filter(Boolean).join(" ");
+    return "https://www.google.com/search?q="+encodeURIComponent(q);
+  }
+  function enhance(){
+    document.querySelectorAll("#settlementExpenseForm .settlement-expense-row").forEach(row=>{
+      const key=row.dataset.financeField;
+      const detail=row.querySelector("[data-payment-details]");
+      if(!key||!detail)return;
+
+      const d=getDestination(key);
+      detail.classList.add("nd-payment-link");
+
+      if(d.type==="website" && d.website){
+        detail.title="Open website";
+        detail.onclick=function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          let url=d.website.trim();
+          if(!/^https?:\/\//i.test(url)) url="https://"+url;
+          window.open(url,"_blank","noopener,noreferrer");
+        };
+      }else if(d.type==="bank" && d.bank && d.account){
+        detail.title="Open bank/payment details";
+        detail.onclick=function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          /* Bank account itself is not necessarily a web URL.
+             Open a bank search in a new tab; editing remains available via long press/double click below. */
+          window.open(bankSearchUrl(d),"_blank","noopener,noreferrer");
+        };
+      }else{
+        detail.title="Set payment destination";
+      }
+
+      /* Double-click keeps an edit path without sacrificing single-click opening. */
+      detail.ondblclick=function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(typeof window.openExpenseDestination==="function"){
+          window.openExpenseDestination(key,row);
+        }
+      };
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>setTimeout(enhance,700));
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",()=>setTimeout(enhance,350));
+  document.getElementById("settlementBranchTabs")?.addEventListener("click",()=>setTimeout(enhance,350));
+  document.getElementById("settlementMonth")?.addEventListener("change",()=>setTimeout(enhance,350));
+  window.enhanceExpensePaymentLinks=enhance;
+})();
+</script>
+
 </body>
 </html>
