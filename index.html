@@ -11354,5 +11354,382 @@ html,body{max-width:100%;overflow-x:hidden!important}
 })();
 </script>
 
+
+<script>
+/* ===== PAYMENT DESTINATION PER EXPENSE ===== */
+(function(){
+  function branch(){ return String(window.settlementCurrentOutlet||settlementCurrentOutlet||""); }
+  let currentExpenseKey="";
+
+  function storageKey(expenseKey){
+    return "ndacc_payment_destination_"+branch()+"_"+String(expenseKey||"");
+  }
+  function getDestination(expenseKey){
+    try{return JSON.parse(localStorage.getItem(storageKey(expenseKey))||"{}")||{}}catch(_){return {}}
+  }
+  function saveDestination(expenseKey,v){
+    try{localStorage.setItem(storageKey(expenseKey),JSON.stringify(v))}catch(_){}
+  }
+  function expenseName(row){
+    const key=row?.dataset?.financeField||"";
+    const first=row?.children?.[0];
+    return (first?.textContent||key||"Expense").replace(/AUTO|✎/g,"").trim();
+  }
+
+  function destinationText(d){
+    if(d.type==="bank" && d.bank && d.account)
+      return `${d.bank} · ${d.name||""} · ${d.account}`;
+    if(d.type==="website" && d.website) return d.website;
+    return "";
+  }
+
+  function refreshRows(){
+    document.querySelectorAll("#settlementExpenseForm .settlement-expense-row").forEach(row=>{
+      const key=row.dataset.financeField;
+      if(!key) return;
+      const detail=row.querySelector("[data-payment-details]");
+      if(!detail) return;
+      const d=getDestination(key);
+      const txt=destinationText(d);
+      if(txt){
+        detail.textContent=txt;
+        detail.dataset.destinationType=d.type||"";
+        detail.title=txt;
+      }else{
+        detail.textContent="Set Payment";
+        detail.dataset.destinationType="";
+        detail.title="Set payment destination for this expense";
+      }
+      detail.style.cursor="pointer";
+      detail.onclick=function(e){
+        e.preventDefault();
+        openExpenseDestination(key,row);
+      };
+    });
+  }
+
+  function syncType(){
+    const modal=document.getElementById("paymentDestinationModal");
+    const type=document.getElementById("paymentDestinationType")?.value||"bank";
+    if(modal) modal.dataset.paymentType=type;
+    const bank=document.getElementById("paymentDestinationBankFields");
+    const web=document.getElementById("paymentDestinationWebsiteFields");
+    if(bank) bank.style.display=type==="bank"?"block":"none";
+    if(web) web.style.display=type==="website"?"block":"none";
+  }
+
+  function openExpenseDestination(key,row){
+    currentExpenseKey=key;
+    const d=getDestination(key);
+    const type=document.getElementById("paymentDestinationType");
+    if(type) type.value=d.type||"bank";
+    document.getElementById("paymentDestinationName").value=d.name||"";
+    document.getElementById("paymentDestinationBank").value=d.bank||"";
+    document.getElementById("paymentDestinationAccount").value=d.account||"";
+    document.getElementById("paymentDestinationWebsite").value=d.website||"";
+    const label=document.getElementById("paymentDestinationBranch");
+    if(label) label.textContent=`${branch()} · ${expenseName(row)}`;
+    const state=document.getElementById("paymentDestinationSaveState");
+    if(state) state.textContent="";
+    syncType();
+    document.getElementById("paymentDestinationModal")?.classList.add("open");
+  }
+
+  function saveCurrent(){
+    if(!currentExpenseKey) return;
+    const type=document.getElementById("paymentDestinationType")?.value||"bank";
+    let d={type};
+    if(type==="bank"){
+      d.name=document.getElementById("paymentDestinationName").value.trim();
+      d.bank=document.getElementById("paymentDestinationBank").value.trim();
+      d.account=document.getElementById("paymentDestinationAccount").value.trim();
+      if(!d.name||!d.bank||!d.account){
+        alert("Please enter Account Name, Bank Name and Account No.");
+        return;
+      }
+    }else{
+      d.website=document.getElementById("paymentDestinationWebsite").value.trim();
+      if(!d.website){alert("Please enter Website.");return;}
+      if(!/^https?:\/\//i.test(d.website)) d.website="https://"+d.website;
+      try{new URL(d.website)}catch(_){alert("Please enter a valid website.");return;}
+    }
+    saveDestination(currentExpenseKey,d);
+    const state=document.getElementById("paymentDestinationSaveState");
+    if(state) state.textContent="Saved ✓";
+    refreshRows();
+    setTimeout(()=>document.getElementById("paymentDestinationModal")?.classList.remove("open"),180);
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    /* Branch-wide destination card is no longer used. */
+    const card=document.getElementById("settlementPaymentDestinationCard");
+    if(card) card.style.display="none";
+
+    document.getElementById("paymentDestinationType")?.addEventListener("change",syncType);
+
+    /* Override earlier Save listener before it can be used by replacing button. */
+    const old=document.getElementById("savePaymentDestinationBtn");
+    if(old){
+      const fresh=old.cloneNode(true);
+      old.parentNode.replaceChild(fresh,old);
+      fresh.addEventListener("click",saveCurrent);
+    }
+    setTimeout(refreshRows,550);
+  });
+
+  document.getElementById("settlementBranchTabs")?.addEventListener("click",()=>setTimeout(refreshRows,300));
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",()=>setTimeout(refreshRows,300));
+  document.getElementById("settlementMonth")?.addEventListener("change",()=>setTimeout(refreshRows,300));
+
+  window.refreshExpensePaymentDestinations=refreshRows;
+})();
+</script>
+<style>
+/* Payment destination now belongs to each expense, not the whole branch. */
+#settlementPaymentDestinationCard{display:none!important}
+@media(max-width:700px){
+ #settlementExpenseForm [data-payment-details]{
+   font-size:9px!important;
+   text-overflow:ellipsis!important;
+   overflow:hidden!important;
+   white-space:nowrap!important;
+ }
+}
+</style>
+
+
+<style>
+/* ===== MONTHLY EXPENSES MOBILE DENSE ===== */
+@media(max-width:700px){
+  #settlementPage .salary-card{
+    padding:10px!important;
+    border-radius:14px!important;
+  }
+  #settlementExpenseForm .settlement-expense-row{
+    grid-template-columns:minmax(0,1fr) 92px!important;
+    gap:4px 7px!important;
+    padding:8px 0!important;
+  }
+  #settlementExpenseForm .settlement-expense-row > :first-child{
+    font-size:12px!important;
+    line-height:1.1!important;
+  }
+  #settlementExpenseForm input,
+  #settlementExpenseForm select,
+  #settlementExpenseForm button,
+  #settlementExpenseForm [data-payment-status],
+  #settlementExpenseForm [data-payment-paid],
+  #settlementExpenseForm [data-payment-details],
+  #settlementExpenseForm .nd-short-date-label{
+    min-height:25px!important;
+    height:25px!important;
+    padding:2px 6px!important;
+    border-radius:7px!important;
+    font-size:9px!important;
+    line-height:1!important;
+  }
+  #settlementExpenseForm [data-payment-details]{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  #settlementExpenseForm .expense-edit-btn,
+  #settlementExpenseForm [data-edit-expense]{
+    width:20px!important;
+    min-width:20px!important;
+    height:20px!important;
+    min-height:20px!important;
+    padding:0!important;
+    font-size:8px!important;
+  }
+  #settlementExpenseForm .settlement-payment-status{
+    font-size:9px!important;
+  }
+  #settlementExpenseForm [data-payment-paid]{
+    font-size:9px!important;
+  }
+  /* Remove old swipe instruction to save vertical space */
+  #settlementPage .helper{
+    line-height:1.2;
+  }
+}
+</style>
+
+
+<style>
+/* ===== MONTHLY EXPENSES PREMIUM HORIZONTAL TABLE ===== */
+@media(max-width:700px){
+  #settlementPage .salary-card:has(#settlementExpenseForm){
+    padding:12px 10px!important;
+    border-radius:18px!important;
+    overflow:hidden!important;
+  }
+
+  #settlementExpenseForm{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:visible!important;
+    -webkit-overflow-scrolling:touch!important;
+    touch-action:pan-x pan-y!important;
+    padding-bottom:5px!important;
+  }
+
+  /* Restore one clean horizontal table */
+  #settlementExpenseForm .settlement-expense-head,
+  #settlementExpenseForm .settlement-expense-row{
+    display:grid!important;
+    width:850px!important;
+    min-width:850px!important;
+    max-width:none!important;
+    grid-template-columns:175px 230px 105px 115px 105px 90px!important;
+    gap:0!important;
+    align-items:center!important;
+    box-sizing:border-box!important;
+  }
+
+  #settlementExpenseForm .settlement-expense-head{
+    padding:8px 10px!important;
+    margin:0!important;
+    border:1px solid #ebe7de!important;
+    border-radius:11px!important;
+    background:#faf9f6!important;
+    color:#777!important;
+    font-size:10px!important;
+    font-weight:800!important;
+    text-transform:uppercase!important;
+    letter-spacing:.02em!important;
+  }
+
+  #settlementExpenseForm .settlement-expense-row{
+    min-height:58px!important;
+    padding:7px 10px!important;
+    margin:4px 0 0!important;
+    border:1px solid #eeeae2!important;
+    border-radius:12px!important;
+    background:#fff!important;
+  }
+
+  #settlementExpenseForm .settlement-expense-row > *{
+    grid-column:auto!important;
+    grid-row:auto!important;
+    min-width:0!important;
+    width:auto!important;
+    margin:0!important;
+    padding-left:6px!important;
+    padding-right:6px!important;
+    box-sizing:border-box!important;
+  }
+
+  /* Expense name */
+  #settlementExpenseForm .settlement-expense-row > :first-child{
+    grid-column:auto!important;
+    grid-row:auto!important;
+    font-size:12px!important;
+    font-weight:800!important;
+    line-height:1.15!important;
+    white-space:normal!important;
+  }
+
+  /* Amount / date / payment detail / action controls */
+  #settlementExpenseForm input,
+  #settlementExpenseForm select,
+  #settlementExpenseForm button,
+  #settlementExpenseForm [data-payment-status],
+  #settlementExpenseForm [data-payment-details],
+  #settlementExpenseForm [data-payment-paid],
+  #settlementExpenseForm .nd-short-date-label{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    height:32px!important;
+    min-height:32px!important;
+    border-radius:9px!important;
+    padding:5px 7px!important;
+    font-size:10px!important;
+    line-height:1.1!important;
+    box-sizing:border-box!important;
+  }
+
+  #settlementExpenseForm [data-payment-details]{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    color:#2563eb!important;
+    font-weight:700!important;
+    white-space:normal!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+
+  #settlementExpenseForm [data-payment-status]{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    font-weight:800!important;
+    border:0!important;
+  }
+
+  #settlementExpenseForm [data-payment-paid]{
+    font-weight:800!important;
+  }
+
+  /* tiny edit pencil only */
+  #settlementExpenseForm .expense-edit-btn,
+  #settlementExpenseForm [data-edit-expense]{
+    width:25px!important;
+    min-width:25px!important;
+    max-width:25px!important;
+    height:25px!important;
+    min-height:25px!important;
+    padding:0!important;
+    border-radius:7px!important;
+  }
+
+  /* Hide old helper line; horizontal swipe is obvious and scrollbar remains */
+  #settlementExpenseForm + .helper,
+  #settlementExpenseForm .helper,
+  #settlementExpenseForm .nd-bank-web-hint{
+    display:none!important;
+  }
+
+  #settlementExpenseForm::-webkit-scrollbar{height:6px!important}
+  #settlementExpenseForm::-webkit-scrollbar-track{
+    background:#f1efe9!important;
+    border-radius:99px!important;
+  }
+  #settlementExpenseForm::-webkit-scrollbar-thumb{
+    background:#aaa!important;
+    border-radius:99px!important;
+  }
+}
+
+/* Desktop/tablet keeps same premium table language, wider naturally */
+@media(min-width:701px){
+  #settlementExpenseForm .settlement-expense-head,
+  #settlementExpenseForm .settlement-expense-row{
+    border-radius:10px!important;
+  }
+}
+</style>
+<script>
+/* Premium expense table headers */
+(function(){
+  function applyPremiumExpenseHeaders(){
+    const h=document.querySelector("#settlementExpenseForm .settlement-expense-head");
+    if(!h)return;
+    const labels=["Expense","Payment Details","Amount","Date","Status","Action"];
+    [...h.children].slice(0,6).forEach((el,i)=>{ if(labels[i]) el.textContent=labels[i]; });
+  }
+  document.addEventListener("DOMContentLoaded",()=>setTimeout(applyPremiumExpenseHeaders,450));
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",()=>setTimeout(applyPremiumExpenseHeaders,250));
+  document.getElementById("settlementBranchTabs")?.addEventListener("click",()=>setTimeout(applyPremiumExpenseHeaders,250));
+})();
+</script>
+
 </body>
 </html>
