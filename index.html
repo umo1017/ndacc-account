@@ -12802,5 +12802,119 @@ html,body{max-width:100%;overflow-x:hidden!important}
 }
 </style>
 
+
+<style>
+/* ===== MONTHLY EXPENSES SHORTER BOXES ===== */
+@media(max-width:700px){
+  #settlementExpenseForm .settlement-expense-head,
+  #settlementExpenseForm .settlement-expense-row.nd-expense-clean{
+    width:800px!important;
+    min-width:800px!important;
+    max-width:800px!important;
+    grid-template-columns:165px 95px 105px 90px 255px 70px!important;
+    column-gap:4px!important;
+  }
+
+  /* Inputs no longer stretch across the whole column */
+  #settlementExpenseForm .nd-expense-amount input{
+    width:82px!important;
+    max-width:82px!important;
+  }
+  #settlementExpenseForm .nd-expense-date input{
+    width:92px!important;
+    max-width:92px!important;
+  }
+  #settlementExpenseForm .nd-expense-details [data-payment-details]{
+    width:235px!important;
+    max-width:235px!important;
+  }
+
+  #settlementExpenseForm .nd-expense-cell [data-payment-paid]{
+    width:64px!important;
+    min-width:64px!important;
+    max-width:64px!important;
+  }
+
+  #settlementExpenseForm .nd-expense-cell{
+    padding:0 2px!important;
+  }
+}
+</style>
+
+
+<style>
+/* ===== PAYMENT DETAILS VIEW BUTTON ONLY ===== */
+@media(max-width:700px){
+  #settlementExpenseForm .settlement-expense-head,
+  #settlementExpenseForm .settlement-expense-row.nd-expense-clean{
+    width:650px!important;
+    min-width:650px!important;
+    max-width:650px!important;
+    grid-template-columns:160px 92px 100px 85px 70px 65px!important;
+    column-gap:4px!important;
+  }
+
+  #settlementExpenseForm .nd-expense-details{
+    justify-content:center!important;
+  }
+
+  #settlementExpenseForm .nd-expense-details [data-payment-details]{
+    width:52px!important;
+    min-width:52px!important;
+    max-width:52px!important;
+    height:26px!important;
+    min-height:26px!important;
+    max-height:26px!important;
+    padding:2px 5px!important;
+    justify-content:center!important;
+    font-size:8.5px!important;
+    border:1px solid #d9e2f5!important;
+    border-radius:6px!important;
+    background:#f7faff!important;
+    color:#2563eb!important;
+    font-weight:800!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+  }
+}
+</style>
+
+<script>
+/* Payment Details column displays only a compact View button.
+   Existing saved bank/website details remain unchanged. */
+(function(){
+  function compactPaymentDetails(){
+    document.querySelectorAll("#settlementExpenseForm [data-payment-details]").forEach(el=>{
+      if(!el.dataset.ndFullPaymentText){
+        el.dataset.ndFullPaymentText=(el.textContent||"").trim();
+      }
+      el.textContent="View";
+      el.setAttribute("aria-label","View payment details");
+      el.title="View Payment Details";
+    });
+  }
+
+  function refreshCompact(){
+    setTimeout(compactPaymentDetails,120);
+    setTimeout(compactPaymentDetails,500);
+  }
+
+  document.addEventListener("DOMContentLoaded",refreshCompact);
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",refreshCompact);
+  document.getElementById("settlementMonth")?.addEventListener("change",refreshCompact);
+  document.getElementById("settlementBranchTabs")?.addEventListener("click",refreshCompact);
+
+  /* Re-apply after the clean expense table rebuild/render updates text. */
+  const oldRebuild=window.ndRebuildExpenseRows;
+  if(typeof oldRebuild==="function"){
+    window.ndRebuildExpenseRows=async function(){
+      const r=await oldRebuild.apply(this,arguments);
+      refreshCompact();
+      return r;
+    };
+  }
+})();
+</script>
+
 </body>
 </html>
