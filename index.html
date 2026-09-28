@@ -12504,5 +12504,303 @@ html,body{max-width:100%;overflow-x:hidden!important}
 })();
 </script>
 
+
+<style>
+/* ===== MONTHLY EXPENSES REBUILT CLEAN TABLE ===== */
+@media(max-width:700px){
+  #settlementPage .salary-card:has(#settlementExpenseForm){
+    padding:12px!important;
+    overflow:hidden!important;
+  }
+  #settlementExpenseForm{
+    display:block!important;
+    width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    padding:0 0 7px!important;
+  }
+  #settlementExpenseForm .settlement-expense-head,
+  #settlementExpenseForm .settlement-expense-row.nd-expense-clean{
+    display:grid!important;
+    width:910px!important;
+    min-width:910px!important;
+    max-width:910px!important;
+    grid-template-columns:170px 105px 110px 95px 300px 90px!important;
+    grid-template-rows:42px!important;
+    column-gap:8px!important;
+    align-items:center!important;
+    box-sizing:border-box!important;
+  }
+  #settlementExpenseForm .settlement-expense-head{
+    height:42px!important;
+    padding:0 8px!important;
+    margin:0 0 6px!important;
+    border:1px solid #e9e5dd!important;
+    border-radius:10px!important;
+    background:#faf9f6!important;
+  }
+  #settlementExpenseForm .settlement-expense-head>div{
+    font-size:9px!important;
+    font-weight:850!important;
+    color:#777!important;
+    white-space:nowrap!important;
+    padding:0 4px!important;
+  }
+  #settlementExpenseForm .settlement-expense-row.nd-expense-clean{
+    height:42px!important;
+    min-height:42px!important;
+    max-height:42px!important;
+    padding:0 8px!important;
+    margin:0 0 4px!important;
+    border:1px solid #e9e5dd!important;
+    border-radius:10px!important;
+    background:#fff!important;
+    overflow:hidden!important;
+  }
+  #settlementExpenseForm .nd-expense-cell{
+    display:flex!important;
+    align-items:center!important;
+    min-width:0!important;
+    height:100%!important;
+    overflow:hidden!important;
+    padding:0 4px!important;
+    box-sizing:border-box!important;
+  }
+  #settlementExpenseForm .nd-expense-name{
+    gap:4px!important;
+    flex-wrap:nowrap!important;
+    white-space:nowrap!important;
+  }
+  #settlementExpenseForm .nd-expense-name strong{
+    min-width:0!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+    font-size:10px!important;
+  }
+  #settlementExpenseForm .branch-chip{
+    flex:0 0 auto!important;
+    font-size:7px!important;
+    padding:2px 5px!important;
+  }
+  #settlementExpenseForm .nd-expense-cell input,
+  #settlementExpenseForm .nd-expense-cell select,
+  #settlementExpenseForm .nd-expense-cell [data-payment-details]{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    height:25px!important;
+    min-height:25px!important;
+    max-height:25px!important;
+    margin:0!important;
+    padding:3px 6px!important;
+    border-radius:6px!important;
+    font-size:8.5px!important;
+    line-height:1!important;
+    box-sizing:border-box!important;
+  }
+  #settlementExpenseForm .nd-expense-cell [data-payment-details]{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    color:#2563eb!important;
+    font-weight:750!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    cursor:pointer!important;
+  }
+  #settlementExpenseForm .nd-expense-cell [data-payment-status]{
+    width:100%!important;
+    min-width:0!important;
+    height:25px!important;
+    min-height:25px!important;
+    margin:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    font-size:8.5px!important;
+    white-space:nowrap!important;
+  }
+  #settlementExpenseForm .nd-expense-cell [data-payment-paid]{
+    width:78px!important;
+    min-width:78px!important;
+    max-width:78px!important;
+    height:25px!important;
+    min-height:25px!important;
+    max-height:25px!important;
+    padding:2px 6px!important;
+    margin:0!important;
+    border-radius:6px!important;
+    font-size:8.5px!important;
+    white-space:nowrap!important;
+  }
+  #settlementExpenseForm .nd-expense-cell .mini{
+    flex:0 0 18px!important;
+    width:18px!important;
+    min-width:18px!important;
+    max-width:18px!important;
+    height:18px!important;
+    min-height:18px!important;
+    max-height:18px!important;
+    padding:0!important;
+    margin:0!important;
+    font-size:7px!important;
+    border-radius:5px!important;
+  }
+  #settlementExpenseForm::-webkit-scrollbar{height:5px!important}
+  #settlementExpenseForm::-webkit-scrollbar-track{background:#eeeae2!important;border-radius:99px!important}
+  #settlementExpenseForm::-webkit-scrollbar-thumb{background:#999!important;border-radius:99px!important}
+}
+</style>
+<script>
+/* Rebuild only the presentation of Monthly Expenses.
+   Existing inputs/buttons are MOVED, not cloned, so existing save/database listeners remain intact. */
+(function(){
+  function rebuildExpenseRows(){
+    const form=document.getElementById("settlementExpenseForm");
+    if(!form)return;
+
+    const head=form.querySelector(".settlement-expense-head");
+    if(head){
+      const labels=["Expense","Amount","Date","Status","Payment Details","Payment"];
+      head.innerHTML=labels.map(x=>`<div>${x}</div>`).join("");
+    }
+
+    form.querySelectorAll(".settlement-expense-row[data-expense-payment-key]").forEach(row=>{
+      /* ensure legacy JS has already created date/status/details/payment */
+      if(typeof settlementEnsurePaymentControls==="function") settlementEnsurePaymentControls();
+
+      const key=row.dataset.expensePaymentKey||"";
+      const current=[...row.children];
+
+      let nameNode=current.find(el=>
+        el.querySelector?.("strong") ||
+        el.matches?.("strong")
+      );
+      let amountNode=current.find(el=>
+        el.matches?.("[data-finance-field],#settlementSalary7Input,#settlementSalary14Input,#settlementPettyInput") ||
+        el.querySelector?.("[data-finance-field]")
+      );
+      const dateNode=row.querySelector("[data-payment-date]");
+      const statusNode=row.querySelector("[data-payment-status]");
+      const detailsNode=row.querySelector("[data-payment-details]");
+      const paidNode=row.querySelector("[data-payment-paid]");
+
+      if(!nameNode || !amountNode || !dateNode || !statusNode || !paidNode) return;
+
+      /* Other has amount + pencil inside one wrapper; keep that wrapper intact. */
+      const cells=[
+        ["nd-expense-name",nameNode],
+        ["nd-expense-amount",amountNode],
+        ["nd-expense-date",dateNode],
+        ["nd-expense-status",statusNode],
+        ["nd-expense-details",detailsNode],
+        ["nd-expense-payment",paidNode]
+      ];
+
+      row.innerHTML="";
+      cells.forEach(([cls,node])=>{
+        const cell=document.createElement("div");
+        cell.className="nd-expense-cell "+cls;
+        if(node) cell.appendChild(node);
+        row.appendChild(cell);
+      });
+      row.classList.add("nd-expense-clean");
+    });
+  }
+
+  async function run(){
+    try{
+      if(typeof settlementEnsurePaymentControls==="function") settlementEnsurePaymentControls();
+      rebuildExpenseRows();
+      if(typeof settlementRenderPaymentMeta==="function") settlementRenderPaymentMeta();
+    }catch(e){console.warn("Expense clean layout:",e)}
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>setTimeout(run,700));
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",()=>setTimeout(run,500));
+  document.getElementById("settlementMonth")?.addEventListener("change",()=>setTimeout(run,500));
+  document.getElementById("settlementBranchTabs")?.addEventListener("click",()=>setTimeout(run,500));
+  window.ndRebuildExpenseRows=run;
+})();
+</script>
+
+
+<style>
+/* ===== MONTHLY EXPENSES MEDIUM CONTROLS ===== */
+@media(max-width:700px){
+  #settlementExpenseForm .settlement-expense-head,
+  #settlementExpenseForm .settlement-expense-row.nd-expense-clean{
+    width:940px!important;
+    min-width:940px!important;
+    max-width:940px!important;
+    grid-template-columns:180px 115px 120px 100px 300px 85px!important;
+    grid-template-rows:46px!important;
+  }
+
+  #settlementExpenseForm .settlement-expense-row.nd-expense-clean{
+    height:46px!important;
+    min-height:46px!important;
+    max-height:46px!important;
+  }
+
+  #settlementExpenseForm .nd-expense-name strong{
+    font-size:11px!important;
+  }
+
+  /* Amount / Date / Details: medium size and numbers remain readable */
+  #settlementExpenseForm .nd-expense-cell input,
+  #settlementExpenseForm .nd-expense-cell select,
+  #settlementExpenseForm .nd-expense-cell [data-payment-details]{
+    height:30px!important;
+    min-height:30px!important;
+    max-height:30px!important;
+    padding:4px 7px!important;
+    font-size:10px!important;
+    line-height:1.15!important;
+  }
+
+  #settlementExpenseForm .nd-expense-amount input{
+    text-align:right!important;
+    font-size:10.5px!important;
+    font-weight:700!important;
+  }
+
+  #settlementExpenseForm .nd-expense-date input{
+    font-size:9.5px!important;
+  }
+
+  #settlementExpenseForm .nd-expense-cell [data-payment-status]{
+    height:30px!important;
+    min-height:30px!important;
+    font-size:9.5px!important;
+  }
+
+  #settlementExpenseForm .nd-expense-cell [data-payment-paid]{
+    width:80px!important;
+    min-width:80px!important;
+    max-width:80px!important;
+    height:30px!important;
+    min-height:30px!important;
+    max-height:30px!important;
+    font-size:9.5px!important;
+  }
+
+  /* Pencil remains small so it doesn't steal space from the value */
+  #settlementExpenseForm .nd-expense-cell .mini{
+    flex:0 0 20px!important;
+    width:20px!important;
+    min-width:20px!important;
+    max-width:20px!important;
+    height:20px!important;
+    min-height:20px!important;
+    max-height:20px!important;
+    font-size:8px!important;
+  }
+}
+</style>
+
 </body>
 </html>
