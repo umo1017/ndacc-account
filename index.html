@@ -14045,5 +14045,235 @@ html,body{max-width:100%;overflow-x:hidden!important}
 })();
 </script>
 
+
+<script>
+/* ===== LOAN STOCK: NO ALL BRANCHES =====
+   Loan Stock must always use one actual branch. */
+(function(){
+  const KEY="nd_loan_stock_branch_v1";
+
+  function fixLoanBranchPicker(){
+    const picker=document.getElementById("loanBranchPicker");
+    const main=document.getElementById("ordersBranch");
+    if(!picker||!main)return;
+
+    /* Remove every aggregate/all-branch option from Loan Stock only. */
+    [...picker.options].forEach(o=>{
+      const v=String(o.value||"").trim().toLowerCase();
+      const t=String(o.textContent||"").trim().toLowerCase();
+      if(v==="__all__" || v==="all" || t==="all branches" || t==="all branch"){
+        o.remove();
+      }
+    });
+
+    const realOptions=[...picker.options];
+    if(!realOptions.length)return;
+
+    let saved="";
+    try{saved=localStorage.getItem(KEY)||""}catch(_){}
+
+    /* If old memory was All Branches, automatically switch to first real branch. */
+    const validSaved=realOptions.some(o=>o.value===saved);
+    if(!validSaved){
+      const preferred=realOptions.find(o=>String(o.value).toLowerCase().includes("eco")) || realOptions[0];
+      picker.value=preferred.value;
+      try{localStorage.setItem(KEY,preferred.value)}catch(_){}
+    }else{
+      picker.value=saved;
+    }
+
+    /* Keep underlying Orders branch in sync so Add Loan is saved to the actual branch. */
+    if(main.value!==picker.value){
+      main.value=picker.value;
+      main.dispatchEvent(new Event("change",{bubbles:true}));
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    setTimeout(fixLoanBranchPicker,1100);
+    setTimeout(fixLoanBranchPicker,1800);
+  });
+  document.getElementById("ordersLoanBtn")?.addEventListener("click",()=>{
+    setTimeout(fixLoanBranchPicker,300);
+  });
+
+  /* Existing code may rebuild branch options after DB load; clean it again automatically. */
+  const observer=new MutationObserver(()=>setTimeout(fixLoanBranchPicker,30));
+  document.addEventListener("DOMContentLoaded",()=>{
+    setTimeout(()=>{
+      const picker=document.getElementById("loanBranchPicker");
+      if(picker)observer.observe(picker,{childList:true});
+    },1200);
+  });
+})();
+</script>
+
+
+<style>
+/* ===== LOAN STOCK REMOVE BRAND UI ===== */
+#loanBrandFilterWrap{display:none!important}
+</style>
+<script>
+/* Loan Stock has no Brand selector/filter.
+   Product search returns to normal catalog search; Branch remains required. */
+(function(){
+  function removeLoanBrand(){
+    document.getElementById("loanBrandFilterWrap")?.remove();
+    try{localStorage.removeItem("nd_loan_brand_filter_v1")}catch(_){}
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    setTimeout(removeLoanBrand,1150);
+    setTimeout(removeLoanBrand,1900);
+  });
+  document.getElementById("ordersLoanBtn")?.addEventListener("click",()=>{
+    setTimeout(removeLoanBrand,350);
+  });
+})();
+</script>
+
+
+<style>
+/* ===== LOAN OUTSTANDING SIMPLE ROW LIST ===== */
+@media(max-width:700px){
+  /* Outstanding becomes a clean one-record-per-row list */
+  #loanHead{
+    display:grid!important;
+    grid-template-columns:90px minmax(130px,1fr) 42px 42px 52px 66px!important;
+    gap:4px!important;
+    align-items:center!important;
+    width:100%!important;
+    padding:6px 5px!important;
+    box-sizing:border-box!important;
+    font-size:7.5px!important;
+    font-weight:800!important;
+  }
+  #loanHead > *{min-width:0!important;text-align:left!important}
+  #loanHead > :nth-child(1){display:none!important} /* Date hidden from compact header */
+  #loanHead > :nth-child(2){display:none!important} /* Branch already selected above */
+  #loanHead > :nth-child(3){display:none!important} /* Brand not used */
+  #loanHead > :nth-child(4){grid-column:1 / span 2!important}
+  #loanHead > :nth-child(5){grid-column:3!important}
+  #loanHead > :nth-child(6){grid-column:4!important}
+  #loanHead > :nth-child(7){grid-column:5!important}
+  #loanHead > :nth-child(8){display:none!important}
+  #loanHead > :nth-child(9){grid-column:6!important}
+
+  #loanBody,
+  #loanBody > tr,
+  #loanBody > tr > td,
+  #loanBody .orders-po-group,
+  #loanBody .orders-list-wrap,
+  #loanBody .orders-table,
+  #loanBody .orders-table tbody{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    background:transparent!important;
+  }
+
+  /* Borrower/PO title stays as a small separator */
+  #loanBody .orders-po-head{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    padding:6px 5px 4px!important;
+    margin:0!important;
+    border-bottom:1px solid #eee9e1!important;
+  }
+  #loanBody .orders-po-no{font-size:10px!important}
+  #loanBody .orders-po-head .helper{font-size:8px!important}
+
+  #loanBody .orders-table thead{display:none!important}
+
+  #loanBody .orders-table tbody tr{
+    display:grid!important;
+    grid-template-columns:90px minmax(130px,1fr) 42px 42px 52px 66px!important;
+    gap:4px!important;
+    align-items:center!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-height:38px!important;
+    padding:5px!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+    border:0!important;
+    border-bottom:1px solid #eee9e1!important;
+    border-radius:0!important;
+    background:#fff!important;
+  }
+
+  #loanBody .orders-table tbody td{
+    display:block!important;
+    min-width:0!important;
+    width:auto!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    font-size:8.5px!important;
+    line-height:1.15!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+
+  /* No card labels above every field */
+  #loanBody .orders-table tbody td::before{display:none!important;content:none!important}
+
+  /* Compact row = Date | Product | Loan | Returned | Outstanding | Return */
+  #loanBody td[data-loan-field="date"]{grid-column:1!important}
+  #loanBody td[data-loan-field="branch"]{display:none!important}
+  #loanBody td[data-loan-field="brand"]{display:none!important}
+  #loanBody td[data-loan-field="product"]{
+    grid-column:2!important;
+    white-space:normal!important;
+    overflow:hidden!important;
+    display:-webkit-box!important;
+    -webkit-line-clamp:2!important;
+    -webkit-box-orient:vertical!important;
+  }
+  #loanBody td[data-loan-field="loan"]{grid-column:3!important;text-align:center!important}
+  #loanBody td[data-loan-field="returned"]{grid-column:4!important;text-align:center!important}
+  #loanBody td[data-loan-field="outstanding"]{grid-column:5!important;text-align:center!important;font-weight:800!important}
+  #loanBody td[data-loan-field="note"]{display:none!important}
+  #loanBody td[data-loan-field="return"]{
+    grid-column:6!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+    gap:3px!important;
+    overflow:visible!important;
+  }
+  #loanBody td[data-loan-field="return"] input{
+    width:27px!important;min-width:27px!important;max-width:27px!important;
+    height:25px!important;min-height:25px!important;
+    padding:2px 3px!important;font-size:8px!important;
+  }
+  #loanBody td[data-loan-field="return"] button{
+    width:34px!important;min-width:34px!important;max-width:34px!important;
+    height:25px!important;min-height:25px!important;
+    padding:2px!important;font-size:7px!important;
+  }
+}
+</style>
+
+<script>
+/* Compact Outstanding header for the row-list layout. */
+(function(){
+  function loanRowHeader(){
+    const h=document.getElementById("loanHead");
+    if(!h)return;
+    const labels=["Date","Branch","Brand","Product","Loan","Returned","Outstanding","Note","Return"];
+    [...h.children].forEach((el,i)=>{if(labels[i])el.textContent=labels[i]});
+  }
+  document.addEventListener("DOMContentLoaded",()=>setTimeout(loanRowHeader,600));
+  document.getElementById("ordersLoanBtn")?.addEventListener("click",()=>setTimeout(loanRowHeader,200));
+})();
+</script>
+
 </body>
 </html>
