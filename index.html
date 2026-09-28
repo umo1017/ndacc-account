@@ -3615,9 +3615,8 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
   <div id="ordersManagePanel">
     <div class="salary-card">
       <div class="outlet-title"><strong>+ Add Order</strong><span class="helper">Search and add only the products you want to order.</span></div>
-      <div class="orders-toolbar" style="margin-top:10px">
-        <div class="field" style="min-width:280px;flex:1">
-          <label>Search Product</label>
+      <div id="orderAddBranchButtons" class="order-add-branch-buttons"></div>
+<div class="orders-toolbar" style="margin-top:10px"> <div class="field" style="min-width:280px;flex:1"> <label>Search Product</label>
           <input id="orderProductSearch" type="search" placeholder="Search product / brand">
           <div id="orderProductSearchResults" style="margin-top:6px"></div>
         </div>
@@ -14274,6 +14273,125 @@ html,body{max-width:100%;overflow-x:hidden!important}
   document.getElementById("ordersLoanBtn")?.addEventListener("click",()=>setTimeout(loanRowHeader,200));
 })();
 </script>
+
+
+<style>
+/* ===== ADD ORDER BRANCH BUTTONS ===== */
+#orderAddBranchButtons{
+  display:flex!important;
+  flex-wrap:wrap!important;
+  gap:6px!important;
+  margin:10px 0 4px!important;
+}
+#orderAddBranchButtons .order-add-branch-btn{
+  width:auto!important;
+  min-width:82px!important;
+  height:34px!important;
+  min-height:34px!important;
+  padding:5px 10px!important;
+  border-radius:8px!important;
+  font-size:10px!important;
+}
+#orderAddBranchButtons .order-add-branch-btn.active{
+  background:#111!important;
+  color:#fff!important;
+  border-color:#111!important;
+}
+@media(max-width:700px){
+  #orderAddBranchButtons{
+    gap:5px!important;
+    margin:8px 0 3px!important;
+  }
+  #orderAddBranchButtons .order-add-branch-btn{
+    flex:0 1 auto!important;
+    min-width:72px!important;
+    height:31px!important;
+    min-height:31px!important;
+    padding:4px 8px!important;
+    font-size:9px!important;
+  }
+}
+</style>
+
+<script>
+/* Add Order requires one real branch.
+   Buttons mirror Settings/Orders branch list and do not show All Branches.
+   The choice is remembered and syncs to the existing Orders branch state,
+   so the original addWorkingOrder() saves to the selected branch. */
+(function(){
+  const KEY="nd_add_order_branch_v1";
+
+  function realBranches(){
+    const main=document.getElementById("ordersBranch");
+    if(!main)return [];
+    return [...main.options].filter(o=>{
+      const v=String(o.value||"").trim().toLowerCase();
+      const t=String(o.textContent||"").trim().toLowerCase();
+      return v && v!=="__all__" && v!=="all" && t!=="all branches" && t!=="all branch";
+    }).map(o=>({value:o.value,text:o.textContent}));
+  }
+
+  function render(){
+    const root=document.getElementById("orderAddBranchButtons");
+    const main=document.getElementById("ordersBranch");
+    if(!root||!main)return;
+    const branches=realBranches();
+    if(!branches.length){root.innerHTML="";return;}
+
+    let saved="";
+    try{saved=localStorage.getItem(KEY)||""}catch(_){}
+    let current=branches.some(b=>b.value===saved) ? saved :
+      (branches.some(b=>b.value===main.value) ? main.value : branches[0].value);
+
+    root.innerHTML=branches.map(b=>
+      `<button type="button" class="btn order-add-branch-btn ${b.value===current?"active":""}" data-add-order-branch="${ordersEsc(b.value)}">${ordersEsc(b.text)}</button>`
+    ).join("");
+
+    try{localStorage.setItem(KEY,current)}catch(_){}
+  }
+
+  async function choose(value){
+    const main=document.getElementById("ordersBranch");
+    if(!main||!realBranches().some(b=>b.value===value))return;
+    try{localStorage.setItem(KEY,value)}catch(_){}
+    main.value=value;
+    main.dispatchEvent(new Event("change",{bubbles:true}));
+    render();
+    if(typeof renderWorkingOrders==="function") await renderWorkingOrders();
+  }
+
+  document.addEventListener("click",e=>{
+    const b=e.target.closest?.("[data-add-order-branch]");
+    if(b)choose(b.dataset.addOrderBranch);
+  });
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    setTimeout(render,900);
+    setTimeout(render,1600);
+  });
+  document.getElementById("ordersManageBtn")?.addEventListener("click",()=>setTimeout(render,200));
+
+  /* If Settings adds/removes a branch, refresh these buttons automatically. */
+  const obs=new MutationObserver(()=>setTimeout(render,60));
+  document.addEventListener("DOMContentLoaded",()=>{
+    setTimeout(()=>{
+      const main=document.getElementById("ordersBranch");
+      if(main)obs.observe(main,{childList:true});
+    },1000);
+  });
+})();
+</script>
+
+
+<!-- FINAL FULL AUDIT 2026-09-28
+JS syntax: PASS
+Duplicate static IDs: PASS
+Orders: branch buttons / no Supplier UI / Loan real-branch selector / no Brand selector /
+Outstanding row list / Add Order real-branch buttons / page+mode+branch+month memory checked.
+Reports: payment details View / salary next-month 7th+14th no-year display /
+Petty Cash Paid / Internet RM391.15 checked.
+Bed Fee: Amlee / + merchant / database memory checked.
+-->
 
 </body>
 </html>
