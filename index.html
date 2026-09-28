@@ -1219,9 +1219,12 @@ body{
 <label for="bedFee">Bed Fee</label>
 <div class="bed-fee-inline">
   <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="bedFee" min="0" step="0.01" type="number" value="" placeholder="0.00"/></div>
-  <select id="bedFeeMerchant" style="width:100%;min-width:0">
-    <option value="">Select Merchant</option>
-  </select>
+  <div class="bed-fee-merchant-area">
+<select id="bedFeeMerchant" style="width:100%;min-width:0">
+<option value="">Select Merchant</option>
+</select>
+<button class="btn bed-fee-other-btn" id="bedFeeAddOtherBtn" type="button">+ Other</button>
+</div>
 </div>
 </div></div>
 <div style="height:14px"></div>
@@ -12913,6 +12916,187 @@ html,body{max-width:100%;overflow-x:hidden!important}
       return r;
     };
   }
+})();
+</script>
+
+
+<style>
+/* ===== SALARY PAYMENT DATE DISPLAY ===== */
+@media(max-width:700px){
+  #settlementExpenseForm .nd-salary-date-display{
+    width:92px!important;
+    height:30px!important;
+    min-height:30px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    padding:3px 6px!important;
+    border:1px solid var(--line)!important;
+    border-radius:7px!important;
+    background:#fff!important;
+    font-size:9.5px!important;
+    white-space:nowrap!important;
+    box-sizing:border-box!important;
+  }
+}
+</style>
+<script>
+/* Branch Salary belongs to the selected report month,
+   but is paid in the FOLLOWING month:
+   7th salary -> next month 7th
+   14th salary -> next month 14th.
+   Display omits year while the internal ISO date remains complete. */
+(function(){
+  function nextMonthSalaryISO(day){
+    const ym=(typeof settlementCurrentMonth==="function" ? settlementCurrentMonth() : document.getElementById("settlementMonth")?.value)||"";
+    const m=ym.match(/^(\d{4})-(\d{2})$/);
+    if(!m)return "";
+    const d=new Date(Number(m[1]),Number(m[2]),Number(day)); // JS month index makes this next month
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  }
+  function shortMYDate(iso){
+    const m=String(iso||"").match(/^\d{4}-(\d{2})-(\d{2})$/);
+    return m ? `${Number(m[1])}月${Number(m[2])}日` : "";
+  }
+  function applySalaryDates(){
+    [
+      ["branch_salary_7th",7],
+      ["branch_salary_14th",14]
+    ].forEach(([key,day])=>{
+      const row=document.querySelector(`#settlementExpenseForm [data-expense-payment-key="${key}"]`);
+      if(!row)return;
+      const input=row.querySelector("[data-payment-date]");
+      if(!input)return;
+
+      const iso=nextMonthSalaryISO(day);
+      input.value=iso;
+      input.dataset.fixedSalaryDate=iso;
+      input.readOnly=true;
+      input.tabIndex=-1;
+      input.style.display="none";
+
+      let display=row.querySelector(".nd-salary-date-display");
+      if(!display){
+        display=document.createElement("div");
+        display.className="nd-salary-date-display";
+        input.insertAdjacentElement("afterend",display);
+      }
+      display.textContent=shortMYDate(iso);
+      display.title="Fixed salary payment date";
+    });
+  }
+
+  function refresh(){
+    setTimeout(applySalaryDates,180);
+    setTimeout(applySalaryDates,650);
+  }
+
+  document.addEventListener("DOMContentLoaded",refresh);
+  document.getElementById("settlementMonth")?.addEventListener("change",refresh);
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",refresh);
+  document.getElementById("settlementBranchTabs")?.addEventListener("click",refresh);
+})();
+</script>
+
+
+<style>
+/* ===== BED FEE MERCHANT: AMLEE + OTHER ===== */
+.bed-fee-merchant-area{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:6px;
+  align-items:center;
+  min-width:0;
+}
+.bed-fee-other-btn{
+  width:auto!important;
+  min-width:64px!important;
+  padding:6px 9px!important;
+  white-space:nowrap!important;
+}
+@media(max-width:600px){
+  .bed-fee-inline{
+    align-items:start!important;
+  }
+  .bed-fee-merchant-area{
+    grid-template-columns:minmax(0,1fr) auto!important;
+  }
+  .bed-fee-other-btn{
+    min-height:34px!important;
+    height:34px!important;
+    font-size:10px!important;
+  }
+}
+</style>
+<script>
+/* Amlee is always available.
+   "+ Other" opens the existing merchant modal.
+   Save writes to bed_fee_merchants, so custom merchants are remembered automatically. */
+(function(){
+  function ensureAmlee(){
+    const sel=document.getElementById("bedFeeMerchant");
+    if(!sel)return;
+    const exists=[...sel.options].some(o=>String(o.value).trim().toLowerCase()==="amlee");
+    if(!exists){
+      const opt=document.createElement("option");
+      opt.value="Amlee";
+      opt.textContent="Amlee";
+      const first=sel.options[0];
+      if(first?.nextSibling) sel.insertBefore(opt,first.nextSibling);
+      else sel.appendChild(opt);
+    }
+  }
+
+  async function persistAmlee(){
+    try{
+      if(typeof db==="undefined" || !db?.from)return;
+      const {data,error}=await db.from("bed_fee_merchants")
+        .select("id,merchant_name,is_active")
+        .ilike("merchant_name","Amlee")
+        .limit(1);
+      if(error)return;
+      if(data?.length){
+        if(data[0].is_active===false){
+          await db.from("bed_fee_merchants").update({is_active:true}).eq("id",data[0].id);
+        }
+      }else{
+        const {data:maxRows}=await db.from("bed_fee_merchants")
+          .select("sort_order").order("sort_order",{ascending:false}).limit(1);
+        await db.from("bed_fee_merchants").insert({
+          merchant_name:"Amlee",
+          is_active:true,
+          sort_order:Number(maxRows?.[0]?.sort_order||0)+1
+        });
+      }
+      if(typeof loadBedFeeMerchants==="function") await loadBedFeeMerchants();
+      ensureAmlee();
+    }catch(e){ console.warn("Amlee merchant init:",e); ensureAmlee(); }
+  }
+
+  function openOther(){
+    const input=document.getElementById("newBedFeeMerchantName");
+    if(input)input.value="";
+    document.getElementById("bedFeeMerchantModal")?.classList.add("open");
+    setTimeout(()=>input?.focus(),50);
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    document.getElementById("bedFeeAddOtherBtn")?.addEventListener("click",openOther);
+    document.getElementById("closeBedFeeMerchantModal")?.addEventListener("click",()=>{
+      document.getElementById("bedFeeMerchantModal")?.classList.remove("open");
+    });
+    document.getElementById("saveBedFeeMerchantBtn")?.addEventListener("click",async()=>{
+      if(typeof addBedFeeMerchant==="function"){
+        await addBedFeeMerchant();
+        ensureAmlee();
+      }
+    });
+    setTimeout(ensureAmlee,100);
+    setTimeout(persistAmlee,900);
+  });
+
+  /* Existing loader replaces select options, so restore Amlee after each page return/load. */
+  window.addEventListener("pageshow",()=>setTimeout(ensureAmlee,200));
 })();
 </script>
 
