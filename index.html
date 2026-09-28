@@ -3982,6 +3982,21 @@ const monthKey=()=>{
   return v;
 };
 const monthDate=()=>monthKey()+"-01";
+
+function salaryNextMonthPayDate(day){
+  const [y,m]=monthKey().split("-").map(Number);
+  const d=new Date(y,m,day); // JS month is zero-based; m = next calendar month
+  const yy=d.getFullYear();
+  const mm=String(d.getMonth()+1).padStart(2,"0");
+  const dd=String(day).padStart(2,"0");
+  return `${yy}-${mm}-${dd}`;
+}
+function salaryNextMonthPayLabel(day){
+  const [yy,mm,dd]=salaryNextMonthPayDate(day).split("-");
+  const d=new Date(Number(yy),Number(mm)-1,Number(dd));
+  return d.toLocaleDateString("en-MY",{day:"2-digit",month:"short",year:"numeric"});
+}
+
 function monthShortLabel(){
   const [y,m]=monthKey().split("-").map(Number);
   return new Date(y,m-1,1).toLocaleString("en-US",{month:"short",year:"numeric"});
@@ -5568,11 +5583,11 @@ function renderSalary(){
           <table class="salary-table compact">
             <thead><tr><th>Pay Day</th><th>Cash</th><th>Bank Transfer</th><th>TNG</th><th>Total</th></tr></thead>
             <tbody>
-              <tr><td>7th</td><td>${money(sum.seven.Cash)}</td><td>${money(sum.seven["Bank Transfer"])}</td><td>${money(sum.seven.TNG)}</td><td>${money(total7)}</td></tr>
+              <tr><td>${salaryNextMonthPayLabel(7)}</td><td>${money(sum.seven.Cash)}</td><td>${money(sum.seven["Bank Transfer"])}</td><td>${money(sum.seven.TNG)}</td><td>${money(total7)}</td></tr>
             </tbody>
           </table>
         </div>
-        ${fullTimeEmps.length?`<div class="payroll-section-title">7TH — MONTHLY PAYROLL</div>${renderSevenTable(fullTimeEmps)}`:`<div class="helper">No 7th payroll employees.</div>`}
+        ${fullTimeEmps.length?`<div class="payroll-section-title">7TH — MONTHLY PAYROLL · PAY ${salaryNextMonthPayLabel(7)}</div>${renderSevenTable(fullTimeEmps)}`:`<div class="helper">No 7th payroll employees.</div>`}
       </div>`;
     }
 
@@ -5583,11 +5598,11 @@ function renderSalary(){
           <table class="salary-table compact">
             <thead><tr><th>Pay Day</th><th>Cash</th><th>Bank Transfer</th><th>TNG</th><th>Total</th></tr></thead>
             <tbody>
-              <tr><td>14th</td><td>${money(sum.fourteen.Cash)}</td><td>${money(sum.fourteen["Bank Transfer"])}</td><td>${money(sum.fourteen.TNG)}</td><td>${money(total14)}</td></tr>
+              <tr><td>${salaryNextMonthPayLabel(14)}</td><td>${money(sum.fourteen.Cash)}</td><td>${money(sum.fourteen["Bank Transfer"])}</td><td>${money(sum.fourteen.TNG)}</td><td>${money(total14)}</td></tr>
             </tbody>
           </table>
         </div>
-        ${all.length?`<div class="payroll-section-title">14TH — COMMISSION PAYROLL</div>${renderFourteenTable(all)}`:`<div class="helper">No 14th payroll employees.</div>`}
+        ${all.length?`<div class="payroll-section-title">14TH — COMMISSION PAYROLL · PAY ${salaryNextMonthPayLabel(14)}</div>${renderFourteenTable(all)}`:`<div class="helper">No 14th payroll employees.</div>`}
       </div>`;
     }
 
@@ -10587,6 +10602,179 @@ html,body{max-width:100%;overflow-x:hidden!important}
   document.addEventListener("DOMContentLoaded",()=>setTimeout(relabelPaymentDetails,300));
   document.getElementById("settlementBranchTabs")?.addEventListener("click",()=>setTimeout(relabelPaymentDetails,200));
   document.getElementById("settlementRefreshBtn")?.addEventListener("click",()=>setTimeout(relabelPaymentDetails,200));
+})();
+</script>
+
+
+<style>
+/* ===== REPORT PAYMENT METHODS SPACING + FULL VIEW EXPENSES ===== */
+#settlementPaymentMethodsCard .table-wrap{
+  overflow-x:visible!important;
+}
+#settlementPaymentMethodsCard table{
+  width:100%!important;
+  min-width:0!important;
+  table-layout:fixed!important;
+  border-collapse:separate!important;
+  border-spacing:6px 0!important;
+}
+#settlementPaymentMethodsCard th,
+#settlementPaymentMethodsCard td{
+  white-space:normal!important;
+  font-size:12px!important;
+  line-height:1.25!important;
+  padding:10px 5px!important;
+  text-align:center!important;
+  border-radius:8px!important;
+}
+#settlementExpenseForm{
+  overflow-x:visible!important;
+}
+#settlementExpenseForm .settlement-expense-head,
+#settlementExpenseForm .settlement-expense-row{
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  grid-template-columns:minmax(145px,1.35fr) 90px 115px 75px minmax(130px,1fr) 95px!important;
+  gap:5px!important;
+  font-size:11px!important;
+}
+#settlementExpenseForm .settlement-expense-head{
+  font-size:10px!important;
+}
+#settlementExpenseForm input,
+#settlementExpenseForm select,
+#settlementExpenseForm button{
+  min-width:0!important;
+  max-width:100%!important;
+  min-height:34px!important;
+  font-size:11px!important;
+  padding:6px!important;
+}
+#settlementExpenseForm .helper{
+  font-size:9px!important;
+}
+#settlementExpenseForm [data-payment-details]{
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+}
+@media(max-width:700px){
+  #settlementPaymentMethodsCard .table-wrap{
+    overflow-x:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  #settlementPaymentMethodsCard table{
+    min-width:760px!important;
+  }
+  #settlementExpenseForm{
+    overflow-x:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  #settlementExpenseForm .settlement-expense-head,
+  #settlementExpenseForm .settlement-expense-row{
+    display:grid!important;
+    min-width:760px!important;
+    width:760px!important;
+    grid-template-columns:170px 90px 115px 75px 200px 90px!important;
+  }
+}
+</style>
+
+
+<script>
+/* ===== GLOBAL STAY ON SAME PAGE ===== */
+(function(){
+  const KEY="nd_active_main_page_v3";
+  const valid=new Set(["daily","roster","salary","settlement","orders","settings"]);
+
+  function savePage(page){
+    if(!valid.has(page)) return;
+    try{
+      localStorage.setItem(KEY,page);
+      sessionStorage.setItem(KEY,page);
+      window.activeMainPage=page;
+    }catch(_){}
+  }
+
+  function detectVisiblePage(){
+    const map={
+      daily:"dailyPage",
+      roster:"rosterPage",
+      salary:"salaryPage",
+      settlement:"settlementPage",
+      orders:"ordersPage",
+      settings:"settingsPage"
+    };
+    for(const [page,id] of Object.entries(map)){
+      const el=document.getElementById(id);
+      if(el && getComputedStyle(el).display!=="none") return page;
+    }
+    return "";
+  }
+
+  function restorePage(){
+    let page="";
+    try{
+      page=sessionStorage.getItem(KEY)||localStorage.getItem(KEY)||"";
+    }catch(_){}
+    if(!valid.has(page)) return;
+
+    // Use the application's own navigation function whenever available.
+    try{
+      if(typeof window.showMainPage==="function"){
+        window.showMainPage(page);
+        window.activeMainPage=page;
+        return;
+      }
+    }catch(_){}
+
+    const buttonMap={
+      daily:"sidebarDaily",
+      roster:"sidebarRoster",
+      salary:"sidebarSalary",
+      settlement:"sidebarSettlement",
+      orders:"sidebarOrders",
+      settings:"sidebarSettings"
+    };
+    const btn=document.getElementById(buttonMap[page]);
+    if(btn) btn.click();
+  }
+
+  // Capture navigation before any re-render.
+  document.addEventListener("click",function(e){
+    const ids={
+      sidebarDaily:"daily",
+      sidebarRoster:"roster",
+      sidebarSalary:"salary",
+      sidebarSettlement:"settlement",
+      sidebarOrders:"orders",
+      sidebarSettings:"settings"
+    };
+    for(const [id,page] of Object.entries(ids)){
+      if(e.target.closest && e.target.closest("#"+id)){
+        savePage(page);
+        break;
+      }
+    }
+  },true);
+
+  // Save current page on refresh / close / backgrounding.
+  window.addEventListener("beforeunload",function(){
+    savePage(detectVisiblePage()||window.activeMainPage||"");
+  });
+  window.addEventListener("pagehide",function(){
+    savePage(detectVisiblePage()||window.activeMainPage||"");
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState==="hidden"){
+      savePage(detectVisiblePage()||window.activeMainPage||"");
+    }
+  });
+
+  // Restore only after existing initialization has finished.
+  window.addEventListener("load",function(){
+    setTimeout(restorePage,450);
+  });
 })();
 </script>
 
