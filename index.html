@@ -7933,10 +7933,18 @@ function settlementRenderPaymentMeta(){
       method.style.display=settlementIsSalaryPaymentKey(key)?"none":"";
     }
     if(btn){
-      const paid=meta.paid===true;
+      const isPettyCash=(key==="petty_cash");
+      if(isPettyCash) meta.paid=true;
+      const paid=isPettyCash ? true : meta.paid===true;
       btn.textContent=paid?"Paid ✓":"Not Paid";
       btn.classList.toggle("paid",paid);
       btn.classList.toggle("unpaid",!paid);
+      if(isPettyCash){
+        btn.disabled=true;
+        btn.title="Petty Cash is fixed as Paid";
+      }else{
+        btn.disabled=false;
+      }
 
       if(method){
         method.placeholder=paid?"Transfer Name":"Transfer Name";
@@ -7985,7 +7993,7 @@ function settlementCollectPaymentMeta(){
 
     // Transfer is the fixed payment method. Save transfer name and account number.
     out[key]={
-      paid:Boolean(paid),
+      paid:key==="petty_cash" ? true : Boolean(paid),
       date:String(date||""),
       payment_method:String(payment_method||""),
       payment_account:String(payment_account||"")
