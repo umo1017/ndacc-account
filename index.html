@@ -14393,5 +14393,107 @@ Petty Cash Paid / Internet RM391.15 checked.
 Bed Fee: Amlee / + merchant / database memory checked.
 -->
 
+
+<script>
+/* ===== PERMISSION-AWARE SAME PAGE MEMORY FINAL =====
+   A user only returns to a page that is actually visible/authorized for that account.
+   Unauthorized remembered pages are never opened; memory falls back to Daily. */
+(function(){
+  const KEY="nd_last_page_v2";
+  const KEY3="nd_last_page_v3";
+  const pages={
+    daily:{nav:"sidebarDaily",open:"showDaily"},
+    roster:{nav:"sidebarRoster",open:"showRoster"},
+    salary:{nav:"sidebarSalary",open:"showSalary"},
+    settlement:{nav:"sidebarSettlement",open:"showSettlement"},
+    orders:{nav:"sidebarOrders",open:"showOrders"},
+    settings:{nav:"sidebarSettings",open:"showSettings"}
+  };
+
+  function navIsAuthorized(page){
+    const cfg=pages[page], el=cfg && document.getElementById(cfg.nav);
+    if(!el) return false;
+    const cs=getComputedStyle(el);
+    return cs.display!=="none" && cs.visibility!=="hidden" && !el.hidden;
+  }
+
+  function remember(page){
+    if(!pages[page] || !navIsAuthorized(page)) return false;
+    try{
+      localStorage.setItem(KEY,page);
+      localStorage.setItem(KEY3,page);
+      window.activeMainPage=page;
+    }catch(_){}
+    return true;
+  }
+
+  async function openAuthorized(page){
+    if(!pages[page] || !navIsAuthorized(page)) return false;
+    const fn=window[pages[page].open];
+    if(typeof fn!=="function") return false;
+    try{
+      await fn();
+      /* Permission-aware page functions may redirect themselves.
+         Only remember if the requested page really remained active. */
+      if(window.activeMainPage===page) remember(page);
+      return window.activeMainPage===page;
+    }catch(err){
+      console.warn("Authorized page restore failed:",page,err);
+      return false;
+    }
+  }
+
+  async function restoreAfterPermissions(){
+    let wanted="daily";
+    try{wanted=localStorage.getItem(KEY3)||localStorage.getItem(KEY)||"daily"}catch(_){}
+
+    /* Permission loaders are asynchronous. Wait briefly for nav visibility to settle.
+       Never open the remembered protected page while it is hidden. */
+    if(wanted!=="daily" && wanted!=="roster"){
+      for(let i=0;i<12 && !navIsAuthorized(wanted);i++){
+        await new Promise(r=>setTimeout(r,250));
+      }
+    }
+
+    if(navIsAuthorized(wanted) && await openAuthorized(wanted)) return;
+
+    /* The remembered page is not available to this account.
+       Clear that inaccessible destination and use an authorized safe page. */
+    const fallback=navIsAuthorized("daily") ? "daily" :
+                   navIsAuthorized("roster") ? "roster" :
+                   Object.keys(pages).find(navIsAuthorized);
+    if(fallback){
+      try{
+        localStorage.setItem(KEY,fallback);
+        localStorage.setItem(KEY3,fallback);
+      }catch(_){}
+      await openAuthorized(fallback);
+    }
+  }
+
+  /* Only authorized visible navigation can become remembered state. */
+  document.addEventListener("click",e=>{
+    for(const [page,cfg] of Object.entries(pages)){
+      if(e.target.closest?.("#"+cfg.nav)){
+        if(navIsAuthorized(page)) remember(page);
+        break;
+      }
+    }
+  },true);
+
+  window.addEventListener("pagehide",()=>{
+    const page=window.activeMainPage;
+    if(pages[page] && navIsAuthorized(page)) remember(page);
+  });
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    /* Run after auth + salary/report/orders permission checks begin. */
+    setTimeout(restoreAfterPermissions,650);
+  });
+
+  window.ndRestoreAuthorizedPage=restoreAfterPermissions;
+})();
+</script>
+
 </body>
 </html>
