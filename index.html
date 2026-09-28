@@ -3003,6 +3003,41 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 
 
 
+
+
+<div class="salary-modal" id="paymentDestinationModal">
+  <div class="salary-dialog" style="width:min(520px,94vw)">
+    <div class="outlet-title">
+      <div>
+        <h3 style="margin:0">Payment Destination</h3>
+        <div class="helper" id="paymentDestinationBranch"></div>
+      </div>
+      <button class="main-page-close" id="closePaymentDestinationModal" type="button">×</button>
+    </div>
+    <div class="salary-card" style="box-shadow:none">
+      <div class="field">
+        <label>Payment Type</label>
+        <select id="paymentDestinationType">
+          <option value="bank">Bank Account</option>
+          <option value="website">Website</option>
+        </select>
+      </div>
+      <div id="paymentDestinationBankFields">
+        <div class="field" style="margin-top:10px"><label>Account Name</label><input id="paymentDestinationName" type="text" placeholder="Account Name"></div>
+        <div class="field" style="margin-top:10px"><label>Bank Name</label><input id="paymentDestinationBank" type="text" placeholder="Bank Name"></div>
+        <div class="field" style="margin-top:10px"><label>Account No.</label><input id="paymentDestinationAccount" type="text" placeholder="Account No."></div>
+      </div>
+      <div id="paymentDestinationWebsiteFields" style="display:none">
+        <div class="field" style="margin-top:10px"><label>Website</label><input id="paymentDestinationWebsite" type="url" placeholder="https://"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+        <button class="btn" id="savePaymentDestinationBtn" type="button">Save</button>
+        <span class="helper" id="paymentDestinationSaveState"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="salary-modal" id="expenseWebsiteModal">
   <div class="salary-dialog" style="width:min(520px,94vw)">
     <div class="outlet-title">
@@ -3357,6 +3392,16 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <td id="settlementPayBank">RM 0.00</td><td id="settlementPayTips">RM 0.00</td><td id="settlementPayAlipay">RM 0.00</td>
 <td id="settlementPayOnline">RM 0.00</td><td id="settlementPayAmex">RM 0.00</td><td id="settlementPayTotal"><strong>RM 0.00</strong></td>
 </tr></tbody></table></div></div>
+<div class="salary-card" id="settlementPaymentDestinationCard">
+  <div class="outlet-title">
+    <div>
+      <strong>Payment Destination</strong>
+      <div class="helper">Set once for this branch · Bank Account or Website</div>
+    </div>
+    <button class="btn" id="settlementPaymentDestinationBtn" type="button">Set Payment</button>
+  </div>
+  <div id="settlementPaymentDestinationSummary" class="helper" style="margin-top:8px">Not set</div>
+</div>
 <div class="salary-card">
 <div class="outlet-title"><div style="display:flex;align-items:center;gap:8px"><strong>Monthly Expenses</strong><span class="branch-chip">FIXED</span></div><span id="settlementExpenseTotal">RM 0.00</span></div>
 <div class="settlement-scroll-note">← Swipe sideways · Payment Date 只需设定一次，每个月自动沿用 →</div>
@@ -10957,6 +11002,357 @@ html,body{max-width:100%;overflow-x:hidden!important}
   }
 }
 </style>
+
+
+<style>
+/* ===== REPORT MOBILE CLEAN COMPACT DESIGN ===== */
+@media(max-width:700px){
+  #settlementPage{
+    padding:8px!important;
+    background:#f7f6f2!important;
+  }
+  #settlementPage .salary-card{
+    border-radius:18px!important;
+    padding:14px!important;
+    margin-bottom:12px!important;
+  }
+
+  /* Monthly Expenses header */
+  #settlementExpenseForm .settlement-expense-head{display:none!important}
+  #settlementExpenseForm{
+    overflow:visible!important;
+  }
+  #settlementExpenseForm .settlement-expense-row{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) minmax(0,120px)!important;
+    gap:7px 10px!important;
+    width:100%!important;
+    min-width:0!important;
+    padding:14px 0!important;
+    margin:0!important;
+    border:0!important;
+    border-bottom:1px solid #e8e4da!important;
+    border-radius:0!important;
+    align-items:center!important;
+  }
+  #settlementExpenseForm .settlement-expense-row > :first-child{
+    grid-column:1/2!important;
+    grid-row:1!important;
+    font-size:14px!important;
+    font-weight:800!important;
+    line-height:1.2!important;
+  }
+
+  /* amount */
+  #settlementExpenseForm .settlement-expense-row > :nth-child(2){
+    grid-column:2!important;
+    grid-row:1!important;
+  }
+
+  /* date */
+  #settlementExpenseForm .settlement-expense-row > :nth-child(3){
+    grid-column:1!important;
+    grid-row:2!important;
+  }
+
+  /* status */
+  #settlementExpenseForm .settlement-expense-row > :nth-child(4){
+    grid-column:2!important;
+    grid-row:2!important;
+  }
+
+  /* payment details */
+  #settlementExpenseForm .settlement-expense-row > :nth-child(5){
+    grid-column:1!important;
+    grid-row:3!important;
+  }
+
+  /* paid button */
+  #settlementExpenseForm .settlement-expense-row > :nth-child(6){
+    grid-column:2!important;
+    grid-row:3!important;
+  }
+
+  #settlementExpenseForm input,
+  #settlementExpenseForm select,
+  #settlementExpenseForm button{
+    width:100%!important;
+    min-width:0!important;
+    min-height:34px!important;
+    height:34px!important;
+    padding:5px 8px!important;
+    border-radius:9px!important;
+    font-size:11px!important;
+    line-height:1.15!important;
+    box-sizing:border-box!important;
+  }
+  #settlementExpenseForm [data-payment-status]{
+    min-height:34px!important;
+    height:34px!important;
+    padding:4px!important;
+    font-size:10px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    text-align:center!important;
+  }
+  #settlementExpenseForm [data-payment-details]{
+    font-size:10px!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  #settlementExpenseForm [data-payment-paid]{
+    font-size:11px!important;
+    font-weight:800!important;
+  }
+  #settlementExpenseForm .helper,
+  #settlementExpenseForm .nd-bank-web-hint{
+    display:none!important;
+  }
+
+  /* edit pencils stay small, inline with expense name */
+  #settlementExpenseForm .expense-edit-btn,
+  #settlementExpenseForm [data-edit-expense]{
+    width:28px!important;
+    min-width:28px!important;
+    height:28px!important;
+    min-height:28px!important;
+    padding:0!important;
+  }
+
+  /* Payment Methods: 2 columns, compact and balanced */
+  #settlementPaymentMethodsCard tbody tr{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:8px!important;
+  }
+  #settlementPaymentMethodsCard td{
+    min-height:58px!important;
+    padding:9px 10px!important;
+    border-radius:10px!important;
+    font-size:14px!important;
+    justify-content:center!important;
+  }
+  #settlementPaymentMethodsCard td::before{
+    font-size:9px!important;
+    margin-bottom:3px!important;
+  }
+  #settlementPaymentMethodsCard td:nth-child(9){
+    min-height:58px!important;
+  }
+
+  /* Remove old swipe helper line */
+  #settlementPage .salary-card > .helper{
+    font-size:11px!important;
+  }
+}
+</style>
+
+
+<style>
+/* ===== REPORT MOBILE MEDIUM COMPACT CONTROLS ===== */
+@media(max-width:700px){
+  #settlementExpenseForm input,
+  #settlementExpenseForm select,
+  #settlementExpenseForm button{
+    min-height:30px!important;
+    height:30px!important;
+    padding:4px 7px!important;
+    border-radius:8px!important;
+    font-size:10px!important;
+  }
+  #settlementExpenseForm [data-payment-status]{
+    min-height:30px!important;
+    height:30px!important;
+    font-size:9px!important;
+    padding:3px 5px!important;
+  }
+  #settlementExpenseForm [data-payment-paid]{
+    min-height:30px!important;
+    height:30px!important;
+    font-size:10px!important;
+    padding:3px 6px!important;
+  }
+  #settlementExpenseForm [data-payment-details]{
+    min-height:30px!important;
+    height:30px!important;
+    font-size:9px!important;
+  }
+  #settlementExpenseForm .expense-edit-btn,
+  #settlementExpenseForm [data-edit-expense]{
+    width:24px!important;
+    min-width:24px!important;
+    height:24px!important;
+    min-height:24px!important;
+    border-radius:7px!important;
+    font-size:10px!important;
+  }
+  #settlementExpenseForm .settlement-expense-row{
+    gap:6px 9px!important;
+    padding:11px 0!important;
+  }
+}
+</style>
+<script>
+/* REPORT PAYMENT DATE DISPLAY WITHOUT YEAR */
+(function(){
+  function shortDateText(value){
+    const m=String(value||"").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return value||"";
+    return Number(m[2])+"月"+Number(m[3])+"日";
+  }
+
+  function applyShortReportDates(){
+    document.querySelectorAll("#settlementExpenseForm input[type='date']").forEach(input=>{
+      // Native date inputs cannot reliably hide only the year on iPhone.
+      // Keep the real date input for editing, but show a compact overlay when not focused.
+      let wrap=input.parentElement;
+      if(!wrap) return;
+      let label=wrap.querySelector(".nd-short-date-label");
+      if(!label){
+        label=document.createElement("div");
+        label.className="nd-short-date-label";
+        label.style.cssText="height:30px;display:flex;align-items:center;justify-content:center;font-size:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);cursor:pointer;";
+        label.addEventListener("click",()=>{label.style.display="none";input.style.display="block";input.focus();try{input.showPicker?.()}catch(_){}});
+        wrap.appendChild(label);
+        input.addEventListener("blur",()=>{label.textContent=shortDateText(input.value);input.style.display="none";label.style.display="flex";});
+        input.addEventListener("change",()=>{label.textContent=shortDateText(input.value);});
+      }
+      label.textContent=shortDateText(input.value);
+      if(document.activeElement!==input){input.style.display="none";label.style.display="flex";}
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>setTimeout(applyShortReportDates,500));
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",()=>setTimeout(applyShortReportDates,350));
+  document.getElementById("settlementBranchTabs")?.addEventListener("click",()=>setTimeout(applyShortReportDates,350));
+  document.getElementById("settlementMonth")?.addEventListener("change",()=>setTimeout(applyShortReportDates,350));
+})();
+</script>
+
+
+<script>
+/* ===== BRANCH PAYMENT DESTINATION ===== */
+(function(){
+  function key(){
+    return "ndacc_branch_payment_destination_"+String(window.settlementCurrentOutlet||settlementCurrentOutlet||"");
+  }
+  function get(){
+    try{return JSON.parse(localStorage.getItem(key())||"{}")||{}}catch(_){return {}}
+  }
+  function set(v){try{localStorage.setItem(key(),JSON.stringify(v))}catch(_){}}
+
+  function render(){
+    const d=get();
+    const summary=document.getElementById("settlementPaymentDestinationSummary");
+    const btn=document.getElementById("settlementPaymentDestinationBtn");
+    if(!summary||!btn)return;
+    if(d.type==="bank" && d.bank && d.account){
+      summary.textContent=`${d.bank} · ${d.name||""} · ${d.account}`;
+      btn.textContent="Edit Bank";
+    }else if(d.type==="website" && d.website){
+      summary.textContent=d.website;
+      btn.textContent="Edit Website";
+    }else{
+      summary.textContent="Not set";
+      btn.textContent="Set Payment";
+    }
+  }
+
+  function toggle(){
+    const type=document.getElementById("paymentDestinationType")?.value||"bank";
+    const b=document.getElementById("paymentDestinationBankFields");
+    const w=document.getElementById("paymentDestinationWebsiteFields");
+    if(b)b.style.display=type==="bank"?"":"none";
+    if(w)w.style.display=type==="website"?"":"none";
+  }
+
+  function open(){
+    const d=get();
+    const type=document.getElementById("paymentDestinationType");
+    if(type)type.value=d.type||"bank";
+    document.getElementById("paymentDestinationName").value=d.name||"";
+    document.getElementById("paymentDestinationBank").value=d.bank||"";
+    document.getElementById("paymentDestinationAccount").value=d.account||"";
+    document.getElementById("paymentDestinationWebsite").value=d.website||"";
+    document.getElementById("paymentDestinationBranch").textContent=String(window.settlementCurrentOutlet||settlementCurrentOutlet||"");
+    document.getElementById("paymentDestinationSaveState").textContent="";
+    toggle();
+    document.getElementById("paymentDestinationModal")?.classList.add("open");
+  }
+
+  function save(){
+    const type=document.getElementById("paymentDestinationType")?.value||"bank";
+    let d={type};
+    if(type==="bank"){
+      d.name=document.getElementById("paymentDestinationName").value.trim();
+      d.bank=document.getElementById("paymentDestinationBank").value.trim();
+      d.account=document.getElementById("paymentDestinationAccount").value.trim();
+      if(!d.name||!d.bank||!d.account){alert("Please enter Account Name, Bank Name and Account No.");return}
+    }else{
+      d.website=document.getElementById("paymentDestinationWebsite").value.trim();
+      if(!d.website){alert("Please enter Website.");return}
+      if(!/^https?:\/\//i.test(d.website))d.website="https://"+d.website;
+      try{new URL(d.website)}catch(_){alert("Please enter a valid website.");return}
+    }
+    set(d);
+    document.getElementById("paymentDestinationSaveState").textContent="Saved ✓";
+    render();
+    setTimeout(()=>document.getElementById("paymentDestinationModal")?.classList.remove("open"),250);
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    document.getElementById("settlementPaymentDestinationBtn")?.addEventListener("click",open);
+    document.getElementById("closePaymentDestinationModal")?.addEventListener("click",()=>document.getElementById("paymentDestinationModal")?.classList.remove("open"));
+    document.getElementById("paymentDestinationType")?.addEventListener("change",toggle);
+    document.getElementById("savePaymentDestinationBtn")?.addEventListener("click",save);
+    setTimeout(render,500);
+  });
+  document.getElementById("settlementBranchTabs")?.addEventListener("click",()=>setTimeout(render,250));
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",()=>setTimeout(render,250));
+  window.renderSettlementBranchPaymentDestination=render;
+})();
+</script>
+<style>
+@media(max-width:700px){
+ #settlementPaymentDestinationCard{padding:12px!important}
+ #settlementPaymentDestinationCard .outlet-title{gap:8px!important;align-items:center!important}
+ #settlementPaymentDestinationBtn{min-height:30px!important;padding:4px 9px!important;font-size:10px!important}
+ #settlementPaymentDestinationSummary{font-size:10px!important;overflow-wrap:anywhere!important}
+}
+</style>
+
+
+<style>
+/* ===== PAYMENT DESTINATION: SHOW ONLY SELECTED TYPE ===== */
+#paymentDestinationBankFields,
+#paymentDestinationWebsiteFields{display:none}
+#paymentDestinationModal[data-payment-type="bank"] #paymentDestinationBankFields{display:block!important}
+#paymentDestinationModal[data-payment-type="website"] #paymentDestinationWebsiteFields{display:block!important}
+</style>
+<script>
+(function(){
+  function ndSyncPaymentDestinationType(){
+    const modal=document.getElementById("paymentDestinationModal");
+    const type=document.getElementById("paymentDestinationType")?.value||"bank";
+    if(modal) modal.dataset.paymentType=type;
+
+    const bank=document.getElementById("paymentDestinationBankFields");
+    const web=document.getElementById("paymentDestinationWebsiteFields");
+    if(bank) bank.style.display=type==="bank"?"block":"none";
+    if(web) web.style.display=type==="website"?"block":"none";
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    const sel=document.getElementById("paymentDestinationType");
+    sel?.addEventListener("change",ndSyncPaymentDestinationType);
+    document.getElementById("settlementPaymentDestinationBtn")?.addEventListener("click",
+      ()=>setTimeout(ndSyncPaymentDestinationType,0));
+    ndSyncPaymentDestinationType();
+  });
+})();
+</script>
 
 </body>
 </html>
