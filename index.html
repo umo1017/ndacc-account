@@ -3266,10 +3266,10 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
    </div>
   </div>
   <div class="bonus-card">
-   <div class="helper" style="margin-bottom:10px">Rule: Full Time eligible employees automatically share 1% of branch monthly performance equally. Part Time is excluded. Once employment type is changed to Full Time, the employee joins automatically. MC or target not achieved = not eligible. Manager is separate and does not share the employee 1%. Only Umo can set the manager % for each branch/month.</div>
+   <div class="helper" style="margin-bottom:10px"></div>
    <div id="bonusManagerSetting" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:10px 0 14px">
     <div class="field"><label>Manager %</label><input id="bonusManagerPct" type="number" min="0" step="0.01" value="0" style="width:100px"/></div>
-    <div class="helper">Manager Bonus = Branch Total × Manager %. Only Umo can change this %.</div>
+    <div class="helper"></div>
    </div>
    <div class="bonus-table-wrap">
     <table class="bonus-table">
@@ -15246,140 +15246,66 @@ input,select,textarea,button,a{
 }
 </style>
 <script>
-/* ===== SALARY 14TH QUARTERLY 3-BONUS =====
-   Quarter payout months:
-   Jan+Feb+Mar -> March 14th
-   Apr+May+Jun -> June 14th
-   Jul+Aug+Sep -> September 14th
-   Oct+Nov+Dec -> December 14th
-
-   3-Bonus = sum of each employee's FINAL monthly Commission for the 3 months.
-   Non-payout months = RM0.
-   This layer does not replace existing monthly Commission calculations.
-*/
+/* ===== SALARY 14TH QUARTERLY 3-BONUS V2 ===== */
 (function(){
-  const PAYOUT_MONTHS=new Set([3,6,9,12]);
+ const PAYOUT=new Set([3,6,9,12]);
+ const money=v=>"RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+ const monthEl=()=>document.getElementById("salaryMonth");
+ const ym=()=>monthEl()?.value||new Date().toISOString().slice(0,7);
+ const branchOf=e=>String(e?.outlet||e?.branch||"").trim();
 
-  function qMonths(ym){
-    const [y,m]=String(ym||"").split("-").map(Number);
-    if(!y||!m||!PAYOUT_MONTHS.has(m)) return [];
-    return [m-2,m-1,m].map(mm=>`${y}-${String(mm).padStart(2,"0")}`);
-  }
+ function quarterMonths(v){
+   const [y,m]=String(v||"").split("-").map(Number);
+   if(!y||!PAYOUT.has(m)) return [];
+   return [m-2,m-1,m].map(x=>`${y}-${String(x).padStart(2,"0")}`);
+ }
+ async function branchMonthTotal(branch,m){
+   const d1=m+"-01",d=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1),d2=d.toISOString().slice(0,10);
+   const {data,error}=await salaryDb.from("daily_settlements").select("grand_total").eq("branch",branch).gte("settlement_date",d1).lt("settlement_date",d2);
+   if(error) throw error;
+   return (data||[]).reduce((a,r)=>a+Number(r.grand_total||0),0);
+ }
+ async function branchMonthPct(branch,m){
+   const {data,error}=await salaryDb.from("branch_3bonus_monthly").select("bonus_percent").eq("bonus_month",m+"-01").eq("branch",branch).maybeSingle();
+   if(error) throw error;
+   return Number(data?.bonus_percent||0);
+ }
+ async function quarterBonus(branch,v){
+   const ms=quarterMonths(v); if(ms.length!==3)return 0;
+   let total=0;
+   for(const m of ms){
+     const [perf,pct]=await Promise.all([branchMonthTotal(branch,m),branchMonthPct(branch,m)]);
+     total += perf*pct/100;
+   }
+   return total;
+ }
+ window.ndQuarter3Bonus={months:quarterMonths,calculate:quarterBonus,isPayoutMonth:v=>PAYOUT.has(Number(String(v).slice(5,7)))};
 
-  function employeeKey(r){
-    return String(r.employee_id ?? r.employeeId ?? r.emp_id ?? r.id ?? r.email ?? r.employee_email ?? r.name ?? r.employee_name ?? "").trim().toLowerCase();
-  }
-
-  function finalCommission(r){
-    const candidates=[
-      r.commission, r.final_commission, r.finalCommission,
-      r.commission_amount, r.commissionAmount,
-      r.total_commission_payable, r.totalCommissionPayable
-    ];
-    for(const v of candidates){
-      const n=Number(v);
-      if(Number.isFinite(n)) return n;
-    }
-    return 0;
-  }
-
-  async function loadQuarterCommission(employee, ym){
-    const months=qMonths(ym);
-    if(months.length!==3) return 0;
-    const key=employeeKey(employee);
-    if(!key) return 0;
-
-    /* Read confirmed 14th snapshots first, because 3-Bonus must use the
-       final Commission actually calculated for each historical month. */
-    const tableCandidates=[
-      "salary_14th_snapshots",
-      "salary_snapshots_14th",
-      "salary_payroll_snapshots",
-      "salary_monthly_snapshots"
-    ];
-
-    for(const table of tableCandidates){
-      try{
-        const {data,error}=await salaryDb.from(table).select("*");
-        if(error||!Array.isArray(data)) continue;
-        const matched=data.filter(r=>{
-          const rm=String(r.salary_month ?? r.month ?? r.payroll_month ?? "").slice(0,7);
-          const period=String(r.period ?? r.salary_period ?? r.pay_type ?? "").toLowerCase();
-          const is14=!period || period.includes("14");
-          return months.includes(rm) && is14 && employeeKey(r)===key;
-        });
-        if(matched.length){
-          return matched.reduce((sum,r)=>sum+finalCommission(r),0);
-        }
-      }catch(_){}
-    }
-    return 0;
-  }
-
-  window.ndQuarter3Bonus={
-    isPayoutMonth(ym){
-      const m=Number(String(ym||"").slice(5,7));
-      return PAYOUT_MONTHS.has(m);
-    },
-    months:qMonths,
-    calculate:loadQuarterCommission
-  };
-
-  /* UI helper used by the Salary renderer. It appends the 3-Bonus column
-     only when a 14th payroll table is rendered. */
-  async function enhance14th(){
-    const page=document.getElementById("salaryPage");
-    if(!page||!page.classList.contains("active")) return;
-    const ym=document.getElementById("salaryMonth")?.value||"";
-    const payout=window.ndQuarter3Bonus.isPayoutMonth(ym);
-
-    const tables=[...page.querySelectorAll("table")];
-    for(const table of tables){
-      const headerText=(table.querySelector("thead")?.innerText||"").toLowerCase();
-      const nearby=(table.closest(".salary-card")?.innerText||"").slice(0,300).toLowerCase();
-      if(!(headerText.includes("commission") && (nearby.includes("14th")||nearby.includes("14")))) continue;
-      if(table.querySelector('[data-3bonus-col]')) continue;
-
-      const hr=table.querySelector("thead tr");
-      if(!hr) continue;
-      const th=document.createElement("th");
-      th.textContent="3-Bonus";
-      th.dataset["3bonusCol"]="1";
-      hr.appendChild(th);
-
-      const bodyRows=[...table.querySelectorAll("tbody tr")];
-      for(const tr of bodyRows){
-        const td=document.createElement("td");
-        td.dataset["3bonusCol"]="1";
-        td.textContent=payout?"Calculating...":"RM 0.00";
-        tr.appendChild(td);
-        if(!payout) continue;
-
-        /* Build employee identity from row text/data. Existing renderer may
-           expose employee id/email/name in row dataset; fall back to first cell. */
-        const emp={
-          employee_id:tr.dataset.employeeId||tr.dataset.empId||"",
-          email:tr.dataset.email||"",
-          name:tr.dataset.employeeName||tr.querySelector("td")?.textContent?.trim()||""
-        };
-        const amount=await loadQuarterCommission(emp,ym);
-        td.textContent="RM "+Number(amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-        td.dataset.amount=String(amount||0);
-      }
-    }
-  }
-
-  document.addEventListener("DOMContentLoaded",()=>{
-    document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(enhance14th,900));
-    document.getElementById("salaryMonth")?.addEventListener("change",()=>setTimeout(enhance14th,700));
-    const p=document.getElementById("salaryPage");
-    if(p){
-      let timer;
-      new MutationObserver(()=>{
-        clearTimeout(timer);timer=setTimeout(enhance14th,350);
-      }).observe(p,{childList:true,subtree:true});
-    }
-  });
+ async function enhance(){
+   const page=document.getElementById("salaryPage"); if(!page||!page.classList.contains("active"))return;
+   const current=ym(),isPay=window.ndQuarter3Bonus.isPayoutMonth(current);
+   const tables=[...page.querySelectorAll("table")];
+   for(const table of tables){
+     const h=(table.querySelector("thead")?.innerText||"").toLowerCase();
+     const near=(table.closest(".salary-card")?.innerText||"").slice(0,300).toLowerCase();
+     if(!(h.includes("commission")&&(near.includes("14th")||near.includes("14"))))continue;
+     let th=table.querySelector('th[data-3bonus-col]');
+     if(!th){th=document.createElement("th");th.textContent="3-Bonus";th.dataset["3bonusCol"]="1";table.querySelector("thead tr")?.appendChild(th);}
+     for(const tr of table.querySelectorAll("tbody tr")){
+       let td=tr.querySelector('td[data-3bonus-col]');
+       if(!td){td=document.createElement("td");td.dataset["3bonusCol"]="1";tr.appendChild(td);}
+       if(!isPay){td.textContent="RM 0.00";continue;}
+       const branch=tr.dataset.outlet||tr.dataset.branch||window.currentSalaryOutlet||document.querySelector(".salary-outlet-btn.active")?.dataset.outlet||"";
+       try{td.textContent=money(await quarterBonus(branch,current));}catch(_){td.textContent="RM 0.00";}
+     }
+   }
+ }
+ document.addEventListener("DOMContentLoaded",()=>{
+   document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(enhance,900));
+   monthEl()?.addEventListener("change",()=>setTimeout(enhance,700));
+   const p=document.getElementById("salaryPage");
+   if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(enhance,350)}).observe(p,{childList:true,subtree:true});}
+ });
 })();
 </script>
 
