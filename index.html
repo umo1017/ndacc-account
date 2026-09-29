@@ -3197,6 +3197,22 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 </div>
 <style>
+
+/* ===== ROSTER CLEANING CALENDAR ===== */
+.cleaning-wrap{margin-top:16px}
+.cleaning-title{font-size:18px;font-weight:900;margin-bottom:4px}
+.cleaning-sub{font-size:12px;color:var(--muted);margin-bottom:12px}
+.cleaning-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cleaning-table{width:100%;min-width:900px;border-collapse:separate;border-spacing:6px}
+.cleaning-table th{font-size:12px;font-weight:900;padding:9px;text-align:center}
+.cleaning-table td{vertical-align:top;border:1px solid var(--line);border-radius:12px;padding:9px;min-width:118px;background:#fff}
+.cleaning-day{font-weight:900;font-size:13px;margin-bottom:7px}
+.cleaning-off{font-size:10px;color:#a33;font-weight:800;margin-bottom:7px}
+.cleaning-job{font-size:11px;line-height:1.35;padding:5px 0;border-top:1px dashed var(--line)}
+.cleaning-job:first-of-type{border-top:0}
+.cleaning-job strong{display:block;font-size:11px}
+.cleaning-empty{color:var(--muted);font-size:11px}
+
 /* ===== Branch Calendar Roster ===== */
 .roster-branch-tabs{display:flex;gap:10px;flex-wrap:wrap}
 .roster-branch-tab{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 18px;font-weight:800;cursor:pointer}
@@ -8822,6 +8838,16 @@ let rosterAssignments=[];
 let rosterActiveOutlet="Eco Botanic";
 let rosterOutletNames=["Eco Botanic","Nusa Bestari"];
 let rosterOutletSettings=new Map();
+let rosterCleaningEmployees=[];
+let rosterCleaningManagers=new Map();
+const ROSTER_CLEANING_TASKS=[
+  "Toilet / Washroom",
+  "Treatment Rooms & Floor",
+  "Reception / Waiting Area",
+  "Towels / Laundry Area",
+  "Pantry / Cups",
+  "Trash / Supplies Check"
+];
 const ROSTER_WEEKDAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 function rosterDb(){
@@ -8930,6 +8956,81 @@ function rosterDisplayName(outlet,date){
   return String(row?.staff_name||"").trim() || rosterDefaultName(outlet,date);
 }
 
+
+function rosterNormName(v){return String(v||"").trim().toLowerCase();}
+function rosterIsFullTime(e){
+  const v=String(e?.employment_type||"full_time").trim().toLowerCase().replace(/[\s-]+/g,"_");
+  return !["part_time","parttime","pt"].includes(v);
+}
+async function loadRosterCleaningPeople(){
+  // Cleaning roster uses Salary employees:
+  // Full Time only, same branch only, Global excluded, fixed manager excluded.
+  const [empRes,mgrRes]=await Promise.all([
+    rosterDb().from("employees").select("*").order("name"),
+    rosterDb().from("branch_bonus_fixed_settings").select("branch,manager_employee_id,manager_name")
+  ]);
+  rosterCleaningEmployees=empRes.error?[]:(empRes.data||[]);
+  rosterCleaningManagers=new Map();
+  if(!mgrRes.error){
+    (mgrRes.data||[]).forEach(x=>rosterCleaningManagers.set(String(x.branch||"").trim(),x));
+  }
+}
+function rosterCleaningEligible(outlet){
+  if(!outlet || String(outlet).trim().toLowerCase()==="global") return [];
+  const mgr=rosterCleaningManagers.get(outlet);
+  return rosterCleaningEmployees.filter(e=>{
+    if(String(e.outlet||"").trim()!==outlet) return false;
+    if(!rosterIsFullTime(e)) return false;
+    if(mgr && Number(mgr.manager_employee_id||0)===Number(e.id)) return false;
+    if(mgr && rosterNormName(mgr.manager_name) && rosterNormName(mgr.manager_name)===rosterNormName(e.name)) return false;
+    return true;
+  });
+}
+function rosterCleaningAssignments(outlet,date){
+  const eligible=rosterCleaningEligible(outlet);
+  if(!eligible.length) return [];
+  // The person shown in Monthly Roster for that date is treated as Rest Day
+  // and is removed from that day's cleaning rotation.
+  const offName=rosterNormName(rosterDisplayName(outlet,date));
+  const working=eligible.filter(e=>
+    rosterNormName(e.name)!==offName &&
+    !(window.ndOptionalRestDayFor && window.ndOptionalRestDayFor(e,date))
+  );
+  if(!working.length) return [];
+  const [y,m,d]=date.split("-").map(Number);
+  const dayIndex=Math.max(0,d-1);
+  return ROSTER_CLEANING_TASKS.map((task,i)=>{
+    const emp=working[(dayIndex+i)%working.length];
+    return {task,name:String(emp?.name||"").trim()};
+  });
+}
+function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
+  if(!outlet || String(outlet).trim().toLowerCase()==="global") return "";
+  const heads=ROSTER_WEEKDAYS.map(w=>`<th>${w}</th>`).join("");
+  const cells=[];
+  for(let i=0;i<firstDow;i++) cells.push("<td></td>");
+  for(let day=1;day<=days;day++){
+    const date=rosterDate(m,day);
+    const off=String(rosterDisplayName(outlet,date)||"").trim();
+    const jobs=rosterCleaningAssignments(outlet,date);
+    cells.push(`<td>
+      <div class="cleaning-day">${day}</div>
+      ${off?`<div class="cleaning-off">Rest: ${rosterEsc(off)}</div>`:""}
+      ${jobs.length?jobs.map(j=>`<div class="cleaning-job"><strong>${rosterEsc(j.name)}</strong>${rosterEsc(j.task)}</div>`).join(""):`<div class="cleaning-empty">No Full Time technician available</div>`}
+    </td>`);
+  }
+  while(cells.length%7) cells.push("<td></td>");
+  const rows=[];
+  for(let i=0;i<cells.length;i+=7) rows.push(`<tr>${cells.slice(i,i+7).join("")}</tr>`);
+  return `<div class="roster-calendar-card cleaning-wrap">
+    <div class="cleaning-title">Daily Cleaning Roster</div>
+    <div class="cleaning-sub">${rosterEsc(outlet)} · ${rosterEsc(m)}</div>
+    <div class="cleaning-table-wrap">
+      <table class="cleaning-table"><thead><tr>${heads}</tr></thead><tbody>${rows.join("")}</tbody></table>
+    </div>
+  </div>`;
+}
+
 async function loadRosterData(){
   initRosterMonth();
   const m=rosterMonthKey();
@@ -9001,7 +9102,8 @@ function renderRoster(){
     </div>
     <div class="roster-calendar-head">${weekdayHead}</div>
     <div class="roster-calendar-grid">${blanks}${dayCards}</div>
-  </div>`;
+  </div>
+  ${renderCleaningCalendar(rosterActiveOutlet,m,year,month,days,firstDow)}`;
 }
 function openRosterNameEditor(outlet,date){
   const defaultName=rosterDefaultName(outlet,date);
@@ -9049,6 +9151,7 @@ async function openRosterPageData(){
   initRosterMonth();
   await loadRosterOutlets();
   await loadRosterSettings();
+  await loadRosterCleaningPeople();
   await loadRosterData();
   renderRosterOutletTabs();
 }
@@ -9062,6 +9165,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.getElementById("rosterRefreshBtn")?.addEventListener("click",async()=>{
     await loadRosterOutlets();
     await loadRosterSettings();
+    await loadRosterCleaningPeople();
     await loadRosterData();
   });
   document.getElementById("closeRosterNameModal")?.addEventListener("click",()=>document.getElementById("rosterNameModal").classList.remove("open"));
@@ -14477,6 +14581,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     daily:{nav:"sidebarDaily",open:"showDaily"},
     roster:{nav:"sidebarRoster",open:"showRoster"},
     salary:{nav:"sidebarSalary",open:"showSalary"},
+    bonus:{nav:"sidebarBonus",open:"showBonus"},
     settlement:{nav:"sidebarSettlement",open:"showSettlement"},
     orders:{nav:"sidebarOrders",open:"showOrders"},
     settings:{nav:"sidebarSettings",open:"showSettings"}
@@ -15138,7 +15243,7 @@ input,select,textarea,button,a{
      const bn=String(bonusBranch||"").trim().toLowerCase();
      const defaultName=bn.includes("eco")?"sam":(bn.includes("nusa")?"sam":"");
      const defaultPct=bn.includes("eco")?3:(bn.includes("nusa")?1:0);
-     const defaultEmp=bonusEmployees.find(e=>String(e.outlet||"").trim()===bonusBranch && String(e.name||"").trim().toLowerCase()===defaultName);
+     const defaultEmp=bonusEmployees.find(e=>String(e.name||"").trim().toLowerCase()===defaultName);
      if(defaultEmp){
        fixedManagerSetting={
          branch:bonusBranch,
@@ -15160,7 +15265,8 @@ input,select,textarea,button,a{
    const emps=allBranchEmps.filter(e=>Number(e.id)!==managerId);
    const mgrSel=$("bonusManagerEmployee");
    if(mgrSel){
-     mgrSel.innerHTML='<option value="">Select Manager</option>'+allBranchEmps.map(e=>`<option value="${e.id}" ${Number(e.id)===managerId?"selected":""}>${e.name||"-"}</option>`).join("");
+     const managerChoices=[...bonusEmployees];
+     mgrSel.innerHTML='<option value="">Select Manager</option>'+managerChoices.map(e=>`<option value="${e.id}" ${Number(e.id)===managerId?"selected":""}>${e.name||"-"}</option>`).join("");
      mgrSel.disabled=!isUmoBonus();
    }
    const rows=emps.map(e=>{
@@ -15347,6 +15453,183 @@ input,select,textarea,button,a{
    monthEl()?.addEventListener("change",()=>setTimeout(enhance,700));
    const p=document.getElementById("salaryPage");
    if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(enhance,350)}).observe(p,{childList:true,subtree:true});}
+ });
+})();
+</script>
+
+
+<style>
+#allBranchExpenseSummary{
+  margin:12px 0;padding:12px 14px;border:1px solid var(--line);
+  border-radius:12px;background:var(--card);display:flex;
+  justify-content:space-between;align-items:center;gap:12px;
+}
+#allBranchExpenseSummary .k{font-size:12px;font-weight:800;opacity:.72}
+#allBranchExpenseSummary .v{font-size:18px;font-weight:900;white-space:nowrap}
+</style>
+<script>
+/* ===== REPORT ALL BRANCH EXPENSE TOTAL ===== */
+(function(){
+ const money=v=>"RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+ function parseMoney(t){
+   const n=Number(String(t||"").replace(/[^0-9.-]/g,""));
+   return Number.isFinite(n)?n:0;
+ }
+ function updateAllBranchExpense(){
+   const page=document.getElementById("settlementPage");
+   if(!page||!page.classList.contains("active"))return;
+
+   // Find the Monthly Expenses section and sum branch totals already rendered by the existing report.
+   const candidates=[...page.querySelectorAll("table")].filter(t=>{
+     const tx=(t.closest(".card,.section,.panel")?.innerText||t.innerText||"").toLowerCase();
+     return tx.includes("monthly expenses");
+   });
+   if(!candidates.length)return;
+
+   let total=0;
+   for(const table of candidates){
+     const rows=[...table.querySelectorAll("tbody tr")];
+     for(const tr of rows){
+       const txt=(tr.innerText||"").toLowerCase();
+       if(txt.includes("total") && !txt.includes("grand total")){
+         const cells=[...tr.querySelectorAll("td")];
+         if(cells.length) total+=parseMoney(cells[cells.length-1].innerText);
+       }
+     }
+   }
+
+   let box=document.getElementById("allBranchExpenseSummary");
+   if(!box){
+     box=document.createElement("div");
+     box.id="allBranchExpenseSummary";
+     box.innerHTML='<div class="k">All Branch Expenses</div><div class="v" id="allBranchExpenseValue">RM 0.00</div>';
+     const first=candidates[0];
+     (first.closest(".card,.section,.panel")||first).parentNode.insertBefore(box,(first.closest(".card,.section,.panel")||first));
+   }
+   const v=document.getElementById("allBranchExpenseValue");
+   if(v)v.textContent=money(total);
+ }
+ document.addEventListener("DOMContentLoaded",()=>{
+   document.getElementById("sidebarSettlement")?.addEventListener("click",()=>setTimeout(updateAllBranchExpense,900));
+   const p=document.getElementById("settlementPage");
+   if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(updateAllBranchExpense,400)}).observe(p,{childList:true,subtree:true,characterData:true});}
+ });
+})();
+</script>
+
+
+<script>
+/* ===== SALARY 14TH: 3-BONUS AFTER BONUS ===== */
+(function(){
+ function normalize(t){return String(t||"").trim().toLowerCase().replace(/\s+/g," ");}
+ function reorder(){
+   const page=document.getElementById("salaryPage");
+   if(!page)return;
+   for(const table of page.querySelectorAll("table")){
+     const hr=table.querySelector("thead tr"); if(!hr)continue;
+     const hs=[...hr.children];
+     const bonusIdx=hs.findIndex(x=>normalize(x.textContent)==="bonus");
+     const threeIdx=hs.findIndex(x=>normalize(x.textContent)==="3-bonus");
+     if(bonusIdx<0||threeIdx<0||threeIdx===bonusIdx+1)continue;
+
+     const threeHeader=hs[threeIdx];
+     const refHeader=hr.children[bonusIdx+1]||null;
+     hr.insertBefore(threeHeader,refHeader);
+
+     for(const tr of table.querySelectorAll("tbody tr")){
+       const cells=[...tr.children];
+       if(cells.length<=Math.max(bonusIdx,threeIdx))continue;
+       const threeCell=cells[threeIdx];
+       const refCell=tr.children[bonusIdx+1]||null;
+       tr.insertBefore(threeCell,refCell);
+     }
+   }
+ }
+ document.addEventListener("DOMContentLoaded",()=>{
+   const p=document.getElementById("salaryPage");
+   if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(reorder,120)}).observe(p,{childList:true,subtree:true});}
+   document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(reorder,700));
+   document.getElementById("salaryMonth")?.addEventListener("change",()=>setTimeout(reorder,600));
+ });
+})();
+</script>
+
+<!-- FULL PAGE AUDIT 2026-09-29 FINAL
+Checked: Daily Settlement / Monthly Roster / Salary / Bonus / Report-Settlement /
+Orders / Settings / page restore / mobile+desktop overflow / JavaScript syntax.
+Audit fix: Bonus added to permission-aware page restore map.
+-->
+
+<script>
+/* ===== OPTIONAL EMPLOYEE REST DAY -> CLEANING ROSTER ===== */
+(function(){
+ const KEY="nd_employee_rest_days_v1";
+ function read(){
+   try{return JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){return{}}
+ }
+ function write(v){localStorage.setItem(KEY,JSON.stringify(v||{}));}
+ function email(){
+   return String(window.currentUserEmail||"").trim().toLowerCase();
+ }
+ function monthKey(){
+   const m=document.getElementById("rosterMonth")?.value||"";
+   return m;
+ }
+ function ensureField(){
+   // Add to employee submission form only, not manager/admin settings.
+   const form=document.getElementById("rosterSubmitForm") ||
+              document.querySelector("#rosterPage form");
+   if(!form || form.querySelector("#employeeOptionalRestDay")) return;
+   const wrap=document.createElement("div");
+   wrap.className="field";
+   wrap.innerHTML=`<label>Rest Day <span style="font-weight:500;opacity:.65">(Optional)</span></label>
+     <div id="employeeRestDayPicker" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:6px">
+       ${["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((d,i)=>`<button type="button" class="btn rest-day-choice" data-day="${i+1}" style="padding:7px 10px;font-size:12px">${d.slice(0,3)}</button>`).join("")}
+     </div>
+     <div style="font-size:11px;opacity:.65;margin-top:5px">Optional · Tap to select / unselect</div>`;
+   const submit=form.querySelector('button[type="submit"],button');
+   if(submit) form.insertBefore(wrap,submit); else form.appendChild(wrap);
+
+   const all=read(), k=email()+"|"+monthKey();
+   let selected=Array.isArray(all[k])?all[k]:[];
+   const paint=()=>{
+     wrap.querySelectorAll(".rest-day-choice").forEach(b=>{
+       const on=selected.includes(Number(b.dataset.day));
+       b.style.fontWeight=on?"900":"700";
+       b.style.outline=on?"2px solid currentColor":"none";
+       b.setAttribute("aria-pressed",on?"true":"false");
+     });
+   };
+   wrap.querySelectorAll(".rest-day-choice").forEach(b=>b.addEventListener("click",()=>{
+     const d=Number(b.dataset.day);
+     selected=selected.includes(d)?selected.filter(x=>x!==d):[...selected,d].sort();
+     paint();
+   }));
+   paint();
+
+   form.addEventListener("submit",()=>{
+     const all2=read(), k2=email()+"|"+monthKey();
+     if(selected.length) all2[k2]=selected; else delete all2[k2];
+     write(all2);
+     setTimeout(()=>window.renderRosterCalendar?.(),200);
+   });
+ }
+ window.ndOptionalRestDayFor=function(emp,date){
+   const all=read();
+   const em=String(emp?.email||emp?.login_email||"").trim().toLowerCase();
+   if(!em) return false;
+   const mk=String(date||"").slice(0,7);
+   const selected=all[em+"|"+mk];
+   if(!Array.isArray(selected)) return false;
+   const [yy,mm,dd]=String(date||"").split("-").map(Number);
+   if(!yy||!mm||!dd) return false;
+   const jsDay=new Date(yy,mm-1,dd).getDay(); // Sun=0
+   const isoDay=jsDay===0?7:jsDay; // Mon=1 ... Sun=7
+   return selected.includes(isoDay);
+ };
+ document.addEventListener("DOMContentLoaded",()=>{
+   setTimeout(ensureField,700);
+   document.getElementById("sidebarRoster")?.addEventListener("click",()=>setTimeout(ensureField,700));
  });
 })();
 </script>
