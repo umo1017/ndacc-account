@@ -1083,6 +1083,18 @@ body{
   }
 }
 
+
+/* ===== BURMESE PASTEL CLEANING ROSTER ===== */
+.cleaning-table td{background:#fffdfd}
+.cleaning-job{border-radius:9px!important;padding:7px 5px!important;margin:5px 0;border-top:0!important}
+.clean-pink{background:#ffdfe8}
+.clean-yellow{background:#fff1bd}
+.clean-purple{background:#e9ddff}
+.clean-green{background:#d9f4df}
+.clean-blue{background:#d9efff}
+.clean-peach{background:#ffe2d5}
+.cleaning-off{background:#f2f2f2;border-radius:8px;padding:5px;text-align:center}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -8841,12 +8853,12 @@ let rosterOutletSettings=new Map();
 let rosterCleaningEmployees=[];
 let rosterCleaningManagers=new Map();
 const ROSTER_CLEANING_TASKS=[
-  {icon:"🚽",label:"Toilet"},
-  {icon:"🧹",label:"Floor"},
-  {icon:"🛏️",label:"Room"},
-  {icon:"🧺",label:"Towels"},
-  {icon:"☕",label:"Pantry"},
-  {icon:"🗑️",label:"Trash"}
+  {icon:"🚽",label:"အိမ်သာသန့်ရှင်းရေး",cls:"clean-pink"},
+  {icon:"🧹",label:"ကြမ်းပြင်သန့်ရှင်းရေး",cls:"clean-yellow"},
+  {icon:"🛏️",label:"အခန်းသန့်ရှင်းရေး",cls:"clean-purple"},
+  {icon:"🧺",label:"မျက်နှာသုတ်ပဝါ / အဝတ်လျှော်",cls:"clean-green"},
+  {icon:"☕",label:"လက်ဖက်ရည်နေရာ",cls:"clean-blue"},
+  {icon:"🗑️",label:"အမှိုက်ရှင်းရန်",cls:"clean-peach"}
 ];
 const ROSTER_WEEKDAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
@@ -9001,7 +9013,7 @@ function rosterCleaningAssignments(outlet,date){
   const dayIndex=Math.max(0,d-1);
   return ROSTER_CLEANING_TASKS.map((task,i)=>{
     const emp=working[(dayIndex+i)%working.length];
-    return {task:task.label,icon:task.icon,name:String(emp?.name||"").trim()};
+    return {task:task.label,icon:task.icon,cls:task.cls,name:String(emp?.name||"").trim()};
   });
 }
 function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
@@ -9015,15 +9027,15 @@ function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
     const jobs=rosterCleaningAssignments(outlet,date);
     cells.push(`<td>
       <div class="cleaning-day">${day}</div>
-      ${off?`<div class="cleaning-off">OFF · ${rosterEsc(off)}</div>`:""}
-      ${jobs.length?jobs.map(j=>`<div class="cleaning-job" style="text-align:center"><strong>${rosterEsc(j.name)}</strong><div style="font-size:22px;line-height:1.2;margin:3px 0">${j.icon}</div><span>${rosterEsc(j.task)}</span></div>`).join(""):`<div class="cleaning-empty">—</div>`}
+      ${off?`<div class="cleaning-off">နားရက် · ${rosterEsc(off)}</div>`:""}
+      ${jobs.length?jobs.map(j=>`<div class="cleaning-job ${j.cls||""}" style="text-align:center"><strong>${rosterEsc(j.name)}</strong><div style="font-size:24px;line-height:1.2;margin:4px 0">${j.icon}</div><span>${rosterEsc(j.task)}</span></div>`).join(""):`<div class="cleaning-empty">—</div>`}
     </td>`);
   }
   while(cells.length%7) cells.push("<td></td>");
   const rows=[];
   for(let i=0;i<cells.length;i+=7) rows.push(`<tr>${cells.slice(i,i+7).join("")}</tr>`);
   return `<div class="roster-calendar-card cleaning-wrap">
-    <div class="cleaning-title">🧹 Cleaning Roster</div>
+    <div class="cleaning-title">🧹 နေ့စဉ်သန့်ရှင်းရေးတာဝန်ဇယား</div>
     <div class="cleaning-sub">${rosterEsc(outlet)} · ${rosterEsc(m)}</div>
     <div class="cleaning-table-wrap">
       <table class="cleaning-table"><thead><tr>${heads}</tr></thead><tbody>${rows.join("")}</tbody></table>
