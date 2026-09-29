@@ -1450,6 +1450,7 @@ body{
     const mobileMenu=document.getElementById("mobileSidebarBtn");
     if(session){
       currentUserEmail=(session.user?.email||"").toLowerCase();
+      window.currentUserEmail=currentUserEmail;
       isCashWithdrawalManager=CASH_WITHDRAWAL_MANAGERS.has(currentUserEmail);
       isSystemAdmin=SYSTEM_ADMIN_EMAILS.has(currentUserEmail);
       canViewDailySettlement=true;
@@ -15054,6 +15055,16 @@ input,select,textarea,button,a{
    return String(window.currentUserEmail||window.currentEmail||window.userEmail||"").trim().toLowerCase();
  }
  function isUmoBonus(){return currentBonusEmail()===UMO;}
+ async function syncBonusAuth(){
+   try{
+     const client=(typeof salaryDb!=="undefined"&&salaryDb)?salaryDb:((typeof db!=="undefined"&&db)?db:null);
+     if(client?.auth){
+       const {data:{session}}=await client.auth.getSession();
+       const email=String(session?.user?.email||"").trim().toLowerCase();
+       if(email) window.currentUserEmail=email;
+     }
+   }catch(_){}
+ }
  function isFullTimeBonusEmployee(e){
    // Use whichever employment-status field exists in the current employee record.
    const raw=String(
@@ -15086,6 +15097,7 @@ input,select,textarea,button,a{
 
  async function loadBonus(){
    if(!$("bonusPage"))return;
+   await syncBonusAuth();
    const state=$("bonusSyncState");if(state)state.textContent="Loading...";
    const m=monthBonus(),start=m+"-01";
    const endDate=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1);
@@ -15121,6 +15133,21 @@ input,select,textarea,button,a{
 
    bonusBranchTotal=(settRes.data||[]).filter(r=>String(r.branch)===bonusBranch).reduce((n,r)=>n+Number(r.grand_total||0),0);
    fixedManagerSetting=(fixedRes.data||[]).find(r=>String(r.branch)===bonusBranch)||null;
+   // Initial defaults come from existing Salary employees; after saving, DB setting always wins.
+   if(!fixedManagerSetting){
+     const bn=String(bonusBranch||"").trim().toLowerCase();
+     const defaultName=bn.includes("eco")?"sam":(bn.includes("nusa")?"billy":"");
+     const defaultPct=bn.includes("eco")?3:(bn.includes("nusa")?1:0);
+     const defaultEmp=bonusEmployees.find(e=>String(e.outlet||"").trim()===bonusBranch && String(e.name||"").trim().toLowerCase()===defaultName);
+     if(defaultEmp){
+       fixedManagerSetting={
+         branch:bonusBranch,
+         manager_employee_id:Number(defaultEmp.id),
+         manager_name:defaultEmp.name||"",
+         manager_percent:defaultPct
+       };
+     }
+   }
    managerSetting={manager_percent:Number(fixedManagerSetting?.manager_percent||0)};
    renderBonus();
    if(state)state.textContent="Cloud synced ✓";
