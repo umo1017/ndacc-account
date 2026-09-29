@@ -8998,6 +8998,7 @@ function rosterCleaningEligible(outlet){
     return true;
   });
 }
+window.rosterCleaningEligible=rosterCleaningEligible;
 function rosterCleaningAssignments(outlet,date){
   const eligible=rosterCleaningEligible(outlet);
   if(!eligible.length) return [];
@@ -9026,50 +9027,65 @@ function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
   </div>`;
 
   const weekdayMm=[
-    ["Monday","တနင်္လာ"],
-    ["Tuesday","အင်္ဂါ"],
-    ["Wednesday","ဗုဒ္ဓဟူး"],
-    ["Thursday","ကြာသပတေး"],
-    ["Friday","သောကြာ"],
-    ["Saturday","စနေ"],
-    ["Sunday","တနင်္ဂနွေ"]
+    ["Monday","တနင်္လာ"],["Tuesday","အင်္ဂါ"],["Wednesday","ဗုဒ္ဓဟူး"],
+    ["Thursday","ကြာသပတေး"],["Friday","သောကြာ"],["Saturday","စနေ"],["Sunday","တနင်္ဂနွေ"]
   ];
 
-  // For each weekday, use the first occurrence in the selected month to determine
-  // optional recurring rest-day status. Monthly Roster rest-day names are also respected.
-  const firstDateForIsoDay=(iso)=>{
-    for(let d=1;d<=days;d++){
-      const dt=new Date(year,month-1,d);
-      const js=dt.getDay(), val=js===0?7:js;
-      if(val===iso) return rosterDate(m,d);
-    }
-    return "";
-  };
+  // Build actual calendar weeks for the selected month.
+  const weeks=[];
+  let week=[];
+  const firstJs=new Date(year,month-1,1).getDay();
+  const firstIso=firstJs===0?7:firstJs;
+  for(let i=1;i<firstIso;i++) week.push(null);
+  for(let d=1;d<=days;d++){
+    week.push(d);
+    if(week.length===7){weeks.push(week);week=[];}
+  }
+  if(week.length){while(week.length<7)week.push(null);weeks.push(week);}
 
-  const head=`<tr><th class="cleaning-week-head">နေ့</th>${
+  const header=()=>`<tr><th class="cleaning-week-head">နေ့</th>${
     eligible.map(e=>`<th class="cleaning-person-head">${rosterEsc(e.name||"-")}</th>`).join("")
   }</tr>`;
 
-  const rows=weekdayMm.map((wd,rowIdx)=>{
-    const iso=rowIdx+1;
-    const date=firstDateForIsoDay(iso);
-    const rosterOff=rosterNormName(rosterDisplayName(outlet,date));
-    const cells=eligible.map((e,colIdx)=>{
-      const optionalOff=window.ndOptionalRestDayFor && window.ndOptionalRestDayFor(e,date);
-      const off=optionalOff || (rosterOff && rosterOff===rosterNormName(e.name));
-      if(off){
-        return `<td class="cleaning-matrix-cell cleaning-rest-cell">
-          <div class="cleaning-cell-icon">😴</div>
-          <div class="cleaning-cell-text">နားရက်</div>
-        </td>`;
+  const weekTables=weeks.map((wk,wIdx)=>{
+    const rows=wk.map((day,rowIdx)=>{
+      const wd=weekdayMm[rowIdx];
+      if(!day){
+        return `<tr><th class="cleaning-weekday"><strong>${wd[0]}</strong><span>${wd[1]}</span></th>${
+          eligible.map(()=>`<td class="cleaning-matrix-cell cleaning-empty-date">—</td>`).join("")
+        }</tr>`;
       }
-      const task=ROSTER_CLEANING_TASKS[(rowIdx+colIdx)%ROSTER_CLEANING_TASKS.length];
-      return `<td class="cleaning-matrix-cell ${task.cls||""}">
-        <div class="cleaning-cell-text">${rosterEsc(task.label)}</div>
-        <div class="cleaning-cell-icon">${task.icon}</div>
-      </td>`;
+      const date=rosterDate(m,day);
+      const rosterOff=rosterNormName(rosterDisplayName(outlet,date));
+      const cells=eligible.map((e,colIdx)=>{
+        const optionalOff=window.ndOptionalRestDayFor && window.ndOptionalRestDayFor(e,date);
+        const off=optionalOff || (rosterOff && rosterOff===rosterNormName(e.name));
+        if(off){
+          return `<td class="cleaning-matrix-cell cleaning-rest-cell">
+            <div class="cleaning-cell-date">${day}</div>
+            <div class="cleaning-cell-icon">😴</div>
+            <div class="cleaning-cell-text">နားရက်</div>
+          </td>`;
+        }
+        // Rotate by week + weekday + employee so duties change every week.
+        const task=ROSTER_CLEANING_TASKS[(wIdx+rowIdx+colIdx)%ROSTER_CLEANING_TASKS.length];
+        return `<td class="cleaning-matrix-cell ${task.cls||""}">
+          <div class="cleaning-cell-date">${day}</div>
+          <div class="cleaning-cell-text">${rosterEsc(task.label)}</div>
+          <div class="cleaning-cell-icon">${task.icon}</div>
+        </td>`;
+      }).join("");
+      return `<tr><th class="cleaning-weekday"><strong>${wd[0]}</strong><span>${wd[1]}</span></th>${cells}</tr>`;
     }).join("");
-    return `<tr><th class="cleaning-weekday"><strong>${wd[0]}</strong><span>${wd[1]}</span></th>${cells}</tr>`;
+
+    return `<section class="cleaning-week-block">
+      <div class="cleaning-week-label">Week ${wIdx+1}</div>
+      <div class="cleaning-table-wrap">
+        <table class="cleaning-table cleaning-matrix">
+          <thead>${header()}</thead><tbody>${rows}</tbody>
+        </table>
+      </div>
+    </section>`;
   }).join("");
 
   const legend=ROSTER_CLEANING_TASKS.map(t=>`<div class="cleaning-legend-item ${t.cls||""}">
@@ -9079,12 +9095,10 @@ function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
   return `<div class="roster-calendar-card cleaning-wrap cleaning-reference-card">
     <div class="cleaning-title">🧹 နေ့စဉ်သန့်ရှင်းရေးတာဝန်ဇယား</div>
     <div class="cleaning-sub">${rosterEsc(outlet)} · ${rosterEsc(m)}</div>
-    <div class="cleaning-table-wrap">
-      <table class="cleaning-table cleaning-matrix">
-        <thead>${head}</thead>
-        <tbody>${rows}</tbody>
-      </table>
+    <div class="cleaning-admin-bar">
+      <button type="button" class="btn" onclick="openCleaningRestAdjust('${rosterEsc(outlet)}','${rosterEsc(m)}')">⚙ Adjust Rest Day</button>
     </div>
+    <div class="cleaning-full-month">${weekTables}</div>
     <div class="cleaning-legend">${legend}</div>
   </div>`;
 }
@@ -15570,6 +15584,43 @@ input,select,textarea,button,a{
 .cleaning-legend-item span{font-size:18px}
 .cleaning-legend-item small{font-size:10px}
 
+
+/* ===== FULL MONTH CLEANING VIEW ===== */
+.cleaning-full-month{display:grid;gap:14px}
+.cleaning-week-block{width:100%;break-inside:avoid}
+.cleaning-week-label{
+  display:inline-block;background:#244d82;color:#fff;font-weight:900;
+  padding:6px 12px;border-radius:10px 10px 0 0;font-size:12px
+}
+.cleaning-cell-date{
+  position:absolute;top:4px;right:6px;font-size:9px;font-weight:900;opacity:.55
+}
+.cleaning-matrix-cell{position:relative}
+.cleaning-empty-date{background:#f7f7f7!important;color:#bbb!important}
+@media (min-width:1100px){
+  .cleaning-reference-card{max-width:none!important}
+  .cleaning-table-wrap{overflow-x:visible!important}
+  .cleaning-matrix{width:100%!important;min-width:0!important;table-layout:fixed}
+  .cleaning-matrix th,.cleaning-matrix td{min-width:0!important}
+}
+@media print{
+  #sidebar,.sidebar,.topbar,.app-header,button{display:none!important}
+  #rosterPage{display:block!important;overflow:visible!important}
+  .cleaning-table-wrap{overflow:visible!important}
+  .cleaning-matrix{width:100%!important;min-width:0!important;table-layout:fixed}
+  .cleaning-week-block{page-break-inside:avoid}
+}
+
+
+.cleaning-admin-bar{display:flex;justify-content:flex-end;margin:8px 0 12px}
+.clean-rest-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:99999;align-items:center;justify-content:center;padding:16px}
+.clean-rest-modal.show{display:flex}
+.clean-rest-box{width:min(430px,100%);background:#fff;border-radius:16px;padding:16px;box-shadow:0 18px 60px rgba(0,0,0,.2)}
+.clean-rest-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.clean-rest-days{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+.clean-rest-day.selected{outline:2px solid currentColor;font-weight:900;background:#e6f2ff}
+.clean-rest-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
 </style>
 <script>
 /* ===== REPORT ALL BRANCH EXPENSE TOTAL ===== */
@@ -15735,6 +15786,60 @@ Audit fix: Bonus added to permission-aware page restore map.
    setTimeout(ensureField,700);
    document.getElementById("sidebarRoster")?.addEventListener("click",()=>setTimeout(ensureField,700));
  });
+})();
+</script>
+
+
+<script>
+/* ===== CLEANING ROSTER REST-DAY ADJUSTMENT ===== */
+(function(){
+ const KEY="nd_employee_rest_days_v1";
+ const DAYS=[["Mon",1],["Tue",2],["Wed",3],["Thu",4],["Fri",5],["Sat",6],["Sun",7]];
+ function read(){try{return JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){return{}}}
+ function write(v){localStorage.setItem(KEY,JSON.stringify(v||{}))}
+ function ensureModal(){
+   if(document.getElementById("cleanRestAdjustModal"))return;
+   const d=document.createElement("div");
+   d.id="cleanRestAdjustModal";
+   d.className="clean-rest-modal";
+   d.innerHTML=`<div class="clean-rest-box">
+     <div class="clean-rest-head"><strong>Adjust Employee Rest Day</strong><button type="button" class="btn" id="cleanRestClose">×</button></div>
+     <div class="field"><label>Employee</label><select id="cleanRestEmployee"></select></div>
+     <div class="field"><label>Rest Day</label><div id="cleanRestDays" class="clean-rest-days"></div></div>
+     <div class="clean-rest-actions"><button type="button" class="btn" id="cleanRestClear">Clear</button><button type="button" class="btn primary" id="cleanRestSave">Save</button></div>
+   </div>`;
+   document.body.appendChild(d);
+   d.querySelector("#cleanRestClose").onclick=()=>d.classList.remove("show");
+   d.addEventListener("click",e=>{if(e.target===d)d.classList.remove("show")});
+ }
+ window.openCleaningRestAdjust=function(outlet,month){
+   ensureModal();
+   const d=document.getElementById("cleanRestAdjustModal");
+   d.dataset.outlet=outlet; d.dataset.month=month;
+   const emps=(window.rosterCleaningEligible?window.rosterCleaningEligible(outlet):[]).length
+      ? window.rosterCleaningEligible(outlet)
+      : (typeof rosterCleaningEligible==="function"?rosterCleaningEligible(outlet):[]);
+   const sel=d.querySelector("#cleanRestEmployee");
+   sel.innerHTML=emps.map(e=>`<option value="${e.id}" data-email="${String(e.email||e.login_email||"").replace(/"/g,"&quot;")}">${e.name||"-"}</option>`).join("");
+   const render=()=>{
+     const opt=sel.selectedOptions[0], em=String(opt?.dataset.email||"").trim().toLowerCase();
+     const all=read(), chosen=Array.isArray(all[em+"|"+month])?all[em+"|"+month]:[];
+     d.querySelector("#cleanRestDays").innerHTML=DAYS.map(([lab,n])=>`<button type="button" class="btn clean-rest-day ${chosen.includes(n)?"selected":""}" data-day="${n}">${lab}</button>`).join("");
+     d.querySelectorAll(".clean-rest-day").forEach(b=>b.onclick=()=>b.classList.toggle("selected"));
+   };
+   sel.onchange=render; render();
+   d.querySelector("#cleanRestClear").onclick=()=>d.querySelectorAll(".clean-rest-day").forEach(b=>b.classList.remove("selected"));
+   d.querySelector("#cleanRestSave").onclick=()=>{
+     const opt=sel.selectedOptions[0], em=String(opt?.dataset.email||"").trim().toLowerCase();
+     if(!em){alert("Employee email not found.");return}
+     const chosen=[...d.querySelectorAll(".clean-rest-day.selected")].map(b=>Number(b.dataset.day)).sort();
+     const all=read(), k=em+"|"+month;
+     if(chosen.length)all[k]=chosen;else delete all[k];
+     write(all); d.classList.remove("show");
+     if(typeof renderRosterCalendar==="function")renderRosterCalendar();
+   };
+   d.classList.add("show");
+ };
 })();
 </script>
 
