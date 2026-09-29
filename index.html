@@ -15487,20 +15487,36 @@ input,select,textarea,button,a{
    if(error) throw error;
    return (data||[]).reduce((a,r)=>a+Number(r.grand_total||0),0);
  }
- async function branchMonthPct(branch,m){
-   const {data,error}=await salaryDb.from("branch_3bonus_monthly").select("bonus_percent").eq("bonus_month",m+"-01").eq("branch",branch).maybeSingle();
+ async function branchMonthBonus(branch,m){
+   // Automatically use the Branch Bonus already saved for that branch/month.
+   // Sum employee bonus_amount plus the branch manager bonus for the month.
+   const {data,error}=await salaryDb.from("branch_bonus_monthly")
+     .select("bonus_amount,branch_total")
+     .eq("bonus_month",m+"-01")
+     .eq("branch",branch);
    if(error) throw error;
-   return Number(data?.bonus_percent||0);
+   const rows=data||[];
+   const employeeBonus=rows.reduce((a,r)=>a+Number(r.bonus_amount||0),0);
+
+   // Manager bonus uses the fixed branch manager percentage and the same month's branch total.
+   const {data:setting,error:setErr}=await salaryDb.from("branch_bonus_fixed_settings")
+     .select("manager_percent")
+     .eq("branch",branch)
+     .maybeSingle();
+   if(setErr) throw setErr;
+   const branchTotal=rows.length ? Number(rows[0].branch_total||0) : await branchMonthTotal(branch,m);
+   const managerBonus=branchTotal*Number(setting?.manager_percent||0)/100;
+   return employeeBonus+managerBonus;
  }
  async function quarterBonus(branch,v){
    const ms=quarterMonths(v); if(ms.length!==3)return 0;
    let total=0;
    for(const m of ms){
-     const [perf,pct]=await Promise.all([branchMonthTotal(branch,m),branchMonthPct(branch,m)]);
-     total += perf*pct/100;
+     total += await branchMonthBonus(branch,m);
    }
    return total;
  }
+ // Quarter-end Salary 14th 3-Bonus is auto-filled from Branch Bonus for all 3 months.
  window.ndQuarter3Bonus={months:quarterMonths,calculate:quarterBonus,isPayoutMonth:v=>PAYOUT.has(Number(String(v).slice(5,7)))};
 
  async function enhance(){
