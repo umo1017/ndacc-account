@@ -3227,7 +3227,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 .bonus-title{font-size:24px;font-weight:900}
 .bonus-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
 .bonus-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
-.bonus-metrics{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:10px;margin-top:14px}
+.bonus-metrics{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin-top:14px}
 .bonus-metric{border:1px solid var(--line);border-radius:14px;padding:14px}
 .bonus-metric .k{font-size:11px;color:var(--muted);font-weight:800}
 .bonus-metric .v{font-size:22px;font-weight:900;margin-top:5px}
@@ -3262,14 +3262,18 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
    <div class="bonus-metrics">
     <div class="bonus-metric"><div class="k">Branch Total Performance</div><div class="v" id="bonusBranchPerformance">RM 0.00</div></div>
     <div class="bonus-metric"><div class="k">1% Bonus Pool</div><div class="v" id="bonusPool">RM 0.00</div></div>
-    <div class="bonus-metric"><div class="k">Eligible Staff</div><div class="v" id="bonusEligibleCount">0</div></div>
+    <div class="bonus-metric"><div class="k">Eligible Staff</div><div class="v" id="bonusEligibleCount">0</div></div><div class="bonus-metric"><div class="k">Manager Bonus</div><div class="v" id="bonusManagerAmount">RM 0.00</div></div>
    </div>
   </div>
   <div class="bonus-card">
-   <div class="helper" style="margin-bottom:10px">Rule: branch monthly total performance × 1%. Staff with MC or who did not achieve target cannot receive it. Manager is not included in the employee list; manager/admin selects eligible staff.</div>
+   <div class="helper" style="margin-bottom:10px">Rule: Full Time eligible employees automatically share 1% of branch monthly performance equally. Part Time is excluded. Once employment type is changed to Full Time, the employee joins automatically. MC or target not achieved = not eligible. Manager is separate and does not share the employee 1%. Only Umo can set the manager % for each branch/month.</div>
+   <div id="bonusManagerSetting" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:10px 0 14px">
+    <div class="field"><label>Manager %</label><input id="bonusManagerPct" type="number" min="0" step="0.01" value="0" style="width:100px"/></div>
+    <div class="helper">Manager Bonus = Branch Total × Manager %. Only Umo can change this %.</div>
+   </div>
    <div class="bonus-table-wrap">
     <table class="bonus-table">
-     <thead><tr><th>Employee</th><th>Target Achieved</th><th>MC</th><th>Manager Select</th><th>Eligible</th><th>Bonus</th></tr></thead>
+     <thead><tr><th>Employee</th><th>Target Achieved</th><th>MC</th><th>Eligible</th><th>Bonus</th></tr></thead>
      <tbody id="bonusStaffBody"></tbody>
     </table>
    </div>
@@ -15032,34 +15036,45 @@ input,select,textarea,button,a{
 
 
 <script>
-/* ===== BRANCH BONUS PAGE =====
-   Pool = monthly branch grand_total × 1%.
-   MC OR target not achieved => not eligible.
-   Manager is excluded from staff rows; manager/admin chooses selected staff.
+/* ===== BRANCH BONUS PAGE V2 =====
+   Employee pool = branch monthly total × 1%, shared equally by all eligible employees.
+   Eligible = target achieved AND no MC. No manager selection is required.
+   Manager is separate. Only umo1017@gmail.com may set manager % by branch/month.
+   Branch visibility follows the same Salary outlet permissions.
 */
 (function(){
  const $=id=>document.getElementById(id);
- let bonusBranch="";
- let bonusEmployees=[];
- let bonusSaved={};
- let bonusBranchTotal=0;
+ const UMO="umo1017@gmail.com";
+ let bonusBranch="", bonusEmployees=[], bonusSaved={}, bonusBranchTotal=0, managerSetting=null;
 
  function moneyBonus(v){return "RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
  function monthBonus(){return $("bonusMonth")?.value || new Date().toISOString().slice(0,7);}
  function bonusMonthDate(){return monthBonus()+"-01";}
+ function currentBonusEmail(){
+   return String(window.currentUserEmail||window.currentEmail||window.userEmail||"").trim().toLowerCase();
+ }
+ function isUmoBonus(){return currentBonusEmail()===UMO;}
+ function isFullTimeBonusEmployee(e){
+   // Use whichever employment-status field exists in the current employee record.
+   const raw=String(
+     e.employment_type ?? e.employmentType ?? e.employee_type ?? e.employeeType ??
+     e.work_type ?? e.workType ?? e.status_type ?? e.statusType ?? ""
+   ).trim().toLowerCase().replace(/[\s_-]+/g,"");
+   // Explicit Part Time never joins Bonus. Once changed to Full Time, it joins automatically.
+   if(["parttime","parttimer","pt"].includes(raw)) return false;
+   if(["fulltime","fulltimer","ft","permanent"].includes(raw)) return true;
+   // Existing records with no employment-type field keep current behavior.
+   return true;
+ }
+ function canOpenBonus(){return !!(window.canViewSalary || window.isGlobalAdmin || window.isPayrollManager);}
+ function canEditStaffBonus(){return !!(window.isGlobalAdmin || window.isPayrollManager);}
 
- function canOpenBonus(){
-   return !!(window.canViewSalary || window.isGlobalAdmin || window.isPayrollManager);
- }
- function canEditBonus(){
-   return !!(window.isGlobalAdmin || window.isPayrollManager);
- }
  function showBonus(){
-   if(!canOpenBonus()){ if(typeof showDaily==="function") showDaily(); return; }
+   if(!canOpenBonus()){if(typeof showDaily==="function")showDaily();return;}
    window.activeMainPage="bonus";
    try{localStorage.setItem("nd_last_page_v2","bonus");localStorage.setItem("nd_last_page_v3","bonus");}catch(_){}
    ["appView","salaryPage","rosterPage","settlementPage","ordersPage","settingsPage"].forEach(id=>{
-     const p=$(id); if(!p)return; p.classList.remove("active","sidebar-offset"); if(id==="appView")p.classList.add("hidden");
+     const p=$(id);if(!p)return;p.classList.remove("active","sidebar-offset");if(id==="appView")p.classList.add("hidden");
    });
    $("bonusPage")?.classList.add("active","sidebar-offset");
    document.querySelectorAll(".sidebar-btn").forEach(b=>b.classList.remove("active"));
@@ -15069,48 +15084,42 @@ input,select,textarea,button,a{
  }
  window.showBonus=showBonus;
 
- function hideBonus(){
-   $("bonusPage")?.classList.remove("active","sidebar-offset");
- }
-
  async function loadBonus(){
    if(!$("bonusPage"))return;
-   const state=$("bonusSyncState"); if(state)state.textContent="Loading...";
-   const m=monthBonus(), start=m+"-01";
+   const state=$("bonusSyncState");if(state)state.textContent="Loading...";
+   const m=monthBonus(),start=m+"-01";
    const endDate=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1);
    const end=endDate.toISOString().slice(0,10);
 
-   const [empRes,settRes,saveRes,profileRes]=await Promise.all([
+   const [empRes,settRes,saveRes,profileRes,mgrRes]=await Promise.all([
      salaryDb.from("employees").select("*").order("outlet").order("name"),
      salaryDb.from("daily_settlements").select("branch,grand_total,settlement_date").gte("settlement_date",start).lt("settlement_date",end),
      salaryDb.from("branch_bonus_monthly").select("*").eq("bonus_month",bonusMonthDate()),
-     salaryDb.from("salary_manager_profiles").select("name,email,is_owner")
+     salaryDb.from("salary_manager_profiles").select("name,email,is_owner"),
+     salaryDb.from("branch_bonus_manager_settings").select("*").eq("bonus_month",bonusMonthDate())
    ]);
+   const err=empRes.error||settRes.error||saveRes.error||mgrRes.error;
+   if(err){if(state)state.textContent="Bonus setup required: "+err.message;return;}
 
-   const err=empRes.error||settRes.error||saveRes.error;
-   if(err){
-     if(state)state.textContent="Bonus setup required: "+err.message;
-     return;
-   }
    bonusEmployees=empRes.data||[];
-   bonusSaved={};
-   (saveRes.data||[]).forEach(r=>bonusSaved[Number(r.employee_id)]=r);
+   bonusSaved={};(saveRes.data||[]).forEach(r=>bonusSaved[Number(r.employee_id)]=r);
 
-   // Exclude known manager names from employee bonus rows.
+   // Managers are excluded from the employee 1% pool.
    const managerNames=new Set((profileRes.data||[]).map(x=>String(x.name||"").trim().toLowerCase()).filter(Boolean));
-   bonusEmployees=bonusEmployees.filter(e=>!managerNames.has(String(e.name||"").trim().toLowerCase()));
+   bonusEmployees=bonusEmployees.filter(e=>!managerNames.has(String(e.name||"").trim().toLowerCase()) && isFullTimeBonusEmployee(e));
 
+   // Exactly the same branch scope as Salary.
    let branches=[...new Set(bonusEmployees.map(e=>String(e.outlet||"").trim()).filter(Boolean))];
    if(!window.isGlobalAdmin && !window.isPayrollManager && Array.isArray(window.accessibleSalaryOutlets)){
      branches=branches.filter(b=>window.accessibleSalaryOutlets.includes(b));
    }
-   if(!bonusBranch || !branches.includes(bonusBranch)) bonusBranch=branches[0]||"";
+   if(!bonusBranch||!branches.includes(bonusBranch))bonusBranch=branches[0]||"";
 
    const tabs=$("bonusBranchTabs");
    if(tabs)tabs.innerHTML=branches.map(b=>`<button type="button" class="bonus-branch-btn ${b===bonusBranch?"active":""}" data-bonus-branch="${String(b).replace(/"/g,"&quot;")}">${b}</button>`).join("");
 
-   const rows=settRes.data||[];
-   bonusBranchTotal=rows.filter(r=>String(r.branch)===bonusBranch).reduce((n,r)=>n+Number(r.grand_total||0),0);
+   bonusBranchTotal=(settRes.data||[]).filter(r=>String(r.branch)===bonusBranch).reduce((n,r)=>n+Number(r.grand_total||0),0);
+   managerSetting=(mgrRes.data||[]).find(r=>String(r.branch)===bonusBranch)||null;
    renderBonus();
    if(state)state.textContent="Cloud synced ✓";
  }
@@ -15122,87 +15131,103 @@ input,select,textarea,button,a{
      const r=bonusSaved[Number(e.id)]||{};
      const target=r.target_achieved!==false;
      const mc=!!r.has_mc;
-     const selected=!!r.manager_selected;
-     const eligible=target&&!mc&&selected;
-     return {e,r,target,mc,selected,eligible};
+     const eligible=target&&!mc;
+     return {e,target,mc,eligible};
    });
    const count=rows.filter(x=>x.eligible).length;
    const each=count?pool/count:0;
+   const managerPct=Number(managerSetting?.manager_percent||0);
+   const managerAmount=bonusBranchTotal*managerPct/100;
+
    $("bonusBranchPerformance").textContent=moneyBonus(bonusBranchTotal);
    $("bonusPool").textContent=moneyBonus(pool);
    $("bonusEligibleCount").textContent=String(count);
+   if($("bonusManagerAmount"))$("bonusManagerAmount").textContent=moneyBonus(managerAmount);
+   if($("bonusManagerPct")){$("bonusManagerPct").value=managerPct;$("bonusManagerPct").disabled=!isUmoBonus();}
 
-   const edit=canEditBonus();
+   const edit=canEditStaffBonus();
    $("bonusStaffBody").innerHTML=rows.length?rows.map(x=>`
     <tr data-bonus-emp="${x.e.id}">
      <td><strong>${x.e.name||"-"}</strong></td>
      <td><input type="checkbox" data-bonus-target="${x.e.id}" ${x.target?"checked":""} ${edit?"":"disabled"}/></td>
      <td><input type="checkbox" data-bonus-mc="${x.e.id}" ${x.mc?"checked":""} ${edit?"":"disabled"}/></td>
-     <td><input type="checkbox" data-bonus-select="${x.e.id}" ${x.selected?"checked":""} ${edit?"":"disabled"}/></td>
      <td class="${x.eligible?"bonus-yes":"bonus-no"}">${x.eligible?"Eligible":"Not eligible"}</td>
      <td>${x.eligible?moneyBonus(each):"RM 0.00"}</td>
-    </tr>`).join(""):`<tr><td colspan="6">No employees for this branch.</td></tr>`;
-   $("bonusSaveBtn").style.display=edit?"":"none";
+    </tr>`).join(""):`<tr><td colspan="5">No employees for this branch.</td></tr>`;
+   $("bonusSaveBtn").style.display=(edit||isUmoBonus())?"":"none";
  }
 
  function readRow(id){
    const target=$("bonusStaffBody").querySelector(`[data-bonus-target="${id}"]`)?.checked??true;
    const mc=$("bonusStaffBody").querySelector(`[data-bonus-mc="${id}"]`)?.checked??false;
-   const selected=$("bonusStaffBody").querySelector(`[data-bonus-select="${id}"]`)?.checked??false;
-   return {target,mc,selected,eligible:target&&!mc&&selected};
+   return {target,mc,eligible:target&&!mc};
  }
 
  async function saveBonus(){
-   if(!canEditBonus())return;
    const state=$("bonusSyncState");
-   const emps=bonusEmployees.filter(e=>String(e.outlet||"")===bonusBranch);
-   const states=emps.map(e=>({e,...readRow(e.id)}));
-   const eligibleCount=states.filter(x=>x.eligible).length;
-   const pool=bonusBranchTotal*0.01;
-   const each=eligibleCount?pool/eligibleCount:0;
-   const rows=states.map(x=>({
-     bonus_month:bonusMonthDate(),branch:bonusBranch,employee_id:Number(x.e.id),employee_name:x.e.name||"",
-     branch_total:Number(bonusBranchTotal||0),bonus_pool:Number(pool||0),
-     target_achieved:x.target,has_mc:x.mc,manager_selected:x.selected,
-     eligible:x.eligible,bonus_amount:x.eligible?Number(each.toFixed(2)):0,
-     updated_at:new Date().toISOString()
-   }));
-   if(state)state.textContent="Saving...";
-   const {error}=await salaryDb.from("branch_bonus_monthly").upsert(rows,{onConflict:"bonus_month,branch,employee_id"});
-   if(error){if(state)state.textContent="Save failed: "+error.message;return;}
+   const editStaff=canEditStaffBonus(), umo=isUmoBonus();
+   if(!editStaff&&!umo)return;
+
+   // Save employee eligibility/results.
+   if(editStaff){
+     const emps=bonusEmployees.filter(e=>String(e.outlet||"")===bonusBranch);
+     const states=emps.map(e=>({e,...readRow(e.id)}));
+     const eligibleCount=states.filter(x=>x.eligible).length;
+     const pool=bonusBranchTotal*0.01;
+     const each=eligibleCount?pool/eligibleCount:0;
+     const rows=states.map(x=>({
+       bonus_month:bonusMonthDate(),branch:bonusBranch,employee_id:Number(x.e.id),employee_name:x.e.name||"",
+       branch_total:Number(bonusBranchTotal||0),bonus_pool:Number(pool||0),
+       target_achieved:x.target,has_mc:x.mc,manager_selected:true,
+       eligible:x.eligible,bonus_amount:x.eligible?Number(each.toFixed(2)):0,
+       updated_at:new Date().toISOString()
+     }));
+     if(rows.length){
+       const {error}=await salaryDb.from("branch_bonus_monthly").upsert(rows,{onConflict:"bonus_month,branch,employee_id"});
+       if(error){if(state)state.textContent="Save failed: "+error.message;return;}
+     }
+   }
+
+   // Only Umo may save manager percentage.
+   if(umo){
+     const pct=Math.max(0,Number($("bonusManagerPct")?.value||0));
+     const payload={
+       bonus_month:bonusMonthDate(),branch:bonusBranch,manager_percent:pct,
+       manager_bonus:Number((bonusBranchTotal*pct/100).toFixed(2)),
+       updated_by:UMO,updated_at:new Date().toISOString()
+     };
+     const {error}=await salaryDb.from("branch_bonus_manager_settings").upsert(payload,{onConflict:"bonus_month,branch"});
+     if(error){if(state)state.textContent="Manager % save failed: "+error.message;return;}
+   }
    if(state)state.textContent="Saved ✓";
    await loadBonus();
  }
 
  document.addEventListener("DOMContentLoaded",()=>{
-   const bm=$("bonusMonth");
-   if(bm && !bm.value) bm.value=$("salaryMonth")?.value || new Date().toISOString().slice(0,7);
+   const bm=$("bonusMonth");if(bm&&!bm.value)bm.value=$("salaryMonth")?.value||new Date().toISOString().slice(0,7);
    $("sidebarBonus")?.addEventListener("click",showBonus);
-   $("closeBonusPage")?.addEventListener("click",()=>{hideBonus(); if(typeof showDaily==="function")showDaily();});
+   $("closeBonusPage")?.addEventListener("click",()=>{if(typeof showDaily==="function")showDaily();});
    $("bonusRefreshBtn")?.addEventListener("click",loadBonus);
    $("bonusSaveBtn")?.addEventListener("click",saveBonus);
    $("bonusMonth")?.addEventListener("change",loadBonus);
-   $("bonusBranchTabs")?.addEventListener("click",e=>{
-     const b=e.target.closest("[data-bonus-branch]"); if(!b)return;
-     bonusBranch=b.dataset.bonusBranch||""; loadBonus();
-   });
+   $("bonusBranchTabs")?.addEventListener("click",e=>{const b=e.target.closest("[data-bonus-branch]");if(!b)return;bonusBranch=b.dataset.bonusBranch||"";loadBonus();});
    $("bonusStaffBody")?.addEventListener("change",e=>{
-     if(e.target.matches("[data-bonus-target],[data-bonus-mc],[data-bonus-select]")){
-       // mirror current unsaved choices into memory object before rerender
-       const id=Number(e.target.closest("tr")?.dataset.bonusEmp);
-       if(id){
-         const st=readRow(id), old=bonusSaved[id]||{};
-         bonusSaved[id]={...old,target_achieved:st.target,has_mc:st.mc,manager_selected:st.selected};
-       }
-       renderBonus();
-     }
+     if(!e.target.matches("[data-bonus-target],[data-bonus-mc]"))return;
+     const id=Number(e.target.closest("tr")?.dataset.bonusEmp);if(!id)return;
+     const st=readRow(id),old=bonusSaved[id]||{};
+     bonusSaved[id]={...old,target_achieved:st.target,has_mc:st.mc};
+     renderBonus();
+   });
+   $("bonusManagerPct")?.addEventListener("input",()=>{
+     if(!isUmoBonus())return;
+     managerSetting={...(managerSetting||{}),manager_percent:Number($("bonusManagerPct").value||0)};
+     renderBonus();
    });
  });
 
- // Keep Bonus nav visibility aligned with Salary access after permissions load.
  const obs=new MutationObserver(()=>{
-   const salary=$("sidebarSalary"), bonus=$("sidebarBonus");
-   if(salary&&bonus) bonus.style.display=getComputedStyle(salary).display==="none"?"none":"";
+   const salary=$("sidebarSalary"),bonus=$("sidebarBonus");
+   if(salary&&bonus)bonus.style.display=getComputedStyle(salary).display==="none"?"none":"";
  });
  document.addEventListener("DOMContentLoaded",()=>{
    const salary=$("sidebarSalary"),bonus=$("sidebarBonus");
