@@ -8841,12 +8841,12 @@ let rosterOutletSettings=new Map();
 let rosterCleaningEmployees=[];
 let rosterCleaningManagers=new Map();
 const ROSTER_CLEANING_TASKS=[
-  "Toilet / Washroom",
-  "Treatment Rooms & Floor",
-  "Reception / Waiting Area",
-  "Towels / Laundry Area",
-  "Pantry / Cups",
-  "Trash / Supplies Check"
+  {icon:"🚽",label:"Toilet"},
+  {icon:"🧹",label:"Floor"},
+  {icon:"🛏️",label:"Room"},
+  {icon:"🧺",label:"Towels"},
+  {icon:"☕",label:"Pantry"},
+  {icon:"🗑️",label:"Trash"}
 ];
 const ROSTER_WEEKDAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
@@ -9001,7 +9001,7 @@ function rosterCleaningAssignments(outlet,date){
   const dayIndex=Math.max(0,d-1);
   return ROSTER_CLEANING_TASKS.map((task,i)=>{
     const emp=working[(dayIndex+i)%working.length];
-    return {task,name:String(emp?.name||"").trim()};
+    return {task:task.label,icon:task.icon,name:String(emp?.name||"").trim()};
   });
 }
 function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
@@ -9015,15 +9015,15 @@ function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
     const jobs=rosterCleaningAssignments(outlet,date);
     cells.push(`<td>
       <div class="cleaning-day">${day}</div>
-      ${off?`<div class="cleaning-off">Rest: ${rosterEsc(off)}</div>`:""}
-      ${jobs.length?jobs.map(j=>`<div class="cleaning-job"><strong>${rosterEsc(j.name)}</strong>${rosterEsc(j.task)}</div>`).join(""):`<div class="cleaning-empty">No Full Time technician available</div>`}
+      ${off?`<div class="cleaning-off">OFF · ${rosterEsc(off)}</div>`:""}
+      ${jobs.length?jobs.map(j=>`<div class="cleaning-job" style="text-align:center"><strong>${rosterEsc(j.name)}</strong><div style="font-size:22px;line-height:1.2;margin:3px 0">${j.icon}</div><span>${rosterEsc(j.task)}</span></div>`).join(""):`<div class="cleaning-empty">—</div>`}
     </td>`);
   }
   while(cells.length%7) cells.push("<td></td>");
   const rows=[];
   for(let i=0;i<cells.length;i+=7) rows.push(`<tr>${cells.slice(i,i+7).join("")}</tr>`);
   return `<div class="roster-calendar-card cleaning-wrap">
-    <div class="cleaning-title">Daily Cleaning Roster</div>
+    <div class="cleaning-title">🧹 Cleaning Roster</div>
     <div class="cleaning-sub">${rosterEsc(outlet)} · ${rosterEsc(m)}</div>
     <div class="cleaning-table-wrap">
       <table class="cleaning-table"><thead><tr>${heads}</tr></thead><tbody>${rows.join("")}</tbody></table>
