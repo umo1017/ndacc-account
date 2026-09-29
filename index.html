@@ -3,7 +3,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes" name="viewport"/>
 <title>Nature's Dao Daily Settlement</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -14708,6 +14708,212 @@ Static audit passed: JS syntax, duplicate IDs, core page/function presence.
 Latest UI fixes retained: Salary vertical/horizontal scrolling, zoom, permission-aware same-page memory,
 Orders/Loan branch workflow, Outstanding row list, Settings/Bed Fee persistence patches.
 -->
+
+
+<style>
+/* ===== COMPLETE DESKTOP + MOBILE INTERACTION AUDIT FIX ===== */
+
+/* 1. All main pages: normal vertical scrolling, no content clipping. */
+html,body{
+  width:100%!important;
+  min-height:100%!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+#appView,#salaryPage,#rosterPage,#settlementPage,#ordersPage,#settingsPage{
+  height:auto!important;
+  min-height:100vh!important;
+  max-height:none!important;
+  box-sizing:border-box!important;
+}
+.salary-page.active,#rosterPage.active{
+  overflow:visible!important;
+}
+
+/* 2. Wide information stays readable and can be moved horizontally.
+      Do not squeeze columns until values disappear. */
+.table-wrap,
+.salary-table-wrap,
+.orders-list-wrap,
+.settlement-table-wrap,
+.roster-table-wrap{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+  -webkit-overflow-scrolling:touch!important;
+  touch-action:pan-x pan-y pinch-zoom!important;
+}
+#salaryPage table,
+#settlementPage table,
+#ordersPage table,
+#rosterPage table,
+#appView table{
+  max-width:none;
+}
+
+/* 3. Every secondary page has a small Close button. */
+.nd-page-close{
+  position:sticky!important;
+  top:8px!important;
+  float:right!important;
+  z-index:60!important;
+  width:34px!important;
+  min-width:34px!important;
+  max-width:34px!important;
+  height:34px!important;
+  min-height:34px!important;
+  padding:0!important;
+  margin:0 0 6px 8px!important;
+  border:1px solid var(--line)!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  color:#222!important;
+  font-size:19px!important;
+  font-weight:700!important;
+  line-height:32px!important;
+  text-align:center!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.05)!important;
+}
+
+/* 4. Inputs/buttons remain tappable; zoom and scrolling are not blocked. */
+input,select,textarea,button,a{
+  touch-action:manipulation;
+}
+#salaryPage,#rosterPage,#settlementPage,#ordersPage,#settingsPage,
+.table-wrap,.salary-table-wrap,.orders-list-wrap{
+  touch-action:pan-x pan-y pinch-zoom!important;
+}
+
+/* 5. Mobile: page uses full screen; only genuinely wide content scrolls. */
+@media(max-width:760px){
+  #appView,#salaryPage,#rosterPage,#settlementPage,#ordersPage,#settingsPage{
+    width:100%!important;
+    max-width:100%!important;
+    margin-left:0!important;
+    box-sizing:border-box!important;
+  }
+  .sidebar-offset{
+    margin-left:0!important;
+    max-width:100%!important;
+  }
+  #salaryPage .salary-shell,
+  #settlementPage .salary-shell,
+  #ordersPage .salary-shell,
+  #settingsPage .salary-shell{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+  }
+  #salaryPage .salary-card,
+  #settlementPage .salary-card,
+  #ordersPage .salary-card,
+  #settingsPage .salary-card{
+    max-width:100%!important;
+    min-width:0!important;
+  }
+
+  /* Salary is deliberately wide: scroll the table, not hide columns. */
+  #salaryPage .salary-table,
+  #salaryPage .salary-table-wrap table{
+    width:max-content!important;
+    min-width:760px!important;
+    max-width:none!important;
+    table-layout:auto!important;
+  }
+  #salaryPage th,#salaryPage td{
+    white-space:nowrap!important;
+    word-break:normal!important;
+    overflow:visible!important;
+    text-overflow:clip!important;
+  }
+
+  .nd-page-close{
+    top:6px!important;
+    width:32px!important;
+    min-width:32px!important;
+    max-width:32px!important;
+    height:32px!important;
+    min-height:32px!important;
+    line-height:30px!important;
+    font-size:18px!important;
+  }
+}
+
+/* 6. Desktop: sidebar offset remains correct and tables remain independently scrollable. */
+@media(min-width:761px){
+  .salary-page.sidebar-offset,.roster-page.sidebar-offset{
+    margin-left:190px!important;
+    max-width:calc(100% - 190px)!important;
+  }
+}
+</style>
+
+<script>
+/* ===== SAFE PAGE OPEN/CLOSE + SCROLL SUPPORT =====
+   UI-only. Does not change calculations, Supabase writes, payroll, orders, or reports data. */
+(function(){
+  const pageIds=["salaryPage","rosterPage","settlementPage","ordersPage","settingsPage"];
+
+  function closeToDaily(){
+    try{
+      if(typeof showDaily==="function") showDaily();
+    }catch(_){}
+  }
+
+  function ensurePageCloseButtons(){
+    pageIds.forEach(id=>{
+      const page=document.getElementById(id);
+      if(!page || page.querySelector(":scope > .nd-page-close")) return;
+      const b=document.createElement("button");
+      b.type="button";
+      b.className="nd-page-close";
+      b.setAttribute("aria-label","Close page");
+      b.title="Close";
+      b.textContent="×";
+      b.addEventListener("click",closeToDaily);
+      page.insertBefore(b,page.firstChild);
+    });
+  }
+
+  function makeExistingTableAreasScrollable(){
+    const roots=["appView",...pageIds].map(id=>document.getElementById(id)).filter(Boolean);
+    roots.forEach(root=>{
+      root.querySelectorAll(".table-wrap,.salary-table-wrap,.orders-list-wrap").forEach(w=>{
+        w.style.overflowX="auto";
+        w.style.webkitOverflowScrolling="touch";
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    ensurePageCloseButtons();
+    makeExistingTableAreasScrollable();
+    setTimeout(makeExistingTableAreasScrollable,500);
+    setTimeout(makeExistingTableAreasScrollable,1500);
+
+    pageIds.forEach(id=>{
+      const page=document.getElementById(id);
+      if(page){
+        new MutationObserver(()=>makeExistingTableAreasScrollable())
+          .observe(page,{childList:true,subtree:true});
+      }
+    });
+  });
+
+  /* Escape closes a secondary page, but never while a modal is open. */
+  document.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    if(document.querySelector(".salary-modal.open")) return;
+    if(pageIds.some(id=>document.getElementById(id)?.classList.contains("active"))){
+      closeToDaily();
+    }
+  });
+})();
+</script>
 
 </body>
 </html>
