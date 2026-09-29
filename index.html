@@ -9027,16 +9027,15 @@ function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
   </div>`;
 
   const weekdayMm=[
-    ["Monday","တနင်္လာ"],["Tuesday","အင်္ဂါ"],["Wednesday","ဗုဒ္ဓဟူး"],
-    ["Thursday","ကြာသပတေး"],["Friday","သောကြာ"],["Saturday","စနေ"],["Sunday","တနင်္ဂနွေ"]
+    ["Sunday","တနင်္ဂနွေ"],["Monday","တနင်္လာ"],["Tuesday","အင်္ဂါ"],
+    ["Wednesday","ဗုဒ္ဓဟူး"],["Thursday","ကြာသပတေး"],["Friday","သောကြာ"],["Saturday","စနေ"]
   ];
 
   // Build actual calendar weeks for the selected month.
   const weeks=[];
   let week=[];
-  const firstJs=new Date(year,month-1,1).getDay();
-  const firstIso=firstJs===0?7:firstJs;
-  for(let i=1;i<firstIso;i++) week.push(null);
+  const firstJs=new Date(year,month-1,1).getDay(); // 0=Sun ... 6=Sat, same as Monthly Roster
+  for(let i=0;i<firstJs;i++) week.push(null);
   for(let d=1;d<=days;d++){
     week.push(d);
     if(week.length===7){weeks.push(week);week=[];}
@@ -16128,6 +16127,93 @@ html,body,#app,.app,.main,.main-content{height:auto!important;min-height:100%!im
   #rosterPage .cleaning-cell-date{
     font-size:8px!important;width:16px!important;height:16px!important;line-height:16px!important
   }
+}
+
+
+/* ===== FINAL FULL CALENDAR VIEW — PHONE + DESKTOP ===== */
+#rosterPage .roster-calendar-card,
+#rosterPage .cleaning-reference-card{
+  width:100%!important;max-width:100%!important;box-sizing:border-box!important;
+}
+#rosterPage .roster-calendar-card{overflow:visible!important}
+#rosterPage .roster-calendar-head,
+#rosterPage .roster-calendar-grid{
+  width:100%!important;min-width:0!important;
+  grid-template-columns:repeat(7,minmax(0,1fr))!important;
+}
+#rosterPage .cleaning-table-wrap{width:100%!important;max-width:100%!important;overflow:visible!important}
+#rosterPage .cleaning-matrix{width:100%!important;min-width:0!important;max-width:100%!important;table-layout:fixed!important}
+#rosterPage .cleaning-matrix th,
+#rosterPage .cleaning-matrix td{min-width:0!important;max-width:none!important;width:auto!important}
+#rosterPage .cleaning-matrix .cleaning-week-head,
+#rosterPage .cleaning-matrix .cleaning-weekday{position:static!important;min-width:0!important;width:12%!important}
+#rosterPage .cleaning-person-head{
+  white-space:normal!important;word-break:normal!important;overflow-wrap:anywhere!important;
+  line-height:1.1!important;max-height:2.4em!important;
+}
+@media(max-width:700px){
+  #rosterPage{padding:4px!important}
+  #rosterPage .roster-calendar-card{padding:5px!important}
+  #rosterPage .roster-calendar-head,
+  #rosterPage .roster-calendar-grid{gap:2px!important}
+  #rosterPage .roster-calendar-head>*{min-width:0!important;width:auto!important;font-size:8px!important;padding:3px 0!important}
+  #rosterPage .roster-day{
+    width:auto!important;min-width:0!important;min-height:78px!important;
+    padding:4px 2px!important;font-size:9px!important;overflow:hidden!important;
+  }
+  #rosterPage .roster-day *{word-break:normal!important;overflow-wrap:anywhere!important}
+  #rosterPage .cleaning-reference-card{padding:4px!important}
+  #rosterPage .cleaning-matrix{border-spacing:2px!important}
+  #rosterPage .cleaning-matrix th,#rosterPage .cleaning-matrix td{
+    min-width:0!important;width:auto!important;height:67px!important;padding:2px 1px!important
+  }
+  #rosterPage .cleaning-weekday strong{font-size:7px!important}
+  #rosterPage .cleaning-weekday span{font-size:6px!important}
+  #rosterPage .cleaning-person-head{font-size:8px!important;line-height:1.05!important}
+  #rosterPage .cleaning-cell-text{font-size:6.5px!important;line-height:1.05!important}
+  #rosterPage .cleaning-cell-icon{font-size:15px!important}
+  #rosterPage .cleaning-cell-date{font-size:7px!important;width:15px!important;height:15px!important;line-height:15px!important}
+}
+@media(min-width:701px){
+  #rosterPage .roster-day{min-width:0!important}
+  #rosterPage .cleaning-matrix th,#rosterPage .cleaning-matrix td{min-width:0!important}
+}
+
+
+/* ===== ONE LOGO = ONE UNIQUE COLOR (FINAL OVERRIDE) ===== */
+/* Toilet = Blue */
+#rosterPage .cleaning-matrix td.task-toilet,
+#rosterPage .cleaning-legend-item.task-toilet{
+  background:#cfe8ff!important;border:1px solid #73afe4!important
+}
+/* Floor = Yellow */
+#rosterPage .cleaning-matrix td.task-floor,
+#rosterPage .cleaning-legend-item.task-floor{
+  background:#fff0a8!important;border:1px solid #dfc34f!important
+}
+/* Room = Purple */
+#rosterPage .cleaning-matrix td.task-room,
+#rosterPage .cleaning-legend-item.task-room{
+  background:#e4d6ff!important;border:1px solid #aa8ddd!important
+}
+/* Towels/Laundry = Green */
+#rosterPage .cleaning-matrix td.task-towel,
+#rosterPage .cleaning-legend-item.task-towel{
+  background:#cef0d7!important;border:1px solid #78bd8d!important
+}
+/* Pantry = Pink */
+#rosterPage .cleaning-matrix td.task-pantry,
+#rosterPage .cleaning-legend-item.task-pantry{
+  background:#ffd5e4!important;border:1px solid #e68eae!important
+}
+/* Trash = Orange */
+#rosterPage .cleaning-matrix td.task-trash,
+#rosterPage .cleaning-legend-item.task-trash{
+  background:#ffd9b8!important;border:1px solid #e59d62!important
+}
+/* Rest day = Gray; never shares a task color */
+#rosterPage .cleaning-matrix td.cleaning-rest-cell{
+  background:#eceff2!important;border:1px solid #bfc5ca!important
 }
 
 </style>
