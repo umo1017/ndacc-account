@@ -16008,6 +16008,128 @@ html,body,#app,.app,.main,.main-content{height:auto!important;min-height:100%!im
   }
 }
 
+
+/* ===== MOBILE ROSTER READABILITY FIX ===== */
+@media (max-width:700px){
+  #rosterPage{
+    width:100%!important;
+    max-width:100vw!important;
+    overflow-x:hidden!important;
+  }
+
+  /* Monthly Roster: readable cells, swipe horizontally instead of squeezing */
+  #rosterPage .roster-calendar-card{
+    width:100%!important;
+    max-width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:visible!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  #rosterPage .roster-calendar-head,
+  #rosterPage .roster-calendar-grid{
+    width:820px!important;
+    min-width:820px!important;
+    grid-template-columns:repeat(7,110px)!important;
+    gap:6px!important;
+  }
+  #rosterPage .roster-calendar-head>*{
+    min-width:110px!important;
+    font-size:12px!important;
+    padding:6px 3px!important;
+  }
+  #rosterPage .roster-day{
+    width:110px!important;
+    min-width:110px!important;
+    min-height:128px!important;
+    padding:8px 6px!important;
+    font-size:12px!important;
+    overflow:visible!important;
+  }
+  #rosterPage .roster-day *{
+    max-width:100%!important;
+    overflow-wrap:normal!important;
+    word-break:normal!important;
+  }
+
+  /* Employee names must never stack letter-by-letter */
+  #rosterPage .roster-day,
+  #rosterPage .roster-day div,
+  #rosterPage .roster-day span,
+  #rosterPage .roster-day button{
+    word-break:keep-all!important;
+  }
+
+  /* Cleaning table remains readable too; swipe to see all staff */
+  #rosterPage .cleaning-table-wrap{
+    width:100%!important;
+    max-width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:visible!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  #rosterPage .cleaning-matrix{
+    width:max-content!important;
+    min-width:760px!important;
+    table-layout:auto!important;
+  }
+  #rosterPage .cleaning-matrix th,
+  #rosterPage .cleaning-matrix td{
+    min-width:112px!important;
+    max-width:130px!important;
+    height:82px!important;
+    padding:5px 4px!important;
+  }
+  #rosterPage .cleaning-matrix .cleaning-week-head,
+  #rosterPage .cleaning-matrix .cleaning-weekday{
+    min-width:92px!important;
+    width:92px!important;
+    position:sticky!important;
+    left:0!important;
+    z-index:5!important;
+  }
+  #rosterPage .cleaning-person-head{font-size:11px!important}
+  #rosterPage .cleaning-cell-text{font-size:10px!important;line-height:1.15!important}
+  #rosterPage .cleaning-cell-icon{font-size:22px!important}
+}
+
+
+/* ===== REST DAY: FULL MONTH DATE PICKER ===== */
+.clean-rest-month-label{text-align:center;font-weight:900;margin:5px 0 8px;color:#244d82}
+.clean-rest-date-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.clean-rest-dow{text-align:center;font-size:10px;font-weight:900;color:#777;padding:3px 0}
+.clean-rest-date{border:1px solid #ddd;background:#fff;border-radius:8px;min-height:38px;font-weight:800}
+.clean-rest-date.selected{background:#244d82!important;color:#fff!important;border-color:#244d82!important}
+.clean-rest-date.blank{border:0;background:transparent}
+
+/* ===== WEEK DUTY TABLE: SMALL DATE + 2-LINE NAMES ===== */
+.cleaning-cell-date{
+  display:block!important;
+  position:absolute!important;
+  top:3px!important;right:5px!important;
+  min-width:17px!important;height:17px!important;line-height:17px!important;
+  border-radius:9px!important;background:rgba(255,255,255,.72)!important;
+  text-align:center!important;font-size:9px!important;font-weight:950!important;color:#555!important
+}
+.cleaning-person-head{
+  white-space:normal!important;
+  overflow:hidden!important;
+  overflow-wrap:anywhere!important;
+  word-break:normal!important;
+  line-height:1.12!important;
+  max-height:2.5em!important;
+}
+@media(max-width:700px){
+  #rosterPage .cleaning-person-head{
+    font-size:10px!important;
+    line-height:1.1!important;
+    max-height:2.4em!important;
+    min-height:2.4em!important;
+  }
+  #rosterPage .cleaning-cell-date{
+    font-size:8px!important;width:16px!important;height:16px!important;line-height:16px!important
+  }
+}
+
 </style>
 <script>
 /* ===== REPORT ALL BRANCH EXPENSE TOTAL ===== */
@@ -16157,6 +16279,15 @@ Audit fix: Bonus added to permission-aware page restore map.
    });
  }
  window.ndOptionalRestDayFor=function(emp,date){
+    try{
+      const dt=new Date(String(date)+"T00:00:00");
+      const month=String(date).slice(0,7), day=dt.getDate();
+      const em=String(emp?.email||emp?.login_email||"").trim().toLowerCase();
+      const all=JSON.parse(localStorage.getItem("nd_employee_rest_days_v1")||"{}")||{};
+      const exact=all[em+"|"+month+"|dates"];
+      if(Array.isArray(exact) && exact.includes(day)) return true;
+    }catch(_){}
+
    const all=read();
    const em=String(emp?.email||emp?.login_email||"").trim().toLowerCase();
    if(!em) return false;
@@ -16181,7 +16312,7 @@ Audit fix: Bonus added to permission-aware page restore map.
 /* ===== CLEANING ROSTER REST-DAY ADJUSTMENT ===== */
 (function(){
  const KEY="nd_employee_rest_days_v1";
- const DAYS=[["Mon",1],["Tue",2],["Wed",3],["Thu",4],["Fri",5],["Sat",6],["Sun",7]];
+ const DAYN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
  function read(){try{return JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){return{}}}
  function write(v){localStorage.setItem(KEY,JSON.stringify(v||{}))}
  function ensureModal(){
@@ -16192,7 +16323,7 @@ Audit fix: Bonus added to permission-aware page restore map.
    d.innerHTML=`<div class="clean-rest-box">
      <div class="clean-rest-head"><strong>Adjust Employee Rest Day</strong><button type="button" class="btn" id="cleanRestClose">×</button></div>
      <div class="field"><label>Employee</label><select id="cleanRestEmployee"></select></div>
-     <div class="field"><label>Rest Day</label><div id="cleanRestDays" class="clean-rest-days"></div></div>
+     <div class="field"><label>Rest Day · Select Date</label><div id="cleanRestMonthLabel" class="clean-rest-month-label"></div><div id="cleanRestDays" class="clean-rest-date-grid"></div></div>
      <div class="clean-rest-actions"><button type="button" class="btn" id="cleanRestClear">Clear</button><button type="button" class="btn primary" id="cleanRestSave">Save</button></div>
    </div>`;
    document.body.appendChild(d);
@@ -16210,17 +16341,28 @@ Audit fix: Bonus added to permission-aware page restore map.
    sel.innerHTML=emps.map(e=>`<option value="${e.id}" data-email="${String(e.email||e.login_email||"").replace(/"/g,"&quot;")}">${e.name||"-"}</option>`).join("");
    const render=()=>{
      const opt=sel.selectedOptions[0], em=String(opt?.dataset.email||"").trim().toLowerCase();
-     const all=read(), chosen=Array.isArray(all[em+"|"+month])?all[em+"|"+month]:[];
-     d.querySelector("#cleanRestDays").innerHTML=DAYS.map(([lab,n])=>`<button type="button" class="btn clean-rest-day ${chosen.includes(n)?"selected":""}" data-day="${n}">${lab}</button>`).join("");
-     d.querySelectorAll(".clean-rest-day").forEach(b=>b.onclick=()=>b.classList.toggle("selected"));
+     const all=read();
+     const key=em+"|"+month+"|dates";
+     const chosen=Array.isArray(all[key])?all[key]:[];
+     const [yy,mm]=month.split("-").map(Number);
+     const total=new Date(yy,mm,0).getDate();
+     const first=new Date(yy,mm-1,1).getDay();
+     d.querySelector("#cleanRestMonthLabel").textContent=month;
+     let html=DAYN.map(x=>`<div class="clean-rest-dow">${x}</div>`).join("");
+     for(let i=0;i<first;i++) html+=`<div class="clean-rest-date blank"></div>`;
+     for(let day=1;day<=total;day++){
+       html+=`<button type="button" class="clean-rest-date ${chosen.includes(day)?"selected":""}" data-date="${day}">${day}</button>`;
+     }
+     d.querySelector("#cleanRestDays").innerHTML=html;
+     d.querySelectorAll(".clean-rest-date[data-date]").forEach(b=>b.onclick=()=>b.classList.toggle("selected"));
    };
    sel.onchange=render; render();
-   d.querySelector("#cleanRestClear").onclick=()=>d.querySelectorAll(".clean-rest-day").forEach(b=>b.classList.remove("selected"));
+   d.querySelector("#cleanRestClear").onclick=()=>d.querySelectorAll(".clean-rest-date[data-date]").forEach(b=>b.classList.remove("selected"));
    d.querySelector("#cleanRestSave").onclick=()=>{
      const opt=sel.selectedOptions[0], em=String(opt?.dataset.email||"").trim().toLowerCase();
      if(!em){alert("Employee email not found.");return}
-     const chosen=[...d.querySelectorAll(".clean-rest-day.selected")].map(b=>Number(b.dataset.day)).sort();
-     const all=read(), k=em+"|"+month;
+     const chosen=[...d.querySelectorAll(".clean-rest-date.selected[data-date]")].map(b=>Number(b.dataset.date)).sort((a,b)=>a-b);
+     const all=read(), k=em+"|"+month+"|dates";
      if(chosen.length)all[k]=chosen;else delete all[k];
      write(all); d.classList.remove("show");
      if(typeof renderRosterCalendar==="function")renderRosterCalendar();
