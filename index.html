@@ -8987,16 +8987,48 @@ async function loadRosterCleaningPeople(){
     (mgrRes.data||[]).forEach(x=>rosterCleaningManagers.set(String(x.branch||"").trim(),x));
   }
 }
+/* Branch employee duty selection. Default: all employees in the branch;
+   clicking a name removes/adds that person from cleaning duty. */
+function rosterCleaningSelectionKey(outlet){return "nd_cleaning_staff_v2_"+String(outlet||"").trim().toLowerCase();}
+function rosterCleaningBranchEmployees(outlet){
+  if(!outlet||String(outlet).trim().toLowerCase()==="global")return [];
+  return rosterCleaningEmployees.filter(e=>String(e.outlet||"").trim()===outlet);
+}
+function rosterCleaningSelectedIds(outlet){
+  let stored=null;
+  try{stored=JSON.parse(localStorage.getItem(rosterCleaningSelectionKey(outlet))||"null");}catch(_){}
+  const people=rosterCleaningBranchEmployees(outlet);
+  return Array.isArray(stored)?stored.map(String):people.map(e=>String(e.id));
+}
 function rosterCleaningEligible(outlet){
-  if(!outlet || String(outlet).trim().toLowerCase()==="global") return [];
-  const mgr=rosterCleaningManagers.get(outlet);
-  return rosterCleaningEmployees.filter(e=>{
-    if(String(e.outlet||"").trim()!==outlet) return false;
-    if(!rosterIsFullTime(e)) return false;
-    if(mgr && Number(mgr.manager_employee_id||0)===Number(e.id)) return false;
-    if(mgr && rosterNormName(mgr.manager_name) && rosterNormName(mgr.manager_name)===rosterNormName(e.name)) return false;
-    return true;
-  });
+  const selected=new Set(rosterCleaningSelectedIds(outlet));
+  return rosterCleaningBranchEmployees(outlet).filter(e=>selected.has(String(e.id)));
+}
+function toggleRosterCleaningStaff(outlet,id){
+  const selected=new Set(rosterCleaningSelectedIds(outlet));
+  const k=String(id);
+  if(selected.has(k))selected.delete(k);else selected.add(k);
+  localStorage.setItem(rosterCleaningSelectionKey(outlet),JSON.stringify([...selected]));
+  renderRoster();
+}
+window.toggleRosterCleaningStaff=toggleRosterCleaningStaff;
+function toggleRosterCleaningPicker(outlet){
+  const el=document.getElementById("cleaningStaffPicker");
+  if(el)el.hidden=!el.hidden;
+}
+window.toggleRosterCleaningPicker=toggleRosterCleaningPicker;
+function renderRosterCleaningPicker(outlet){
+  const people=rosterCleaningBranchEmployees(outlet);
+  const selected=new Set(rosterCleaningSelectedIds(outlet));
+  return `<div class="cleaning-staff-control">
+    <button type="button" class="btn" onclick="toggleRosterCleaningPicker()">👥 Branch Employees (${selected.size}/${people.length}) ▾</button>
+    <div id="cleaningStaffPicker" class="cleaning-staff-picker" hidden>
+      <div class="cleaning-picker-hint">Tap a name to include / exclude from cleaning duty</div>
+      <div class="cleaning-staff-buttons">${people.map(e=>`<button type="button" class="cleaning-staff-btn ${selected.has(String(e.id))?"selected":"excluded"}"
+        onclick="toggleRosterCleaningStaff('${rosterEsc(outlet)}','${rosterEsc(String(e.id))}')"
+        aria-pressed="${selected.has(String(e.id))}">${selected.has(String(e.id))?"✓ ":"＋ "}${rosterEsc(e.name||"-")}</button>`).join("")}</div>
+    </div>
+  </div>`;
 }
 window.rosterCleaningEligible=rosterCleaningEligible;
 function rosterCleaningAssignments(outlet,date){
@@ -9023,7 +9055,8 @@ function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
   if(!eligible.length) return `<div class="roster-calendar-card cleaning-wrap">
     <div class="cleaning-title">🧹 နေ့စဉ်သန့်ရှင်းရေးတာဝန်ဇယား</div>
     <div class="cleaning-sub">${rosterEsc(outlet)} · ${rosterEsc(m)}</div>
-    <div class="cleaning-empty">—</div>
+    ${renderRosterCleaningPicker(outlet)}
+    <div class="cleaning-empty">No employees selected</div>
   </div>`;
 
   const weekdayMm=[
@@ -9094,6 +9127,7 @@ function renderCleaningCalendar(outlet,m,year,month,days,firstDow){
   return `<div class="roster-calendar-card cleaning-wrap cleaning-reference-card">
     <div class="cleaning-title">🧹 နေ့စဉ်သန့်ရှင်းရေးတာဝန်ဇယား</div>
     <div class="cleaning-sub">${rosterEsc(outlet)} · ${rosterEsc(m)}</div>
+    ${renderRosterCleaningPicker(outlet)}
     <div class="cleaning-admin-bar">
       <button type="button" class="btn" onclick="openCleaningRestAdjust('${rosterEsc(outlet)}','${rosterEsc(m)}')">⚙ Adjust Rest Day</button>
     </div>
@@ -16267,6 +16301,16 @@ html,body,#app,.app,.main,.main-content{height:auto!important;min-height:100%!im
   }
 }
 
+
+/* Branch employee inclusion picker */
+#rosterPage .cleaning-staff-control{margin:9px 0}
+#rosterPage .cleaning-staff-picker{padding:9px;border:1px solid #dce5ee;border-radius:10px;margin-top:7px;background:#f8fafc}
+#rosterPage .cleaning-staff-picker[hidden]{display:none!important}
+#rosterPage .cleaning-picker-hint{font-size:10px;color:#617185;margin-bottom:7px}
+#rosterPage .cleaning-staff-buttons{display:flex;flex-wrap:wrap;gap:6px}
+#rosterPage .cleaning-staff-btn{border:1px solid #b9c6d5;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:700;cursor:pointer}
+#rosterPage .cleaning-staff-btn.selected{background:#dbeafe;color:#123b70;border-color:#7fa7db}
+#rosterPage .cleaning-staff-btn.excluded{background:#ececec;color:#777;border-color:#ccc;text-decoration:line-through}
 </style>
 <script>
 /* ===== REPORT ALL BRANCH EXPENSE TOTAL ===== */
