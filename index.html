@@ -9011,6 +9011,13 @@ async function loadRosterCleaningPeople(){
 /* Branch employee duty selection. Default: all employees in the branch;
    clicking a name removes/adds that person from cleaning duty. */
 function rosterCleaningSelectionKey(outlet){return "nd_cleaning_staff_v2_"+String(outlet||"").trim().toLowerCase();}
+function rosterStaffHasLeft(e){
+  const last=String(e?.last_working_date||"").slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(last))return false;
+  const now=new Date();
+  const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-");
+  return last<today;
+}
 function rosterCleaningBranchEmployees(outlet){
   if(!outlet||String(outlet).trim().toLowerCase()==="global")return [];
   const manager=rosterCleaningManagers.get(String(outlet||"").trim());
@@ -9018,7 +9025,7 @@ function rosterCleaningBranchEmployees(outlet){
   const managerName=rosterNormName(manager?.manager_name);
   return rosterCleaningEmployees.filter(e=>{
     if(String(e.outlet||"").trim()!==outlet)return false;
-    if(!rosterIsFullTime(e) || staffHasLeft(e))return false;
+    if(!rosterIsFullTime(e) || rosterStaffHasLeft(e))return false;
     const role=String(e.role||e.position||e.job_title||e.employee_role||"").trim().toLowerCase();
     if(/(^|[\s_-])(manager|店长|经理)([\s_-]|$)/i.test(role))return false;
     if(managerId && String(e.id)===managerId)return false;
