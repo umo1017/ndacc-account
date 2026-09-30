@@ -1146,6 +1146,21 @@ body[data-nd-visible-page]:not([data-nd-visible-page="settlement"]) #settlementP
 body[data-nd-visible-page]:not([data-nd-visible-page="orders"]) #ordersPage{display:none!important}
 body[data-nd-visible-page]:not([data-nd-visible-page="settings"]) #settingsPage{display:none!important}
 body[data-nd-visible-page]:not([data-nd-visible-page="bonus"]) #bonusPage{display:none!important}
+</style><style id="nd-exclusive-screen-final">
+body[data-nd-visible-page] #appView,
+body[data-nd-visible-page] #rosterPage,
+body[data-nd-visible-page] #salaryPage,
+body[data-nd-visible-page] #bonusPage,
+body[data-nd-visible-page] #settlementPage,
+body[data-nd-visible-page] #ordersPage,
+body[data-nd-visible-page] #settingsPage{display:none!important}
+body[data-nd-visible-page="daily"] #appView{display:block!important}
+body[data-nd-visible-page="roster"] #rosterPage{display:block!important}
+body[data-nd-visible-page="salary"] #salaryPage{display:block!important}
+body[data-nd-visible-page="bonus"] #bonusPage{display:block!important}
+body[data-nd-visible-page="settlement"] #settlementPage{display:block!important}
+body[data-nd-visible-page="orders"] #ordersPage{display:block!important}
+body[data-nd-visible-page="settings"] #settingsPage{display:block!important}
 </style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -9665,7 +9680,11 @@ async function refreshOrdersVisibility(){
   window.canViewOrders=allowed;
   window.canManageOrders=(ordersCurrentEmail==="umo1017@gmail.com" || ordersCurrentEmail===String(ORDERS_OWNER_EMAIL||"").trim().toLowerCase());
   return allowed;
- }catch(_){if(btn)btn.style.display="none";return false;}
+ }catch(_){
+   if(btn)btn.style.display="none";
+   window.canViewOrders=false;
+   return false;
+ }
 }
 
 function setOrdersMode(mode){
@@ -9847,6 +9866,48 @@ async function returnLoan(id){
 }
 
 async function showOrders(){
+  // Umo is always allowed. Other users may be allowed through Order View Access.
+  let currentEmail="";
+  let isUmo=false;
+  let allowed=false;
+  try{
+    const client=(typeof ordersDb==="function" ? ordersDb() :
+                 ((typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
+                 ((typeof db!=="undefined" && db) ? db : null)));
+    if(client?.auth){
+      const {data:{session}}=await client.auth.getSession();
+      currentEmail=String(session?.user?.email||"").trim().toLowerCase();
+    }
+    isUmo=currentEmail==="umo1017@gmail.com";
+    if(isUmo){
+      allowed=true;
+      window.canViewOrders=true;
+      window.canManageOrders=true;
+      const btn=document.getElementById("sidebarOrders");
+      if(btn) btn.style.display="";
+    }else{
+      try{allowed=await refreshOrdersVisibility();}catch(_){allowed=false;}
+    }
+  }catch(err){
+    console.warn("Orders permission check:",err);
+  }
+
+  if(!allowed && !isUmo){
+    const b=document.getElementById("sidebarOrders");
+    if(b)b.style.display="none";
+    const p=document.getElementById("ordersPage");
+    if(p){p.classList.remove("active","sidebar-offset");p.style.display="none";}
+    // Unauthorized pages are never opened and never saved as the last page.
+    try{
+      if(window.activeMainPage==="orders"){
+        window.activeMainPage="daily";
+        if(typeof showDaily==="function")showDaily();
+      }
+    }catch(_){}
+    return;
+  }
+
+
   try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
   // Open the page FIRST so a later data-loading error can never make the
   // Orders button look dead.
@@ -9875,40 +9936,6 @@ async function showOrders(){
 
   try{setSidebarActive("orders")}catch(_){}
   try{closeMobileSidebar()}catch(_){}
-
-  // Umo is always allowed. Other users may be allowed through Order View Access.
-  let currentEmail="";
-  let isUmo=false;
-  let allowed=false;
-  try{
-    const client=(typeof ordersDb==="function" ? ordersDb() :
-                 ((typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
-                 ((typeof db!=="undefined" && db) ? db : null)));
-    if(client?.auth){
-      const {data:{session}}=await client.auth.getSession();
-      currentEmail=String(session?.user?.email||"").trim().toLowerCase();
-    }
-    isUmo=currentEmail==="umo1017@gmail.com";
-    if(isUmo){
-      allowed=true;
-      window.canViewOrders=true;
-      window.canManageOrders=true;
-      const btn=document.getElementById("sidebarOrders");
-      if(btn) btn.style.display="";
-    }else{
-      try{allowed=await refreshOrdersVisibility();}catch(_){allowed=false;}
-    }
-  }catch(err){
-    console.warn("Orders permission check:",err);
-  }
-
-  if(!allowed && !isUmo){
-    p.classList.remove("active","sidebar-offset");
-    p.style.display="none";
-    alert("No Order View Access.");
-    try{if(typeof showDaily==="function") showDaily();}catch(_){}
-    return;
-  }
 
   const month=document.getElementById("ordersMonth");
   if(month&&!month.value){
@@ -16658,35 +16685,118 @@ Audit fix: Bonus added to permission-aware page restore map.
 </script>
 
 <script>
-/* Single-page navigation guard: page display must match the selected sidebar screen. */
+/* Account-scoped, permission-aware one-screen navigation. */
 (function(){
- const nav={sidebarDaily:"daily",sidebarSalary:"salary",sidebarRoster:"roster",
-  sidebarSettlement:"settlement",sidebarOrders:"orders",sidebarSettings:"settings",sidebarBonus:"bonus"};
- const page={daily:"appView",salary:"salaryPage",roster:"rosterPage",settlement:"settlementPage",
-  orders:"ordersPage",settings:"settingsPage",bonus:"bonusPage"};
- function sync(){
-   const selected=String(window.activeMainPage||"").toLowerCase();
-   const p=page[selected]?selected:"daily";
-   if(document.body.dataset.ndVisiblePage!==p)document.body.dataset.ndVisiblePage=p;
+ const nav={daily:"sidebarDaily",roster:"sidebarRoster",salary:"sidebarSalary",
+   bonus:"sidebarBonus",settlement:"sidebarSettlement",orders:"sidebarOrders",settings:"sidebarSettings"};
+ const screens={daily:"appView",roster:"rosterPage",salary:"salaryPage",bonus:"bonusPage",
+   settlement:"settlementPage",orders:"ordersPage",settings:"settingsPage"};
+ let lastAccount="",lastWanted="",opening=false,initialRestored=false;
+ function account(){
+   return String(window.currentUserEmail||window.currentEmail||window.userEmail||"").trim().toLowerCase();
  }
- document.addEventListener("click",function(ev){
-   const b=ev.target.closest?.("[id]");
-   if(!b || !nav[b.id])return;
-   // Keep the requested screen exclusive even while its async data is loading.
-   document.body.dataset.ndVisiblePage=nav[b.id];
-   queueMicrotask(sync);
+ function key(){return "nd_last_authorized_page_v4::"+account();}
+ function allowed(page){
+   const id=nav[page],el=id&&document.getElementById(id);
+   if(!el||el.hidden||el.disabled||el.getAttribute("aria-disabled")==="true")return false;
+   if(page==="orders" && window.canViewOrders!==true)return false;
+   const st=getComputedStyle(el);
+   return st.display!=="none"&&st.visibility!=="hidden"&&
+     !el.closest('[hidden], [aria-hidden="true"]');
+ }
+ function fallback(){return Object.keys(nav).find(allowed)||"";}
+ function showOnly(page){
+   if(!screens[page]||!allowed(page))return false;
+   document.body.dataset.ndVisiblePage=page;
+   window.activeMainPage=page;
+   for(const [p,id] of Object.entries(screens)){
+     const el=document.getElementById(id);
+     if(!el)continue;
+     const active=p===page;
+     el.classList.toggle("active",active);
+     if(p!=="daily")el.style.display=active?"":"none";
+     else el.classList.toggle("hidden",!active);
+   }
+   for(const [p,id] of Object.entries(nav)){
+     document.getElementById(id)?.classList.toggle("active",p===page);
+   }
+   return true;
+ }
+ function save(page){
+   if(!account()||!allowed(page))return;
+   try{localStorage.setItem(key(),page);}catch(_){}
+   lastWanted=page;
+ }
+ function open(page,invoke){
+   if(!allowed(page))page=fallback();
+   if(!page)return;
+   showOnly(page);
+   save(page);
+   if(invoke&&!opening){
+     const btn=document.getElementById(nav[page]);
+     if(btn){
+       opening=true;
+       try{btn.click();}finally{opening=false;}
+       showOnly(page);
+     }
+   }
+ }
+ function restore(){
+   const email=account();
+   if(!email)return;
+   if(email!==lastAccount){lastAccount=email;initialRestored=false;lastWanted="";}
+   let wanted="";
+   try{wanted=localStorage.getItem(key())||"";}catch(_){}
+   if(!allowed(wanted))wanted=fallback();
+   if(!wanted)return;
+   if(!initialRestored || !allowed(window.activeMainPage)){
+     initialRestored=true;
+     open(wanted,true);
+   }else{
+     // Old navigation/restore scripts may reopen an inaccessible screen.
+     if(!allowed(window.activeMainPage))open(wanted,true);
+     else showOnly(window.activeMainPage);
+   }
+ }
+ document.addEventListener("click",function(e){
+   const el=e.target.closest?.("[id]");
+   if(!el)return;
+   const page=Object.keys(nav).find(p=>nav[p]===el.id);
+   if(!page)return;
+   if(!allowed(page)){
+     e.preventDefault();
+     e.stopImmediatePropagation();
+     const safe=fallback();
+     if(safe)open(safe,true);
+     return;
+   }
+   showOnly(page);
+   save(page);
  },true);
  function init(){
-   sync();
-   const observer=new MutationObserver(sync);
-   Object.values(page).forEach(id=>{
-     const el=document.getElementById(id);
-     if(el)observer.observe(el,{attributes:true,attributeFilter:["class","style"]});
+   // Restore only after auth and branch permissions have had time to load.
+   setTimeout(restore,950);
+   setTimeout(restore,2200);
+   setTimeout(restore,4000);
+   window.addEventListener("pageshow",()=>setTimeout(restore,300));
+   window.addEventListener("pagehide",()=>{
+     if(account()&&allowed(window.activeMainPage))save(window.activeMainPage);
    });
-   window.addEventListener("pageshow",sync);
+   // Reconcile changes to permissions without requiring a refresh.
+   const obs=new MutationObserver(()=>{
+     if(!account()||!initialRestored)return;
+     if(!allowed(window.activeMainPage)){
+       const safe=fallback();if(safe)open(safe,true);
+     }
+   });
+   Object.values(nav).forEach(id=>{
+     const el=document.getElementById(id);
+     if(el)obs.observe(el,{attributes:true,attributeFilter:["style","class","hidden","disabled","aria-disabled"]});
+   });
  }
  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
  else init();
+ window.ndRestoreAuthorizedPage=restore;
 })();
 </script></body>
 </html>
