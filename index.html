@@ -1128,7 +1128,25 @@ body{
 .salary-view-btn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 20px;font-weight:900;cursor:pointer}
 .salary-view-btn.active{background:#111;color:#fff;border-color:#111}
 </style>
-</head>
+<style>
+/* SINGLE MAIN SCREEN: prevent stacked screens caused by old inline display rules */
+body:not(.salary-print) #appView.hidden,
+body:not(.salary-print) .salary-page:not(.active),
+body:not(.salary-print) #rosterPage:not(.active){display:none!important}
+body[data-nd-visible-page="daily"] #salaryPage,
+body[data-nd-visible-page="daily"] #rosterPage,
+body[data-nd-visible-page="daily"] #settlementPage,
+body[data-nd-visible-page="daily"] #ordersPage,
+body[data-nd-visible-page="daily"] #settingsPage,
+body[data-nd-visible-page="daily"] #bonusPage{display:none!important}
+body[data-nd-visible-page]:not([data-nd-visible-page="daily"]) #appView{display:none!important}
+body[data-nd-visible-page]:not([data-nd-visible-page="salary"]) #salaryPage{display:none!important}
+body[data-nd-visible-page]:not([data-nd-visible-page="roster"]) #rosterPage{display:none!important}
+body[data-nd-visible-page]:not([data-nd-visible-page="settlement"]) #settlementPage{display:none!important}
+body[data-nd-visible-page]:not([data-nd-visible-page="orders"]) #ordersPage{display:none!important}
+body[data-nd-visible-page]:not([data-nd-visible-page="settings"]) #settingsPage{display:none!important}
+body[data-nd-visible-page]:not([data-nd-visible-page="bonus"]) #bonusPage{display:none!important}
+</style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
@@ -16639,5 +16657,36 @@ Audit fix: Bonus added to permission-aware page restore map.
 })();
 </script>
 
-</body>
+<script>
+/* Single-page navigation guard: page display must match the selected sidebar screen. */
+(function(){
+ const nav={sidebarDaily:"daily",sidebarSalary:"salary",sidebarRoster:"roster",
+  sidebarSettlement:"settlement",sidebarOrders:"orders",sidebarSettings:"settings",sidebarBonus:"bonus"};
+ const page={daily:"appView",salary:"salaryPage",roster:"rosterPage",settlement:"settlementPage",
+  orders:"ordersPage",settings:"settingsPage",bonus:"bonusPage"};
+ function sync(){
+   const selected=String(window.activeMainPage||"").toLowerCase();
+   const p=page[selected]?selected:"daily";
+   if(document.body.dataset.ndVisiblePage!==p)document.body.dataset.ndVisiblePage=p;
+ }
+ document.addEventListener("click",function(ev){
+   const b=ev.target.closest?.("[id]");
+   if(!b || !nav[b.id])return;
+   // Keep the requested screen exclusive even while its async data is loading.
+   document.body.dataset.ndVisiblePage=nav[b.id];
+   queueMicrotask(sync);
+ },true);
+ function init(){
+   sync();
+   const observer=new MutationObserver(sync);
+   Object.values(page).forEach(id=>{
+     const el=document.getElementById(id);
+     if(el)observer.observe(el,{attributes:true,attributeFilter:["class","style"]});
+   });
+   window.addEventListener("pageshow",sync);
+ }
+ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
+ else init();
+})();
+</script></body>
 </html>
