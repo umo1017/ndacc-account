@@ -6619,24 +6619,41 @@ document.addEventListener("click",(ev)=>{
   );
 });
 
+function staffHasLeft(e){
+  const last=String(e?.last_working_date||"").slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(last))return false;
+  const now=new Date();
+  const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-");
+  return last<today;
+}
+function staffSafe(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+async function rehireStaff(empId){
+  if(!(staffEditManager || isGlobalAdmin)){alert("Management access only.");return;}
+  const emp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!emp || !staffHasLeft(emp))return;
+  if(!confirm(`Rehire ${emp.name||"this employee"}?\\nThe employee will return to Active Staff. Historical salary records will remain unchanged.`))return;
+  const {error}=await salaryDb.from("employees").update({last_working_date:null}).eq("id",empId);
+  if(error){alert("Rehire failed: "+error.message);return;}
+  emp.last_working_date=null;
+  renderStaffList();
+  try{await loadSalaryData();renderStaffList();}catch(err){console.warn("Rehire refresh:",err);}
+}
+window.rehireStaff=rehireStaff;
 function renderStaffList(){
   byId("staffListContent").innerHTML=salaryBranches.map(b=>b.name).map(outlet=>{
-    const rows=salaryEmployees
-      .filter(e=>e.outlet===outlet)
-      .sort((a,b)=>{
-        const pa=Number(!!a.is_pinned), pb=Number(!!b.is_pinned);
-        if(pa!==pb) return pb-pa;
-        return String(a.name||"").localeCompare(String(b.name||""));
-      });
-    return `<div class="staff-group"><h4>${outlet}</h4>
-      <div class="salary-table-wrap"><table class="salary-table">
+    const rows=salaryEmployees.filter(e=>e.outlet===outlet).sort((a,b)=>{
+      const pa=Number(!!a.is_pinned),pb=Number(!!b.is_pinned);
+      if(pa!==pb)return pb-pa;
+      return String(a.name||"").localeCompare(String(b.name||""));
+    });
+    const staffTable=(list,title)=>`<div class="staff-list-section"><h5>${title} <span>(${list.length})</span></h5><div class="salary-table-wrap"><table class="salary-table">
       <thead><tr><th>Name</th><th>Type</th><th>Birthday</th><th>Join Date</th><th>Last Working Date</th><th>Payment Method</th><th>Basic Pay</th><th>Allowance</th><th>Bank Name</th><th>Bank Account</th><th>NRIC / Passport</th><th>Phone</th><th>Employee No.</th><th>SOCSO No.</th><th>KWSP / EPF No.</th><th>Tax No.</th><th>Action</th></tr></thead>
-      <tbody>${rows.map(e=>`<tr>
-<td><span class="employee-edit-cell">${e.name||"-"}${staffPencil(e.id,"editEmpName")}</span>${e.is_pinned?'<span class="staff-pin-badge">TOP</span>':""}</td>
+      <tbody>${list.map(e=>`<tr>
+<td><span class="employee-edit-cell">${staffSafe(e.name||"-")}${staffPencil(e.id,"editEmpName")}</span>${e.is_pinned?'<span class="staff-pin-badge">TOP</span>':""}</td>
 <td><span class="employee-edit-cell">${(e.employment_type||"full_time")==="part_time"?"Part Time":"Full Time"}${staffPencil(e.id,"editEmpEmploymentType")}</span></td>
 <td><span class="employee-edit-cell">${e.birthday||"-"}${staffPencil(e.id,"editEmpBirthday")}</span></td>
 <td><span class="employee-edit-cell">${e.join_date||"-"}${staffPencil(e.id,"editEmpJoinDate")}</span></td>
-<td><span class="employee-edit-cell">${e.last_working_date||"-"}${staffPencil(e.id,"editEmpLastDate")}</span></td>
+<td><span class="employee-edit-cell">${staffSafe(e.last_working_date||"-")}${staffPencil(e.id,"editEmpLastDate")}</span></td>
 <td><span class="employee-edit-cell">${e.payment_method||"-"}${staffPencil(e.id,"editEmpPayBy")}</span></td>
 <td><span class="employee-edit-cell">${money(e.guaranteed_pay)}${staffPencil(e.id,"editEmpGuaranteed")}</span></td>
 <td><span class="employee-edit-cell">${money(e.allowance)}${staffPencil(e.id,"editEmpAllowance")}</span></td>
@@ -6650,9 +6667,11 @@ function renderStaffList(){
 <td><span class="employee-edit-cell">${e.tax_no||"-"}${staffPencil(e.id,"editEmpTax")}</span></td>
 <td>${staffEditManager?`<div class="staff-action-wrap">
   <button class="btn staff-pin-btn" data-pin-staff="${e.id}" data-pinned="${e.is_pinned?"1":"0"}">${e.is_pinned?"Unpin":"Pin Top"}</button>
+  ${staffHasLeft(e)?`<button class="btn staff-rehire-btn" type="button" data-rehire-staff="${e.id}">↩ Rehire / 复职</button>`:""}
   <button class="btn" data-edit-staff="${e.id}">Edit</button>
   <button class="btn staff-delete-btn" data-delete-staff="${e.id}">Delete</button>
 </div>`:"—"}</td></tr>`).join("") || '<tr><td colspan="17"></td></tr>'}</tbody></table></div></div>`;
+    return `<div class="staff-group"><h4>${staffSafe(outlet)}</h4>${staffTable(rows.filter(e=>!staffHasLeft(e)),"Active Staff")}${staffTable(rows.filter(staffHasLeft),"Resigned Staff")}</div>`;
   }).join("");
 }
 
@@ -6969,6 +6988,8 @@ byId("closeStaffListModal").onclick=()=>byId("staffListModal").classList.remove(
       );
       return;
     }
+    const rehireBtn=e.target.closest("[data-rehire-staff]");
+    if(rehireBtn){rehireStaff(Number(rehireBtn.dataset.rehireStaff));return;}
     const editBtn=e.target.closest("[data-edit-staff]");
     if(editBtn){
       openEditStaff(Number(editBtn.dataset.editStaff));
@@ -8992,7 +9013,18 @@ async function loadRosterCleaningPeople(){
 function rosterCleaningSelectionKey(outlet){return "nd_cleaning_staff_v2_"+String(outlet||"").trim().toLowerCase();}
 function rosterCleaningBranchEmployees(outlet){
   if(!outlet||String(outlet).trim().toLowerCase()==="global")return [];
-  return rosterCleaningEmployees.filter(e=>String(e.outlet||"").trim()===outlet);
+  const manager=rosterCleaningManagers.get(String(outlet||"").trim());
+  const managerId=String(manager?.manager_employee_id||"");
+  const managerName=rosterNormName(manager?.manager_name);
+  return rosterCleaningEmployees.filter(e=>{
+    if(String(e.outlet||"").trim()!==outlet)return false;
+    if(!rosterIsFullTime(e) || staffHasLeft(e))return false;
+    const role=String(e.role||e.position||e.job_title||e.employee_role||"").trim().toLowerCase();
+    if(/(^|[\s_-])(manager|店长|经理)([\s_-]|$)/i.test(role))return false;
+    if(managerId && String(e.id)===managerId)return false;
+    if(managerName && rosterNormName(e.name)===managerName)return false;
+    return true;
+  });
 }
 function rosterCleaningSelectedIds(outlet){
   let stored=null;
@@ -9019,7 +9051,7 @@ function toggleRosterCleaningPicker(outlet){
 window.toggleRosterCleaningPicker=toggleRosterCleaningPicker;
 function renderRosterCleaningPicker(outlet){
   const people=rosterCleaningBranchEmployees(outlet);
-  const selected=new Set(rosterCleaningSelectedIds(outlet));
+  const selected=new Set(rosterCleaningSelectedIds(outlet).filter(id=>people.some(e=>String(e.id)===String(id))));
   return `<div class="cleaning-staff-control">
     <button type="button" class="btn" onclick="toggleRosterCleaningPicker()">👥 Branch Employees (${selected.size}/${people.length}) ▾</button>
     <div id="cleaningStaffPicker" class="cleaning-staff-picker" hidden>
@@ -16323,6 +16355,40 @@ html,body,#app,.app,.main,.main-content{height:auto!important;min-height:100%!im
 }
 #rosterPage .cleaning-matrix td.cleaning-empty-date * ,
 #rosterPage .cleaning-matrix td.cleaning-rest-cell *{color:#818791!important}
+
+/* Staff modal: two clearly separated tables per branch */
+#staffListContent .staff-list-section{margin:12px 0 22px}
+#staffListContent .staff-list-section h5{font-size:13px;color:#173f70;margin:0 0 7px;padding:9px 11px;background:#eaf1f9;border-radius:8px}
+#staffListContent .staff-list-section:nth-of-type(2) h5{color:#666;background:#eeeeee}
+#staffListContent .staff-list-section h5 span{font-size:11px;font-weight:500}
+
+#staffListContent .staff-rehire-btn{background:#e1f2e9!important;border:1px solid #8bc5a5!important;color:#176b45!important;font-weight:800!important;white-space:nowrap}
+
+/* Cleaning calendar weekday column: same navy as employee name header */
+#rosterPage .cleaning-matrix th.cleaning-weekday,
+#rosterPage .cleaning-matrix td.cleaning-weekday,
+#rosterPage .cleaning-matrix .cleaning-weekday,
+#rosterPage .cleaning-matrix .cleaning-week-head{
+  background:#244d82!important;color:#fff!important;border-color:#244d82!important;
+}
+#rosterPage .cleaning-matrix .cleaning-weekday strong,
+#rosterPage .cleaning-matrix .cleaning-weekday span{color:#fff!important}
+
+/* FINAL: smaller complete employee names in cleaning duty roster */
+#rosterPage .cleaning-matrix thead th.cleaning-person-head{
+ font-size:9px!important;line-height:1.15!important;letter-spacing:-.15px!important;
+ white-space:normal!important;overflow:visible!important;text-overflow:clip!important;
+ word-break:normal!important;overflow-wrap:anywhere!important;
+ max-height:none!important;height:auto!important;min-height:34px!important;
+ padding:5px 2px!important;vertical-align:middle!important;
+ color:#fff!important;background:#244d82!important;
+}
+@media(max-width:700px){
+ #rosterPage .cleaning-matrix thead th.cleaning-person-head{
+  font-size:7px!important;line-height:1.12!important;letter-spacing:-.2px!important;
+  padding:4px 1px!important;max-height:none!important;height:auto!important;
+ }
+}
 </style>
 <script>
 /* ===== REPORT ALL BRANCH EXPENSE TOTAL ===== */
@@ -16531,6 +16597,7 @@ Audit fix: Bonus added to permission-aware page restore map.
       ? window.rosterCleaningEligible(outlet)
       : (typeof rosterCleaningEligible==="function"?rosterCleaningEligible(outlet):[]);
    const sel=d.querySelector("#cleanRestEmployee");
+   if(!emps.length){alert("No eligible branch employees selected.");return;}
    sel.innerHTML=emps.map(e=>`<option value="${e.id}" data-email="${String(e.email||e.login_email||"").replace(/"/g,"&quot;")}">${e.name||"-"}</option>`).join("");
    const render=()=>{
      const opt=sel.selectedOptions[0], em=String(opt?.dataset.email||"").trim().toLowerCase();
