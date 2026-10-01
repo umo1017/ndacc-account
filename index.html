@@ -1344,6 +1344,15 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
  #ordersPage #ordersManagePanel .orders-toolbar>.field:nth-child(3){grid-column:1/-1!important;min-width:0!important}
  #ordersPage #orderAddProductBtn{grid-column:1/-1!important;width:100%!important;min-width:0!important}
 }
+</style><style id="nd-complete-inventory-system">
+#ordersPage .orders-tabs-wrap{flex-wrap:wrap}
+#ordersInventoryPanel .orders-table,#ordersStaffStockPanel .orders-table,#ordersTransferPanel .orders-table{min-width:760px}
+#ordersInventoryPanel .salary-card,#ordersStaffStockPanel .salary-card,#ordersTransferPanel .salary-card{margin-top:12px}
+@media(max-width:700px){
+ #ordersPage .orders-tab{font-size:11px!important;padding:8px 9px!important}
+ #ordersInventoryPanel .orders-toolbar,#ordersStaffStockPanel .orders-toolbar,#ordersTransferPanel .orders-toolbar{display:grid!important;grid-template-columns:1fr!important}
+ #ordersInventoryPanel .orders-toolbar>*,#ordersStaffStockPanel .orders-toolbar>*,#ordersTransferPanel .orders-toolbar>*{min-width:0!important;width:100%!important}
+}
 </style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -3919,6 +3928,9 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <button class="btn orders-tab" id="ordersMonthlyBtn" type="button">Monthly Order Records</button>
       <button class="btn orders-tab" id="ordersTotalQtyBtn" type="button">Total Order Quantity</button>
       <button class="btn orders-tab" id="ordersLoanBtn" type="button">Loan Stock</button>
+      <button class="btn orders-tab" id="ordersInventoryBtn" type="button">Inventory</button>
+      <button class="btn orders-tab" id="ordersStaffStockBtn" type="button">Staff Stock</button>
+      <button class="btn orders-tab" id="ordersTransferBtn" type="button">Stock Transfer</button>
     </div>
   </div>
 
@@ -3976,6 +3988,64 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     <div class="salary-card">
       <div class="outlet-title"><strong>Outstanding</strong><span class="helper">Fully returned items disappear from this list automatically.</span></div>
       <div class="orders-list-wrap" style="margin-top:10px"><table class="orders-table"><thead id="loanHead"></thead><tbody id="loanBody"></tbody></table></div>
+    </div>
+
+  </div>
+
+  <div id="ordersInventoryPanel" style="display:none">
+    <div class="salary-card">
+      <div class="outlet-title"><strong>Inventory</strong><span class="helper">Stock is separated by Outlet. Opening Stock is only for the starting balance.</span></div>
+      <div class="orders-toolbar" style="margin-top:10px">
+        <div class="field" style="min-width:260px;flex:1"><label>Search Product</label><input id="inventoryProductSearch" type="search" placeholder="Search product / brand"><div id="inventoryProductSearchResults" style="margin-top:6px"></div></div>
+        <div class="field"><label>Opening Qty</label><input id="inventoryOpeningQty" type="number" min="1" value="1"></div>
+        <div class="field" style="min-width:180px"><label>Note</label><input id="inventoryOpeningNote" placeholder="Optional"></div>
+        <button class="btn" id="inventoryOpeningBtn" type="button">Add Opening Stock</button>
+      </div>
+    </div>
+    <div class="salary-card">
+      <div class="outlet-title"><strong>Current Stock</strong><span class="helper">Available = all stock movements combined. Pending Order and In Transfer are shown separately.</span></div>
+      <div class="field" style="margin-top:10px;max-width:340px"><label>Search Inventory</label><input id="inventorySearch" type="search" placeholder="Search product / brand"></div>
+      <div class="orders-list-wrap" style="margin-top:10px"><table class="orders-table"><thead id="inventoryHead"></thead><tbody id="inventoryBody"></tbody></table></div>
+    </div>
+    <div class="salary-card">
+      <div class="outlet-title"><strong>Stock Movement Ledger</strong><span class="helper">Every stock increase/decrease keeps a record.</span></div>
+      <div class="orders-list-wrap" style="margin-top:10px"><table class="orders-table"><thead id="inventoryLedgerHead"></thead><tbody id="inventoryLedgerBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <div id="ordersStaffStockPanel" style="display:none">
+    <div class="salary-card">
+      <div class="outlet-title"><strong>Staff Take Stock</strong><span class="helper">Employee stock is deducted from the selected Outlet.</span></div>
+      <div class="orders-toolbar" style="margin-top:10px">
+        <div class="field" style="min-width:180px"><label>Employee</label><select id="staffStockEmployee"><option value="">Select employee</option></select></div>
+        <div class="field" style="min-width:250px;flex:1"><label>Search Product</label><input id="staffStockProductSearch" type="search" placeholder="Search product / brand"><div id="staffStockProductResults" style="margin-top:6px"></div></div>
+        <div class="field"><label>Qty</label><input id="staffStockQty" type="number" min="1" value="1"></div>
+        <div class="field"><label>Type</label><select id="staffStockReturnRequired"><option value="true">Return Required</option><option value="false">Consumable</option></select></div>
+        <div class="field" style="min-width:170px"><label>Note</label><input id="staffStockNote" placeholder="Optional"></div>
+        <button class="btn" id="staffStockTakeBtn" type="button">Submit Take</button>
+      </div>
+    </div>
+    <div class="salary-card">
+      <div class="outlet-title"><strong>Staff Holding / Outstanding</strong><span class="helper">Resigned employees remain here until return-required items are cleared.</span></div>
+      <div class="orders-list-wrap" style="margin-top:10px"><table class="orders-table"><thead id="staffStockHead"></thead><tbody id="staffStockBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <div id="ordersTransferPanel" style="display:none">
+    <div class="salary-card">
+      <div class="outlet-title"><strong>Stock Transfer</strong><span class="helper">Transfer between Outlets keeps both sides and the full movement history.</span></div>
+      <div class="orders-toolbar" style="margin-top:10px">
+        <div class="field"><label>From Outlet</label><select id="transferFromOutlet"></select></div>
+        <div class="field"><label>To Outlet</label><select id="transferToOutlet"></select></div>
+        <div class="field" style="min-width:250px;flex:1"><label>Search Product</label><input id="transferProductSearch" type="search" placeholder="Search product / brand"><div id="transferProductResults" style="margin-top:6px"></div></div>
+        <div class="field"><label>Qty</label><input id="transferQty" type="number" min="1" value="1"></div>
+        <div class="field"><label>Note</label><input id="transferNote" placeholder="Optional"></div>
+        <button class="btn" id="transferSubmitBtn" type="button">Transfer Out</button>
+      </div>
+    </div>
+    <div class="salary-card">
+      <div class="outlet-title"><strong>Transfer Records</strong><span class="helper">Destination Outlet confirms receipt before stock is added there.</span></div>
+      <div class="orders-list-wrap" style="margin-top:10px"><table class="orders-table"><thead id="transferHead"></thead><tbody id="transferBody"></tbody></table></div>
     </div>
   </div>
  </div>
@@ -9977,13 +10047,16 @@ async function refreshOrdersVisibility(){
 
 function setOrdersMode(mode){
  ordersMode=mode;
- const ids={manage:"ordersManagePanel",monthly:"ordersMonthlyPanel",total:"ordersTotalPanel",loan:"ordersLoanPanel"};
+ const ids={manage:"ordersManagePanel",monthly:"ordersMonthlyPanel",total:"ordersTotalPanel",loan:"ordersLoanPanel",inventory:"ordersInventoryPanel",staff:"ordersStaffStockPanel",transfer:"ordersTransferPanel"};
  Object.entries(ids).forEach(([k,id])=>{const e=document.getElementById(id);if(e)e.style.display=k===mode?"":"none";});
- [["ordersManageBtn","manage"],["ordersMonthlyBtn","monthly"],["ordersTotalQtyBtn","total"],["ordersLoanBtn","loan"]].forEach(([id,k])=>document.getElementById(id)?.classList.toggle("active",k===mode));
+ [["ordersManageBtn","manage"],["ordersMonthlyBtn","monthly"],["ordersTotalQtyBtn","total"],["ordersLoanBtn","loan"],["ordersInventoryBtn","inventory"],["ordersStaffStockBtn","staff"],["ordersTransferBtn","transfer"]].forEach(([id,k])=>document.getElementById(id)?.classList.toggle("active",k===mode));
  if(mode==="manage") renderWorkingOrders();
  if(mode==="monthly") renderMonthlyOrders();
  if(mode==="total") renderTotalOrderQty();
  if(mode==="loan") renderLoanStock();
+ if(mode==="inventory") renderInventory();
+ if(mode==="staff") renderStaffStock();
+ if(mode==="transfer") renderTransfers();
 }
 
 function searchCatalog(q){
@@ -10036,7 +10109,20 @@ async function markOrdered(id){
  await renderWorkingOrders();
 }
 async function confirmArrival(id){
- const {error}=await ordersDb().from("order_working_items").update({status:"Arrived",arrived_at:new Date().toISOString(),arrived_by:ordersCurrentEmail}).eq("id",id);if(error)return alert(error.message);
+ const dbx=ordersDb();
+ const {data:item,error:readErr}=await dbx.from("order_working_items").select("*").eq("id",id).single();
+ if(readErr)return alert(readErr.message);
+ if(item.status==="Arrived")return;
+ const {error:moveErr}=await dbx.from("inventory_movements").insert({
+   outlet:item.branch,sku_id:String(item.sku_id),product_name:item.product_name,brand:item.brand||"",
+   movement_type:"ORDER_ARRIVAL",qty_change:Number(item.quantity||0),
+   reference_type:"ORDER",reference_id:String(id),note:item.note||"",created_by:ordersCurrentEmail
+ });
+ if(moveErr){
+   if(String(moveErr.code)!=="23505")return alert("Stock update failed: "+moveErr.message);
+ }
+ const {error}=await dbx.from("order_working_items").update({status:"Arrived",arrived_at:new Date().toISOString(),arrived_by:ordersCurrentEmail}).eq("id",id);
+ if(error)return alert(error.message);
  await renderWorkingOrders();
 }
 
@@ -10153,6 +10239,128 @@ async function returnLoan(id){
  await renderLoanStock();
 }
 
+
+let selectedInventoryProduct=null,selectedStaffStockProduct=null,selectedTransferProduct=null;
+
+function pickCatalogBySku(sku){return ORDER_PRODUCT_CATALOG.find(p=>String(p.sku_id)===String(sku))||null}
+async function inventoryBalance(outlet,sku){
+ const {data,error}=await ordersDb().from("inventory_movements").select("qty_change").eq("outlet",outlet).eq("sku_id",String(sku));
+ if(error)throw error;
+ return (data||[]).reduce((a,r)=>a+Number(r.qty_change||0),0);
+}
+async function addOpeningStock(){
+ if(ordersIsAllBranches())return alert("Please select one Outlet.");
+ if(!selectedInventoryProduct)return alert("Please select a product.");
+ const qty=Number(document.getElementById("inventoryOpeningQty")?.value||0);if(qty<=0)return alert("Please enter Qty.");
+ const {error}=await ordersDb().from("inventory_movements").insert({
+  outlet:ordersBranch(),sku_id:String(selectedInventoryProduct.sku_id),product_name:selectedInventoryProduct.product_name,
+  brand:selectedInventoryProduct.brand||"",movement_type:"OPENING",qty_change:qty,
+  note:String(document.getElementById("inventoryOpeningNote")?.value||"").trim(),created_by:ordersCurrentEmail
+ });
+ if(error)return alert(error.message);
+ selectedInventoryProduct=null;document.getElementById("inventoryProductSearch").value="";document.getElementById("inventoryProductSearchResults").innerHTML="";
+ document.getElementById("inventoryOpeningQty").value="1";document.getElementById("inventoryOpeningNote").value="";
+ await renderInventory();
+}
+async function renderInventory(){
+ const head=document.getElementById("inventoryHead"),body=document.getElementById("inventoryBody");
+ const lh=document.getElementById("inventoryLedgerHead"),lb=document.getElementById("inventoryLedgerBody");if(!head||!body)return;
+ let mq=ordersDb().from("inventory_movements").select("*").order("created_at",{ascending:false});
+ let oq=ordersDb().from("order_working_items").select("*").neq("status","Arrived");
+ let tq=ordersDb().from("inventory_transfers").select("*").eq("status","Pending");
+ if(!ordersIsAllBranches()){mq=mq.eq("outlet",ordersBranch());oq=oq.eq("branch",ordersBranch());tq=tq.or(`from_outlet.eq.${ordersBranch()},to_outlet.eq.${ordersBranch()}`)}
+ const [{data:moves,error},{data:orders},{data:transfers}]=await Promise.all([mq,oq,tq]);
+ if(error){body.innerHTML=`<tr><td>${ordersEsc(error.message)}</td></tr>`;return;}
+ const g={};
+ (moves||[]).forEach(r=>{const k=(ordersIsAllBranches()?r.outlet+"|":"")+r.sku_id;if(!g[k])g[k]={outlet:r.outlet,sku_id:r.sku_id,product_name:r.product_name,brand:r.brand,available:0};g[k].available+=Number(r.qty_change||0)});
+ (orders||[]).forEach(r=>{const k=(ordersIsAllBranches()?r.branch+"|":"")+r.sku_id;if(!g[k])g[k]={outlet:r.branch,sku_id:r.sku_id,product_name:r.product_name,brand:r.brand,available:0};g[k].pending=(g[k].pending||0)+Number(r.quantity||0)});
+ (transfers||[]).forEach(r=>{const k=(ordersIsAllBranches()?r.from_outlet+"|":"")+r.sku_id;if(g[k])g[k].in_transfer_out=(g[k].in_transfer_out||0)+Number(r.qty||0);});
+ let rows=Object.values(g),sq=String(document.getElementById("inventorySearch")?.value||"").toLowerCase().trim();
+ if(sq)rows=rows.filter(r=>[r.product_name,r.brand,r.outlet].some(v=>String(v||"").toLowerCase().includes(sq)));
+ head.innerHTML=`<tr>${ordersIsAllBranches()?"<th>Outlet</th>":""}<th>Brand</th><th>Product</th><th>Available</th><th>Pending Order</th><th>In Transfer</th></tr>`;
+ body.innerHTML=rows.map(r=>`<tr>${ordersIsAllBranches()?`<td>${ordersEsc(r.outlet)}</td>`:""}<td>${ordersEsc(r.brand||"-")}</td><td><strong>${ordersEsc(r.product_name)}</strong></td><td><strong>${Number(r.available||0)}</strong></td><td>${Number(r.pending||0)}</td><td>${Number(r.in_transfer_out||0)}</td></tr>`).join("")||'<tr><td colspan="6">No inventory yet.</td></tr>';
+ lh.innerHTML=`<tr><th>Date</th>${ordersIsAllBranches()?"<th>Outlet</th>":""}<th>Product</th><th>Type</th><th>Qty +/-</th><th>Note</th><th>By</th></tr>`;
+ lb.innerHTML=(moves||[]).slice(0,300).map(r=>`<tr><td>${new Date(r.created_at).toLocaleString()}</td>${ordersIsAllBranches()?`<td>${ordersEsc(r.outlet)}</td>`:""}<td>${ordersEsc(r.product_name)}</td><td>${ordersEsc(r.movement_type)}</td><td><strong>${Number(r.qty_change||0)>0?"+":""}${Number(r.qty_change||0)}</strong></td><td>${ordersEsc(r.note||"-")}</td><td>${ordersEsc(r.created_by||"-")}</td></tr>`).join("")||'<tr><td colspan="7">No movements.</td></tr>';
+}
+async function loadStaffStockEmployees(){
+ const sel=document.getElementById("staffStockEmployee");if(!sel)return;
+ if(ordersIsAllBranches()){sel.innerHTML='<option value="">Select one Outlet first</option>';return;}
+ const {data,error}=await salaryDb.from("employees").select("id,name,outlet,last_working_date").eq("outlet",ordersBranch()).order("name");
+ if(error)return;
+ sel.innerHTML='<option value="">Select employee</option>'+(data||[]).map(e=>`<option value="${e.id}" data-name="${ordersEsc(e.name)}">${ordersEsc(e.name)}${e.last_working_date?" (Resigned)":""}</option>`).join("");
+}
+async function takeStaffStock(){
+ if(ordersIsAllBranches())return alert("Please select one Outlet.");
+ const sel=document.getElementById("staffStockEmployee"),employee_id=Number(sel?.value||0),employee_name=sel?.selectedOptions?.[0]?.dataset?.name||sel?.selectedOptions?.[0]?.textContent||"";
+ if(!employee_id)return alert("Please select employee.");if(!selectedStaffStockProduct)return alert("Please select product.");
+ const qty=Number(document.getElementById("staffStockQty")?.value||0);if(qty<=0)return alert("Please enter Qty.");
+ const bal=await inventoryBalance(ordersBranch(),selectedStaffStockProduct.sku_id);if(bal<qty)return alert(`Not enough stock. Available: ${bal}`);
+ const return_required=document.getElementById("staffStockReturnRequired").value==="true",note=document.getElementById("staffStockNote").value.trim();
+ const {data:issue,error}=await ordersDb().from("staff_stock_issues").insert({outlet:ordersBranch(),employee_id,employee_name,sku_id:String(selectedStaffStockProduct.sku_id),product_name:selectedStaffStockProduct.product_name,brand:selectedStaffStockProduct.brand||"",issued_qty:qty,return_required,note,created_by:ordersCurrentEmail}).select("id").single();
+ if(error)return alert(error.message);
+ const {error:me}=await ordersDb().from("inventory_movements").insert({outlet:ordersBranch(),sku_id:String(selectedStaffStockProduct.sku_id),product_name:selectedStaffStockProduct.product_name,brand:selectedStaffStockProduct.brand||"",movement_type:return_required?"STAFF_TAKE":"CONSUMED",qty_change:-qty,reference_type:"STAFF_ISSUE",reference_id:String(issue.id),note:`${employee_name}${note?" · "+note:""}`,created_by:ordersCurrentEmail});
+ if(me)return alert(me.message);
+ selectedStaffStockProduct=null;document.getElementById("staffStockProductSearch").value="";document.getElementById("staffStockProductResults").innerHTML="";document.getElementById("staffStockQty").value="1";document.getElementById("staffStockNote").value="";
+ await renderStaffStock();
+}
+async function renderStaffStock(){
+ await loadStaffStockEmployees();
+ const head=document.getElementById("staffStockHead"),body=document.getElementById("staffStockBody");if(!head||!body)return;
+ let q=ordersDb().from("staff_stock_issues").select("*").order("issued_at",{ascending:false});if(!ordersIsAllBranches())q=q.eq("outlet",ordersBranch());
+ const {data,error}=await q;if(error){body.innerHTML=`<tr><td>${ordersEsc(error.message)}</td></tr>`;return;}
+ const rows=(data||[]).filter(r=>Number(r.issued_qty||0)>Number(r.returned_qty||0)+Number(r.damaged_qty||0)+Number(r.consumed_qty||0));
+ head.innerHTML=`<tr>${ordersIsAllBranches()?"<th>Outlet</th>":""}<th>Employee</th><th>Product</th><th>Taken</th><th>Returned</th><th>Damaged</th><th>Outstanding</th><th>Type</th><th>Action</th></tr>`;
+ body.innerHTML=rows.map(r=>{const out=Number(r.issued_qty)-Number(r.returned_qty||0)-Number(r.damaged_qty||0)-Number(r.consumed_qty||0);return `<tr>${ordersIsAllBranches()?`<td>${ordersEsc(r.outlet)}</td>`:""}<td><strong>${ordersEsc(r.employee_name)}</strong></td><td>${ordersEsc(r.product_name)}</td><td>${r.issued_qty}</td><td>${r.returned_qty||0}</td><td>${r.damaged_qty||0}</td><td><strong>${out}</strong></td><td>${r.return_required?"Return Required":"Consumable"}</td><td>${r.return_required?`<input type="number" min="1" max="${out}" value="1" style="width:62px" data-staff-action-qty="${r.id}"><button class="btn" data-staff-return="${r.id}">Return</button><button class="btn" data-staff-damaged="${r.id}">Damaged</button>`:`<button class="btn" data-staff-consumed="${r.id}">Used</button>`}</td></tr>`}).join("")||'<tr><td colspan="9">No outstanding staff stock.</td></tr>';
+}
+async function staffStockAction(id,type){
+ const {data:r,error}=await ordersDb().from("staff_stock_issues").select("*").eq("id",id).single();if(error)return alert(error.message);
+ const outstanding=Number(r.issued_qty)-Number(r.returned_qty||0)-Number(r.damaged_qty||0)-Number(r.consumed_qty||0);
+ const input=document.querySelector(`[data-staff-action-qty="${id}"]`);const qty=type==="CONSUMED"?outstanding:Number(input?.value||0);
+ if(qty<=0||qty>outstanding)return alert("Invalid quantity.");
+ if(type==="RETURN"){
+  const {error:u}=await ordersDb().from("staff_stock_issues").update({returned_qty:Number(r.returned_qty||0)+qty}).eq("id",id);if(u)return alert(u.message);
+  const {error:m}=await ordersDb().from("inventory_movements").insert({outlet:r.outlet,sku_id:r.sku_id,product_name:r.product_name,brand:r.brand||"",movement_type:"STAFF_RETURN",qty_change:qty,reference_type:"STAFF_ISSUE",reference_id:String(id),note:r.employee_name,created_by:ordersCurrentEmail});if(m)return alert(m.message);
+ }else if(type==="DAMAGED"){
+  const reason=prompt("Damage reason / note:","");if(reason===null)return;
+  const {error:u}=await ordersDb().from("staff_stock_issues").update({damaged_qty:Number(r.damaged_qty||0)+qty,damage_note:String(reason)}).eq("id",id);if(u)return alert(u.message);
+  await ordersDb().from("inventory_movements").insert({outlet:r.outlet,sku_id:r.sku_id,product_name:r.product_name,brand:r.brand||"",movement_type:"DAMAGED",qty_change:0,reference_type:"STAFF_ISSUE",reference_id:String(id),note:`${r.employee_name} · ${reason}`,created_by:ordersCurrentEmail});
+ }else{
+  await ordersDb().from("staff_stock_issues").update({consumed_qty:Number(r.consumed_qty||0)+qty}).eq("id",id);
+ }
+ await renderStaffStock();await renderInventory();
+}
+async function loadTransferOutlets(){
+ const a=document.getElementById("transferFromOutlet"),b=document.getElementById("transferToOutlet");if(!a||!b)return;
+ const {data}=await ordersDb().from("order_branches").select("name").order("name");const names=(data||[]).map(x=>x.name);
+ a.innerHTML=names.map(n=>`<option>${ordersEsc(n)}</option>`).join("");b.innerHTML=names.map(n=>`<option>${ordersEsc(n)}</option>`).join("");
+ if(!ordersIsAllBranches()&&names.includes(ordersBranch()))a.value=ordersBranch();
+ if(b.value===a.value)b.value=names.find(n=>n!==a.value)||"";
+}
+async function submitTransfer(){
+ const from=document.getElementById("transferFromOutlet").value,to=document.getElementById("transferToOutlet").value;
+ if(!from||!to||from===to)return alert("From and To Outlet must be different.");if(!selectedTransferProduct)return alert("Please select product.");
+ const qty=Number(document.getElementById("transferQty").value||0);if(qty<=0)return alert("Please enter Qty.");
+ const bal=await inventoryBalance(from,selectedTransferProduct.sku_id);if(bal<qty)return alert(`Not enough stock. Available: ${bal}`);
+ const note=document.getElementById("transferNote").value.trim();
+ const {data:t,error}=await ordersDb().from("inventory_transfers").insert({from_outlet:from,to_outlet:to,sku_id:String(selectedTransferProduct.sku_id),product_name:selectedTransferProduct.product_name,brand:selectedTransferProduct.brand||"",qty,status:"Pending",note,created_by:ordersCurrentEmail}).select("id").single();if(error)return alert(error.message);
+ const {error:m}=await ordersDb().from("inventory_movements").insert({outlet:from,sku_id:String(selectedTransferProduct.sku_id),product_name:selectedTransferProduct.product_name,brand:selectedTransferProduct.brand||"",movement_type:"TRANSFER_OUT",qty_change:-qty,reference_type:"TRANSFER",reference_id:String(t.id),note:`To ${to}${note?" · "+note:""}`,created_by:ordersCurrentEmail});if(m)return alert(m.message);
+ selectedTransferProduct=null;document.getElementById("transferProductSearch").value="";document.getElementById("transferProductResults").innerHTML="";document.getElementById("transferQty").value="1";document.getElementById("transferNote").value="";
+ await renderTransfers();await renderInventory();
+}
+async function renderTransfers(){
+ await loadTransferOutlets();const head=document.getElementById("transferHead"),body=document.getElementById("transferBody");if(!head||!body)return;
+ let q=ordersDb().from("inventory_transfers").select("*").order("created_at",{ascending:false});if(!ordersIsAllBranches())q=q.or(`from_outlet.eq.${ordersBranch()},to_outlet.eq.${ordersBranch()}`);
+ const {data,error}=await q;if(error){body.innerHTML=`<tr><td>${ordersEsc(error.message)}</td></tr>`;return;}
+ head.innerHTML='<tr><th>Date</th><th>From</th><th>To</th><th>Product</th><th>Qty</th><th>Status</th><th>Note</th><th>Action</th></tr>';
+ body.innerHTML=(data||[]).map(r=>`<tr><td>${new Date(r.created_at).toLocaleString()}</td><td>${ordersEsc(r.from_outlet)}</td><td>${ordersEsc(r.to_outlet)}</td><td>${ordersEsc(r.product_name)}</td><td>${r.qty}</td><td><strong>${ordersEsc(r.status)}</strong></td><td>${ordersEsc(r.note||"-")}</td><td>${r.status==="Pending"?`<button class="btn" data-receive-transfer="${r.id}">Received</button>`:"-"}</td></tr>`).join("")||'<tr><td colspan="8">No transfers.</td></tr>';
+}
+async function receiveTransfer(id){
+ const {data:r,error}=await ordersDb().from("inventory_transfers").select("*").eq("id",id).single();if(error)return alert(error.message);if(r.status!=="Pending")return;
+ const {error:m}=await ordersDb().from("inventory_movements").insert({outlet:r.to_outlet,sku_id:r.sku_id,product_name:r.product_name,brand:r.brand||"",movement_type:"TRANSFER_IN",qty_change:Number(r.qty),reference_type:"TRANSFER",reference_id:String(id),note:`From ${r.from_outlet}${r.note?" · "+r.note:""}`,created_by:ordersCurrentEmail});if(m){if(String(m.code)!=="23505")return alert(m.message);}
+ const {error:u}=await ordersDb().from("inventory_transfers").update({status:"Received",received_at:new Date().toISOString(),received_by:ordersCurrentEmail}).eq("id",id);if(u)return alert(u.message);
+ await renderTransfers();await renderInventory();
+}
+
 async function showOrders(){
   // Umo is always allowed. Other users may be allowed through Order View Access.
   let currentEmail="";
@@ -10261,6 +10469,9 @@ document.addEventListener("DOMContentLoaded",()=>{
  document.getElementById("ordersMonthlyBtn")?.addEventListener("click",()=>setOrdersMode("monthly"));
  document.getElementById("ordersTotalQtyBtn")?.addEventListener("click",()=>setOrdersMode("total"));
  document.getElementById("ordersLoanBtn")?.addEventListener("click",()=>setOrdersMode("loan"));
+ document.getElementById("ordersInventoryBtn")?.addEventListener("click",()=>setOrdersMode("inventory"));
+ document.getElementById("ordersStaffStockBtn")?.addEventListener("click",()=>setOrdersMode("staff"));
+ document.getElementById("ordersTransferBtn")?.addEventListener("click",()=>setOrdersMode("transfer"));
  document.getElementById("ordersRefreshBtn")?.addEventListener("click",async()=>{await loadOrderBranches();setOrdersMode(ordersMode);});
  document.getElementById("ordersAddBranchBtn")?.addEventListener("click",()=>document.getElementById("ordersAddBranchModal")?.classList.add("open"));
  document.getElementById("ordersCloseBranchModal")?.addEventListener("click",()=>document.getElementById("ordersAddBranchModal")?.classList.remove("open"));
@@ -10275,6 +10486,19 @@ document.addEventListener("DOMContentLoaded",()=>{
  document.getElementById("orderAddProductBtn")?.addEventListener("click",addWorkingOrder);
  document.getElementById("orderNewProductBtn")?.addEventListener("click",addNewOrderProduct);
  document.getElementById("loanAddBtn")?.addEventListener("click",addLoan);
+ document.getElementById("inventoryProductSearch")?.addEventListener("input",()=>renderProductSearch("inventoryProductSearch","inventoryProductSearchResults","inventory"));
+ document.getElementById("staffStockProductSearch")?.addEventListener("input",()=>renderProductSearch("staffStockProductSearch","staffStockProductResults","staffstock"));
+ document.getElementById("transferProductSearch")?.addEventListener("input",()=>renderProductSearch("transferProductSearch","transferProductResults","transfer"));
+ document.getElementById("inventoryProductSearchResults")?.addEventListener("click",e=>{const b=e.target.closest("[data-pick-inventory]");if(!b)return;selectedInventoryProduct=pickCatalogBySku(b.dataset.pickInventory);document.getElementById("inventoryProductSearch").value=selectedInventoryProduct?.product_name||"";document.getElementById("inventoryProductSearchResults").innerHTML="";});
+ document.getElementById("staffStockProductResults")?.addEventListener("click",e=>{const b=e.target.closest("[data-pick-staffstock]");if(!b)return;selectedStaffStockProduct=pickCatalogBySku(b.dataset.pickStaffstock);document.getElementById("staffStockProductSearch").value=selectedStaffStockProduct?.product_name||"";document.getElementById("staffStockProductResults").innerHTML="";});
+ document.getElementById("transferProductResults")?.addEventListener("click",e=>{const b=e.target.closest("[data-pick-transfer]");if(!b)return;selectedTransferProduct=pickCatalogBySku(b.dataset.pickTransfer);document.getElementById("transferProductSearch").value=selectedTransferProduct?.product_name||"";document.getElementById("transferProductResults").innerHTML="";});
+ document.getElementById("inventoryOpeningBtn")?.addEventListener("click",addOpeningStock);
+ document.getElementById("inventorySearch")?.addEventListener("input",renderInventory);
+ document.getElementById("staffStockTakeBtn")?.addEventListener("click",takeStaffStock);
+ document.getElementById("staffStockBody")?.addEventListener("click",e=>{const r=e.target.closest("[data-staff-return]");if(r)staffStockAction(Number(r.dataset.staffReturn),"RETURN");const d=e.target.closest("[data-staff-damaged]");if(d)staffStockAction(Number(d.dataset.staffDamaged),"DAMAGED");const u=e.target.closest("[data-staff-consumed]");if(u)staffStockAction(Number(u.dataset.staffConsumed),"CONSUMED");});
+ document.getElementById("transferSubmitBtn")?.addEventListener("click",submitTransfer);
+ document.getElementById("transferBody")?.addEventListener("click",e=>{const b=e.target.closest("[data-receive-transfer]");if(b)receiveTransfer(Number(b.dataset.receiveTransfer));});
+
  document.getElementById("orderWorkingList")?.addEventListener("click",e=>{const a=e.target.closest("[data-toggle-ordered]");if(a)markOrdered(Number(a.dataset.toggleOrdered));const b=e.target.closest("[data-confirm-arrival]");if(b)confirmArrival(Number(b.dataset.confirmArrival));});
  document.getElementById("loanBody")?.addEventListener("click",e=>{const b=e.target.closest("[data-return-loan]");if(b)returnLoan(Number(b.dataset.returnLoan));});
  ["sidebarDaily","sidebarRoster","sidebarSalary","sidebarSettlement","sidebarSettings"].forEach(id=>document.getElementById(id)?.addEventListener("click",()=>document.getElementById("ordersPage")?.classList.remove("active","sidebar-offset"),true));
