@@ -1539,7 +1539,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <div class="auth-shell" id="authView">
 <div class="auth-card">
 <div class="brand"> Nature’s Dao</div>
-<div class="sub" style="margin-bottom:16px">Daily Settlement</div>
+<div class="sub" style="margin-bottom:16px">Internal System</div>
 <div><label>Email</label><input id="authEmail" placeholder="staff@example.com" type="email"/></div>
 <div style="height:10px"></div>
 <div><label>Password</label><input id="authPassword" placeholder="Minimum 6 characters" type="password"/></div>
@@ -1918,18 +1918,16 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     const res=await db.auth.signInWithPassword({email,password});
     if(res.error){authMessage(res.error.message,true);return;}
 
-    // A fresh login always starts at Daily Settlement.
-    try{ localStorage.setItem("nd_last_page_v2","daily"); }catch(_){}
-    window.activeMainPage="daily";
+    // Preserve the user's last authorized page; login no longer forces Daily Settlement.
+    try{window.activeMainPage=localStorage.getItem("nd_last_page_v2")||"daily";}catch(_){window.activeMainPage="daily";}
 
     try{ await showSession(); }catch(err){ console.error("Session init failed:",err); }
     setTimeout(()=>{
       try{
-        if(typeof showDaily==="function") showDaily();
-        else document.getElementById("appView")?.classList.remove("hidden");
+        if(typeof stableRestoreState==="function") stableRestoreState();
+        else if(typeof window.ndRestoreCurrentAuthorizedPage==="function") window.ndRestoreCurrentAuthorizedPage();
       }catch(err){
-        console.error("Daily route failed:",err);
-        document.getElementById("appView")?.classList.remove("hidden");
+        console.error("Page restore failed:",err);
       }
     },50);
   };
@@ -17925,6 +17923,200 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
 @media (max-width:390px){
   .main-sidebar{width:82vw !important;}
   .sidebar-btn{height:46px !important;min-height:46px !important;font-size:15px !important;}
+}
+</style>
+
+
+<style id="sidebar-responsive-final-v5">
+/* ===== SIDEBAR RESPONSIVE FINAL V5 ===== */
+
+/* Desktop / laptop drawer */
+@media (min-width:761px){
+  .main-sidebar{
+    width:220px !important;
+    max-width:220px !important;
+    padding:78px 12px 18px !important;
+    gap:5px !important;
+    box-sizing:border-box !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+  }
+  .sidebar-brand{
+    display:block !important;
+    position:absolute !important;
+    top:24px !important;
+    left:76px !important;
+    right:10px !important;
+    padding:0 !important;
+    margin:0 !important;
+    font-size:18px !important;
+    line-height:42px !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+  .sidebar-btn{
+    height:44px !important;
+    min-height:44px !important;
+    padding:0 14px !important;
+    border-radius:12px !important;
+    font-size:14px !important;
+    line-height:1.15 !important;
+    flex:0 0 auto !important;
+  }
+  .sidebar-btn.active{
+    height:44px !important;
+    min-height:44px !important;
+  }
+  .mobile-sidebar-btn{
+    left:18px !important;
+    top:22px !important;
+    width:44px !important;
+    height:44px !important;
+    border-radius:12px !important;
+    font-size:20px !important;
+  }
+}
+
+/* Phone drawer */
+@media (max-width:760px){
+  .main-sidebar{
+    width:min(78vw,280px) !important;
+    max-width:280px !important;
+    padding:calc(68px + env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom)) !important;
+    gap:4px !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    -webkit-overflow-scrolling:touch;
+    box-sizing:border-box !important;
+  }
+  .sidebar-brand{display:none !important;}
+  .sidebar-btn{
+    height:48px !important;
+    min-height:48px !important;
+    padding:0 14px !important;
+    border-radius:12px !important;
+    font-size:16px !important;
+    line-height:1.15 !important;
+    flex:0 0 auto !important;
+  }
+  .sidebar-btn.active{height:48px !important;min-height:48px !important;}
+  .mobile-sidebar-btn{
+    left:max(10px,env(safe-area-inset-left)) !important;
+    top:calc(10px + env(safe-area-inset-top)) !important;
+    width:46px !important;
+    height:46px !important;
+    border-radius:13px !important;
+    font-size:21px !important;
+  }
+}
+</style>
+
+
+<style id="salary-desktop-layout-final-v6">
+/* ===== SALARY DESKTOP FULL-WIDTH FINAL V6 ===== */
+@media (min-width:901px){
+  #salaryPage{
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+    padding:72px clamp(18px,2vw,34px) 28px !important;
+    box-sizing:border-box !important;
+  }
+  #salaryPage .salary-shell{
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+  }
+  #salaryPage .salary-top,
+  #salaryPage .salary-card{
+    width:100% !important;
+    max-width:none !important;
+    box-sizing:border-box !important;
+  }
+  #salaryPage .salary-title{
+    margin:0 0 8px !important;
+  }
+
+  /* Top controls use full width and wrap cleanly instead of running off-screen. */
+  #salaryPage .salary-toolbar{
+    display:flex !important;
+    align-items:flex-end !important;
+    flex-wrap:wrap !important;
+    gap:10px !important;
+    width:100% !important;
+  }
+  #salaryPage .salary-toolbar .field{
+    flex:0 1 250px !important;
+    min-width:190px !important;
+  }
+  #salaryPage .salary-toolbar .field input,
+  #salaryPage .salary-toolbar .field select{
+    width:100% !important;
+  }
+  #salaryPage .salary-toolbar > .btn,
+  #salaryPage .salary-toolbar > button{
+    flex:0 0 auto !important;
+    min-height:40px !important;
+    white-space:nowrap !important;
+  }
+
+  /* Payroll tables fill the card; first employee column remains visible while swiping. */
+  #salaryPage .salary-table-wrap,
+  #salaryPage .table-wrap{
+    width:100% !important;
+    max-width:100% !important;
+    overflow-x:auto !important;
+    overflow-y:visible !important;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-gutter:stable;
+  }
+  #salaryPage .salary-table{
+    width:max-content !important;
+    min-width:100% !important;
+    max-width:none !important;
+    font-size:13px !important;
+    table-layout:auto !important;
+  }
+  #salaryPage .salary-table th{
+    padding:10px 9px !important;
+    font-size:12px !important;
+    white-space:nowrap !important;
+  }
+  #salaryPage .salary-table td{
+    padding:9px !important;
+    font-size:13px !important;
+    white-space:nowrap !important;
+  }
+  #salaryPage .salary-table th:first-child,
+  #salaryPage .salary-table td:first-child{
+    position:sticky !important;
+    left:0 !important;
+    min-width:210px !important;
+    max-width:240px !important;
+    background:#fff !important;
+    z-index:5 !important;
+  }
+  #salaryPage .salary-table th:first-child{
+    background:#f7f7f5 !important;
+    z-index:7 !important;
+  }
+  #salaryPage .salary-table td:first-child{
+    font-weight:800 !important;
+    box-shadow:8px 0 12px -12px rgba(0,0,0,.5);
+  }
+
+  /* Off-day editor stays compact so Basic/Allowance have more room. */
+  #salaryPage .off-day-control,
+  #salaryPage [data-off-day-wrap]{
+    min-width:130px !important;
+  }
+}
+@media (min-width:1200px){
+  #salaryPage{
+    padding-left:28px !important;
+    padding-right:28px !important;
+  }
 }
 </style>
 
