@@ -1533,6 +1533,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
 <button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">Orders</button>
+<button class="sidebar-btn" id="sidebarSocial" style="display:none" type="button">Social Media</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Setting</button>
 </aside>
 <button class="mobile-sidebar-btn" id="mobileSidebarBtn" type="button">☰</button>
@@ -4223,6 +4224,118 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
  </div>
 </div>
 
+
+<div class="salary-page" id="socialPage" style="display:none">
+  <div class="salary-shell social-shell">
+    <div class="salary-top">
+      <div>
+        <div class="salary-title">Social Media</div>
+        <div class="helper">Calendar · Images · Video · Scheduled Publishing</div>
+      </div>
+      <div class="salary-right">
+        <button class="btn" id="socialAccountsBtn" type="button">Accounts</button>
+        <button class="btn primary" id="socialNewPostBtn" type="button">+ New Post</button>
+      </div>
+    </div>
+
+    <div class="salary-card social-toolbar-card">
+      <div class="social-toolbar">
+        <button class="btn" id="socialPrevMonth" type="button">‹</button>
+        <strong id="socialMonthLabel"></strong>
+        <button class="btn" id="socialNextMonth" type="button">›</button>
+        <button class="btn" id="socialTodayBtn" type="button">Today</button>
+        <select id="socialPlatformFilter">
+          <option value="">All Platforms</option>
+          <option>Facebook</option><option>Instagram</option><option>TikTok</option>
+          <option>小红书</option><option>微信视频号</option>
+        </select>
+        <select id="socialStatusFilter">
+          <option value="">All Status</option>
+          <option value="draft">Draft</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="publishing">Publishing</option>
+          <option value="published">Published</option>
+          <option value="failed">Failed</option>
+        </select>
+        <button class="btn" id="socialRefreshBtn" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div class="salary-card">
+      <div class="social-weekdays">
+        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      </div>
+      <div class="social-calendar" id="socialCalendar"></div>
+    </div>
+
+    <div class="salary-card">
+      <div class="outlet-title"><strong>Scheduled / Recent Posts</strong></div>
+      <div class="social-list" id="socialPostList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="social-modal" id="socialPostModal" aria-hidden="true">
+  <div class="social-modal-card">
+    <div class="social-modal-head">
+      <strong id="socialPostModalTitle">New Post</strong>
+      <button class="social-x" id="socialPostClose" type="button">×</button>
+    </div>
+    <input id="socialPostId" type="hidden">
+    <div class="social-form-grid">
+      <div class="field"><label>Brand / Account Group</label><input id="socialBrand" placeholder="Nature's Dao"></div>
+      <div class="field"><label>Title</label><input id="socialTitle" placeholder="Internal title"></div>
+      <div class="field social-span-2">
+        <label>Platforms</label>
+        <div class="social-platform-checks">
+          <label><input type="checkbox" value="Facebook"> Facebook</label>
+          <label><input type="checkbox" value="Instagram"> Instagram</label>
+          <label><input type="checkbox" value="TikTok"> TikTok</label>
+          <label><input type="checkbox" value="小红书"> 小红书</label>
+          <label><input type="checkbox" value="微信视频号"> 微信视频号</label>
+        </div>
+      </div>
+      <div class="field social-span-2"><label>Caption</label><textarea id="socialCaption" rows="6" placeholder="Post caption..."></textarea></div>
+      <div class="field"><label>Publish Date</label><input id="socialPublishDate" type="date"></div>
+      <div class="field"><label>Publish Time</label><input id="socialPublishTime" type="time"></div>
+      <div class="field"><label>Status</label>
+        <select id="socialPostStatus"><option value="draft">Draft</option><option value="scheduled">Scheduled</option></select>
+      </div>
+      <div class="field"><label>Timezone</label><input id="socialTimezone" value="Asia/Kuala_Lumpur" readonly></div>
+      <div class="field social-span-2">
+        <label>Poster Images / Video</label>
+        <input id="socialMediaFiles" type="file" accept="image/*,video/*" multiple>
+        <div class="helper">Images and video are stored in Supabase Storage, not inside this HTML file.</div>
+        <div class="social-media-preview" id="socialMediaPreview"></div>
+      </div>
+    </div>
+    <div class="social-modal-actions">
+      <button class="btn bad" id="socialDeletePostBtn" type="button" style="display:none">Delete</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="socialSaveDraftBtn" type="button">Save Draft</button>
+      <button class="btn primary" id="socialScheduleBtn" type="button">Schedule</button>
+    </div>
+    <div class="helper" id="socialPostMsg"></div>
+  </div>
+</div>
+
+<div class="social-modal" id="socialAccountsModal" aria-hidden="true">
+  <div class="social-modal-card social-account-card">
+    <div class="social-modal-head">
+      <strong>Social Accounts</strong>
+      <button class="social-x" id="socialAccountsClose" type="button">×</button>
+    </div>
+    <div class="helper" style="margin-bottom:12px">Save the account identity here. API access tokens must stay in a secure server/Edge Function, never in this page.</div>
+    <div class="social-account-add">
+      <select id="socialAccountPlatform"><option>Facebook</option><option>Instagram</option><option>TikTok</option><option>小红书</option><option>微信视频号</option></select>
+      <input id="socialAccountBrand" placeholder="Brand">
+      <input id="socialAccountName" placeholder="@account / Page name">
+      <button class="btn" id="socialAccountAddBtn" type="button">+ Add</button>
+    </div>
+    <div id="socialAccountList" class="social-account-list"></div>
+  </div>
+</div>
+
 <div class="salary-page" id="settingsPage">
 <div class="salary-shell" style="display:grid">
 <div class="salary-top">
@@ -4841,6 +4954,7 @@ async function determineManager(){
   updateSalaryExportButtons();
 
   byId("sidebarSettings").style.display=isGlobalAdmin?"":"none";
+  if(byId("sidebarSocial")) byId("sidebarSocial").style.display=isGlobalAdmin?"":"none";
   byId("salaryRoleNote").textContent=isPayrollManager && !isGlobalAdmin ? "Assigned Branch Reports" : "";
 }
 
@@ -4868,6 +4982,7 @@ function setSidebarActive(page){
   byId("sidebarRoster")?.classList.toggle("active",page==="roster");
   byId("sidebarSettlement")?.classList.toggle("active",page==="settlement");
   byId("sidebarOrders")?.classList.toggle("active",page==="orders");
+  byId("sidebarSocial")?.classList.toggle("active",page==="social");
   byId("sidebarSettings")?.classList.toggle("active",page==="settings");
 }
 function closeMobileSidebar(){
@@ -4900,7 +5015,7 @@ function closeCurrentMainPage(){
   try{prev=null||"daily";}catch(_){}
   if(prev===window.activeMainPage) prev=window.activeMainPage==="daily"?"salary":"daily";
   mainPageBackNavigation=true;
-  if(prev==="salary") showSalary(); else if(prev==="roster") showRoster(); else if(prev==="settings") showSettings(); else showDaily();
+  if(prev==="salary") showSalary(); else if(prev==="roster") showRoster(); else if(prev==="social") showSocial(); else if(prev==="settings") showSettings(); else showDaily();
   mainPageBackNavigation=false;
 }
 
@@ -11208,6 +11323,7 @@ table{
       sidebarSalary:"salary",
       sidebarSettlement:"settlement",
       sidebarOrders:"orders",
+      sidebarSocial:"social",
       sidebarSettings:"settings"
     };
     for(const [id,page] of Object.entries(map)){
@@ -11406,7 +11522,7 @@ document.addEventListener("click",async function(e){
   const KEY="nd_last_page_v2";
   const valid=new Set(["daily","roster","salary","settlement","orders","settings"]);
   document.addEventListener("click",e=>{
-    const map={sidebarDaily:"daily",sidebarRoster:"roster",sidebarSalary:"salary",sidebarSettlement:"settlement",sidebarOrders:"orders",sidebarSettings:"settings"};
+    const map={sidebarDaily:"daily",sidebarRoster:"roster",sidebarSalary:"salary",sidebarSettlement:"settlement",sidebarOrders:"orders",sidebarSocial:"social",sidebarSettings:"settings"};
     for(const [id,page] of Object.entries(map)){
       if(e.target.closest?.("#"+id)){try{localStorage.setItem(KEY,page);window.activeMainPage=page;}catch(_){} break;}
     }
@@ -11925,6 +12041,7 @@ html,body{max-width:100%;overflow-x:hidden!important}
       sidebarSalary:"salary",
       sidebarSettlement:"settlement",
       sidebarOrders:"orders",
+      sidebarSocial:"social",
       sidebarSettings:"settings"
     };
     for(const [id,page] of Object.entries(ids)){
@@ -17538,9 +17655,9 @@ function monthKey(){
 /* Account-scoped, permission-aware one-screen navigation. */
 (function(){
  const nav={daily:"sidebarDaily",roster:"sidebarRoster",salary:"sidebarSalary",
-   bonus:"sidebarBonus",settlement:"sidebarSettlement",orders:"sidebarOrders",settings:"sidebarSettings"};
+   bonus:"sidebarBonus",settlement:"sidebarSettlement",orders:"sidebarOrders",social:"sidebarSocial",settings:"sidebarSettings"};
  const screens={daily:"appView",roster:"rosterPage",salary:"salaryPage",bonus:"bonusPage",
-   settlement:"settlementPage",orders:"ordersPage",settings:"settingsPage"};
+   settlement:"settlementPage",orders:"ordersPage",social:"socialPage",settings:"settingsPage"};
  let lastAccount="",lastWanted="",opening=false,initialRestored=false;
  function account(){
    return String(window.currentUserEmail||window.currentEmail||window.userEmail||"").trim().toLowerCase();
@@ -17658,11 +17775,11 @@ function monthKey(){
  const map={
   sidebarDaily:"daily",sidebarRoster:"roster",sidebarSalary:"salary",
   sidebarBonus:"bonus",sidebarSettlement:"settlement",
-  sidebarOrders:"orders",sidebarSettings:"settings"
+  sidebarOrders:"orders",sidebarSocial:"social",sidebarSettings:"settings"
  };
  const screen={
   daily:"appView",roster:"rosterPage",salary:"salaryPage",bonus:"bonusPage",
-  settlement:"settlementPage",orders:"ordersPage",settings:"settingsPage"
+  settlement:"settlementPage",orders:"ordersPage",social:"socialPage",settings:"settingsPage"
  };
  function email(){return String(window.currentUserEmail||"").trim().toLowerCase()}
  function storeKey(){return "nd_last_authorized_page_v5::"+email()}
@@ -17681,7 +17798,7 @@ function monthKey(){
    return st.display!=="none"&&st.visibility!=="hidden"&&!el.closest('[hidden],[aria-hidden="true"]');
  }
  function firstAllowed(){
-   return ["daily","roster","salary","bonus","settlement","orders","settings"].find(authorized)||"";
+   return ["daily","roster","salary","bonus","settlement","orders","social","settings"].find(authorized)||"";
  }
  function closeMenu(){
    const sb=document.getElementById("mainSidebar");
@@ -18234,6 +18351,288 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
   }
 }
 </style>
+
+
+<style id="social-media-calendar-v1">
+#socialPage{width:100%;max-width:none;padding:72px clamp(16px,2vw,30px) 28px;box-sizing:border-box}
+#socialPage .social-shell{width:100%;max-width:none}
+.social-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.social-toolbar #socialMonthLabel{min-width:145px;text-align:center;font-size:16px}
+.social-weekdays,.social-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.social-weekdays>div{padding:9px 6px;text-align:center;font-size:12px;font-weight:800;color:#666;border-bottom:1px solid #ddd}
+.social-day{min-height:126px;border-right:1px solid #ece8df;border-bottom:1px solid #ece8df;padding:7px;box-sizing:border-box;background:#fff;overflow:hidden}
+.social-day:nth-child(7n){border-right:0}
+.social-day.muted{background:#faf9f6;color:#aaa}
+.social-day.today{box-shadow:inset 0 0 0 2px #111}
+.social-day-num{font-size:12px;font-weight:800;margin-bottom:5px}
+.social-event{display:block;width:100%;border:0;border-radius:8px;padding:6px 7px;margin:4px 0;text-align:left;cursor:pointer;background:#f0eee8;color:#111;font-size:11px;line-height:1.25;overflow:hidden}
+.social-event-time{font-weight:800}
+.social-event-thumb{width:100%;height:54px;object-fit:cover;border-radius:6px;margin-top:5px;background:#ddd}
+.social-platform-mini{font-size:10px;opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.social-list{display:grid;gap:8px;margin-top:10px}
+.social-list-row{display:grid;grid-template-columns:72px minmax(160px,1fr) minmax(180px,1fr) 110px 110px;gap:10px;align-items:center;padding:10px;border:1px solid #e8e4dc;border-radius:12px}
+.social-list-thumb{width:68px;height:52px;border-radius:9px;object-fit:cover;background:#eee}
+.social-status{display:inline-flex;padding:5px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:capitalize}
+.social-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:120000;padding:18px;overflow:auto}
+.social-modal.open{display:flex;align-items:flex-start;justify-content:center}
+.social-modal-card{width:min(820px,100%);margin:auto;background:#fff;border-radius:20px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.social-modal-head{display:flex;align-items:center;justify-content:space-between;font-size:19px;margin-bottom:14px}
+.social-x{border:0;background:transparent;font-size:28px;cursor:pointer}
+.social-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.social-span-2{grid-column:1/-1}
+.social-form-grid input,.social-form-grid select,.social-form-grid textarea,.social-account-add input,.social-account-add select{width:100%;box-sizing:border-box}
+.social-platform-checks{display:flex;flex-wrap:wrap;gap:8px}
+.social-platform-checks label{display:flex;gap:6px;align-items:center;padding:8px 10px;border:1px solid #ddd;border-radius:10px}
+.social-platform-checks input{width:auto}
+.social-media-preview{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.social-preview-item{position:relative;width:110px}
+.social-preview-item img,.social-preview-item video{width:110px;height:84px;object-fit:cover;border-radius:10px;background:#eee}
+.social-preview-remove{position:absolute;right:4px;top:4px;border:0;border-radius:999px;width:24px;height:24px;background:#fff;cursor:pointer}
+.social-modal-actions{display:flex;gap:8px;align-items:center;margin-top:16px}
+.social-account-add{display:grid;grid-template-columns:150px 1fr 1fr auto;gap:8px}
+.social-account-list{display:grid;gap:8px;margin-top:14px}
+.social-account-row{display:grid;grid-template-columns:120px 1fr 1fr auto;gap:8px;align-items:center;padding:10px;border:1px solid #e7e2d9;border-radius:12px}
+@media(max-width:900px){
+ #socialPage{padding:calc(70px + env(safe-area-inset-top)) 12px 22px!important}
+ .social-calendar{min-width:760px}
+ #socialPage .salary-card:has(.social-calendar){overflow-x:auto;-webkit-overflow-scrolling:touch}
+ .social-weekdays{min-width:760px}
+ .social-day{min-height:112px}
+ .social-form-grid{grid-template-columns:1fr}
+ .social-span-2{grid-column:1}
+ .social-list-row{grid-template-columns:58px 1fr auto}
+ .social-list-row .social-list-platforms{grid-column:2/4}
+ .social-list-row .social-list-date{grid-column:2}
+ .social-account-add,.social-account-row{grid-template-columns:1fr}
+}
+</style>
+
+
+<script id="social-media-module-v1">
+(function(){
+ const $=id=>document.getElementById(id);
+ const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+ const PLAT=["Facebook","Instagram","TikTok","小红书","微信视频号"];
+ let viewMonth=new Date(); viewMonth.setDate(1);
+ let posts=[],accounts=[],editingMedia=[],loading=false;
+
+ function db(){return window.salaryDb||salaryDb}
+ function isoLocal(date,time){
+   if(!date)return null;
+   const t=time||"00:00";
+   return new Date(`${date}T${t}:00+08:00`).toISOString();
+ }
+ function localParts(iso){
+   if(!iso)return {date:"",time:""};
+   const d=new Date(iso);
+   const fmt=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kuala_Lumpur",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(d);
+   const o={};fmt.forEach(x=>o[x.type]=x.value);
+   return {date:`${o.year}-${o.month}-${o.day}`,time:`${o.hour}:${o.minute}`};
+ }
+ function monthKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`}
+ function mediaThumb(media){
+   const m=(media||[])[0]; if(!m)return "";
+   if(String(m.type||"").startsWith("video")) return `<video class="social-list-thumb" src="${esc(m.url)}" muted preload="metadata"></video>`;
+   return `<img class="social-list-thumb" src="${esc(m.url)}" alt="">`;
+ }
+ function platformText(a){return Array.isArray(a)?a.join(" · "):""}
+ function closeModals(){["socialPostModal","socialAccountsModal"].forEach(id=>$(id)?.classList.remove("open"))}
+ function setMsg(t,bad=false){const e=$("socialPostMsg");if(e){e.textContent=t||"";e.style.color=bad?"#a00":""}}
+
+ async function loadPosts(){
+   if(loading)return;loading=true;
+   try{
+     const from=new Date(viewMonth.getFullYear(),viewMonth.getMonth()-1,1).toISOString();
+     const to=new Date(viewMonth.getFullYear(),viewMonth.getMonth()+2,1).toISOString();
+     const {data,error}=await db().from("social_media_posts").select("*").gte("scheduled_at",from).lt("scheduled_at",to).order("scheduled_at",{ascending:true});
+     if(error)throw error;
+     posts=data||[];
+     render();
+   }catch(e){
+     console.error(e);
+     $("socialPostList").innerHTML=`<div class="bad">Social Media database not ready: ${esc(e.message||e)}</div>`;
+   }finally{loading=false}
+ }
+ function filtered(){
+   const p=$("socialPlatformFilter")?.value||"",st=$("socialStatusFilter")?.value||"";
+   return posts.filter(x=>(!p||(x.platforms||[]).includes(p))&&(!st||x.status===st));
+ }
+ function render(){
+   $("socialMonthLabel").textContent=viewMonth.toLocaleDateString("en-MY",{month:"long",year:"numeric"});
+   const arr=filtered(), first=new Date(viewMonth.getFullYear(),viewMonth.getMonth(),1), start=new Date(first);
+   start.setDate(1-first.getDay());
+   let html="";
+   for(let i=0;i<42;i++){
+     const d=new Date(start);d.setDate(start.getDate()+i);
+     const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+     const today=new Date(), todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+     const dayPosts=arr.filter(x=>localParts(x.scheduled_at).date===key);
+     html+=`<div class="social-day ${d.getMonth()!==viewMonth.getMonth()?"muted":""} ${key===todayKey?"today":""}" data-social-date="${key}">
+       <div class="social-day-num">${d.getDate()}</div>
+       ${dayPosts.slice(0,4).map(x=>{
+         const lp=localParts(x.scheduled_at),m=(x.media||[])[0];
+         return `<button class="social-event" type="button" data-social-post="${x.id}">
+           <div class="social-event-time">${esc(lp.time)} · ${esc(x.status)}</div>
+           <div>${esc(x.title||"Untitled")}</div>
+           <div class="social-platform-mini">${esc(platformText(x.platforms))}</div>
+           ${m&&!String(m.type||"").startsWith("video")?`<img class="social-event-thumb" src="${esc(m.url)}" alt="">`:""}
+         </button>`;
+       }).join("")}
+       ${dayPosts.length>4?`<div class="helper">+${dayPosts.length-4} more</div>`:""}
+     </div>`;
+   }
+   $("socialCalendar").innerHTML=html;
+   $("socialPostList").innerHTML=arr.length?arr.map(x=>{
+     const lp=localParts(x.scheduled_at);
+     return `<button type="button" class="social-list-row" data-social-post="${x.id}" style="background:#fff;text-align:left">
+       <div>${mediaThumb(x.media)||'<div class="social-list-thumb"></div>'}</div>
+       <div><strong>${esc(x.title||"Untitled")}</strong><br><span class="helper">${esc(x.brand||"")}</span></div>
+       <div class="social-list-platforms">${esc(platformText(x.platforms))}</div>
+       <div class="social-list-date">${esc(lp.date)}<br>${esc(lp.time)}</div>
+       <div><span class="social-status">${esc(x.status)}</span></div>
+     </button>`;
+   }).join(""):'<div class="helper">No posts in this period.</div>';
+   document.querySelectorAll("[data-social-post]").forEach(b=>b.onclick=()=>openEdit(b.dataset.socialPost));
+ }
+ function resetForm(date=""){
+   $("socialPostId").value="";$("socialPostModalTitle").textContent="New Post";
+   $("socialBrand").value="Nature's Dao";$("socialTitle").value="";$("socialCaption").value="";
+   $("socialPublishDate").value=date||new Date().toISOString().slice(0,10);
+   $("socialPublishTime").value="20:00";$("socialPostStatus").value="draft";
+   document.querySelectorAll(".social-platform-checks input").forEach(x=>x.checked=false);
+   $("socialMediaFiles").value="";editingMedia=[];renderMediaPreview();
+   $("socialDeletePostBtn").style.display="none";setMsg("");
+ }
+ function openNew(date=""){resetForm(date);$("socialPostModal").classList.add("open")}
+ function openEdit(id){
+   const x=posts.find(p=>String(p.id)===String(id));if(!x)return;
+   const lp=localParts(x.scheduled_at);
+   $("socialPostId").value=x.id;$("socialPostModalTitle").textContent="Edit Post";
+   $("socialBrand").value=x.brand||"";$("socialTitle").value=x.title||"";$("socialCaption").value=x.caption||"";
+   $("socialPublishDate").value=lp.date;$("socialPublishTime").value=lp.time;$("socialPostStatus").value=x.status==="draft"?"draft":"scheduled";
+   document.querySelectorAll(".social-platform-checks input").forEach(c=>c.checked=(x.platforms||[]).includes(c.value));
+   editingMedia=Array.isArray(x.media)?JSON.parse(JSON.stringify(x.media)):[];
+   $("socialMediaFiles").value="";renderMediaPreview();
+   $("socialDeletePostBtn").style.display="";
+   $("socialPostModal").classList.add("open");setMsg("");
+ }
+ function renderMediaPreview(){
+   $("socialMediaPreview").innerHTML=editingMedia.map((m,i)=>`<div class="social-preview-item">
+     ${String(m.type||"").startsWith("video")?`<video src="${esc(m.url)}" muted controls></video>`:`<img src="${esc(m.url)}" alt="">`}
+     <button class="social-preview-remove" type="button" data-rm-media="${i}">×</button>
+   </div>`).join("");
+   document.querySelectorAll("[data-rm-media]").forEach(b=>b.onclick=()=>{editingMedia.splice(Number(b.dataset.rmMedia),1);renderMediaPreview()});
+ }
+ async function uploadFiles(){
+   const files=[...($("socialMediaFiles").files||[])]; if(!files.length)return;
+   setMsg(`Uploading ${files.length} file(s)...`);
+   for(const f of files){
+     if(f.size>250*1024*1024)throw new Error(`${f.name}: maximum 250MB.`);
+     const ext=(f.name.split(".").pop()||"bin").replace(/[^a-z0-9]/gi,"").toLowerCase();
+     const path=`${new Date().toISOString().slice(0,10)}/${crypto.randomUUID()}.${ext}`;
+     const {error}=await db().storage.from("social-media").upload(path,f,{contentType:f.type,upsert:false});
+     if(error)throw error;
+     const {data}=db().storage.from("social-media").getPublicUrl(path);
+     editingMedia.push({path,url:data.publicUrl,type:f.type,name:f.name,size:f.size});
+   }
+   $("socialMediaFiles").value="";renderMediaPreview();
+ }
+ async function save(status){
+   try{
+     const platforms=[...document.querySelectorAll(".social-platform-checks input:checked")].map(x=>x.value);
+     if(!platforms.length)return setMsg("Choose at least one platform.",true);
+     if(status==="scheduled"&&(!$("socialPublishDate").value||!$("socialPublishTime").value))return setMsg("Choose publish date and time.",true);
+     await uploadFiles();
+     if(!editingMedia.length)return setMsg("Upload at least one poster image or video.",true);
+     const row={
+       brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),
+       caption:$("socialCaption").value,platforms,media:editingMedia,
+       scheduled_at:isoLocal($("socialPublishDate").value,$("socialPublishTime").value),
+       timezone:"Asia/Kuala_Lumpur",status,
+       updated_at:new Date().toISOString(),created_by:String(window.currentUserEmail||"").toLowerCase()
+     };
+     const id=$("socialPostId").value;
+     setMsg("Saving...");
+     const q=id?db().from("social_media_posts").update(row).eq("id",id):db().from("social_media_posts").insert(row);
+     const {error}=await q;if(error)throw error;
+     closeModals();await loadPosts();
+   }catch(e){console.error(e);setMsg(e.message||String(e),true)}
+ }
+ async function del(){
+   const id=$("socialPostId").value;if(!id||!confirm("Delete this scheduled post?"))return;
+   const {error}=await db().from("social_media_posts").delete().eq("id",id);if(error)return setMsg(error.message,true);
+   closeModals();await loadPosts();
+ }
+ async function loadAccounts(){
+   try{
+     const {data,error}=await db().from("social_media_accounts").select("*").order("platform").order("brand");
+     if(error)throw error;accounts=data||[];renderAccounts();
+   }catch(e){$("socialAccountList").innerHTML=`<div class="bad">${esc(e.message||e)}</div>`}
+ }
+ function renderAccounts(){
+   $("socialAccountList").innerHTML=accounts.length?accounts.map(a=>`<div class="social-account-row">
+     <strong>${esc(a.platform)}</strong><span>${esc(a.brand||"")}</span><span>${esc(a.account_name||"")}</span>
+     <button class="btn bad" type="button" data-social-account-delete="${a.id}">Delete</button>
+   </div>`).join(""):'<div class="helper">No accounts added.</div>';
+   document.querySelectorAll("[data-social-account-delete]").forEach(b=>b.onclick=async()=>{
+     if(!confirm("Delete this account record?"))return;
+     const {error}=await db().from("social_media_accounts").delete().eq("id",b.dataset.socialAccountDelete);
+     if(error)return alert(error.message);await loadAccounts();
+   });
+ }
+ async function addAccount(){
+   const row={platform:$("socialAccountPlatform").value,brand:$("socialAccountBrand").value.trim(),account_name:$("socialAccountName").value.trim(),created_by:String(window.currentUserEmail||"").toLowerCase()};
+   if(!row.account_name)return alert("Enter account / page name.");
+   const {error}=await db().from("social_media_accounts").insert(row);if(error)return alert(error.message);
+   $("socialAccountBrand").value="";$("socialAccountName").value="";await loadAccounts();
+ }
+ async function showSocial(){
+   if(!window.isGlobalAdmin){try{showDaily()}catch(_){}return}
+   window.activeMainPage="social";
+   try{localStorage.setItem("nd_last_page_v2","social")}catch(_){}
+   ["appView","salaryPage","rosterPage","bonusPage","settlementPage","ordersPage","settingsPage"].forEach(id=>{
+     const e=$(id);if(!e)return;if(id==="appView")e.classList.add("hidden");else{e.classList.remove("active","sidebar-offset");e.style.display="none"}
+   });
+   const p=$("socialPage");p.classList.add("active","sidebar-offset");p.style.display="block";
+   document.querySelectorAll(".sidebar-btn").forEach(b=>b.classList.toggle("active",b.id==="sidebarSocial"));
+   try{closeMobileSidebar()}catch(_){}
+   await loadPosts();
+ }
+ window.showSocial=showSocial;
+
+ document.addEventListener("DOMContentLoaded",()=>{
+   const nav=$("sidebarSocial");if(nav){nav.style.display=window.isGlobalAdmin?"":"none";nav.onclick=showSocial}
+   $("socialNewPostBtn").onclick=()=>openNew();
+   $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
+   $("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>save("scheduled");
+   $("socialDeletePostBtn").onclick=del;
+   $("socialAccountsBtn").onclick=async()=>{$("socialAccountsModal").classList.add("open");await loadAccounts()};
+   $("socialAccountAddBtn").onclick=addAccount;
+   $("socialPrevMonth").onclick=()=>{viewMonth.setMonth(viewMonth.getMonth()-1);loadPosts()};
+   $("socialNextMonth").onclick=()=>{viewMonth.setMonth(viewMonth.getMonth()+1);loadPosts()};
+   $("socialTodayBtn").onclick=()=>{viewMonth=new Date();viewMonth.setDate(1);loadPosts()};
+   $("socialRefreshBtn").onclick=loadPosts;$("socialPlatformFilter").onchange=render;$("socialStatusFilter").onchange=render;
+   $("socialCalendar").addEventListener("dblclick",e=>{const d=e.target.closest(".social-day")?.dataset.socialDate;if(d)openNew(d)});
+   ["socialPostModal","socialAccountsModal"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))closeModals()}));
+ });
+})();
+</script>
+
+
+<script id="social-page-hide-guard-v1">
+(function(){
+ const names=["showDaily","showSalary","showRoster","showSettlement","showOrders","showSettings"];
+ function bind(){
+   names.forEach(n=>{
+     const f=window[n];if(typeof f!=="function"||f.__socialGuard)return;
+     const w=function(){const p=document.getElementById("socialPage");if(p){p.classList.remove("active","sidebar-offset");p.style.display="none"}return f.apply(this,arguments)};
+     w.__socialGuard=true;window[n]=w;
+   });
+ }
+ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bind,{once:true});else bind();
+ setTimeout(bind,0);
+})();
+</script>
 
 </body>
 </html>
