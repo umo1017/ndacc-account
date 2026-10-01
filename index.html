@@ -4256,7 +4256,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div><label>Monthly Zakat</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="empTaxZakat" min="0" step="0.01" type="number" value="0"/></div></div>
 <div><label>Previous YTD Gross</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="empTaxPrevGross" min="0" step="0.01" type="number" value="0"/></div></div>
 <div><label>Previous YTD EPF</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="empTaxPrevEpf" min="0" step="0.01" type="number" value="0"/></div></div>
-<div><label>Previous YTD PCB</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="empTaxPrevPcb" min="0" step="0.01" type="number" value="0"/></div></div>
+<div><label>Previous PCB Reference</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="empTaxPrevPcb" min="0" step="0.01" type="number" value="0"/></div></div>
 </div>
 </div>
 </div>
@@ -4305,8 +4305,8 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div><label>Monthly Zakat</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="editTaxZakat" min="0" step="0.01" type="number"/></div></div>
 <div><label>Previous YTD Gross</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="editTaxPrevGross" min="0" step="0.01" type="number"/></div></div>
 <div><label>Previous YTD EPF</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="editTaxPrevEpf" min="0" step="0.01" type="number"/></div></div>
-<div><label>Previous YTD PCB</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="editTaxPrevPcb" min="0" step="0.01" type="number"/></div></div>
-<div class="full" style="font-size:12px;color:var(--muted);line-height:1.5">Previous YTD 。 Gross EPF Tax； 1 0 。</div>
+<div><label>Previous PCB Reference</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="editTaxPrevPcb" min="0" step="0.01" type="number"/></div></div>
+
 </div>
 </div>
 </div>
@@ -6513,7 +6513,37 @@ function taxYtdBeforeCurrentMonth(e){
     pcb:opening.pcb+rows.reduce((a,x)=>a+Number(x.tax||0),0)
   };
 }
-function calculateAutoPcb(e,currentGross,currentEmployeeEpf){if(!String(e.tax_no||"").trim())return 0;const [year,month]=monthKey().split("-").map(Number),rule=getTaxRule(year),resident=(e.tax_resident_status||"resident"),zakat=Number(e.tax_monthly_zakat||0);if(resident==="nonresident")return Math.max(0,roundPcb(Number(currentGross||0)*Number(rule.nonResidentRate||0)-zakat,rule.rounding));const remainingMonths=12-month;const ytd=taxYtdBeforeCurrentMonth(e);const accumulatedGross=ytd.gross,accumulatedEpf=ytd.epf,accumulatedPcb=ytd.pcb;const projectedGross=accumulatedGross+Number(currentGross||0)+Number(currentGross||0)*remainingMonths;const projectedEpfRaw=accumulatedEpf+Number(currentEmployeeEpf||0)+Number(currentEmployeeEpf||0)*remainingMonths;const projectedEpf=Math.min(Number(rule.epfReliefCap||0),projectedEpfRaw);let relief=Number(rule.individualRelief||0);if((e.tax_marital_status||"single")==="married_not_working")relief+=Number(rule.spouseNotWorkingRelief||0);if(e.tax_disabled_individual)relief+=Number(rule.disabledIndividualRelief||0);if(e.tax_disabled_spouse)relief+=Number(rule.disabledSpouseRelief||0);relief+=Number(e.tax_children_u18||0)*Number(rule.childU18Relief||0);relief+=Number(e.tax_children_study||0)*Number(rule.childStudyRelief||0);const taxable=Math.max(0,projectedGross-projectedEpf-relief),annualTax=malaysiaResidentTaxAnnual(taxable,rule),currentPcb=(annualTax-accumulatedPcb)/(remainingMonths+1)-zakat;return Math.max(0,roundPcb(currentPcb,rule.rounding));}
+function calculateAutoPcb(e,currentGross,currentEmployeeEpf){
+  if(!String(e.tax_no||"").trim())return 0;
+  const [year]=monthKey().split("-").map(Number);
+  const rule=getTaxRule(year);
+  const resident=(e.tax_resident_status||"resident");
+  const zakat=Number(e.tax_monthly_zakat||0);
+  const gross=Math.max(0,Number(currentGross||0));
+  const epf=Math.max(0,Number(currentEmployeeEpf||0));
+
+  // PCB in Salary is month-specific only:
+  // do not bring forward prior-month Gross / EPF / PCB into this month's calculation.
+  if(resident==="nonresident"){
+    return Math.max(0,roundPcb(gross*Number(rule.nonResidentRate||0)-zakat,rule.rounding));
+  }
+
+  // Annualise THIS MONTH only to determine the monthly PCB.
+  const projectedGross=gross*12;
+  const projectedEpf=Math.min(Number(rule.epfReliefCap||0),epf*12);
+
+  let relief=Number(rule.individualRelief||0);
+  if((e.tax_marital_status||"single")==="married_not_working")relief+=Number(rule.spouseNotWorkingRelief||0);
+  if(e.tax_disabled_individual)relief+=Number(rule.disabledIndividualRelief||0);
+  if(e.tax_disabled_spouse)relief+=Number(rule.disabledSpouseRelief||0);
+  relief+=Number(e.tax_children_u18||0)*Number(rule.childU18Relief||0);
+  relief+=Number(e.tax_children_study||0)*Number(rule.childStudyRelief||0);
+
+  const taxable=Math.max(0,projectedGross-projectedEpf-relief);
+  const annualTax=malaysiaResidentTaxAnnual(taxable,rule);
+  const currentPcb=(annualTax/12)-zakat;
+  return Math.max(0,roundPcb(currentPcb,rule.rounding));
+}
 function calculateAutoPcb2026(e,currentGross,currentEmployeeEpf){return calculateAutoPcb(e,currentGross,currentEmployeeEpf);}
 function taxBandsToText(bands){return (bands||[]).map(([cap,rate])=>`${cap==null?"INF":cap}:${(Number(rate)||0)*100}`).join("\n");}
 function taxBandsFromText(text){const out=[];for(const raw of String(text||"").split(/\n+/)){const line=raw.trim();if(!line)continue;const [a,b]=line.split(":").map(x=>x.trim());const cap=/^inf$/i.test(a)?null:Number(a),pct=Number(b);if((cap!==null&&(!Number.isFinite(cap)||cap<=0))||!Number.isFinite(pct)||pct<0)throw new Error("Invalid tax band: "+line);out.push([cap,pct/100]);}if(!out.length)throw new Error("Tax bands cannot be empty.");return out;}
