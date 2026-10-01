@@ -1412,6 +1412,117 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 #salaryPage .table-wrap td:first-child{box-shadow:7px 0 10px -10px rgba(0,0,0,.45);}
 }
 @media (max-width:900px){#salaryPage .table-wrap table{min-width:1250px;}}
+</style><style id="daily-desktop-width-fix">
+/* ===== DAILY SETTLEMENT DESKTOP WIDTH FIX ===== */
+@media (min-width: 901px){
+  #appView{
+    width:100% !important;
+    max-width:none !important;
+  }
+  #appView > .grid{
+    width:100% !important;
+    max-width:none !important;
+    grid-template-columns:repeat(12,minmax(0,1fr)) !important;
+  }
+  /* Daily entry card must use the full desktop row instead of leaving 1/3 blank. */
+  #appView > .grid > .card.span8{
+    grid-column:span 12 !important;
+    width:100% !important;
+    max-width:none !important;
+  }
+  #appView > .grid > .card.span8 > div:first-child{
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+    align-items:end;
+  }
+  #appView .row4{
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:12px 24px !important;
+    width:100% !important;
+  }
+  #appView .money-line{
+    min-width:0 !important;
+    width:100% !important;
+  }
+  #appView .money-line .money-wrap,
+  #appView .money-line input,
+  #appView .money-line select{
+    width:100% !important;
+    max-width:none !important;
+  }
+  #appView .row3{
+    width:100% !important;
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  }
+}
+@media (max-width:900px){
+  #appView > .grid > .card.span8{
+    width:100%;
+  }
+}
+</style><style id="salary-desktop-readability-v2">
+/* ===== SALARY DESKTOP READABILITY / FULL WIDTH ===== */
+@media (min-width: 901px){
+  #salaryPage{
+    width:96% !important;
+    max-width:none !important;
+    margin-left:auto !important;
+    margin-right:auto !important;
+  }
+  #salaryPage .salary-card{
+    width:100% !important;
+    max-width:none !important;
+  }
+  #salaryPage .salary-table-wrap,
+  #salaryPage .table-wrap{
+    width:100% !important;
+    max-width:100% !important;
+    overflow-x:auto !important;
+    -webkit-overflow-scrolling:touch;
+  }
+  #salaryPage .salary-table{
+    width:max-content !important;
+    min-width:1650px !important;
+    max-width:none !important;
+    font-size:13px !important;
+  }
+  #salaryPage .salary-table th{
+    font-size:12px !important;
+    padding:10px 9px !important;
+    white-space:nowrap !important;
+  }
+  #salaryPage .salary-table td{
+    font-size:13px !important;
+    padding:9px !important;
+    white-space:nowrap !important;
+  }
+  #salaryPage .salary-table th:first-child,
+  #salaryPage .salary-table td:first-child{
+    position:sticky !important;
+    left:0 !important;
+    min-width:190px !important;
+    max-width:220px !important;
+    z-index:4;
+    background:#fff !important;
+  }
+  #salaryPage .salary-table th:first-child{
+    z-index:6;
+    background:#f7f7f5 !important;
+  }
+  #salaryPage .salary-table td:first-child{
+    font-weight:700;
+    box-shadow:8px 0 12px -12px rgba(0,0,0,.55);
+  }
+  #salaryPage input,
+  #salaryPage select,
+  #salaryPage button.btn{
+    min-height:38px;
+    font-size:13px !important;
+  }
+  #salaryPage #salaryMonth{
+    min-width:180px;
+  }
+}
 </style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -4617,7 +4728,13 @@ function calculate7th(e,m={}){
   const daysInMonth=new Date(year,month,0).getDate();
   const scheduledWorkingDays=Math.max(1,daysInMonth-allowedOffDays);
   const dailyRate=guaranteed/scheduledWorkingDays;
-  const offDayDeduction=+(dailyRate*excessOffDays).toFixed(2);
+  const allowanceDailyRate=allowance/scheduledWorkingDays;
+  const basicOffDayDeduction=+(dailyRate*excessOffDays).toFixed(2);
+  const allowanceOffDayDeduction=+(allowanceDailyRate*excessOffDays).toFixed(2);
+  const offDayDeduction=+(basicOffDayDeduction+allowanceOffDayDeduction).toFixed(2);
+  const adjustedGuaranteed=+(guaranteed-basicOffDayDeduction).toFixed(2);
+  const adjustedAllowance=+(allowance-allowanceOffDayDeduction).toFixed(2);
+  const adjustedGross=+(adjustedGuaranteed+adjustedAllowance+ot).toFixed(2);
 
   const totalDeduction=+(
     employee_epf+
@@ -4639,8 +4756,14 @@ function calculate7th(e,m={}){
     off_days_taken:offDaysTaken,
     excess_off_days:excessOffDays,
     off_day_daily_rate:+dailyRate.toFixed(2),
+    allowance_daily_rate:+allowanceDailyRate.toFixed(2),
+    basic_off_day_deduction:basicOffDayDeduction,
+    allowance_off_day_deduction:allowanceOffDayDeduction,
     off_day_deduction:offDayDeduction,
+    adjusted_guaranteed_pay:adjustedGuaranteed,
+    adjusted_allowance:adjustedAllowance,
     gross_pay:gross,
+    adjusted_gross_pay:adjustedGross,
     total_deduction:totalDeduction,
     net_pay:+(gross-totalDeduction).toFixed(2)
   };
@@ -7175,7 +7298,7 @@ async function initialize(){
   byId("sidebarSalary").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","salary");}catch(_){} showSalary();};
   byId("sidebarRoster").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","roster");}catch(_){} showRoster();};
   byId("sidebarSettlement").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","settlement");}catch(_){} showSettlement();};
-  byId("sidebarOrders").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","orders");}catch(_){} showOrders();};
+  byId("sidebarOrders").onclick=async()=>{try{localStorage.setItem("nd_last_page_v2","orders");}catch(_){} try{closeMobileSidebar();}catch(_){} await showOrders();};
   byId("sidebarSettings").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","settings");}catch(_){} showSettings();};
   byId("settingsLogoutBtn").onclick=async()=>{
     try{localStorage.removeItem("nd_last_page_v2");}catch(_){}
@@ -10527,7 +10650,8 @@ async function showOrders(){
     const client=(typeof ordersDb==="function" ? ordersDb() :
                  ((typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
                  ((typeof db!=="undefined" && db) ? db : null)));
-    if(client?.auth){
+    currentEmail=String(window.currentUserEmail||currentEmail||"").trim().toLowerCase();
+    if(!currentEmail && client?.auth){
       const {data:{session}}=await client.auth.getSession();
       currentEmail=String(session?.user?.email||"").trim().toLowerCase();
     }
@@ -17585,7 +17709,10 @@ function monthKey(){
  function authorized(page){
    const el=navEl(page);
    if(!el||el.hidden||el.disabled||el.getAttribute("aria-disabled")==="true")return false;
-   if(page==="orders"&&window.canViewOrders!==true)return false;
+   if(page==="orders"&&window.canViewOrders!==true){
+      const orderStyle=getComputedStyle(el);
+      if(orderStyle.display==="none"||orderStyle.visibility==="hidden")return false;
+    }
    const st=getComputedStyle(el);
    return st.display!=="none"&&st.visibility!=="hidden"&&!el.closest('[hidden],[aria-hidden="true"]');
  }
