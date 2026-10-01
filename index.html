@@ -15047,11 +15047,8 @@ html,body{max-width:100%;overflow-x:hidden!important}
   });
 
   /* Refresh options if Settings later adds another branch. */
-  const obs=new MutationObserver(()=>setTimeout(ensureLoanBranchPicker,80));
-  document.addEventListener("DOMContentLoaded",()=>{
-    const main=document.getElementById("ordersBranch");
-    if(main)obs.observe(main,{childList:true});
-  });
+  // Performance: removed duplicate branch-option observer.
+
 })();
 </script>
 
@@ -15227,13 +15224,8 @@ html,body{max-width:100%;overflow-x:hidden!important}
   });
 
   /* Existing code may rebuild branch options after DB load; clean it again automatically. */
-  const observer=new MutationObserver(()=>setTimeout(fixLoanBranchPicker,30));
-  document.addEventListener("DOMContentLoaded",()=>{
-    setTimeout(()=>{
-      const picker=document.getElementById("loanBranchPicker");
-      if(picker)observer.observe(picker,{childList:true});
-    },1200);
-  });
+  // Performance: removed duplicate branch-option observer.
+
 })();
 </script>
 
@@ -15502,13 +15494,8 @@ html,body{max-width:100%;overflow-x:hidden!important}
   document.getElementById("ordersManageBtn")?.addEventListener("click",()=>setTimeout(render,200));
 
   /* If Settings adds/removes a branch, refresh these buttons automatically. */
-  const obs=new MutationObserver(()=>setTimeout(render,60));
-  document.addEventListener("DOMContentLoaded",()=>{
-    setTimeout(()=>{
-      const main=document.getElementById("ordersBranch");
-      if(main)obs.observe(main,{childList:true});
-    },1000);
-  });
+  // Performance: removed duplicate branch-option observer.
+
 })();
 </script>
 
@@ -15820,10 +15807,8 @@ html,body{
   document.addEventListener("DOMContentLoaded",()=>{
     setTimeout(fixSalaryScroll,500);
     setTimeout(fixSalaryScroll,1400);
-    const page=document.getElementById("salaryPage");
-    if(page){
-      new MutationObserver(()=>fixSalaryScroll()).observe(page,{childList:true,subtree:true});
-    }
+    // Performance: no whole Salary-page observer; explicit Salary/resize hooks refresh scroll.
+
   });
 
   document.getElementById("sidebarSalary")?.addEventListener("click",()=>{
@@ -16025,14 +16010,8 @@ input,select,textarea,button,a{
     makeExistingTableAreasScrollable();
     setTimeout(makeExistingTableAreasScrollable,500);
     setTimeout(makeExistingTableAreasScrollable,1500);
+    // Performance: CSS handles table scrolling; avoid observing every page subtree.
 
-    pageIds.forEach(id=>{
-      const page=document.getElementById(id);
-      if(page){
-        new MutationObserver(()=>makeExistingTableAreasScrollable())
-          .observe(page,{childList:true,subtree:true});
-      }
-    });
   });
 
   /* Escape closes a secondary page, but never while a modal is open. */
@@ -17302,8 +17281,8 @@ html,body,#app,.app,.main,.main-content{height:auto!important;min-height:100%!im
  }
  document.addEventListener("DOMContentLoaded",()=>{
    document.getElementById("sidebarSettlement")?.addEventListener("click",()=>setTimeout(updateAllBranchExpense,900));
-   const p=document.getElementById("settlementPage");
-   if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(updateAllBranchExpense,400)}).observe(p,{childList:true,subtree:true,characterData:true});}
+   // Performance: removed continuous Settlement subtree observer.
+
  });
 })();
 </script>
@@ -17337,8 +17316,8 @@ html,body,#app,.app,.main,.main-content{height:auto!important;min-height:100%!im
    }
  }
  document.addEventListener("DOMContentLoaded",()=>{
-   const p=document.getElementById("salaryPage");
-   if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(reorder,120)}).observe(p,{childList:true,subtree:true});}
+   // Performance: removed continuous Salary reorder observer.
+
    document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(reorder,700));
    document.getElementById("salaryMonth")?.addEventListener("change",()=>setTimeout(reorder,600));
  });
