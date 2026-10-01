@@ -1395,6 +1395,12 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     overflow-x:auto !important;
   }
 }
+</style><style id="nd-performance-cleanup">
+/* PERFORMANCE CLEANUP: do not render heavy off-screen pages until needed */
+#rosterPage,#salaryPage,#bonusPage,#settlementPage,#ordersPage,#settingsPage{
+  content-visibility:auto;
+  contain-intrinsic-size:1000px 800px;
+}
 </style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -4443,7 +4449,6 @@ const STAFF_EDIT_MANAGER_EMAILS = [
   "mars83002566@gmail.com"
 ];
 let salaryEmployees = [];
-try{refreshDailyBirthdayReminder();}catch(_e){}
 
 let salaryMonthly = [];
 let salarySnapshots = [];
@@ -5781,7 +5786,6 @@ async function loadSalaryData(){
   salaryEmployees=(empsRes.data||[])
     .filter(e=>{
       if(isGlobalAdmin) return true;
-try{refreshDailyBirthdayReminder();}catch(_e){}
 
       if(isPayrollManager) return true;
       return accessibleSalaryOutlets.includes(e.outlet);
@@ -7162,7 +7166,6 @@ async function initialize(){
           byIdMap.set(Number(e.id),{...old,...e});
         });
         salaryEmployees=[...byIdMap.values()];
-try{refreshDailyBirthdayReminder();}catch(_e){}
 
       }
     }catch(e){}
@@ -17227,6 +17230,16 @@ function closeDailyBirthdayReminder(){
  box.style.display="none";
 }
 document.getElementById("dailyBirthdayReminderClose")?.addEventListener("click",closeDailyBirthdayReminder);
+let dailyBirthdayLastCheckKey="";
+function refreshDailyBirthdayReminderLazy(force=false){
+ const page=document.getElementById("appView");
+ if(!page || page.classList.contains("hidden") || getComputedStyle(page).display==="none")return;
+ const key=birthdayLocalDateKey(new Date());
+ if(!force && dailyBirthdayLastCheckKey===key)return;
+ dailyBirthdayLastCheckKey=key;
+ try{refreshDailyBirthdayReminder();}catch(e){console.warn("Birthday reminder:",e);}
+}
+
 function monthKey(){
    const m=document.getElementById("rosterMonth")?.value||"";
    return m;
@@ -17573,8 +17586,13 @@ function monthKey(){
  window.ndCloseSidebar=closeMenu;
  window.ndRestoreCurrentAuthorizedPage=restore;
 })();
-window.addEventListener("pageshow",()=>setTimeout(()=>{try{refreshDailyBirthdayReminder();}catch(_e){}},300));
-setTimeout(()=>{try{refreshDailyBirthdayReminder();}catch(_e){}},1200);
+
+document.addEventListener("click",function(e){
+ const t=e.target.closest?.("button,a,[data-page],[data-target]");
+ if(!t)return;
+ setTimeout(()=>refreshDailyBirthdayReminderLazy(false),0);
+},{passive:true});
+window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
 </script></body>
 </html>
 
