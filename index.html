@@ -1318,6 +1318,17 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 @media(max-width:700px){
  #ordersPage #orderAddProductBtn,#ordersPage #orderNewProductBtn{flex:1 1 145px}
 }
+</style><style id="nd-new-product-separate-modal">
+#ordersPage .orders-product-management .outlet-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#ordersPage .orders-product-management .outlet-title>div{display:flex;flex-direction:column;gap:3px}
+.order-product-modal{position:fixed;inset:0;z-index:5000;background:rgba(12,25,42,.45);display:none;align-items:center;justify-content:center;padding:16px}
+.order-product-modal.open{display:flex}
+.order-product-modal-card{width:min(520px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:16px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.22)}
+.order-product-modal-head,.order-product-modal-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.order-product-modal-head h3{margin:0 0 3px}.order-product-modal-actions{justify-content:flex-end}
+.order-product-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0}
+.order-product-form label{font-size:12px;font-weight:800;color:#334155}.order-product-form input{display:block;width:100%;margin-top:5px}
+@media(max-width:600px){.order-product-form{grid-template-columns:1fr}.order-product-modal-card{padding:14px}}
 </style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -3897,6 +3908,13 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
   </div>
 
   <div id="ordersManagePanel">
+    <div class="salary-card orders-product-management">
+      <div class="outlet-title">
+        <div><strong>Product Management</strong><span class="helper">Create products for Orders search.</span></div>
+        <button class="btn primary" id="orderNewProductBtn" type="button">+ New Product</button>
+      </div>
+    </div>
+
     <div class="salary-card">
       <div class="outlet-title"><strong>+ Add Order</strong><span class="helper">Search and add only the products you want to order.</span></div>
       <div id="orderAddBranchButtons" class="order-add-branch-buttons"></div>
@@ -3908,7 +3926,6 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
         
         <div class="field" style="min-width:180px"><label>Note</label><input id="orderAddNote" placeholder="Optional"></div>
         <button class="btn" id="orderAddProductBtn" type="button">+ Add Product</button>
-        <button class="btn" id="orderNewProductBtn" type="button">+ New Product</button>
       </div>
     </div>
 
@@ -9823,43 +9840,50 @@ async function loadOrderCustomProducts(){
 }
 window.loadOrderCustomProducts=loadOrderCustomProducts;
 
-async function addNewOrderProduct(){
-  const name=prompt("New Product\\nProduct name:");
-  if(name===null)return;
-  const productName=String(name).trim();
+function ensureNewProductModal(){
+  let d=document.getElementById("orderNewProductModal");
+  if(d)return d;
+  d=document.createElement("div");
+  d.id="orderNewProductModal"; d.className="order-product-modal";
+  d.innerHTML=`<div class="order-product-modal-card">
+    <div class="order-product-modal-head"><div><h3>New Product</h3><div class="helper">Add a new product to Orders search.</div></div><button type="button" class="btn" data-close-new-product>✕</button></div>
+    <div class="order-product-form">
+      <label>Product Name<input id="newOrderProductName" autocomplete="off"></label>
+      <label>Brand<input id="newOrderProductBrand" autocomplete="off"></label>
+      <label>Category<input id="newOrderProductCategory" autocomplete="off"></label>
+      <label>Price (RM)<input id="newOrderProductPrice" type="number" min="0" step="0.01" value="0"></label>
+    </div>
+    <div class="order-product-modal-actions"><button type="button" class="btn" data-close-new-product>Cancel</button><button type="button" class="btn primary" id="saveNewOrderProductBtn">Save Product</button></div>
+  </div>`;
+  document.body.appendChild(d);
+  d.addEventListener("click",e=>{if(e.target===d||e.target.closest("[data-close-new-product]"))d.classList.remove("open");});
+  d.querySelector("#saveNewOrderProductBtn").addEventListener("click",saveNewOrderProduct);
+  return d;
+}
+function addNewOrderProduct(){
+  const d=ensureNewProductModal();
+  ["newOrderProductName","newOrderProductBrand","newOrderProductCategory"].forEach(id=>d.querySelector("#"+id).value="");
+  d.querySelector("#newOrderProductPrice").value="0"; d.classList.add("open");
+  setTimeout(()=>d.querySelector("#newOrderProductName")?.focus(),30);
+}
+async function saveNewOrderProduct(){
+  const d=ensureNewProductModal();
+  const productName=String(d.querySelector("#newOrderProductName").value||"").trim();
+  const brand=String(d.querySelector("#newOrderProductBrand").value||"").trim();
+  const category=String(d.querySelector("#newOrderProductCategory").value||"").trim();
+  const price=Number(d.querySelector("#newOrderProductPrice").value||0);
   if(!productName){alert("Product name is required.");return;}
-
-  const brandRaw=prompt("Brand:", "");
-  if(brandRaw===null)return;
-  const categoryRaw=prompt("Category (optional):", "");
-  if(categoryRaw===null)return;
-  const priceRaw=prompt("Price RM (optional):", "0");
-  if(priceRaw===null)return;
-  const price=Number(String(priceRaw||"0").replace(/[^0-9.-]/g,""));
   if(!Number.isFinite(price)||price<0){alert("Please enter a valid price.");return;}
-
-  const payload={
-    product_name:productName,
-    brand:String(brandRaw||"").trim(),
-    category:String(categoryRaw||"").trim(),
-    price:Number(price.toFixed(2)),
-    is_active:true,
+  const btn=d.querySelector("#saveNewOrderProductBtn"); btn.disabled=true;btn.textContent="Saving...";
+  const {data,error}=await salaryDb.from("order_product_catalog").insert({
+    product_name:productName,brand,category,price:Number(price.toFixed(2)),is_active:true,
     created_by:String(window.currentUserEmail||"").toLowerCase()
-  };
-  const {data,error}=await salaryDb.from("order_product_catalog")
-    .insert(payload).select("id,product_name,brand,category,price,is_active").single();
-  if(error){
-    if(String(error.code)==="23505")alert("This product already exists.");
-    else alert("New product failed: "+error.message);
-    return;
-  }
-  await loadOrderCustomProducts();
-  selectedOrderProduct=ORDER_PRODUCT_CATALOG.find(p=>String(p.sku_id)==="custom:"+data.id)||null;
+  }).select("id,product_name,brand,category,price,is_active").single();
+  btn.disabled=false;btn.textContent="Save Product";
+  if(error){alert(String(error.code)==="23505"?"This product already exists.":"New product failed: "+error.message);return;}
+  await loadOrderCustomProducts(); d.classList.remove("open");
   const search=document.getElementById("orderProductSearch");
-  if(search){
-    search.value=data.product_name||productName;
-    renderProductSearch("orderProductSearch","orderProductSearchResults","order");
-  }
+  if(search){search.value=data.product_name||productName;renderProductSearch("orderProductSearch","orderProductSearchResults","order");}
 }
 window.addNewOrderProduct=addNewOrderProduct;
 
