@@ -1433,6 +1433,10 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 </div>
 </div>
 <div class="wrap hidden" id="appView">
+<div id="dailyBirthdayReminder" style="display:none;margin:10px 0 14px;padding:14px 16px;border:1px solid #e4dfd5;border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.06);position:relative">
+  <button id="dailyBirthdayReminderClose" type="button" aria-label="Close birthday reminder" style="position:absolute;right:10px;top:8px;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;padding:5px 8px">×</button>
+  <div id="dailyBirthdayReminderText" style="font-weight:800;font-size:15px;padding-right:32px"></div>
+</div>
 <div class="topbar">
 <div><div class="brand"> Nature’s Dao</div><div class="sub">Daily Settlement</div></div>
 <div style="display:flex;align-items:flex-start;gap:10px">
@@ -4439,6 +4443,8 @@ const STAFF_EDIT_MANAGER_EMAILS = [
   "mars83002566@gmail.com"
 ];
 let salaryEmployees = [];
+try{refreshDailyBirthdayReminder();}catch(_e){}
+
 let salaryMonthly = [];
 let salarySnapshots = [];
 let salaryCommissionSnapshots = [];
@@ -4578,7 +4584,14 @@ function calculate7th(e,m={}){
 
   const hasTaxCode=!!String(e.tax_no||"").trim();
   const manualTax=getTaxOverride(e.id);
-  const tax=hasTaxCode ? (manualTax!==null ? manualTax : calculateAutoPcb(e,gross,employee_epf)) : 0;
+  let tax=0;
+  if(hasTaxCode){
+    if(manualTax!==null) tax=Number(manualTax)||0;
+    else{
+      try{ tax=Number(calculateAutoPcb(e,gross,employee_epf))||0; }
+      catch(err){ console.error("Employee PCB failed",e?.id,err); tax=0; }
+    }
+  }
 
   const allowedOffDays=Math.max(0,Number(e.monthly_off_days||0));
   const offDaysTaken=Math.max(0,Number(m.off_days_taken||0));
@@ -5768,6 +5781,8 @@ async function loadSalaryData(){
   salaryEmployees=(empsRes.data||[])
     .filter(e=>{
       if(isGlobalAdmin) return true;
+try{refreshDailyBirthdayReminder();}catch(_e){}
+
       if(isPayrollManager) return true;
       return accessibleSalaryOutlets.includes(e.outlet);
     })
@@ -6514,35 +6529,36 @@ function taxYtdBeforeCurrentMonth(e){
   };
 }
 function calculateAutoPcb(e,currentGross,currentEmployeeEpf){
-  if(!String(e.tax_no||"").trim())return 0;
-  const [year]=monthKey().split("-").map(Number);
-  const rule=getTaxRule(year);
-  const resident=(e.tax_resident_status||"resident");
-  const zakat=Number(e.tax_monthly_zakat||0);
-  const gross=Math.max(0,Number(currentGross||0));
-  const epf=Math.max(0,Number(currentEmployeeEpf||0));
+  try{
+    if(!String(e?.tax_no||"").trim()) return 0;
+    const parts=String(monthKey()||"").split("-");
+    const year=Number(parts[0])||new Date().getFullYear();
+    const rule=getTaxRule(year)||{};
+    const gross=Math.max(0,Number(currentGross)||0);
+    const epf=Math.max(0,Number(currentEmployeeEpf)||0);
+    const zakat=Math.max(0,Number(e?.tax_monthly_zakat)||0);
+    const resident=(e?.tax_resident_status||"resident");
 
-  // PCB in Salary is month-specific only:
-  // do not bring forward prior-month Gross / EPF / PCB into this month's calculation.
-  if(resident==="nonresident"){
-    return Math.max(0,roundPcb(gross*Number(rule.nonResidentRate||0)-zakat,rule.rounding));
+    if(resident==="nonresident"){
+      return Math.max(0,roundPcb(gross*(Number(rule.nonResidentRate)||0)-zakat,Number(rule.rounding)||0.05));
+    }
+
+    const projectedGross=gross*12;
+    const projectedEpf=Math.min(Number(rule.epfReliefCap)||0,epf*12);
+    let relief=Number(rule.individualRelief)||0;
+    if((e?.tax_marital_status||"single")==="married_not_working") relief+=Number(rule.spouseNotWorkingRelief)||0;
+    if(e?.tax_disabled_individual) relief+=Number(rule.disabledIndividualRelief)||0;
+    if(e?.tax_disabled_spouse) relief+=Number(rule.disabledSpouseRelief)||0;
+    relief+=(Number(e?.tax_children_u18)||0)*(Number(rule.childU18Relief)||0);
+    relief+=(Number(e?.tax_children_study)||0)*(Number(rule.childStudyRelief)||0);
+
+    const taxable=Math.max(0,projectedGross-projectedEpf-relief);
+    const annualTax=malaysiaResidentTaxAnnual(taxable,rule);
+    return Math.max(0,roundPcb((Number(annualTax)||0)/12-zakat,Number(rule.rounding)||0.05));
+  }catch(err){
+    console.error("PCB calculation error",err);
+    return 0;
   }
-
-  // Annualise THIS MONTH only to determine the monthly PCB.
-  const projectedGross=gross*12;
-  const projectedEpf=Math.min(Number(rule.epfReliefCap||0),epf*12);
-
-  let relief=Number(rule.individualRelief||0);
-  if((e.tax_marital_status||"single")==="married_not_working")relief+=Number(rule.spouseNotWorkingRelief||0);
-  if(e.tax_disabled_individual)relief+=Number(rule.disabledIndividualRelief||0);
-  if(e.tax_disabled_spouse)relief+=Number(rule.disabledSpouseRelief||0);
-  relief+=Number(e.tax_children_u18||0)*Number(rule.childU18Relief||0);
-  relief+=Number(e.tax_children_study||0)*Number(rule.childStudyRelief||0);
-
-  const taxable=Math.max(0,projectedGross-projectedEpf-relief);
-  const annualTax=malaysiaResidentTaxAnnual(taxable,rule);
-  const currentPcb=(annualTax/12)-zakat;
-  return Math.max(0,roundPcb(currentPcb,rule.rounding));
 }
 function calculateAutoPcb2026(e,currentGross,currentEmployeeEpf){return calculateAutoPcb(e,currentGross,currentEmployeeEpf);}
 function taxBandsToText(bands){return (bands||[]).map(([cap,rate])=>`${cap==null?"INF":cap}:${(Number(rate)||0)*100}`).join("\n");}
@@ -7146,6 +7162,8 @@ async function initialize(){
           byIdMap.set(Number(e.id),{...old,...e});
         });
         salaryEmployees=[...byIdMap.values()];
+try{refreshDailyBirthdayReminder();}catch(_e){}
+
       }
     }catch(e){}
     populateOutletSelects();
@@ -17180,7 +17198,36 @@ Audit fix: Bonus added to permission-aware page restore map.
  function email(){
    return String(window.currentUserEmail||"").trim().toLowerCase();
  }
- function monthKey(){
+ 
+function birthdayReminderDismissKey(empId,dateKey){return `nd_birthday_reminder_closed_${empId}_${dateKey}`;}
+function birthdayLocalDateKey(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`;}
+function birthdayEsc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function refreshDailyBirthdayReminder(){
+ const box=document.getElementById("dailyBirthdayReminder"),txt=document.getElementById("dailyBirthdayReminderText");
+ if(!box||!txt)return;
+ box.style.display="none";txt.innerHTML="";
+ const tomorrow=new Date();tomorrow.setHours(12,0,0,0);tomorrow.setDate(tomorrow.getDate()+1);
+ const tm=tomorrow.getMonth()+1,td=tomorrow.getDate(),todayKey=birthdayLocalDateKey(new Date());
+ const matches=(salaryEmployees||[]).filter(e=>{
+   if(!e||!e.birthday)return false;
+   const raw=String(e.birthday).slice(0,10),p=raw.split("-").map(Number);
+   if(p.length!==3||p[1]!==tm||p[2]!==td)return false;
+   if(e.last_working_date && String(e.last_working_date).slice(0,10)<todayKey)return false;
+   return localStorage.getItem(birthdayReminderDismissKey(e.id,todayKey))!=="1";
+ });
+ if(!matches.length)return;
+ txt.innerHTML=matches.map(e=>`⏰ ${birthdayEsc(e.name||"Employee")} 明天生日`).join("<br>");
+ box.dataset.employeeIds=matches.map(e=>e.id).join(",");
+ box.style.display="block";
+}
+function closeDailyBirthdayReminder(){
+ const box=document.getElementById("dailyBirthdayReminder");if(!box)return;
+ const k=birthdayLocalDateKey(new Date());
+ String(box.dataset.employeeIds||"").split(",").filter(Boolean).forEach(id=>localStorage.setItem(birthdayReminderDismissKey(id,k),"1"));
+ box.style.display="none";
+}
+document.getElementById("dailyBirthdayReminderClose")?.addEventListener("click",closeDailyBirthdayReminder);
+function monthKey(){
    const m=document.getElementById("rosterMonth")?.value||"";
    return m;
  }
@@ -17526,6 +17573,8 @@ Audit fix: Bonus added to permission-aware page restore map.
  window.ndCloseSidebar=closeMenu;
  window.ndRestoreCurrentAuthorizedPage=restore;
 })();
+window.addEventListener("pageshow",()=>setTimeout(()=>{try{refreshDailyBirthdayReminder();}catch(_e){}},300));
+setTimeout(()=>{try{refreshDailyBirthdayReminder();}catch(_e){}},1200);
 </script></body>
 </html>
 
