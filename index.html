@@ -1401,6 +1401,17 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   content-visibility:auto;
   contain-intrinsic-size:1000px 800px;
 }
+</style><style id="salary-desktop-horizontal-scroll">
+/* SALARY DESKTOP TABLE UX */
+#salaryPage .table-wrap{width:100%;max-width:100%;overflow-x:auto !important;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
+#salaryPage .table-wrap table{width:max-content !important;min-width:1450px;max-width:none !important;border-collapse:separate;border-spacing:0;}
+#salaryPage .table-wrap th,#salaryPage .table-wrap td{white-space:nowrap;}
+@media (min-width:901px){
+#salaryPage .table-wrap th:first-child,#salaryPage .table-wrap td:first-child{position:sticky;left:0;z-index:3;background:#fff;min-width:205px;max-width:205px;}
+#salaryPage .table-wrap th:first-child{z-index:5;background:#f7f7f5;}
+#salaryPage .table-wrap td:first-child{box-shadow:7px 0 10px -10px rgba(0,0,0,.45);}
+}
+@media (max-width:900px){#salaryPage .table-wrap table{min-width:1250px;}}
 </style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -5831,6 +5842,29 @@ function offDayInput(empId,value,locked=false){
   return `<div class="offday-box"><input type="number" min="0" step="1" value="${n}" data-month-edit="${empId}" data-field="off_days_taken"><span class="days-suffix">Days</span></div>`;
 }
 
+
+function salaryPayslipReleaseDate(type){
+  const selected=(byId("salaryMonth")?.value||monthKey()||"").trim();
+  const m=/^(\d{4})-(\d{2})$/.exec(selected);
+  const base=m?new Date(Number(m[1]),Number(m[2])-1,1):new Date();
+  // Salary month is paid in the following month.
+  return new Date(base.getFullYear(),base.getMonth()+1,Number(type)===7?5:12,0,0,0,0);
+}
+function salaryPayslipIsReleased(type){
+  const now=new Date();
+  return now.getTime()>=salaryPayslipReleaseDate(type).getTime();
+}
+function salaryPayslipReleaseLabel(type){
+  const d=salaryPayslipReleaseDate(type);
+  return `${String(d.getDate()).padStart(2,"0")} ${d.toLocaleString("en-GB",{month:"short"})} ${d.getFullYear()}`;
+}
+function salaryPayslipCell(empId,type,confirmed){
+  if(!confirmed)return `<span class="helper">Confirm first</span>`;
+  if(!salaryPayslipIsReleased(type)){
+    return `<span class="helper">Available ${salaryPayslipReleaseLabel(type)}</span>`;
+  }
+  return `<button class="btn" data-payslip${Number(type)===7?"7":"14"}="${empId}">${Number(type)===7?"7th":"14th"} Payslip</button>`;
+}
 function renderSevenTable(emps){
   if(!emps.length) return '';
   return `<div class="salary-table-wrap"><table class="salary-table">
@@ -5857,7 +5891,7 @@ function renderSevenTable(emps){
         <td>${snap?money(s.ot||0):editInput(e.id,"ot",m.ot)}</td>
         <td>${money(s.gross_pay)}</td><td>${money(s.total_deduction)}</td><td>${money(s.net_pay)}</td>
         <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
-        <td>${snap?`<button class="btn" data-payslip7="${e.id}">7th Payslip</button>`:`<span class="helper">Confirm first</span>`}</td>
+        <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
         <td><span class="pay-method-pill">${e.payment_method||"Cash"}</span></td>
         <td>${snap
           ? (isPayrollManager
@@ -5888,7 +5922,7 @@ function renderFourteenTable(emps){
         <td data-live-commission="${e.id}">${money(c.commission)}</td>
         <td data-live-netpay14="${e.id}">${money(c.net_pay)}</td>
         <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
-        <td>${cs?`<button class="btn" data-payslip14="${e.id}">14th Payslip</button>`:`<span class="helper">Confirm first</span>`}</td>
+        <td>${salaryPayslipCell(e.id,14,!!cs)}</td>
         <td><span class="pay-method-pill">${e.payment_method||"Cash"}</span></td>
         <td>${cs
           ? (isPayrollManager
@@ -7097,6 +7131,10 @@ function payslipTransferDetailsHtml(e){
 }
 
 async function openPayslip(empId,type){
+  if(!salaryPayslipIsReleased(type)){
+    alert(`${Number(type)===7?"7th":"14th"} payslip will be available on ${salaryPayslipReleaseLabel(type)}.`);
+    return false;
+  }
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId)); if(!e) return;
   if(type===7){
     const s=snapshotFor(empId);
@@ -7610,6 +7648,10 @@ async function buildBranchPayslipPdf(branch,type,employees){
 
 async function exportPayslipsByBranch(type){
   if(!isPayrollManager){alert("Salary manager only.");return;}
+  if(!salaryPayslipIsReleased(type)){
+    alert(`${Number(type)===7?"7th":"14th"} payslips will be available on ${salaryPayslipReleaseLabel(type)}.`);
+    return;
+  }
 
   const isSeven=Number(type)===7;
   const btn=byId(isSeven?"export7thPayslipsBtn":"export14thPayslipsBtn");
@@ -7805,6 +7847,11 @@ async function markExportedSalaryJobsDone(jobs){
 }
 
 async function exportSalaryPayslipCategory(mode){
+  const releaseType=String(mode||"").startsWith("7_")?7:14;
+  if(!salaryPayslipIsReleased(releaseType)){
+    alert(`${releaseType===7?"7th":"14th"} payslips will be available on ${salaryPayslipReleaseLabel(releaseType)}.`);
+    return;
+  }
   if(!isPayrollManager){
     alert("Salary manager only.");
     return;
