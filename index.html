@@ -10297,24 +10297,34 @@ async function saveOrderBranch(){
  setOrdersMode(ordersMode);
 }
 
-async function refreshOrdersVisibility(){
+async function refreshOrdersVisibility(force=false){
  const btn=document.getElementById("sidebarOrders");
+ if(!force && window.ordersPermissionLoaded===true){
+   if(btn)btn.style.display=window.canViewOrders?"":"none";
+   return !!window.canViewOrders;
+ }
  try{
-  const {data:{session}}=await ordersDb().auth.getSession();
-  ordersCurrentEmail=String(session?.user?.email||"").trim().toLowerCase();
+  const known=String(window.currentUserEmail||ordersCurrentEmail||"").trim().toLowerCase();
+  if(known) ordersCurrentEmail=known;
+  if(!ordersCurrentEmail){
+    const {data:{session}}=await ordersDb().auth.getSession();
+    ordersCurrentEmail=String(session?.user?.email||"").trim().toLowerCase();
+  }
   const isUmo=ordersCurrentEmail==="umo1017@gmail.com";
   let allowed=isUmo || ordersCurrentEmail===String(ORDERS_OWNER_EMAIL||"").trim().toLowerCase();
   if(!allowed && ordersCurrentEmail){
     const {data,error}=await ordersDb().from("order_view_access").select("email").eq("email",ordersCurrentEmail).maybeSingle();
     if(!error && data) allowed=true;
   }
+  window.canViewOrders=!!allowed;
+  window.canManageOrders=(isUmo || ordersCurrentEmail===String(ORDERS_OWNER_EMAIL||"").trim().toLowerCase());
+  window.ordersPermissionLoaded=true;
   if(btn)btn.style.display=allowed?"":"none";
-  window.canViewOrders=allowed;
-  window.canManageOrders=(ordersCurrentEmail==="umo1017@gmail.com" || ordersCurrentEmail===String(ORDERS_OWNER_EMAIL||"").trim().toLowerCase());
-  return allowed;
- }catch(_){
-   if(btn)btn.style.display="none";
-   window.canViewOrders=false;
+  return !!allowed;
+ }catch(err){
+   console.warn("Orders permission:",err);
+   // Do not turn a previously-authorized visible Orders button into a dead button on a transient network error.
+   if(window.canViewOrders===true){window.ordersPermissionLoaded=true;return true;}
    return false;
  }
 }
@@ -10642,52 +10652,21 @@ async function receiveTransfer(id){
 }
 
 async function showOrders(){
-  // Umo is always allowed. Other users may be allowed through Order View Access.
-  let currentEmail="";
-  let isUmo=false;
-  let allowed=false;
-  try{
-    const client=(typeof ordersDb==="function" ? ordersDb() :
-                 ((typeof salaryDb!=="undefined" && salaryDb) ? salaryDb :
-                 ((typeof db!=="undefined" && db) ? db : null)));
-    currentEmail=String(window.currentUserEmail||currentEmail||"").trim().toLowerCase();
-    if(!currentEmail && client?.auth){
-      const {data:{session}}=await client.auth.getSession();
-      currentEmail=String(session?.user?.email||"").trim().toLowerCase();
-    }
-    isUmo=currentEmail==="umo1017@gmail.com";
-    if(isUmo){
-      allowed=true;
-      window.canViewOrders=true;
-      window.canManageOrders=true;
-      const btn=document.getElementById("sidebarOrders");
-      if(btn) btn.style.display="";
-    }else{
-      try{allowed=await refreshOrdersVisibility();}catch(_){allowed=false;}
-    }
-  }catch(err){
-    console.warn("Orders permission check:",err);
-  }
+  const p=document.getElementById("ordersPage");
+  if(!p)return;
 
-  if(!allowed && !isUmo){
-    const b=document.getElementById("sidebarOrders");
-    if(b)b.style.display="none";
-    const p=document.getElementById("ordersPage");
-    if(p){p.classList.remove("active","sidebar-offset");p.style.display="none";}
-    // Unauthorized pages are never opened and never saved as the last page.
-    try{
-      if(window.activeMainPage==="orders"){
-        window.activeMainPage="daily";
-        if(typeof showDaily==="function")showDaily();
-      }
-    }catch(_){}
+  // If the menu is visible, open immediately. Permission was already resolved at login.
+  // Only do one permission lookup if this session has not resolved it yet.
+  let allowed=window.canViewOrders===true;
+  if(!window.ordersPermissionLoaded){
+    try{allowed=await refreshOrdersVisibility(false);}catch(_){allowed=false;}
+  }
+  if(!allowed){
+    p.classList.remove("active","sidebar-offset");
+    p.style.display="none";
     return;
   }
 
-
-  try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
-  // Open the page FIRST so a later data-loading error can never make the
-  // Orders button look dead.
   try{
     window.activeMainPage="orders";
     localStorage.setItem("nd_last_page_v2","orders");
@@ -10695,57 +10674,48 @@ async function showOrders(){
   }catch(_){}
 
   document.getElementById("appView")?.classList.add("hidden");
-  ["salaryPage","rosterPage","settlementPage","settingsPage"].forEach(id=>{
+  ["salaryPage","rosterPage","settlementPage","settingsPage","bonusPage"].forEach(id=>{
     const el=document.getElementById(id);
     el?.classList.remove("active","sidebar-offset");
-    if(el && id!=="salaryPage") el.style.display="none";
+    if(el && id!=="salaryPage")el.style.display="none";
   });
-
-  const p=document.getElementById("ordersPage");
-  if(!p){
-    alert("Orders page container is missing.");
-    return;
-  }
   p.classList.add("active","sidebar-offset");
   p.style.display="block";
   p.style.visibility="visible";
   p.style.opacity="1";
-
   try{setSidebarActive("orders")}catch(_){}
   try{closeMobileSidebar()}catch(_){}
 
-  await loadOrderCustomProducts();
   const month=document.getElementById("ordersMonth");
   if(month&&!month.value){
     const d=new Date();
     month.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
   }
-
   const addBranchBtn=document.getElementById("ordersAddBranchBtn");
-  if(addBranchBtn) addBranchBtn.style.display=window.canManageOrders?"":"none";
+  if(addBranchBtn)addBranchBtn.style.display=window.canManageOrders?"":"none";
 
-  // Data errors are shown but do not close the Orders page.
-  try{
-    await loadOrderBranches();
-  }catch(err){
-    console.error("Orders load failed:",err);
-    const target=document.getElementById("ordersManagePanel") || p;
-    const msg=document.createElement("div");
-    msg.className="helper bad";
-    msg.textContent="Orders data load failed: "+(err?.message||String(err));
-    target.prepend(msg);
-  }
+  // Render cached UI immediately; avoid duplicate loads if user clicks Orders repeatedly.
+  try{setOrdersMode(ordersMode||"manage");}catch(_){}
 
-  try{
-    setOrdersMode(ordersMode||"manage");
-  }catch(err){
-    console.error("Orders render failed:",err);
-  }
+  if(window.ordersLoadingPromise)return;
+  window.ordersLoadingPromise=(async()=>{
+    try{
+      await Promise.all([
+        loadOrderCustomProducts(),
+        loadOrderBranches()
+      ]);
+      if(window.activeMainPage==="orders")setOrdersMode(ordersMode||"manage");
+    }catch(err){
+      console.error("Orders load failed:",err);
+    }finally{
+      window.ordersLoadingPromise=null;
+    }
+  })();
 }
 window.showOrders=showOrders;
 
 document.addEventListener("DOMContentLoaded",()=>{
- setTimeout(refreshOrdersVisibility,150);
+ refreshOrdersVisibility(false);
  document.getElementById("ordersManageBtn")?.addEventListener("click",()=>setOrdersMode("manage"));
  document.getElementById("ordersMonthlyBtn")?.addEventListener("click",()=>setOrdersMode("monthly"));
  document.getElementById("ordersTotalQtyBtn")?.addEventListener("click",()=>setOrdersMode("total"));
@@ -16505,8 +16475,7 @@ input,select,textarea,button,a{
  document.addEventListener("DOMContentLoaded",()=>{
    document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(enhance,500));
    monthEl()?.addEventListener("change",()=>setTimeout(enhance,350));
-   const p=document.getElementById("salaryPage");
-   if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(enhance,220)}).observe(p,{childList:true,subtree:true});}
+   // No whole-page MutationObserver: render hooks above are enough and avoid repeated 3-Bonus recalculation.
  });
 })();
 </script>
@@ -17782,11 +17751,7 @@ function monthKey(){
  window.ndRestoreCurrentAuthorizedPage=restore;
 })();
 
-document.addEventListener("click",function(e){
- const t=e.target.closest?.("button,a,[data-page],[data-target]");
- if(!t)return;
- setTimeout(()=>refreshDailyBirthdayReminderLazy(false),0);
-},{passive:true});
+
 window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
 
 /* ===== SIDEBAR CLOSE AFTER MENU SELECTION ===== */
