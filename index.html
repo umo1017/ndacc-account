@@ -5861,7 +5861,7 @@ function salaryPayslipReleaseLabel(type){
 function salaryPayslipCell(empId,type,confirmed){
   if(!confirmed)return `<span class="helper">Confirm first</span>`;
   if(!salaryPayslipIsReleased(type)){
-    return `<span class="helper">Available ${salaryPayslipReleaseLabel(type)}</span>`;
+    return ``;
   }
   return `<button class="btn" data-payslip${Number(type)===7?"7":"14"}="${empId}">${Number(type)===7?"7th":"14th"} Payslip</button>`;
 }
@@ -5879,7 +5879,7 @@ function renderSevenTable(emps){
     </tr></thead><tbody>
     ${emps.map(e=>{
       const m=monthlyFor(e.id), snap=snapshotFor(e.id), s=snap||calculate7th(e,m);
-      return `<tr>
+      return `<tr data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
         <td>${e.name||"-"}</td>
         <td>${offDayInput(e.id, snap?Number(s.off_days_taken||0):Number(m.off_days_taken||0), !!snap)}</td>
         <td>${money(s.guaranteed_pay)}</td><td>${money(s.allowance)}</td>
@@ -6037,8 +6037,10 @@ async function submitCommissionChanges(){
 
 
 function updateSalaryExportButtons(){
-  const show7=isPayrollManager && salaryViewMode==="7th";
-  const show14=isPayrollManager && salaryViewMode==="14th";
+  const email=String(currentUserEmail||"").trim().toLowerCase();
+  const isSalaryExportOwner=email==="umo1017@gmail.com"||email==="mars83002566@gmail.com";
+  const show7=isSalaryExportOwner && salaryViewMode==="7th";
+  const show14=isSalaryExportOwner && salaryViewMode==="14th";
 
   const b7Cash=byId("export7CashBtn");
   const b7Transfer=byId("export7TransferBtn");
@@ -7847,6 +7849,11 @@ async function markExportedSalaryJobsDone(jobs){
 }
 
 async function exportSalaryPayslipCategory(mode){
+  const exportEmail=String(currentUserEmail||"").trim().toLowerCase();
+  if(exportEmail!=="umo1017@gmail.com" && exportEmail!=="mars83002566@gmail.com"){
+    alert("No permission.");
+    return;
+  }
   const releaseType=String(mode||"").startsWith("7_")?7:14;
   if(!salaryPayslipIsReleased(releaseType)){
     alert(`${releaseType===7?"7th":"14th"} payslips will be available on ${salaryPayslipReleaseLabel(releaseType)}.`);
@@ -16287,59 +16294,71 @@ input,select,textarea,button,a{
 }
 </style>
 <script>
-/* ===== SALARY 14TH QUARTERLY 3-BONUS V2 ===== */
+/* ===== SALARY 14TH QUARTERLY 3-BONUS V3 — EMPLOYEE SPECIFIC ===== */
 (function(){
  const PAYOUT=new Set([3,6,9,12]);
  const money=v=>"RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
  const monthEl=()=>document.getElementById("salaryMonth");
  const ym=()=>monthEl()?.value||new Date().toISOString().slice(0,7);
- const branchOf=e=>String(e?.outlet||e?.branch||"").trim();
 
  function quarterMonths(v){
    const [y,m]=String(v||"").split("-").map(Number);
-   if(!y||!PAYOUT.has(m)) return [];
+   if(!y||!PAYOUT.has(m))return [];
    return [m-2,m-1,m].map(x=>`${y}-${String(x).padStart(2,"0")}`);
  }
- async function branchMonthTotal(branch,m){
-   const d1=m+"-01",d=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1),d2=d.toISOString().slice(0,10);
-   const {data,error}=await salaryDb.from("daily_settlements").select("grand_total").eq("branch",branch).gte("settlement_date",d1).lt("settlement_date",d2);
-   if(error) throw error;
-   return (data||[]).reduce((a,r)=>a+Number(r.grand_total||0),0);
- }
- async function branchMonthBonus(branch,m){
-   // Automatically use the Branch Bonus already saved for that branch/month.
-   // Sum employee bonus_amount plus the branch manager bonus for the month.
+ async function monthBranchTotal(branch,m){
    const {data,error}=await salaryDb.from("branch_bonus_monthly")
-     .select("bonus_amount,branch_total")
-     .eq("bonus_month",m+"-01")
-     .eq("branch",branch);
-   if(error) throw error;
-   const rows=data||[];
-   const employeeBonus=rows.reduce((a,r)=>a+Number(r.bonus_amount||0),0);
+     .select("branch_total").eq("bonus_month",m+"-01").eq("branch",branch).limit(1);
+   if(error)throw error;
+   return Number(data?.[0]?.branch_total||0);
+ }
+ async function employeeQuarterBonus(empId,v){
+   const months=quarterMonths(v); if(months.length!==3)return 0;
+   empId=Number(empId); if(!empId)return 0;
 
-   // Manager bonus uses the fixed branch manager percentage and the same month's branch total.
-   const {data:setting,error:setErr}=await salaryDb.from("branch_bonus_fixed_settings")
-     .select("manager_percent")
-     .eq("branch",branch)
-     .maybeSingle();
-   if(setErr) throw setErr;
-   const branchTotal=rows.length ? Number(rows[0].branch_total||0) : await branchMonthTotal(branch,m);
-   const managerBonus=branchTotal*Number(setting?.manager_percent||0)/100;
-   return employeeBonus+managerBonus;
- }
- async function quarterBonus(branch,v){
-   const ms=quarterMonths(v); if(ms.length!==3)return 0;
+   // Branch Bonus: only THIS employee's saved bonus for each month.
+   const {data:ownRows,error:ownErr}=await salaryDb.from("branch_bonus_monthly")
+     .select("bonus_month,branch,bonus_amount,manual_bonus_override")
+     .eq("employee_id",empId)
+     .in("bonus_month",months.map(m=>m+"-01"));
+   if(ownErr)throw ownErr;
+
+   // Manager Bonus: only branches where THIS employee is the selected manager.
+   const {data:mgrRows,error:mgrErr}=await salaryDb.from("branch_bonus_fixed_settings")
+     .select("branch,manager_employee_id,manager_percent")
+     .eq("manager_employee_id",empId);
+   if(mgrErr)throw mgrErr;
+
+   const isManager=(mgrRows||[]).length>0;
    let total=0;
-   for(const m of ms){
-     total += await branchMonthBonus(branch,m);
+
+   // Managers are excluded from the employee 1% pool: manager receives own Manager Bonus only.
+   if(!isManager){
+     for(const r of (ownRows||[])){
+       const val=r.manual_bonus_override!==null && r.manual_bonus_override!==undefined
+         ? Number(r.manual_bonus_override||0)
+         : Number(r.bonus_amount||0);
+       total+=val;
+     }
+   }else{
+     for(const m of months){
+       for(const st of (mgrRows||[])){
+         const branchTotal=await monthBranchTotal(String(st.branch||""),m);
+         total+=branchTotal*Number(st.manager_percent||0)/100;
+       }
+     }
    }
-   return total;
+   return Number(total.toFixed(2));
  }
- // Quarter-end Salary 14th 3-Bonus is auto-filled from Branch Bonus for all 3 months.
- window.ndQuarter3Bonus={months:quarterMonths,calculate:quarterBonus,isPayoutMonth:v=>PAYOUT.has(Number(String(v).slice(5,7)))};
+ window.ndQuarter3Bonus={
+   months:quarterMonths,
+   calculateEmployee:employeeQuarterBonus,
+   isPayoutMonth:v=>PAYOUT.has(Number(String(v).slice(5,7)))
+ };
 
  async function enhance(){
-   const page=document.getElementById("salaryPage"); if(!page||!page.classList.contains("active"))return;
+   const page=document.getElementById("salaryPage");
+   if(!page||!page.classList.contains("active"))return;
    const current=ym(),isPay=window.ndQuarter3Bonus.isPayoutMonth(current);
    const tables=[...page.querySelectorAll("table")];
    for(const table of tables){
@@ -16352,16 +16371,18 @@ input,select,textarea,button,a{
        let td=tr.querySelector('td[data-3bonus-col]');
        if(!td){td=document.createElement("td");td.dataset["3bonusCol"]="1";tr.appendChild(td);}
        if(!isPay){td.textContent="RM 0.00";continue;}
-       const branch=tr.dataset.outlet||tr.dataset.branch||window.currentSalaryOutlet||document.querySelector(".salary-outlet-btn.active")?.dataset.outlet||"";
-       try{td.textContent=money(await quarterBonus(branch,current));}catch(_){td.textContent="RM 0.00";}
+       const empId=Number(tr.dataset.employeeId||0);
+       if(!empId){td.textContent="RM 0.00";continue;}
+       try{td.textContent=money(await employeeQuarterBonus(empId,current));}
+       catch(e){console.warn("3-Bonus",empId,e);td.textContent="RM 0.00";}
      }
    }
  }
  document.addEventListener("DOMContentLoaded",()=>{
-   document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(enhance,900));
-   monthEl()?.addEventListener("change",()=>setTimeout(enhance,700));
+   document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(enhance,500));
+   monthEl()?.addEventListener("change",()=>setTimeout(enhance,350));
    const p=document.getElementById("salaryPage");
-   if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(enhance,350)}).observe(p,{childList:true,subtree:true});}
+   if(p){let t;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(enhance,220)}).observe(p,{childList:true,subtree:true});}
  });
 })();
 </script>
@@ -17640,6 +17661,25 @@ document.addEventListener("click",function(e){
  setTimeout(()=>refreshDailyBirthdayReminderLazy(false),0);
 },{passive:true});
 window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
+
+/* ===== SIDEBAR CLOSE AFTER MENU SELECTION ===== */
+(function(){
+  function closeSidebarAfterSelection(e){
+    const sidebar=document.getElementById("mainSidebar");
+    if(!sidebar)return;
+    const item=e.target.closest("button,a,[data-page],[data-target]");
+    if(!item || !sidebar.contains(item))return;
+    // The hamburger itself is outside mainSidebar; all actual sidebar choices close the menu.
+    sidebar.classList.remove("open");
+  }
+  document.addEventListener("DOMContentLoaded",()=>{
+    const sidebar=document.getElementById("mainSidebar");
+    if(sidebar && !sidebar.dataset.closeAfterSelectionBound){
+      sidebar.dataset.closeAfterSelectionBound="1";
+      sidebar.addEventListener("click",closeSidebarAfterSelection);
+    }
+  });
+})();
 </script></body>
 </html>
 
