@@ -15160,6 +15160,7 @@ html,body{max-width:100%;overflow-x:hidden!important}
     if(body)obs.observe(body,{childList:true,subtree:true});
   });
   document.getElementById("ordersLoanBtn")?.addEventListener("click",()=>setTimeout(ensureBrandFilter,250));
+ document.getElementById("ordersBranch")?.addEventListener("change",()=>setTimeout(()=>{ensureBrandFilter();applyOutstandingBrand();},300));
 })();
 </script>
 
@@ -16443,13 +16444,36 @@ input,select,textarea,button,a{
      }
    }
  }
+ window.ndRefresh3Bonus=enhance;
  document.addEventListener("DOMContentLoaded",()=>{
-   document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(enhance,500));
+   document.getElementById("sidebarSalary")?.addEventListener("click",()=>setTimeout(enhance,180));
    monthEl()?.addEventListener("change",()=>setTimeout(enhance,350));
    // No whole-page MutationObserver: render hooks above are enough and avoid repeated 3-Bonus recalculation.
  });
 })();
 </script>
+<script id="salary-3bonus-render-hook-v4">
+(function(){
+  function bind(){
+    if(typeof window.renderSalary!=="function" || window.renderSalary.__bonus3Hooked)return;
+    const original=window.renderSalary;
+    const wrapped=function(){
+      const result=original.apply(this,arguments);
+      clearTimeout(window.ndRefresh3BonusTimer);
+      window.ndRefresh3BonusTimer=setTimeout(()=>{
+        try{ if(typeof window.ndRefresh3Bonus==="function") window.ndRefresh3Bonus(); }catch(e){console.warn("3-Bonus refresh",e);}
+      },100);
+      return result;
+    };
+    wrapped.__bonus3Hooked=true;
+    window.renderSalary=wrapped;
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bind,{once:true});
+  else bind();
+  setTimeout(bind,0);
+})();
+</script>
+
 
 
 <style>
@@ -18116,6 +18140,48 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
   #salaryPage{
     padding-left:28px !important;
     padding-right:28px !important;
+  }
+}
+</style>
+
+
+<style id="mobile-header-spacing-final-v7">
+/* ===== MOBILE HEADER / HAMBURGER SPACING FINAL V7 ===== */
+@media (max-width:900px){
+  /* Reserve a real header lane for the floating menu button. */
+  #salaryPage,
+  #rosterPage,
+  #bonusPage,
+  #settlementPage,
+  #ordersPage,
+  #settingsPage,
+  #appView{
+    padding-top:calc(92px + env(safe-area-inset-top)) !important;
+    box-sizing:border-box !important;
+  }
+
+  /* Keep the hamburger compact and completely above page titles. */
+  .mobile-sidebar-btn{
+    position:fixed !important;
+    left:max(14px,env(safe-area-inset-left)) !important;
+    top:calc(12px + env(safe-area-inset-top)) !important;
+    width:48px !important;
+    height:48px !important;
+    min-width:48px !important;
+    min-height:48px !important;
+    border-radius:14px !important;
+    z-index:100002 !important;
+  }
+
+  /* Page titles start below the button instead of underneath it. */
+  #salaryPage .salary-title,
+  #rosterPage .salary-title,
+  #bonusPage .salary-title,
+  #settlementPage .salary-title,
+  #ordersPage .salary-title,
+  #settingsPage .salary-title{
+    margin-top:0 !important;
+    clear:both !important;
   }
 }
 </style>
