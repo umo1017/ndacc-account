@@ -1720,7 +1720,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <span class="helper" id="dailySubmitState" style="display:block;text-align:center;margin-top:6px"></span>
 </div>
 <div class="card span12">
-<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><div class="helper">Today Total Cash</div><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong></div><div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap"><button class="btn" id="cashWithdrawalHistoryBtn" type="button">Cash Withdrawal Record</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div></div>
+<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><div class="helper">Today Total Cash</div><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong></div><div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="cashWithdrawalHistoryBtn" type="button">Cash Withdrawal Record</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div></div>
 <div class="card" style="background:var(--soft);margin-top:12px">
 <label>Cash Withdrawal</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashWithdrawal" min="0" step="0.01" type="number" value=""/></div>
@@ -1761,6 +1761,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   const paymentIds=["visa","amex","bedFee","tng","cash","alipay","onlineCard","bankTransfer","tips"];
   let saveTimer=null;
   let cashWithdrawalHistoryBranch="";
+  let pettyHistoryBranch="";
 
   const $=id=>document.getElementById(id);
   const money=v=>"RM "+(Number(v)||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2668,6 +2669,38 @@ return `<div class="history-date-card">
     return rows;
   }
 
+  function renderPettyHistoryBranchButtons(){
+    const root=$("pettyHistoryBranchToggle");
+    if(!root) return;
+
+    const ym=$("pettyHistoryMonth")?.value||today().slice(0,7);
+    const monthBranches=(allRows||[])
+      .filter(r=>String(r.settlement_date||"").slice(0,7)===ym)
+      .map(r=>String(r.branch||"").trim())
+      .filter(Boolean);
+
+    const base=dailyBranchNames();
+    const names=[...base,...monthBranches.filter(x=>!base.includes(x))];
+    const unique=[...new Set(names)];
+
+    if(!pettyHistoryBranch || !unique.includes(pettyHistoryBranch)){
+      pettyHistoryBranch=unique.includes(currentBranch)?currentBranch:(unique[0]||"");
+    }
+
+    root.innerHTML=unique.map(name=>`
+      <button type="button"
+        class="branch-btn ${name===pettyHistoryBranch?"active":""}"
+        data-petty-history-branch="${escHtml(name)}">${escHtml(name)}</button>
+    `).join("");
+
+    root.querySelectorAll("[data-petty-history-branch]").forEach(btn=>{
+      btn.onclick=()=>{
+        pettyHistoryBranch=btn.dataset.pettyHistoryBranch||"";
+        renderPettyCashMonthlyHistory();
+      };
+    });
+  }
+
   function renderPettyCashMonthlyHistory(){
     const root=$("pettyHistoryRoot");
     const summary=$("pettyHistorySummary");
@@ -2682,69 +2715,64 @@ return `<div class="history-date-card">
     const ym=($("pettyHistoryMonth")?.value||today().slice(0,7));
     if($("pettyHistoryMonth")) $("pettyHistoryMonth").value=ym;
 
-    const rows=pettyHistoryMonthRows(ym);
-    const outlets=dailyBranchNames();
-    const rowOutlets=rows.map(r=>String(r.branch||"")).filter(Boolean);
-    const allOutlets=[...outlets,...rowOutlets.filter(x=>!outlets.includes(x))];
+    renderPettyHistoryBranchButtons();
 
-    let grandOpening=0,grandIn=0,grandOut=0,grandClosing=0,grandEntries=0;
-    const outletBlocks=[];
-    const allEntriesForReceipts=[];
+    const rows=pettyHistoryMonthRows(ym)
+      .filter(r=>String(r.branch||"").trim()===String(pettyHistoryBranch||"").trim())
+      .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
 
-    allOutlets.forEach(outlet=>{
-      const outletRows=rows
-        .filter(r=>String(r.branch||"")===outlet)
-        .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
+    let totalIn=0,totalOut=0,entryCount=0;
+    const tableRows=[];
+    const receiptItems=[];
 
-      let totalIn=0,totalOut=0,entryCount=0;
-      const tableRows=[];
-      const opening=outletRows.length?Number(outletRows[0].petty_opening||0):0;
-      const closing=outletRows.length?Number(outletRows[outletRows.length-1].petty_net||0):opening;
+    const opening=rows.length?Number(rows[0].petty_opening||0):0;
+    const closing=rows.length?Number(rows[rows.length-1].petty_net||0):opening;
 
-      outletRows.forEach(r=>{
-        const entries=Array.isArray(r.petty_entries)?r.petty_entries:[];
-        const dayOpening=Number(r.petty_opening||0);
-        const remaining=Number(r.petty_net||0);
+    rows.forEach(r=>{
+      const entries=Array.isArray(r.petty_entries)?r.petty_entries:[];
+      const dayOpening=Number(r.petty_opening||0);
+      const remaining=Number(r.petty_net||0);
 
-        entries.forEach((e,entryIndex)=>{
-          allEntriesForReceipts.push({entry:e,rowId:r.id,entryIndex});
-          const isIn=String(e.type)==="in";
-          const amt=Number(e.amount||0);
-          if(isIn) totalIn+=amt; else totalOut+=amt;
-          entryCount++;
-          tableRows.push(`<tr>
-            <td>${escHtml(r.settlement_date||"")}</td>
-            <td>${isIn?"IN":"OUT"}</td>
-            <td>${escHtml(e.reason||"-")}</td>
-            <td>${money(amt)}</td>
-            <td>${pettyReceiptHistoryCell(e,r.id,entryIndex)}</td>
-            <td>${money(dayOpening)}</td>
-            <td>${money(remaining)}</td>
-          </tr>`);
-        });
+      entries.forEach((e,entryIndex)=>{
+        receiptItems.push({entry:e,rowId:r.id,entryIndex});
+        const isIn=String(e.type)==="in";
+        const amt=Number(e.amount||0);
+        if(isIn) totalIn+=amt; else totalOut+=amt;
+        entryCount++;
+
+        tableRows.push(`<tr>
+          <td>${escHtml(r.settlement_date||"")}</td>
+          <td>${isIn?"IN":"OUT"}</td>
+          <td>${escHtml(e.reason||"-")}</td>
+          <td>${money(amt)}</td>
+          <td>${pettyReceiptHistoryCell(e,r.id,entryIndex)}</td>
+          <td>${money(dayOpening)}</td>
+          <td>${money(remaining)}</td>
+        </tr>`);
       });
-
-      grandOpening+=opening;
-      grandIn+=totalIn;
-      grandOut+=totalOut;
-      grandClosing+=closing;
-      grandEntries+=entryCount;
-
-      outletBlocks.push(`<div class="salary-card" style="margin-top:14px">
-        <div class="outlet-title">
-          <strong>${escHtml(outlet)}</strong>
-          <span>Opening ${money(opening)} &nbsp; + IN ${money(totalIn)} &nbsp; − OUT ${money(totalOut)} &nbsp; = Closing ${money(closing)}</span>
-        </div>
-        ${tableRows.length?`<div class="table-wrap" style="margin-top:10px"><table>
-          <thead><tr><th>Date</th><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th>Opening</th><th>Remaining</th></tr></thead>
-          <tbody>${tableRows.join("")}</tbody>
-        </table></div>`:`<div class="helper" style="margin-top:10px">No Petty Cash IN / OUT record${outletRows.length?` · Closing ${money(closing)}`:""}</div>`}
-      </div>`);
     });
 
-    summary.innerHTML=`<strong>${escHtml(ym)}</strong> &nbsp; Entries <strong>${grandEntries}</strong> &nbsp; Opening <strong>${money(grandOpening)}</strong> &nbsp; Total IN <strong>${money(grandIn)}</strong> &nbsp; Total OUT <strong>${money(grandOut)}</strong> &nbsp; Closing <strong>${money(grandClosing)}</strong>`;
-    root.innerHTML=outletBlocks.join("");
-    bindPettyReceiptButtons(root,allEntriesForReceipts);
+    summary.innerHTML=
+      `<strong>${escHtml(pettyHistoryBranch||"")}</strong>`+
+      ` &nbsp; ${escHtml(ym)}`+
+      ` &nbsp; Entries <strong>${entryCount}</strong>`+
+      ` &nbsp; Opening <strong>${money(opening)}</strong>`+
+      ` &nbsp; Total IN <strong>${money(totalIn)}</strong>`+
+      ` &nbsp; Total OUT <strong>${money(totalOut)}</strong>`+
+      ` &nbsp; Closing <strong>${money(closing)}</strong>`;
+
+    root.innerHTML=`<div class="salary-card" style="margin-top:14px">
+      <div class="outlet-title">
+        <strong>${escHtml(pettyHistoryBranch||"")}</strong>
+        <span>Opening ${money(opening)} &nbsp; + IN ${money(totalIn)} &nbsp; − OUT ${money(totalOut)} &nbsp; = Closing ${money(closing)}</span>
+      </div>
+      ${tableRows.length?`<div class="table-wrap" style="margin-top:10px"><table>
+        <thead><tr><th>Date</th><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th>Opening</th><th>Remaining</th></tr></thead>
+        <tbody>${tableRows.join("")}</tbody>
+      </table></div>`:`<div class="helper" style="margin-top:10px">No Petty Cash history for this branch in this month.</div>`}
+    </div>`;
+
+    bindPettyReceiptButtons(root,receiptItems);
   }
 
   async function renderHistoryAccessManager(){
@@ -3926,13 +3954,16 @@ return `<div class="history-date-card">
       try{await cleanupExpiredPettyReceipts();}catch(e){console.warn("Receipt cleanup failed:",e);}
       const month=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7));
       if($("pettyHistoryMonth")) $("pettyHistoryMonth").value=month;
+      pettyHistoryBranch=currentBranch;
       renderPettyCashMonthlyHistory();
       $("pettyCashHistoryModal").classList.add("open");
     };
     const phc=$("closePettyCashHistoryModal");
     if(phc) phc.onclick=()=>$("pettyCashHistoryModal").classList.remove("open");
     const phm=$("pettyHistoryMonth");
-    if(phm) phm.onchange=renderPettyCashMonthlyHistory;
+    if(phm) phm.onchange=()=>{
+      renderPettyCashMonthlyHistory();
+    };
 
     const ha=$("historyAccessBtn"); if(ha) ha.onclick=async()=>{ if(!isSystemAdmin)return; await renderHistoryAccessManager(); $("historyAccessModal").classList.add("open"); };
     const hac=$("closeHistoryAccessModal"); if(hac) hac.onclick=()=>$("historyAccessModal").classList.remove("open");
@@ -4026,7 +4057,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="outlet-title">
 <div><h3 style="margin:0">Daily Settlement History</h3></div>
 <div style="display:flex;gap:8px;align-items:center">
-<button class="btn" id="pettyCashHistoryBtn" style="display:none" type="button">Petty Cash Record</button>
+
 <button class="btn" id="historyAccessBtn" style="display:none" type="button">History Access</button>
 <button class="main-page-close" id="closeHistoryModal" type="button">×</button>
 </div>
@@ -4186,6 +4217,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <input id="pettyHistoryMonth" type="month"/>
 </div>
 </div>
+<div class="branch-toggle" id="pettyHistoryBranchToggle" style="margin:10px 0 12px"></div>
 <div class="helper" id="pettyHistorySummary" style="margin-top:10px"></div>
 </div>
 <div id="pettyHistoryRoot"></div>
