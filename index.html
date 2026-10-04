@@ -1720,7 +1720,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <span class="helper" id="dailySubmitState" style="display:block;text-align:center;margin-top:6px"></span>
 </div>
 <div class="card span12">
-<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><div class="helper">Today Total Cash</div><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong></div><div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="cashWithdrawalHistoryBtn" type="button">Cash Withdrawal Record</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div></div>
+<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><div class="helper">Today Total Cash</div><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong></div><div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="bedFeeHistoryBtn" type="button">Bed Fee History</button><button class="btn" id="cashWithdrawalHistoryBtn" type="button">Cash Withdrawal Record</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div></div>
 <div class="card" style="background:var(--soft);margin-top:12px">
 <label>Cash Withdrawal</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashWithdrawal" min="0" step="0.01" type="number" value=""/></div>
@@ -1762,6 +1762,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   let saveTimer=null;
   let cashWithdrawalHistoryBranch="";
   let pettyHistoryBranch="";
+  let bedFeeHistoryBranch="";
 
   const $=id=>document.getElementById(id);
   const money=v=>"RM "+(Number(v)||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2003,6 +2004,8 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     if(a) a.style.display="none";
     const p=$("pettyCashHistoryBtn");
     if(p) p.style.display=isSystemAdmin?"":"none";
+    const bf=$("bedFeeHistoryBtn");
+    if(bf) bf.style.display=canViewDailyHistory?"":"none";
     const addOutlet=$("addDailyOutletBtn");
     if(addOutlet) addOutlet.style.display="none";
   }
@@ -2317,6 +2320,132 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     </div>`;
   }
 
+
+
+  function renderBedFeeHistoryBranchButtons(){
+    const root=$("bedFeeHistoryBranchToggle");
+    if(!root) return;
+
+    const ym=$("bedFeeHistoryMonth")?.value||today().slice(0,7);
+    const monthBranches=(allRows||[])
+      .filter(r=>
+        String(r.settlement_date||"").slice(0,7)===ym &&
+        Number(r.bed_fee||0)>0
+      )
+      .map(r=>String(r.branch||"").trim())
+      .filter(Boolean);
+
+    const base=dailyBranchNames();
+    const names=[...base,...monthBranches.filter(x=>!base.includes(x))];
+    const unique=[...new Set(names)];
+
+    if(!bedFeeHistoryBranch || !unique.includes(bedFeeHistoryBranch)){
+      bedFeeHistoryBranch=unique.includes(currentBranch)?currentBranch:(unique[0]||"");
+    }
+
+    root.innerHTML=unique.map(name=>`
+      <button type="button"
+        class="branch-btn ${name===bedFeeHistoryBranch?"active":""}"
+        data-bedfee-history-branch="${escHtml(name)}">${escHtml(name)}</button>
+    `).join("");
+
+    root.querySelectorAll("[data-bedfee-history-branch]").forEach(btn=>{
+      btn.onclick=()=>{
+        bedFeeHistoryBranch=btn.dataset.bedfeeHistoryBranch||"";
+        renderBedFeeHistory();
+      };
+    });
+  }
+
+  function bedFeeVerificationCell(r){
+    const state=(r.payment_statuses||{}).bed_fee||"";
+    const label=state==="accepted"
+      ? '<span class="helper ok" style="font-weight:800">✓ Accepted</span>'
+      : state==="adjust"
+        ? '<span class="helper bad" style="font-weight:800">✕ Error</span>'
+        : '<span class="helper" style="font-weight:800">Pending</span>';
+
+    return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      ${label}
+      <button type="button" class="mini correct"
+        data-bedfee-history-status="${r.id}"
+        data-bedfee-history-value="accepted">Accept</button>
+      <button type="button" class="mini error"
+        data-bedfee-history-status="${r.id}"
+        data-bedfee-history-value="adjust">Error</button>
+    </div>`;
+  }
+
+  function renderBedFeeHistory(){
+    const root=$("bedFeeHistoryRoot");
+    const summary=$("bedFeeHistorySummary");
+    if(!root || !summary) return;
+
+    const ym=$("bedFeeHistoryMonth")?.value||today().slice(0,7);
+    if($("bedFeeHistoryMonth")) $("bedFeeHistoryMonth").value=ym;
+
+    renderBedFeeHistoryBranchButtons();
+
+    const rows=(allRows||[])
+      .filter(r=>
+        String(r.settlement_date||"").slice(0,7)===ym &&
+        String(r.branch||"").trim()===String(bedFeeHistoryBranch||"").trim() &&
+        Number(r.bed_fee||0)>0
+      )
+      .sort((a,b)=>String(b.settlement_date||"").localeCompare(String(a.settlement_date||"")));
+
+    const total=rows.reduce((s,r)=>s+Number(r.bed_fee||0),0);
+    const accepted=rows.filter(r=>(r.payment_statuses||{}).bed_fee==="accepted").length;
+    const pending=rows.length-accepted;
+
+    summary.innerHTML=
+      `<strong>${escHtml(bedFeeHistoryBranch||"")}</strong>`+
+      ` &nbsp; ${escHtml(ym)}`+
+      ` &nbsp; Total <strong>${money(total)}</strong>`+
+      ` &nbsp; Accepted <strong>${accepted}</strong>`+
+      ` &nbsp; Pending/Error <strong>${pending}</strong>`;
+
+    if(!rows.length){
+      root.innerHTML='<div class="helper" style="padding:16px">No Bed Fee records for this branch in this month.</div>';
+      return;
+    }
+
+    root.innerHTML=`<div class="salary-card" style="box-shadow:none">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Branch</th>
+              <th>Brand</th>
+              <th>Amount</th>
+              <th>Verification</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r=>`<tr>
+              <td>${escHtml(r.settlement_date||"")}</td>
+              <td><strong>${escHtml(r.branch||"")}</strong></td>
+              <td>${escHtml(String(r.bed_fee_merchant||"").trim()||"—")}</td>
+              <td><strong>${money(r.bed_fee)}</strong></td>
+              <td>${bedFeeVerificationCell(r)}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+    root.querySelectorAll("[data-bedfee-history-status]").forEach(btn=>{
+      btn.onclick=async()=>{
+        const id=Number(btn.dataset.bedfeeHistoryStatus);
+        const status=btn.dataset.bedfeeHistoryValue;
+        await setPaymentStatus(id,"bed_fee",status);
+        // setPaymentStatus refreshes allRows and the normal Daily Settlement history.
+        // Re-render this modal too so both histories stay synchronized immediately.
+        renderBedFeeHistory();
+      };
+    });
+  }
 
   function renderUnverifiedBedFeeSummary(){
     const root=$("historyBedFeeUnverifiedSummary");
@@ -3931,6 +4060,22 @@ return `<div class="history-date-card">
     const hc=$("closeHistoryModal"); if(hc) hc.onclick=()=>$("historyModal").classList.remove("open");
     const hm=$("historyMonth"); if(hm) hm.onchange=renderCombinedHistory;
 
+    const bfhb=$("bedFeeHistoryBtn");
+    if(bfhb) bfhb.onclick=async()=>{
+      await refreshDailyHistoryPermission();
+      if(!canViewDailyHistory){alert("No history access.");return;}
+      await fetchRows();
+      const month=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7));
+      if($("bedFeeHistoryMonth")) $("bedFeeHistoryMonth").value=month;
+      bedFeeHistoryBranch=currentBranch;
+      renderBedFeeHistory();
+      $("bedFeeHistoryModal")?.classList.add("open");
+    };
+    const bfhc=$("closeBedFeeHistoryModal");
+    if(bfhc) bfhc.onclick=()=>$("bedFeeHistoryModal")?.classList.remove("open");
+    const bfhm=$("bedFeeHistoryMonth");
+    if(bfhm) bfhm.onchange=renderBedFeeHistory;
+
     const cwhb=$("cashWithdrawalHistoryBtn");
     if(cwhb) cwhb.onclick=async()=>{
       await fetchRows();
@@ -4081,6 +4226,32 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 
 
 
+
+
+<div class="salary-modal" id="bedFeeHistoryModal">
+  <div class="salary-dialog" style="width:min(980px,96vw)">
+    <div class="outlet-title">
+      <div>
+        <h3 style="margin:0">Bed Fee History</h3>
+        <div class="helper">Date · Brand · Amount · Verification</div>
+      </div>
+      <button class="main-page-close" id="closeBedFeeHistoryModal" type="button">×</button>
+    </div>
+
+    <div class="salary-card" style="box-shadow:none;margin-bottom:12px">
+      <div class="salary-toolbar">
+        <div class="field">
+          <label>Month</label>
+          <input id="bedFeeHistoryMonth" type="month"/>
+        </div>
+      </div>
+      <div class="branch-toggle" id="bedFeeHistoryBranchToggle" style="margin:10px 0 12px"></div>
+      <div class="helper" id="bedFeeHistorySummary"></div>
+    </div>
+
+    <div id="bedFeeHistoryRoot"></div>
+  </div>
+</div>
 
 <div class="salary-modal" id="paymentDestinationModal">
   <div class="salary-dialog" style="width:min(520px,94vw)">
@@ -4352,7 +4523,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
    <div class="bonus-branch-tabs" id="bonusBranchTabs" style="margin-top:12px"></div>
    <div class="bonus-metrics">
     <div class="bonus-metric"><div class="k">Branch Total Performance</div><div class="v" id="bonusBranchPerformance">RM 0.00</div></div>
-    <div class="bonus-metric"><div class="k">1% Bonus Pool</div><div class="v" id="bonusPool">RM 0.00</div></div>
+    <div class="bonus-metric"><div class="k">1% Bonus Pool After Deduction</div><div class="v" id="bonusPool">RM 0.00</div></div>
     <div class="bonus-metric"><div class="k">Eligible Staff</div><div class="v" id="bonusEligibleCount">0</div></div><div class="bonus-metric"><div class="k">Manager Bonus</div><div class="v" id="bonusManagerAmount">RM 0.00</div></div>
    </div>
   </div>
@@ -4369,6 +4540,27 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     </table>
    </div>
    <div class="actions" style="margin-top:14px"><button class="btn" id="bonusSaveBtn" type="button">Save Bonus</button></div>
+  </div>
+
+  <div class="bonus-card" id="bonusDeductionCard">
+    <div class="outlet-title">
+      <div>
+        <strong>Bonus Deduction</strong>
+        <div class="helper">Deduct from the 1% bonus pool before dividing among eligible staff.</div>
+      </div>
+      <strong id="bonusDeductionTotal">RM 0.00</strong>
+    </div>
+    <div class="salary-toolbar" style="margin-top:12px">
+      <div class="field" style="min-width:220px;flex:1"><label>Reason</label><input id="bonusDeductionReason" type="text" placeholder="Reason"/></div>
+      <div class="field" style="min-width:150px"><label>Amount</label><input id="bonusDeductionAmount" type="number" min="0" step="0.01" placeholder="0.00"/></div>
+      <button class="btn" id="bonusDeductionAddBtn" type="button">Add Deduction</button>
+    </div>
+    <div class="bonus-table-wrap" style="margin-top:12px">
+      <table class="bonus-table" style="min-width:520px">
+        <thead><tr><th>Reason</th><th>Amount</th><th>Action</th></tr></thead>
+        <tbody id="bonusDeductionBody"></tbody>
+      </table>
+    </div>
   </div>
  </div>
 </div>
@@ -5542,41 +5734,68 @@ function calculate7th(e,m={}){
     net_pay:+(gross-totalDeduction).toFixed(2)
   };
 }
-function calculate14th(m={},snapshot=null){
-  const totalCommission=Number(m.total_commission||0);
+function calculate14th(m={},snapshot=null,threeBonus=0){
+  const commissionA=Number(m.commission_a||0);
+  const commissionB=Number(m.commission_b||0);
+  const totalCommission=+(commissionA+commissionB).toFixed(2);
+
   const customer=Number(m.customer_referral||0);
   const staff=Number(m.staff_referral||0);
   const bonus=Number(m.reward||0);
+  const threeMonthBonus=Number(threeBonus||0);
 
-  const seventhGrossPay=Number(snapshot?.gross_pay||0);
+  // 7th employer cost to be recovered from Total Commission.
+  const basicPay=Number(snapshot?.guaranteed_pay||0);
+  const allowance=Number(snapshot?.allowance||0);
   const employerEpf=Number(snapshot?.employer_epf||0);
   const employerSocso=Number(snapshot?.employer_socso||0);
   const employerEis=Number(snapshot?.employer_eis||0);
+  const lindung24=Number(
+    snapshot
+      ? statutory(Number(snapshot.gross_pay||0)).employee_lindung24
+      : 0
+  );
 
-  // 14th commission cannot be negative. If deductions from the 7th payroll
-  // exceed the available commission/referrals, commission is floored at RM0.00.
-  const commission=Math.max(0, +(
-    totalCommission + customer + staff
-    - seventhGrossPay
-    - employerEpf
-    - employerSocso
-    - employerEis
-  ).toFixed(2));
+  const totalEmployerCost=+(
+    basicPay+
+    allowance+
+    employerEpf+
+    employerSocso+
+    lindung24+
+    employerEis
+  ).toFixed(2);
 
-  const netPay=+(commission + bonus).toFixed(2);
+  // Required rule:
+  // Total Commission - 7th Basic Pay - Allowance - Employer EPF
+  // - Employer SOCSO - Lindung 24 Jam - Employer EIS = Commission.
+  // Never allow a negative commission.
+  const rawCommission=+(totalCommission-totalEmployerCost).toFixed(2);
+  const commission=Math.max(0,rawCommission);
+
+  // Existing referral / bonus fields remain additional 14th income,
+  // but a non-positive commission does not produce a 14th payslip.
+  const totalIncome=+(commission+customer+staff+bonus+threeMonthBonus).toFixed(2);
 
   return {
+    commission_a:commissionA,
+    commission_b:commissionB,
     total_commission:totalCommission,
     customer_referral:customer,
     staff_referral:staff,
     bonus,
-    seventh_gross_pay:seventhGrossPay,
+    three_month_bonus:threeMonthBonus,
+    seventh_basic_pay:basicPay,
+    seventh_allowance:allowance,
     employer_epf:employerEpf,
     employer_socso:employerSocso,
+    lindung24,
     employer_eis:employerEis,
+    total_employer_cost:totalEmployerCost,
+    raw_commission:rawCommission,
     commission,
-    total_income:netPay,
-    net_pay:netPay
+    total_income:totalIncome,
+    net_pay:totalIncome,
+    has_payslip:commission>0
   };
 }
 function monthlyFor(id){ return salaryMonthly.find(x=>Number(x.employee_id)===Number(id))||{}; }
@@ -6709,6 +6928,25 @@ async function loadSalaryData(){
   salarySnapshots=snapRes.data||[];
   salaryCommissionSnapshots=commissionRes.data||[];
   salaryYtdSnapshots=ytdRes.data||[];
+
+  // Calculate the employee-specific 3-month bonus for quarterly payout months.
+  salaryQuarter3BonusMap=new Map();
+  try{
+    if(window.ndQuarter3Bonus?.isPayoutMonth?.(month)){
+      await Promise.all(salaryEmployees.map(async e=>{
+        try{
+          const amount=await window.ndQuarter3Bonus.calculateEmployee(Number(e.id),month);
+          salaryQuarter3BonusMap.set(Number(e.id),Number(amount||0));
+        }catch(err){
+          console.warn("3-Bonus load failed",e.id,err);
+          salaryQuarter3BonusMap.set(Number(e.id),0);
+        }
+      }));
+    }
+  }catch(err){
+    console.warn("3-Bonus preload failed",err);
+  }
+
   byId("salarySyncState").textContent="云端已同步 ✓";
   try{if(byId("empNo") && !byId("empNo").value) prepareAutoEmployeeNo();}catch(_){}
   renderSalary();
@@ -6750,6 +6988,9 @@ function salaryPayslipReleaseDate(type){
   return new Date(base.getFullYear(),base.getMonth()+1,Number(type)===7?5:12,0,0,0,0);
 }
 function salaryPayslipIsReleased(type){
+  const email=String(currentUserEmail||window.currentUserEmail||"").trim().toLowerCase();
+  // Before the normal release date, only Umo may view payslips.
+  if(email==="umo1017@gmail.com") return true;
   const now=new Date();
   return now.getTime()>=salaryPayslipReleaseDate(type).getTime();
 }
@@ -6834,22 +7075,45 @@ function renderFourteenTable(emps){
   if(!emps.length) return '';
   return `<div class="salary-table-wrap"><table class="salary-table">
     <thead><tr>
-      <th>Name</th><th>Total Commission</th><th>Customer Referral</th>
-      <th>Staff Referral</th><th>Bonus</th><th>Commission</th><th>Nett Pay</th><th>Confirm</th><th>14th Commission Payslip</th><th>Pay By</th><th>Payment</th>
+      <th>Name</th>
+      <th>Commission A</th><th>Commission B</th><th>Total Commission</th>
+      <th>7th Basic Pay</th><th>Allowance</th><th>Employer EPF</th>
+      <th>Employer SOCSO</th><th>Lindung 24 Jam</th><th>Employer EIS</th>
+      <th>Commission</th>
+      <th>Customer Referral</th><th>Staff Referral</th><th>Bonus</th><th>3-Bonus</th>
+      <th>Nett Pay</th><th>Confirm</th><th>14th Commission Payslip</th><th>Pay By</th><th>Payment</th>
     </tr></thead><tbody>
     ${emps.map(e=>{
-      const m=monthlyFor(e.id), cs=commissionSnapshotFor(e.id), c=cs||calculate14th(m,snapshotFor(e.id));
+      const m=monthlyFor(e.id), cs=commissionSnapshotFor(e.id);
+      const threeBonus=cs
+        ? Number(cs.three_month_bonus ?? salaryQuarter3BonusFor(e.id))
+        : salaryQuarter3BonusFor(e.id);
+      const c=cs||calculate14th(m,snapshotFor(e.id),threeBonus);
       const fld=(field,val)=>cs?money(val):editInput(e.id,field,val);
+      const a=cs?Number(cs.commission_a||0):Number(m.commission_a||0);
+      const b=cs?Number(cs.commission_b||0):Number(m.commission_b||0);
+      const total=cs?Number(cs.total_commission||0):+(a+b).toFixed(2);
+      const canPayslip=Number(c.commission||0)>0;
+
       return `<tr>
         <td>${e.name||"-"}</td>
-        <td>${fld("total_commission",cs?cs.total_commission:m.total_commission)}</td>
+        <td>${fld("commission_a",a)}</td>
+        <td>${fld("commission_b",b)}</td>
+        <td data-live-totalcommission14="${e.id}"><strong>${money(total)}</strong></td>
+        <td>${money(c.seventh_basic_pay||0)}</td>
+        <td>${money(c.seventh_allowance||0)}</td>
+        <td>${money(c.employer_epf||0)}</td>
+        <td>${money(c.employer_socso||0)}</td>
+        <td>${money(c.lindung24||0)}</td>
+        <td>${money(c.employer_eis||0)}</td>
+        <td data-live-commission="${e.id}"><strong>${money(c.commission)}</strong></td>
         <td>${fld("customer_referral",cs?cs.customer_referral:m.customer_referral)}</td>
         <td>${fld("staff_referral",cs?cs.staff_referral:m.staff_referral)}</td>
         <td>${fld("reward",cs?cs.bonus:m.reward)}</td>
-        <td data-live-commission="${e.id}">${money(c.commission)}</td>
+        <td data-live-3bonus="${e.id}"><strong>${money(threeBonus)}</strong></td>
         <td data-live-netpay14="${e.id}">${money(c.net_pay)}</td>
         <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
-        <td>${salaryPayslipCell(e.id,14,!!cs)}</td>
+        <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
         <td><span class="pay-method-pill">${e.payment_method||"Cash"}</span></td>
         <td>${cs
           ? (isPayrollManager
@@ -6861,7 +7125,10 @@ function renderFourteenTable(emps){
     </tbody></table></div>`;
 }
 
-
+let salaryQuarter3BonusMap=new Map();
+function salaryQuarter3BonusFor(empId){
+  return Number(salaryQuarter3BonusMap.get(Number(empId))||0);
+}
 let salaryViewMode=localStorage.getItem("nd_salary_view_mode_v1")||"7th";
 const commissionPendingChanges=new Map();
 
@@ -7136,7 +7403,10 @@ function renderSalary(){
 
 function recalc14thLive(empId){
   const m=monthlyFor(empId);
-  const calc=calculate14th(m,snapshotFor(empId));
+  const calc=calculate14th(m,snapshotFor(empId),salaryQuarter3BonusFor(empId));
+
+  const totalCell=document.querySelector(`[data-live-totalcommission14="${empId}"]`);
+  if(totalCell) totalCell.textContent=money(calc.total_commission);
 
   const commissionCell=document.querySelector(`[data-live-commission="${empId}"]`);
   if(commissionCell) commissionCell.textContent=money(calc.commission);
@@ -7159,7 +7429,7 @@ function bindSalaryTableActions(){
       }
       m[field]=value;
 
-      const isCommissionField=["total_commission","customer_referral","staff_referral","reward"].includes(field);
+      const isCommissionField=["commission_a","commission_b","customer_referral","staff_referral","reward"].includes(field);
 
       if(isCommissionField){
         markCommissionDirty(empId,field,value);
@@ -7176,7 +7446,7 @@ function bindSalaryTableActions(){
       const empId=Number(inp.dataset.monthEdit);
       const field=String(inp.dataset.field||"");
       const value=Number(inp.value||0);
-      const isCommissionField=["total_commission","customer_referral","staff_referral","reward"].includes(field);
+      const isCommissionField=["commission_a","commission_b","customer_referral","staff_referral","reward"].includes(field);
 
       // Commission fields stay local until Submit Commission Changes is pressed.
       if(isCommissionField) return;
@@ -7396,8 +7666,11 @@ async function confirm7th(empId){
   if(!e || snapshotFor(empId)) return;
   if((e.employment_type||"full_time")==="part_time") return;
   const calc=calculate7th(e,monthlyFor(empId));
+  // Lindung 24 Jam is display-only. The existing payroll_snapshot table
+  // does not have an employee_lindung24 column, so never send it to Supabase.
+  const {employee_lindung24,...snapshotCalc}=calc;
   const {error}=await salaryDb.from("payroll_snapshot").insert({
-    employee_id:e.id,salary_month:monthDate(),...calc
+    employee_id:e.id,salary_month:monthDate(),...snapshotCalc
   });
   if(error){ alert("Confirm failed: "+error.message); return; }
   await refreshSalaryStayHere();
@@ -7412,8 +7685,21 @@ async function confirm14th(empId){
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || commissionSnapshotFor(empId)) return;
   const m=monthlyFor(empId);
-  const c=calculate14th(m,snapshotFor(empId));
-  const row={employee_id:e.id,salary_month:monthDate(),total_commission:Number(m.total_commission||0),customer_referral:Number(m.customer_referral||0),staff_referral:Number(m.staff_referral||0),bonus:Number(m.reward||0),commission:Number(c.commission||0),total_income:Number(c.total_income||0),net_pay:Number(c.net_pay||0)};
+  const c=calculate14th(m,snapshotFor(empId),salaryQuarter3BonusFor(empId));
+  const row={
+    employee_id:e.id,
+    salary_month:monthDate(),
+    commission_a:Number(c.commission_a||0),
+    commission_b:Number(c.commission_b||0),
+    total_commission:Number(c.total_commission||0),
+    customer_referral:Number(m.customer_referral||0),
+    staff_referral:Number(m.staff_referral||0),
+    bonus:Number(m.reward||0),
+    three_month_bonus:Number(c.three_month_bonus||0),
+    commission:Number(c.commission||0),
+    total_income:Number(c.total_income||0),
+    net_pay:Number(c.net_pay||0)
+  };
   const {error}=await salaryDb.from("payroll_commission_snapshot").insert(row);
   if(error){alert("Confirm 14th failed: "+error.message);return;}
   await refreshSalaryStayHere();
@@ -8076,11 +8362,18 @@ async function openPayslip(empId,type){
 </div>`;
   } else {
     const sevenSnapshot=snapshotFor(empId);
-    const c=commissionSnapshotFor(empId);
-    if(!c){alert("Please confirm 14th payroll first.");return false;}
+    const rawC=commissionSnapshotFor(empId);
+    if(!rawC){alert("Please confirm 14th payroll first.");return false;}
+    const c={...rawC,three_month_bonus:Number(rawC.three_month_bonus ?? salaryQuarter3BonusFor(empId))};
+    c.total_income=Number(c.commission||0)+Number(c.customer_referral||0)+Number(c.staff_referral||0)+Number(c.bonus||0)+Number(c.three_month_bonus||0);
+    c.net_pay=c.total_income;
+    if(Number(c.commission||0)<=0){
+      alert("Commission is RM 0.00. No 14th payslip.");
+      return false;
+    }
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Commission</span><span class="amt">${Number(c.commission||0).toFixed(2)}</span></div><div class="payslip-line"><span>Bonus</span><span class="amt">${Number(c.bonus||0).toFixed(2)}</span></div><div style="height:140px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(c.total_income||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">0.00</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">0.00</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">0.00</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">0.00</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Commission</span><span class="amt">${Number(c.commission||0).toFixed(2)}</span></div><div class="payslip-line"><span>Bonus</span><span class="amt">${Number(c.bonus||0).toFixed(2)}</span></div><div class="payslip-line"><span>3-Bonus</span><span class="amt">${Number(c.three_month_bonus||0).toFixed(2)}</span></div><div style="height:150px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(c.total_income||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">0.00</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">0.00</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">0.00</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">0.00</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
 <div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${Number(c.net_pay||0).toFixed(2)}</span></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
@@ -8602,7 +8895,7 @@ async function exportPayslipsByBranch(type){
 
       const ok=isSeven
         ? (!isPartTime && !!snapshotFor(e.id))
-        : !!commissionSnapshotFor(e.id);
+        : !!commissionSnapshotFor(e.id) && Number(commissionSnapshotFor(e.id)?.commission||0)>0;
 
       if(!ok) return;
       if(!grouped[branch]) grouped[branch]=[];
@@ -9083,7 +9376,37 @@ document.addEventListener("DOMContentLoaded",()=>{
 
   // Restore the exact main page after refresh.
   // Delay slightly so Salary / Settlement / Orders permissions finish loading first.
-  document.addEventListener("DOMContentLoaded",()=>{
+ 
+ async function addBonusDeduction(){
+   if(!canEditStaffBonus()) return;
+   const reason=String($("bonusDeductionReason")?.value||"").trim();
+   const amount=Math.max(0,Number($("bonusDeductionAmount")?.value||0));
+   if(!reason){alert("Please enter deduction reason.");return;}
+   if(amount<=0){alert("Please enter deduction amount.");return;}
+
+   const payload={
+     bonus_month:bonusMonthDate(),
+     branch:bonusBranch,
+     reason,
+     amount:Number(amount.toFixed(2)),
+     created_by:currentBonusEmail()
+   };
+   const {error}=await salaryDb.from("branch_bonus_deductions").insert(payload);
+   if(error){alert("Deduction save failed: "+error.message);return;}
+   if($("bonusDeductionReason")) $("bonusDeductionReason").value="";
+   if($("bonusDeductionAmount")) $("bonusDeductionAmount").value="";
+   await loadBonus();
+ }
+
+ async function deleteBonusDeduction(id){
+   if(!canEditStaffBonus()) return;
+   if(!confirm("Delete this bonus deduction?")) return;
+   const {error}=await salaryDb.from("branch_bonus_deductions").delete().eq("id",Number(id));
+   if(error){alert("Delete failed: "+error.message);return;}
+   await loadBonus();
+ }
+
+ document.addEventListener("DOMContentLoaded",()=>{
     setTimeout(()=>restoreState(),900);
   });
 
@@ -16891,7 +17214,7 @@ input,select,textarea,button,a{
 (function(){
  const $=id=>document.getElementById(id);
  const UMO="umo1017@gmail.com";
- let bonusBranch="", bonusEmployees=[], bonusSaved={}, bonusBranchTotal=0, managerSetting=null, fixedManagerSetting=null;
+ let bonusBranch="", bonusEmployees=[], bonusSaved={}, bonusBranchTotal=0, managerSetting=null, fixedManagerSetting=null, bonusDeductions=[];
 
  function moneyBonus(v){return "RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
  function monthBonus(){return $("bonusMonth")?.value || new Date().toISOString().slice(0,7);}
@@ -16948,19 +17271,21 @@ input,select,textarea,button,a{
    const endDate=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1);
    const end=endDate.toISOString().slice(0,10);
 
-   const [empRes,settRes,saveRes,profileRes,mgrRes,fixedRes]=await Promise.all([
+   const [empRes,settRes,saveRes,profileRes,mgrRes,fixedRes,dedRes]=await Promise.all([
      salaryDb.from("employees").select("*").order("outlet").order("name"),
      salaryDb.from("daily_settlements").select("branch,grand_total,settlement_date").gte("settlement_date",start).lt("settlement_date",end),
      salaryDb.from("branch_bonus_monthly").select("*").eq("bonus_month",bonusMonthDate()),
      salaryDb.from("salary_manager_profiles").select("name,email,is_owner"),
      salaryDb.from("branch_bonus_manager_settings").select("*").eq("bonus_month",bonusMonthDate()),
-     salaryDb.from("branch_bonus_fixed_settings").select("*")
+     salaryDb.from("branch_bonus_fixed_settings").select("*"),
+     salaryDb.from("branch_bonus_deductions").select("*").eq("bonus_month",bonusMonthDate()).order("created_at",{ascending:true})
    ]);
-   const err=empRes.error||settRes.error||saveRes.error||mgrRes.error||fixedRes.error;
+   const err=empRes.error||settRes.error||saveRes.error||mgrRes.error||fixedRes.error||dedRes.error;
    if(err){if(state)state.textContent="Bonus setup required: "+err.message;return;}
 
    bonusEmployees=empRes.data||[];
    bonusSaved={};(saveRes.data||[]).forEach(r=>bonusSaved[Number(r.employee_id)]=r);
+   bonusDeductions=(dedRes.data||[]).filter(r=>String(r.branch||"")===String(bonusBranch||""));
 
    // Managers are excluded from the employee 1% pool.
    const managerNames=new Set((profileRes.data||[]).map(x=>String(x.name||"").trim().toLowerCase()).filter(Boolean));
@@ -16972,6 +17297,7 @@ input,select,textarea,button,a{
      branches=branches.filter(b=>window.accessibleSalaryOutlets.includes(b));
    }
    if(!bonusBranch||!branches.includes(bonusBranch))bonusBranch=branches[0]||"";
+   bonusDeductions=(dedRes.data||[]).filter(r=>String(r.branch||"")===String(bonusBranch||""));
 
    const tabs=$("bonusBranchTabs");
    if(tabs)tabs.innerHTML=branches.map(b=>`<button type="button" class="bonus-branch-btn ${b===bonusBranch?"active":""}" data-bonus-branch="${String(b).replace(/"/g,"&quot;")}">${b}</button>`).join("");
@@ -16999,7 +17325,9 @@ input,select,textarea,button,a{
  }
 
  function renderBonus(){
-   const pool=bonusBranchTotal*0.01;
+   const grossPool=bonusBranchTotal*0.01;
+   const deductionTotal=(bonusDeductions||[]).reduce((s,r)=>s+Number(r.amount||0),0);
+   const pool=Math.max(0,grossPool-deductionTotal);
    const allBranchEmps=bonusEmployees.filter(e=>String(e.outlet||"")===bonusBranch);
    const managerId=Number(fixedManagerSetting?.manager_employee_id||0);
    const emps=allBranchEmps.filter(e=>Number(e.id)!==managerId);
@@ -17028,6 +17356,19 @@ input,select,textarea,button,a{
    $("bonusEligibleCount").textContent=String(count);
    if($("bonusManagerAmount"))$("bonusManagerAmount").textContent=moneyBonus(managerAmount);
    if($("bonusManagerPct")){$("bonusManagerPct").value=managerPct;$("bonusManagerPct").disabled=!isUmoBonus();}
+
+   if($("bonusDeductionTotal")) $("bonusDeductionTotal").textContent=moneyBonus(deductionTotal);
+   if($("bonusDeductionBody")){
+     $("bonusDeductionBody").innerHTML=(bonusDeductions||[]).length
+       ? bonusDeductions.map(r=>`<tr>
+           <td>${String(r.reason||"-").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}</td>
+           <td>${moneyBonus(r.amount)}</td>
+           <td>${canEditStaffBonus()?`<button type="button" class="mini staff-delete-btn" data-bonus-deduction-delete="${r.id}">Delete</button>`:"—"}</td>
+         </tr>`).join("")
+       : '<tr><td colspan="3">No deductions.</td></tr>';
+   }
+   if($("bonusDeductionCard")) $("bonusDeductionCard").style.display=canOpenBonus()?"":"none";
+   if($("bonusDeductionAddBtn")) $("bonusDeductionAddBtn").style.display=canEditStaffBonus()?"":"none";
 
    const edit=canEditStaffBonus();
    $("bonusStaffBody").innerHTML=rows.length?rows.map(x=>`
@@ -17060,7 +17401,9 @@ input,select,textarea,button,a{
      const managerId=Number(fixedManagerSetting?.manager_employee_id||0); const emps=bonusEmployees.filter(e=>String(e.outlet||"")===bonusBranch && Number(e.id)!==managerId);
      const states=emps.map(e=>({e,...readRow(e.id)}));
      const eligibleCount=states.filter(x=>x.eligible).length;
-     const pool=bonusBranchTotal*0.01;
+     const grossPool=bonusBranchTotal*0.01;
+     const deductionTotal=(bonusDeductions||[]).reduce((s,r)=>s+Number(r.amount||0),0);
+     const pool=Math.max(0,grossPool-deductionTotal);
      const each=eligibleCount?pool/eligibleCount:0;
      const rows=states.map(x=>({
        bonus_month:bonusMonthDate(),branch:bonusBranch,employee_id:Number(x.e.id),employee_name:x.e.name||"",
@@ -17102,6 +17445,11 @@ input,select,textarea,button,a{
    $("closeBonusPage")?.addEventListener("click",()=>{if(typeof showDaily==="function")showDaily();});
    $("bonusRefreshBtn")?.addEventListener("click",loadBonus);
    $("bonusSaveBtn")?.addEventListener("click",saveBonus);
+   $("bonusDeductionAddBtn")?.addEventListener("click",addBonusDeduction);
+   $("bonusDeductionBody")?.addEventListener("click",e=>{
+     const btn=e.target.closest("[data-bonus-deduction-delete]");
+     if(btn) deleteBonusDeduction(btn.dataset.bonusDeductionDelete);
+   });
    $("bonusMonth")?.addEventListener("change",loadBonus);
    $("bonusBranchTabs")?.addEventListener("click",e=>{const b=e.target.closest("[data-bonus-branch]");if(!b)return;bonusBranch=b.dataset.bonusBranch||"";loadBonus();});
    $("bonusStaffBody")?.addEventListener("click",async e=>{
@@ -17119,7 +17467,7 @@ input,select,textarea,button,a{
      const payload={
        bonus_month:bonusMonthDate(),branch:bonusBranch,employee_id:id,employee_name:emp.name||"",
        branch_total:Number(bonusBranchTotal||0),
-       bonus_pool:Number(bonusBranchTotal||0)*0.01,
+       bonus_pool:Math.max(0,Number(bonusBranchTotal||0)*0.01-(bonusDeductions||[]).reduce((s,r)=>s+Number(r.amount||0),0)),
        target_achieved:saved.target_achieved!==false,
        has_mc:!!saved.has_mc,
        manager_selected:true,
@@ -17245,14 +17593,13 @@ input,select,textarea,button,a{
      const h=(table.querySelector("thead")?.innerText||"").toLowerCase();
      const near=(table.closest(".salary-card")?.innerText||"").slice(0,300).toLowerCase();
      if(!(h.includes("commission")&&(near.includes("14th")||near.includes("14"))))continue;
-     let th=table.querySelector('th[data-3bonus-col]');
-     if(!th){th=document.createElement("th");th.textContent="3-Bonus";th.dataset["3bonusCol"]="1";table.querySelector("thead tr")?.appendChild(th);}
+     // 3-Bonus is now integrated directly beside the 14th Bonus column.
+     // Do not append another column here.
      for(const tr of table.querySelectorAll("tbody tr")){
-       let td=tr.querySelector('td[data-3bonus-col]');
-       if(!td){td=document.createElement("td");td.dataset["3bonusCol"]="1";tr.appendChild(td);}
-       if(!isPay){td.textContent="RM 0.00";continue;}
-       const empId=Number(tr.dataset.employeeId||0);
-       if(!empId){td.textContent="RM 0.00";continue;}
+       const td=tr.querySelector("[data-live-3bonus]");
+       if(!td) continue;
+       const empId=Number(td.getAttribute("data-live-3bonus")||0);
+       if(!isPay || !empId){td.textContent="RM 0.00";continue;}
        try{td.textContent=money(await employeeQuarterBonus(empId,current));}
        catch(e){console.warn("3-Bonus",empId,e);td.textContent="RM 0.00";}
      }
