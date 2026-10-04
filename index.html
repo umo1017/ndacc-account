@@ -1668,9 +1668,21 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <div class="money-wrap"><span class="rm-prefix">RM</span><input id="pettyAmount" min="0" step="0.01" type="number" value=""/></div>
 </div>
 </div>
-<div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" style="width:100%;margin-top:2px" type="button">Submit IN / OUT</button></div>
+<div id="pettyReceiptWrap" style="margin-top:12px">
+  <div style="font-weight:800;font-size:13px;margin-bottom:7px">Receipt / 收据 <span id="pettyReceiptRequiredNote" class="helper">(OUT 必须上传)</span></div>
+  <input id="pettyReceiptCamera" type="file" accept="image/*" capture="environment" style="display:none"/>
+  <input id="pettyReceiptFile" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none"/>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" id="pettyReceiptCameraBtn" type="button">📷 拍照</button>
+    <button class="btn" id="pettyReceiptFileBtn" type="button">＋ 添加照片 / 文件</button>
+    <button class="mini" id="pettyReceiptClearBtn" type="button" style="display:none">清除</button>
+  </div>
+  <div class="helper" id="pettyReceiptSelected" style="margin-top:7px">未选择收据</div>
+  <div class="helper" style="margin-top:3px">照片 / PDF / Word / Excel / TXT，单个文件最多 15MB；保存 6 个月后自动删除文件。</div>
+</div>
+<div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" style="width:100%;margin-top:12px" type="button">Submit IN / OUT</button></div>
 <div class="table-wrap" style="margin-top:10px">
-<table><thead><tr><th></th><th></th><th></th><th></th></tr></thead><tbody id="pettyBody"></tbody></table>
+<table><thead><tr><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th></th></tr></thead><tbody id="pettyBody"></tbody></table>
 </div>
 <div style="margin-top:14px">
 <label>Petty Cash </label>
@@ -1978,6 +1990,149 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 
 
 
+
+  function pettyMovementFromRow(r){
+    const entries=Array.isArray(r?.petty_entries)?r.petty_entries:null;
+    if(entries){
+      let pin=0,pout=0;
+      entries.forEach(e=>{
+        const amount=Number(e?.amount||0);
+        if(String(e?.type||"")==="in") pin+=amount;
+        else if(String(e?.type||"")==="out") pout+=amount;
+      });
+      return {pin,pout};
+    }
+    return {pin:Number(r?.petty_in||0),pout:Number(r?.petty_out||0)};
+  }
+
+  function computedCarryBefore(branch,date,sourceRows=allRows){
+    const rows=(sourceRows||[])
+      .filter(r=>String(r.branch||"")===String(branch||"") && String(r.settlement_date||"")<String(date||""))
+      .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
+
+    if(!rows.length) return {cash:0,petty:0};
+
+    // Preserve the earliest historical opening as the ledger baseline.
+    let cash=Number(rows[0].cash_opening||0);
+    let petty=Number(rows[0].petty_opening||0);
+
+    rows.forEach(r=>{
+      cash+=Number(r.cash||0)-Number(r.cash_withdrawal||0);
+      const mv=pettyMovementFromRow(r);
+      petty+=mv.pin-mv.pout;
+    });
+    return {cash,petty};
+  }
+
+  function computedLatestBalancesByBranch(sourceRows=allRows){
+    const rows=(sourceRows||[]).filter(r=>!r._missing && r.branch && r.settlement_date);
+    const branches=[...new Set(rows.map(r=>String(r.branch||"").trim()).filter(Boolean))];
+    const result=new Map();
+
+    branches.forEach(branch=>{
+      const branchRows=rows
+        .filter(r=>String(r.branch||"").trim()===branch)
+        .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
+      if(!branchRows.length) return;
+
+      let cash=Number(branchRows[0].cash_opening||0);
+      let petty=Number(branchRows[0].petty_opening||0);
+      branchRows.forEach(r=>{
+        cash+=Number(r.cash||0)-Number(r.cash_withdrawal||0);
+        const mv=pettyMovementFromRow(r);
+        petty+=mv.pin-mv.pout;
+      });
+
+      result.set(branch,{
+        cash,
+        petty,
+        settlement_date:String(branchRows[branchRows.length-1].settlement_date||"")
+      });
+    });
+    return result;
+  }
+
+  async function repairAllHistoricalCarryForwardBalances(options={}){
+    const silent=options.silent!==false;
+    const {data,error}=await db.from("daily_settlements")
+      .select("*")
+      .order("branch",{ascending:true})
+      .order("settlement_date",{ascending:true});
+
+    if(error){
+      if(!silent){
+        $("syncState").textContent="历史余额检查失败："+error.message;
+        $("syncState").className="bad";
+      }
+      return false;
+    }
+
+    const rows=data||[];
+    const branches=[...new Set(rows.map(r=>String(r.branch||"").trim()).filter(Boolean))];
+    let changed=0;
+
+    for(const branch of branches){
+      const branchRows=rows
+        .filter(r=>String(r.branch||"").trim()===branch)
+        .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
+      if(!branchRows.length) continue;
+
+      // Do not wipe a legitimate starting float from old data.
+      let carryCash=Number(branchRows[0].cash_opening||0);
+      let carryPetty=Number(branchRows[0].petty_opening||0);
+
+      for(const r of branchRows){
+        const mv=pettyMovementFromRow(r);
+        const grand=["visa","master","amex","bed_fee","tng","cash","alipay","online_card","bank_transfer","tips"]
+          .reduce((sum,k)=>sum+Number(r[k]||0),0);
+        const cashBalance=carryCash+Number(r.cash||0)-Number(r.cash_withdrawal||0);
+        const pettyNet=carryPetty+mv.pin-mv.pout;
+
+        const patch={
+          grand_total:grand,
+          cash_opening:carryCash,
+          cash_balance:cashBalance,
+          petty_opening:carryPetty,
+          petty_in:mv.pin,
+          petty_out:mv.pout,
+          petty_net:pettyNet
+        };
+
+        const differs=
+          Math.abs(Number(r.grand_total||0)-grand)>0.005 ||
+          Math.abs(Number(r.cash_opening||0)-carryCash)>0.005 ||
+          Math.abs(Number(r.cash_balance||0)-cashBalance)>0.005 ||
+          Math.abs(Number(r.petty_opening||0)-carryPetty)>0.005 ||
+          Math.abs(Number(r.petty_in||0)-mv.pin)>0.005 ||
+          Math.abs(Number(r.petty_out||0)-mv.pout)>0.005 ||
+          Math.abs(Number(r.petty_net||0)-pettyNet)>0.005;
+
+        if(differs){
+          const {error:updateError}=await db.from("daily_settlements").update(patch).eq("id",r.id);
+          if(updateError){
+            if(!silent){
+              $("syncState").textContent="历史余额修复失败："+updateError.message;
+              $("syncState").className="bad";
+            }
+            return false;
+          }
+          changed++;
+        }
+
+        carryCash=cashBalance;
+        carryPetty=pettyNet;
+      }
+    }
+
+    if(changed>0) await fetchRows();
+
+    if(!silent){
+      $("syncState").textContent=changed?`历史余额已重新检查并修复 ${changed} 笔 ✓`:"历史余额检查完成，没有发现错误 ✓";
+      $("syncState").className="ok";
+    }
+    return true;
+  }
+
   function renderHistoryUnverifiedKeyTotals(){
     const root=$("historyUnverifiedKeyTotals");
     if(!root) return;
@@ -1995,23 +2150,12 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
       }
     });
 
-    // Cash outstanding for withdrawal = latest carried cash balance per branch.
-    // Do not sum every historical cash balance, otherwise carried balances double count.
-    const latestByBranch=new Map();
-    rows.forEach(r=>{
-      const branch=String(r.branch||"").trim();
-      if(!branch) return;
-      const prev=latestByBranch.get(branch);
-      if(!prev || String(r.settlement_date||"")>String(prev.settlement_date||"")){
-        latestByBranch.set(branch,r);
-      }
-    });
+    // Rebuild the cash ledger from raw CASH / Withdrawal movements so this
+    // number stays correct even when an old stored cash_balance was stale.
+    const latestByBranch=computedLatestBalancesByBranch(rows);
     let withdrawalRemaining=0;
-    latestByBranch.forEach(r=>{
-      withdrawalRemaining+=Number(
-        r.cash_balance ??
-        (Number(r.cash_opening||0)+Number(r.cash||0)-Number(r.cash_withdrawal||0))
-      );
+    latestByBranch.forEach(v=>{
+      withdrawalRemaining+=Number(v.cash||0);
     });
 
     root.innerHTML=`
@@ -2442,20 +2586,27 @@ return `<div class="history-date-card">
     const rowOutlets=rows.map(r=>String(r.branch||"")).filter(Boolean);
     const allOutlets=[...outlets,...rowOutlets.filter(x=>!outlets.includes(x))];
 
-    let grandIn=0,grandOut=0,grandEntries=0;
+    let grandOpening=0,grandIn=0,grandOut=0,grandClosing=0,grandEntries=0;
     const outletBlocks=[];
+    const allEntriesForReceipts=[];
 
     allOutlets.forEach(outlet=>{
-      const outletRows=rows.filter(r=>String(r.branch||"")===outlet);
+      const outletRows=rows
+        .filter(r=>String(r.branch||"")===outlet)
+        .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
+
       let totalIn=0,totalOut=0,entryCount=0;
       const tableRows=[];
+      const opening=outletRows.length?Number(outletRows[0].petty_opening||0):0;
+      const closing=outletRows.length?Number(outletRows[outletRows.length-1].petty_net||0):opening;
 
       outletRows.forEach(r=>{
         const entries=Array.isArray(r.petty_entries)?r.petty_entries:[];
-        const opening=Number(r.petty_opening||0);
+        const dayOpening=Number(r.petty_opening||0);
         const remaining=Number(r.petty_net||0);
 
-        entries.forEach(e=>{
+        entries.forEach((e,entryIndex)=>{
+          allEntriesForReceipts.push({entry:e,rowId:r.id,entryIndex});
           const isIn=String(e.type)==="in";
           const amt=Number(e.amount||0);
           if(isIn) totalIn+=amt; else totalOut+=amt;
@@ -2465,30 +2616,34 @@ return `<div class="history-date-card">
             <td>${isIn?"IN":"OUT"}</td>
             <td>${escHtml(e.reason||"-")}</td>
             <td>${money(amt)}</td>
-            <td>${money(opening)}</td>
+            <td>${pettyReceiptHistoryCell(e,r.id,entryIndex)}</td>
+            <td>${money(dayOpening)}</td>
             <td>${money(remaining)}</td>
           </tr>`);
         });
       });
 
+      grandOpening+=opening;
       grandIn+=totalIn;
       grandOut+=totalOut;
+      grandClosing+=closing;
       grandEntries+=entryCount;
 
       outletBlocks.push(`<div class="salary-card" style="margin-top:14px">
         <div class="outlet-title">
           <strong>${escHtml(outlet)}</strong>
-          <span>IN ${money(totalIn)} &nbsp; OUT ${money(totalOut)} &nbsp; NET ${money(totalIn-totalOut)}</span>
+          <span>Opening ${money(opening)} &nbsp; + IN ${money(totalIn)} &nbsp; − OUT ${money(totalOut)} &nbsp; = Closing ${money(closing)}</span>
         </div>
         ${tableRows.length?`<div class="table-wrap" style="margin-top:10px"><table>
-          <thead><tr><th>Date</th><th>Type</th><th>Reason</th><th>Amount</th><th>Opening</th><th>Remaining</th></tr></thead>
+          <thead><tr><th>Date</th><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th>Opening</th><th>Remaining</th></tr></thead>
           <tbody>${tableRows.join("")}</tbody>
-        </table></div>`:`<div class="helper" style="margin-top:10px">No Petty Cash record</div>`}
+        </table></div>`:`<div class="helper" style="margin-top:10px">No Petty Cash IN / OUT record${outletRows.length?` · Closing ${money(closing)}`:""}</div>`}
       </div>`);
     });
 
-    summary.innerHTML=`<strong>${escHtml(ym)}</strong> &nbsp; Entries <strong>${grandEntries}</strong> &nbsp; Total IN <strong>${money(grandIn)}</strong> &nbsp; Total OUT <strong>${money(grandOut)}</strong> &nbsp; Net <strong>${money(grandIn-grandOut)}</strong>`;
+    summary.innerHTML=`<strong>${escHtml(ym)}</strong> &nbsp; Entries <strong>${grandEntries}</strong> &nbsp; Opening <strong>${money(grandOpening)}</strong> &nbsp; Total IN <strong>${money(grandIn)}</strong> &nbsp; Total OUT <strong>${money(grandOut)}</strong> &nbsp; Closing <strong>${money(grandClosing)}</strong>`;
     root.innerHTML=outletBlocks.join("");
+    bindPettyReceiptButtons(root,allEntriesForReceipts);
   }
 
   async function renderHistoryAccessManager(){
@@ -2531,41 +2686,11 @@ return `<div class="history-date-card">
   }
 
   async function previousCashBalance(date){
-    const {data,error}=await db
-      .from("daily_settlements")
-      .select("settlement_date,cash_balance")
-      .eq("branch",currentBranch)
-      .lt("settlement_date",date)
-      .order("settlement_date",{ascending:false})
-      .limit(1);
-
-    if(error){
-      $("syncState").textContent="Cash carry-forward failed: "+error.message;
-      $("syncState").className="bad";
-      return 0;
-    }
-
-    if(!data || !data.length) return 0;
-    return Number(data[0].cash_balance ?? 0);
+    return Number(computedCarryBefore(currentBranch,date).cash||0);
   }
 
   async function previousPetty(date){
-    const {data,error}=await db
-      .from("daily_settlements")
-      .select("settlement_date,petty_net")
-      .eq("branch",currentBranch)
-      .lt("settlement_date",date)
-      .order("settlement_date",{ascending:false})
-      .limit(1);
-
-    if(error){
-      $("syncState").textContent="Petty carry-forward failed: "+error.message;
-      $("syncState").className="bad";
-      return 0;
-    }
-
-    if(!data || !data.length) return 0;
-    return Number(data[0].petty_net ?? 0);
+    return Number(computedCarryBefore(currentBranch,date).petty||0);
   }
 
 
@@ -2664,11 +2789,12 @@ return `<div class="history-date-card">
     $("bankTransfer").value=r.bank_transfer||0;
     $("tips").value=r.tips||0;
 
-    $("pettyOpening").value=(r.petty_opening ?? 0);
+    const rebuiltOpening=computedCarryBefore(r.branch,r.settlement_date);
+    $("pettyOpening").value=rebuiltOpening.petty;
     $("cashWithdrawal").value=(r.cash_withdrawal ?? 0);
 
-    // Always rebuild the opening cash balance from all earlier cash records.
-    $("cashOpening").value=(r.cash_opening ?? await previousCashBalance(r.settlement_date));
+    // Always rebuild both opening balances from the full earlier ledger.
+    $("cashOpening").value=rebuiltOpening.cash;
 
     pettyEntries=Array.isArray(r.petty_entries)?r.petty_entries:[];
     $("currentStatus").textContent=currentStatus==="accepted"?"✓ Accepted":currentStatus==="adjust"?"✕ Review":"Pending";
@@ -2736,13 +2862,11 @@ return `<div class="history-date-card">
   }
 
   async function recalculateBranchFromDate(branch,fromDate){
-    const {data:prevRows,error:prevErr}=await db.from("daily_settlements")
-      .select("settlement_date,cash_balance,petty_net")
-      .eq("branch",branch).lt("settlement_date",fromDate)
-      .order("settlement_date",{ascending:false}).limit(1);
-    if(prevErr) throw prevErr;
-    let carryCash=prevRows&&prevRows.length?Number(prevRows[0].cash_balance||0):0;
-    let carryPetty=prevRows&&prevRows.length?Number(prevRows[0].petty_net||0):0;
+    // Rebuild the carry entering fromDate from raw movements before that date.
+    // This prevents a stale stored previous balance from contaminating future months.
+    const before=computedCarryBefore(branch,fromDate,allRows);
+    let carryCash=Number(before.cash||0);
+    let carryPetty=Number(before.petty||0);
 
     const {data:rows,error}=await db.from("daily_settlements")
       .select("*").eq("branch",branch).gte("settlement_date",fromDate)
@@ -2752,13 +2876,16 @@ return `<div class="history-date-card">
     for(const r of (rows||[])){
       const grand=["visa","master","amex","bed_fee","tng","cash","alipay","online_card","bank_transfer","tips"]
         .reduce((sum,k)=>sum+Number(r[k]||0),0);
+      const mv=pettyMovementFromRow(r);
       const cashBalance=carryCash+Number(r.cash||0)-Number(r.cash_withdrawal||0);
-      const pettyNet=carryPetty+Number(r.petty_in||0)-Number(r.petty_out||0);
+      const pettyNet=carryPetty+mv.pin-mv.pout;
       const {error:updateError}=await db.from("daily_settlements").update({
         grand_total:grand,
         cash_opening:carryCash,
         cash_balance:cashBalance,
         petty_opening:carryPetty,
+        petty_in:mv.pin,
+        petty_out:mv.pout,
         petty_net:pettyNet
       }).eq("id",r.id);
       if(updateError) throw updateError;
@@ -2894,11 +3021,336 @@ return `<div class="history-date-card">
     }
   }
 
+
+  const PETTY_RECEIPT_BUCKET="petty-receipts";
+  const PETTY_RECEIPT_MAX_BYTES=15*1024*1024;
+  let pendingPettyReceiptFile=null;
+
+  function receiptExpiryDate(uploadedAt){
+    const d=new Date(uploadedAt||Date.now());
+    if(Number.isNaN(d.getTime())) return null;
+    d.setMonth(d.getMonth()+6);
+    return d;
+  }
+
+  function receiptIsExpired(receipt){
+    if(!receipt?.uploaded_at) return false;
+    const expiry=receiptExpiryDate(receipt.uploaded_at);
+    return expiry ? expiry.getTime()<=Date.now() : false;
+  }
+
+  function safeReceiptName(name){
+    const base=String(name||"receipt").replace(/[^\w.\-]+/g,"_").replace(/^_+|_+$/g,"");
+    return (base||"receipt").slice(-100);
+  }
+
+  function receiptBranchSlug(name){
+    return String(name||"outlet").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"outlet";
+  }
+
+  function refreshPendingPettyReceiptUI(){
+    const label=$("pettyReceiptSelected");
+    const clearBtn=$("pettyReceiptClearBtn");
+    if(!label || !clearBtn) return;
+    if(pendingPettyReceiptFile){
+      const mb=(pendingPettyReceiptFile.size/1024/1024).toFixed(2);
+      label.textContent=`已选择：${pendingPettyReceiptFile.name} · ${mb}MB`;
+      label.className="helper ok";
+      clearBtn.style.display="";
+    }else{
+      label.textContent="未选择收据";
+      label.className="helper";
+      clearBtn.style.display="none";
+    }
+  }
+
+  function choosePettyReceipt(file){
+    if(!file) return;
+    if(file.size>PETTY_RECEIPT_MAX_BYTES){
+      alert("收据文件不能超过 15MB。");
+      return;
+    }
+    pendingPettyReceiptFile=file;
+    refreshPendingPettyReceiptUI();
+  }
+
+  async function uploadPettyReceipt(file){
+    if(!file) return null;
+    const date=$("settlementDate")?.value||today();
+    const uid=(crypto?.randomUUID?.()||(`${Date.now()}-${Math.random().toString(36).slice(2)}`));
+    const path=`${receiptBranchSlug(currentBranch)}/${date}/${uid}-${safeReceiptName(file.name)}`;
+
+    const {error}=await db.storage.from(PETTY_RECEIPT_BUCKET).upload(path,file,{
+      cacheControl:"3600",
+      upsert:false,
+      contentType:file.type||undefined
+    });
+    if(error) throw new Error("收据上传失败："+error.message);
+
+    return {
+      path,
+      name:file.name||"receipt",
+      type:file.type||"",
+      size:Number(file.size||0),
+      uploaded_at:new Date().toISOString()
+    };
+  }
+
+  async function openPettyReceipt(receipt,download=false){
+    if(!receipt?.path){
+      alert("这笔记录没有收据文件。");
+      return;
+    }
+    if(receiptIsExpired(receipt)){
+      alert("这张收据已超过 6 个月保存期限，文件已过期。");
+      return;
+    }
+
+    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300,{
+      download:download ? (receipt.name||"receipt") : false
+    });
+    if(error || !data?.signedUrl){
+      alert("无法读取收据："+(error?.message||"Unknown error"));
+      return;
+    }
+
+    if(download){
+      const a=document.createElement("a");
+      a.href=data.signedUrl;
+      a.download=receipt.name||"receipt";
+      a.target="_blank";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }else{
+      window.open(data.signedUrl,"_blank","noopener");
+    }
+  }
+
+  function pettyReceiptHistoryCell(entry,rowId,entryIndex){
+    const receipt=entry?.receipt;
+    if(entry?.receipt_expired_at && !receipt){
+      return '<span class="helper">已过期删除</span>';
+    }
+    if(!receipt?.path) return '<span class="helper">—</span>';
+    if(receiptIsExpired(receipt)) return '<span class="helper">待自动清理</span>';
+
+    const name=escHtml(receipt.name||"Receipt");
+    const processed=Boolean(receipt.processed_at);
+    const status=processed
+      ? `<span class="helper ok" style="font-weight:800">✓ 已处理</span>`
+      : `<span class="helper" style="font-weight:800;color:#b7791f">待处理</span>`;
+
+    return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      ${status}
+      <span class="helper" style="max-width:180px;overflow:hidden;text-overflow:ellipsis">${name}</span>
+      <button type="button" class="mini" data-petty-receipt-view="${escHtml(receipt.path)}">查看</button>
+      <button type="button" class="mini" data-petty-receipt-download="${escHtml(receipt.path)}"
+        data-petty-receipt-row="${Number(rowId)||0}"
+        data-petty-receipt-index="${Number(entryIndex)||0}">下载</button>
+    </div>`;
+  }
+
+  async function markPettyReceiptProcessed(rowId,entryIndex){
+    const id=Number(rowId||0);
+    const idx=Number(entryIndex);
+    if(!id || idx<0) return false;
+
+    let row=(allRows||[]).find(r=>Number(r.id)===id);
+    if(!row){
+      const {data,error}=await db.from("daily_settlements")
+        .select("id,petty_entries")
+        .eq("id",id)
+        .maybeSingle();
+      if(error || !data) return false;
+      row=data;
+    }
+
+    const entries=Array.isArray(row.petty_entries)
+      ? row.petty_entries.map(e=>({...e,receipt:e?.receipt?{...e.receipt}:e?.receipt}))
+      : [];
+
+    if(!entries[idx]?.receipt?.path) return false;
+    if(entries[idx].receipt.processed_at) return true;
+
+    entries[idx].receipt.processed_at=new Date().toISOString();
+    entries[idx].receipt.processed_by=currentUserEmail||"";
+
+    const {error}=await db.from("daily_settlements")
+      .update({petty_entries:entries})
+      .eq("id",id);
+
+    if(error){
+      console.warn("Unable to mark receipt processed:",error.message);
+      return false;
+    }
+
+    const local=(allRows||[]).find(r=>Number(r.id)===id);
+    if(local) local.petty_entries=entries;
+    return true;
+  }
+
+  async function downloadPettyReceiptAndProcess(receipt,rowId,entryIndex){
+    if(!receipt?.path){
+      alert("这笔记录没有收据文件。");
+      return;
+    }
+    if(receiptIsExpired(receipt)){
+      alert("这张收据已超过 6 个月保存期限，文件已过期。");
+      return;
+    }
+
+    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300,{
+      download:receipt.name||"receipt"
+    });
+    if(error || !data?.signedUrl){
+      alert("无法下载收据："+(error?.message||"Unknown error"));
+      return;
+    }
+
+    // Start download first. Once a download is successfully generated,
+    // mark this receipt as processed in the cloud.
+    const a=document.createElement("a");
+    a.href=data.signedUrl;
+    a.download=receipt.name||"receipt";
+    a.target="_blank";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    const marked=await markPettyReceiptProcessed(rowId,entryIndex);
+    if(marked){
+      try{
+        await fetchRows();
+        renderPettyCashMonthlyHistory();
+      }catch(_){}
+    }
+  }
+
+  function bindPettyReceiptButtons(root,receiptItems){
+    if(!root) return;
+
+    const pathMap=new Map();
+    (receiptItems||[]).forEach(item=>{
+      const entry=item?.entry||item;
+      if(entry?.receipt?.path){
+        pathMap.set(String(entry.receipt.path),{
+          receipt:entry.receipt,
+          rowId:item?.rowId||0,
+          entryIndex:Number.isInteger(item?.entryIndex)?item.entryIndex:0
+        });
+      }
+    });
+
+    root.querySelectorAll("[data-petty-receipt-view]").forEach(btn=>{
+      btn.onclick=()=>{
+        const item=pathMap.get(btn.dataset.pettyReceiptView);
+        if(item) openPettyReceipt(item.receipt,false);
+      };
+    });
+
+    root.querySelectorAll("[data-petty-receipt-download]").forEach(btn=>{
+      btn.onclick=()=>{
+        const item=pathMap.get(btn.dataset.pettyReceiptDownload);
+        if(!item) return;
+        downloadPettyReceiptAndProcess(
+          item.receipt,
+          Number(btn.dataset.pettyReceiptRow||item.rowId||0),
+          Number(btn.dataset.pettyReceiptIndex??item.entryIndex??0)
+        );
+      };
+    });
+  }
+
+  async function cleanupExpiredPettyReceipts(){
+    if(!isSystemAdmin) return 0;
+    const cutoff=new Date();
+    cutoff.setMonth(cutoff.getMonth()-6);
+
+    const {data,error}=await db.from("daily_settlements")
+      .select("id,petty_entries")
+      .order("settlement_date",{ascending:true});
+    if(error){
+      console.warn("Receipt cleanup scan failed:",error.message);
+      return 0;
+    }
+
+    let removed=0;
+    for(const row of (data||[])){
+      const entries=Array.isArray(row.petty_entries)?row.petty_entries:[];
+      const expired=entries.filter(e=>{
+        const r=e?.receipt;
+        if(!r?.path || !r.uploaded_at) return false;
+        const d=new Date(r.uploaded_at);
+        return !Number.isNaN(d.getTime()) && d<=cutoff;
+      });
+      if(!expired.length) continue;
+
+      const paths=expired.map(e=>e.receipt.path).filter(Boolean);
+      if(paths.length){
+        const {error:removeError}=await db.storage.from(PETTY_RECEIPT_BUCKET).remove(paths);
+        if(removeError){
+          console.warn("Receipt file cleanup failed:",removeError.message);
+          continue;
+        }
+      }
+
+      const expiredPaths=new Set(paths);
+      const nextEntries=entries.map(e=>{
+        if(!e?.receipt?.path || !expiredPaths.has(e.receipt.path)) return e;
+        const {receipt,...rest}=e;
+        return {...rest,receipt_expired_at:new Date().toISOString()};
+      });
+
+      const {error:updateError}=await db.from("daily_settlements")
+        .update({petty_entries:nextEntries})
+        .eq("id",row.id);
+      if(updateError){
+        console.warn("Receipt metadata cleanup failed:",updateError.message);
+        continue;
+      }
+      removed+=paths.length;
+    }
+
+    if(removed>0) await fetchRows();
+    return removed;
+  }
+
   function renderPetty(){
     const body=$("pettyBody");body.innerHTML="";
-    if(!pettyEntries.length){body.innerHTML='<tr><td colspan="4">还没有记录。</td></tr>';return;}
-    pettyEntries.forEach((e,i)=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${e.type==="in"?"进":"出"}</td><td>${e.reason||"-"}</td><td>${money(e.amount)}</td><td><button type="button" class="mini" data-del="${i}">删除</button></td>`;body.appendChild(tr);});
-    body.querySelectorAll("[data-del]").forEach(btn=>btn.onclick=()=>{pettyEntries.splice(Number(btn.dataset.del),1);calc();scheduleSave();});
+    if(!pettyEntries.length){
+      body.innerHTML='<tr><td colspan="5">还没有记录。</td></tr>';
+      return;
+    }
+    pettyEntries.forEach((e,i)=>{
+      const tr=document.createElement("tr");
+      const receiptState=e?.receipt?.path
+        ? '<span class="helper ok">已上传</span>'
+        : (e?.receipt_expired_at?'<span class="helper">已过期删除</span>':'<span class="helper">—</span>');
+      tr.innerHTML=`<td>${e.type==="in"?"进":"出"}</td>
+        <td>${escHtml(e.reason||"-")}</td>
+        <td>${money(e.amount)}</td>
+        <td>${receiptState}</td>
+        <td><button type="button" class="mini" data-del="${i}">删除</button></td>`;
+      body.appendChild(tr);
+    });
+
+    body.querySelectorAll("[data-del]").forEach(btn=>btn.onclick=async()=>{
+      const index=Number(btn.dataset.del);
+      const entry=pettyEntries[index];
+      if(!entry) return;
+      const ok=confirm("删除这项 Petty Cash 记录？");
+      if(!ok) return;
+
+      if(entry?.receipt?.path){
+        try{
+          await db.storage.from(PETTY_RECEIPT_BUCKET).remove([entry.receipt.path]);
+        }catch(_){}
+      }
+      pettyEntries.splice(index,1);
+      calc();
+      scheduleSave();
+    });
   }
 
   function updateMonthTotal(){
@@ -3249,39 +3701,91 @@ return `<div class="history-date-card">
     $("cashWithdrawal").oninput=()=>{calc();scheduleSave();};
     const dailySubmitBtn=$("dailySubmitBtn");
     if(dailySubmitBtn) dailySubmitBtn.onclick=submitDailySettlement;
-    if($("addPettyBtn")) $("addPettyBtn").onclick=async()=>{const amount=num("pettyAmount"),type=$("pettyType").value,reason=$("pettyReason").value.trim();if(amount<=0){alert("Please enter an amount");return}if(!reason){alert("Please enter a reason");return}pettyEntries.push({type,amount,reason});$("pettyAmount").value="";$("pettyReason").value="";calc();
-    setDailyDirty();
+    const pettyCamera=$("pettyReceiptCamera");
+    const pettyFile=$("pettyReceiptFile");
+    const pettyCameraBtn=$("pettyReceiptCameraBtn");
+    const pettyFileBtn=$("pettyReceiptFileBtn");
+    const pettyClearBtn=$("pettyReceiptClearBtn");
 
-    // Petty Cash Submit is independent from the Daily Settlement button.
-    // Persist the petty entry directly without triggering the Daily Settlement submit UI.
-    const pettyBtn=$("addPettyBtn");
-    const oldPettyText=pettyBtn?.textContent||"Submit IN / OUT";
-    if(pettyBtn){ pettyBtn.disabled=true; pettyBtn.textContent="Saving..."; }
+    if(pettyCameraBtn) pettyCameraBtn.onclick=()=>pettyCamera?.click();
+    if(pettyFileBtn) pettyFileBtn.onclick=()=>pettyFile?.click();
+    if(pettyCamera) pettyCamera.onchange=()=>{choosePettyReceipt(pettyCamera.files?.[0]); pettyCamera.value="";};
+    if(pettyFile) pettyFile.onchange=()=>{choosePettyReceipt(pettyFile.files?.[0]); pettyFile.value="";};
+    if(pettyClearBtn) pettyClearBtn.onclick=()=>{pendingPettyReceiptFile=null;refreshPendingPettyReceiptUI();};
+    refreshPendingPettyReceiptUI();
 
-    await saveNow();
+    if($("pettyType")) $("pettyType").onchange=()=>{
+      const note=$("pettyReceiptRequiredNote");
+      if(note) note.textContent=$("pettyType").value==="out"?"(OUT 必须上传)":"(IN 可不上传)";
+    };
 
-    const pettySaved=$("syncState")?.classList.contains("ok");
-    if(pettySaved){
-      // This specific Petty Cash change is now saved.
-      dailyDirty=false;
-      const dailyState=$("dailySubmitState");
-      if(dailyState){ dailyState.textContent=""; dailyState.className="helper"; }
-      const dailyBtn=$("dailySubmitBtn");
-      if(dailyBtn){ dailyBtn.disabled=false; dailyBtn.textContent="Submit Daily Settlement"; }
+    if($("addPettyBtn")) $("addPettyBtn").onclick=async()=>{
+      const amount=num("pettyAmount");
+      const type=$("pettyType").value;
+      const reason=$("pettyReason").value.trim();
+      if(amount<=0){alert("Please enter an amount");return;}
+      if(!reason){alert("Please enter a reason");return;}
+      if(type==="out" && !pendingPettyReceiptFile){
+        alert("每一项 Petty Cash OUT 花费都必须拍照或上传收据文件。");
+        return;
+      }
 
-      if(pettyBtn) pettyBtn.textContent="Saved ✓";
-      setTimeout(()=>{
+      const pettyBtn=$("addPettyBtn");
+      const oldPettyText=pettyBtn?.textContent||"Submit IN / OUT";
+      if(pettyBtn){pettyBtn.disabled=true;pettyBtn.textContent=pendingPettyReceiptFile?"Uploading receipt...":"Saving...";}
+
+      let receipt=null;
+      try{
+        if(pendingPettyReceiptFile) receipt=await uploadPettyReceipt(pendingPettyReceiptFile);
+
+        const newEntry={type,amount,reason};
+        if(receipt) newEntry.receipt=receipt;
+        pettyEntries.push(newEntry);
+
+        $("pettyAmount").value="";
+        $("pettyReason").value="";
+        pendingPettyReceiptFile=null;
+        refreshPendingPettyReceiptUI();
+        calc();
+        setDailyDirty();
+
+        if(pettyBtn) pettyBtn.textContent="Saving...";
+        await saveNow();
+
+        const pettySaved=$("syncState")?.classList.contains("ok");
+        if(pettySaved){
+          dailyDirty=false;
+          const dailyState=$("dailySubmitState");
+          if(dailyState){dailyState.textContent="";dailyState.className="helper";}
+          const dailyBtn=$("dailySubmitBtn");
+          if(dailyBtn){dailyBtn.disabled=false;dailyBtn.textContent="Submit Daily Settlement";}
+
+          if(pettyBtn) pettyBtn.textContent="Saved ✓";
+          setTimeout(()=>{
+            if(pettyBtn){
+              pettyBtn.disabled=false;
+              pettyBtn.textContent=oldPettyText;
+            }
+          },1200);
+        }else{
+          throw new Error("Petty Cash save failed");
+        }
+      }catch(err){
+        if(receipt?.path){
+          try{await db.storage.from(PETTY_RECEIPT_BUCKET).remove([receipt.path]);}catch(_){}
+        }
+        if(receipt){
+          const idx=pettyEntries.findIndex(e=>e?.receipt?.path===receipt.path);
+          if(idx>=0) pettyEntries.splice(idx,1);
+        }
+        calc();
         if(pettyBtn){
           pettyBtn.disabled=false;
-          pettyBtn.textContent=oldPettyText;
+          pettyBtn.textContent="Retry Submit IN / OUT";
         }
-      },1200);
-    }else{
-      if(pettyBtn){
-        pettyBtn.disabled=false;
-        pettyBtn.textContent="Retry Submit IN / OUT";
+        alert(err?.message||String(err));
       }
-    }};
+    };
     $("refreshBtn").onclick=async()=>{await fetchRows();renderAll();await loadDate($("settlementDate").value||today());};
     $("exportBtn").onclick=exportCsv;
     $("clearDayBtn").onclick=clearSelectedDay;
@@ -3290,7 +3794,7 @@ return `<div class="history-date-card">
     const saveOutletBtn=$("saveDailyOutletBtn"); if(saveOutletBtn) saveOutletBtn.onclick=saveDailyOutlet;
     const dailyOutletInput=$("dailyOutletName"); if(dailyOutletInput) dailyOutletInput.onkeydown=e=>{if(e.key==="Enter")saveDailyOutlet();};
 
-    const hb=$("historyRecordsBtn"); if(hb) hb.onclick=async()=>{ await refreshDailyHistoryPermission(); if(!canViewDailyHistory){alert("History access is not enabled for this account.");return;} await fetchRows(); if($("historyMonth")) $("historyMonth").value=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7)); renderCombinedHistory(); $("historyModal").classList.add("open"); };
+    const hb=$("historyRecordsBtn"); if(hb) hb.onclick=async()=>{ await refreshDailyHistoryPermission(); if(!canViewDailyHistory){alert("History access is not enabled for this account.");return;} await fetchRows(); if(isSystemAdmin) await repairAllHistoricalCarryForwardBalances({silent:true}); if($("historyMonth")) $("historyMonth").value=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7)); renderCombinedHistory(); $("historyModal").classList.add("open"); };
     const hc=$("closeHistoryModal"); if(hc) hc.onclick=()=>$("historyModal").classList.remove("open");
     const hm=$("historyMonth"); if(hm) hm.onchange=renderCombinedHistory;
 
@@ -3311,6 +3815,7 @@ return `<div class="history-date-card">
     if(phb) phb.onclick=async()=>{
       if(!isSystemAdmin){alert("Admin only.");return;}
       await fetchRows();
+      try{await cleanupExpiredPettyReceipts();}catch(e){console.warn("Receipt cleanup failed:",e);}
       const month=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7));
       if($("pettyHistoryMonth")) $("pettyHistoryMonth").value=month;
       renderPettyCashMonthlyHistory();
@@ -3325,7 +3830,25 @@ return `<div class="history-date-card">
     const hac=$("closeHistoryAccessModal"); if(hac) hac.onclick=()=>$("historyAccessModal").classList.remove("open");
     const haa=$("addHistoryAccessBtn"); if(haa) haa.onclick=async()=>{ if(!isSystemAdmin)return; const email=$("historyAccessEmail").value.trim().toLowerCase(); if(!email)return; const {error}=await db.from("daily_history_access").upsert({email},{onConflict:"email"}); $("historyAccessMsg").textContent=error?error.message:"Added ✓"; if(!error){$("historyAccessEmail").value="";await renderHistoryAccessManager();} };
     if(canViewDailySettlement){
-      if(await fetchRows()){const d=getActiveDailyDate();$("settlementDate").value=d;$("reviewMonth").value=d.slice(0,7);await loadDate(d);renderAll();applyCashWithdrawalAccess();setDailyClean();}
+      if(await fetchRows()){
+        if(isSystemAdmin){
+          try{
+            const repairKey="nd_carry_repair_v20261005";
+            if(!sessionStorage.getItem(repairKey)){
+              await repairAllHistoricalCarryForwardBalances({silent:true});
+              sessionStorage.setItem(repairKey,"1");
+              try{await cleanupExpiredPettyReceipts();}catch(e){console.warn("Receipt cleanup failed:",e);}
+            }
+          }catch(e){ console.warn("Historical carry-forward check failed:",e); }
+        }
+        const d=getActiveDailyDate();
+        $("settlementDate").value=d;
+        $("reviewMonth").value=d.slice(0,7);
+        await loadDate(d);
+        renderAll();
+        applyCashWithdrawalAccess();
+        setDailyClean();
+      }
     }
   }
 
