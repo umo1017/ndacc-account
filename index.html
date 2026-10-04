@@ -1524,26 +1524,25 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   }
 }
 </style>
-<style id="petty-receipt-layout-fix">
-#pettyReceiptWrap{width:100%}
-#pettyReceiptWrap>div{width:100%;min-width:0}
-#pettyReceiptWrap button{white-space:nowrap}
+
+<style id="petty-receipt-inline-english">
+.petty-type-receipt-row{
+  grid-template-columns:minmax(120px,1fr) minmax(150px,220px)!important;
+  align-items:start!important;
+}
+.petty-inline-receipt{min-width:0;width:100%}
+.petty-inline-receipt #pettyReceiptFileBtn{
+  width:100%;min-height:48px;white-space:normal;line-height:1.2;padding:10px 8px
+}
+#pettyReceiptSelected{font-size:12px;line-height:1.25}
 @media(max-width:700px){
-  #pettyReceiptWrap{
-    grid-template-columns:minmax(90px,1fr) minmax(150px,1.4fr)!important;
+  .petty-type-receipt-row{
+    grid-template-columns:minmax(125px,1fr) minmax(150px,1.4fr)!important;
     gap:12px!important;
   }
-  #pettyReceiptWrap>label{font-size:13px!important;line-height:1.3}
-  #pettyReceiptWrap>div>div:first-of-type{
-    display:grid!important;
-    grid-template-columns:1fr 1.35fr!important;
-    gap:8px!important;
-  }
-  #pettyReceiptCameraBtn,#pettyReceiptFileBtn{
-    width:100%!important;
-    min-width:0!important;
-    padding-left:8px!important;
-    padding-right:8px!important;
+  .petty-inline-receipt #pettyReceiptFileBtn{
+    font-size:12px!important;
+    padding:10px 6px!important;
   }
 }
 </style>
@@ -1677,8 +1676,15 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <div class="card" style="background:var(--soft)">
 <h3 style="margin-top:0">Petty Cash</h3><div id="pettyInOutTitle" style="font-weight:800;font-size:15px;margin:12px 0 8px">IN / OUT</div>
 <div style="display:grid;gap:10px">
-<div class="petty-row">
-<label for="pettyType"></label>
+<div class="petty-row petty-type-receipt-row">
+<div class="petty-inline-receipt">
+  <input id="pettyReceiptCamera" type="file" accept="image/*" capture="environment" style="display:none"/>
+  <input id="pettyReceiptFile" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none"/>
+  <button class="btn" id="pettyReceiptFileBtn" type="button">+ Add Photo / File</button>
+  <button class="btn" id="pettyReceiptCameraBtn" type="button" style="display:none">Take Photo</button>
+  <button class="mini" id="pettyReceiptClearBtn" type="button" style="display:none">Clear</button>
+  <div class="helper" id="pettyReceiptSelected" style="margin-top:5px">No receipt selected</div>
+</div>
 <select class="petty-type-select" id="pettyType">
 <option value="out">Out</option>
 <option value="in">In</option>
@@ -1692,19 +1698,6 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <label for="pettyAmount"></label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input id="pettyAmount" min="0" step="0.01" type="number" value=""/></div>
 </div>
-</div>
-<div id="pettyReceiptWrap" class="form-row" style="margin-top:12px;align-items:start">
-  <label style="padding-top:10px;font-weight:800">Receipt / 收据 <span id="pettyReceiptRequiredNote" class="helper">(OUT 必须上传)</span></label>
-  <div style="min-width:0">
-    <input id="pettyReceiptCamera" type="file" accept="image/*" capture="environment" style="display:none"/>
-    <input id="pettyReceiptFile" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none"/>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" id="pettyReceiptCameraBtn" type="button">📷 拍照</button>
-      <button class="btn" id="pettyReceiptFileBtn" type="button">＋ 添加照片 / 文件</button>
-      <button class="mini" id="pettyReceiptClearBtn" type="button" style="display:none">清除</button>
-    </div>
-    <div class="helper" id="pettyReceiptSelected" style="margin-top:7px">未选择收据</div>
-  </div>
 </div>
 <div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" style="width:100%;margin-top:12px" type="button">Submit IN / OUT</button></div>
 <div class="table-wrap" style="margin-top:10px">
@@ -2054,10 +2047,16 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     return {cash,petty};
   }
 
-  function directCashRemainingForBranch(branch,sourceRows=allRows){
+  function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
     const target=String(branch||"").trim();
+    const cutoff=String(cutoffDate||"").trim();
     return (sourceRows||[])
-      .filter(r=>!r._missing && String(r.branch||"").trim()===target)
+      .filter(r=>{
+        if(r._missing) return false;
+        if(String(r.branch||"").trim()!==target) return false;
+        if(cutoff && String(r.settlement_date||"")>cutoff) return false;
+        return true;
+      })
       .reduce((sum,r)=>sum+Number(r.cash||0)-Number(r.cash_withdrawal||0),0);
   }
 
@@ -2074,7 +2073,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 
       // Canonical cash rule:
       // every day's CASH added together, minus every Cash Withdrawal.
-      const cash=directCashRemainingForBranch(branch,rows);
+      const cash=directCashRemainingForBranch(branch,rows,today());
 
       let petty=Number(branchRows[0].petty_opening||0);
       branchRows.forEach(r=>{
@@ -2450,11 +2449,12 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     const total=rows.reduce((s,r)=>s+Number(r.cash_withdrawal||0),0);
 
     const branchAllRows=(allRows||[]).filter(r=>
-      String(r.branch||"").trim()===String(cashWithdrawalHistoryBranch||"").trim()
+      String(r.branch||"").trim()===String(cashWithdrawalHistoryBranch||"").trim() &&
+      String(r.settlement_date||"")<=today()
     );
     const allCash=branchAllRows.reduce((s,r)=>s+Number(r.cash||0),0);
     const allWithdrawal=branchAllRows.reduce((s,r)=>s+Number(r.cash_withdrawal||0),0);
-    const remaining=allCash-allWithdrawal;
+    const remaining=directCashRemainingForBranch(cashWithdrawalHistoryBranch,allRows,today());
 
     if($("cashWithdrawalHistorySummary")){
       const label=cashWithdrawalHistoryBranch?` · ${cashWithdrawalHistoryBranch}`:"";
@@ -3155,11 +3155,11 @@ return `<div class="history-date-card">
     if(!label || !clearBtn) return;
     if(pendingPettyReceiptFile){
       const mb=(pendingPettyReceiptFile.size/1024/1024).toFixed(2);
-      label.textContent=`已选择：${pendingPettyReceiptFile.name} · ${mb}MB`;
+      label.textContent=`Selected: ${pendingPettyReceiptFile.name}`;
       label.className="helper ok";
       clearBtn.style.display="";
     }else{
-      label.textContent="未选择收据";
+      label.textContent="No receipt selected";
       label.className="helper";
       clearBtn.style.display="none";
     }
@@ -3168,7 +3168,7 @@ return `<div class="history-date-card">
   function choosePettyReceipt(file){
     if(!file) return;
     if(file.size>PETTY_RECEIPT_MAX_BYTES){
-      alert("收据文件不能超过 15MB。");
+      alert("Receipt file cannot exceed 15MB.");
       return;
     }
     pendingPettyReceiptFile=file;
@@ -3186,7 +3186,7 @@ return `<div class="history-date-card">
       upsert:false,
       contentType:file.type||undefined
     });
-    if(error) throw new Error("收据上传失败："+error.message);
+    if(error) throw new Error("Receipt upload failed: "+error.message);
 
     return {
       path,
@@ -3199,11 +3199,11 @@ return `<div class="history-date-card">
 
   async function openPettyReceipt(receipt,download=false){
     if(!receipt?.path){
-      alert("这笔记录没有收据文件。");
+      alert("No receipt file for this entry.");
       return;
     }
     if(receiptIsExpired(receipt)){
-      alert("这张收据已超过 6 个月保存期限，文件已过期。");
+      alert("This receipt has expired after 6 months.");
       return;
     }
 
@@ -3211,7 +3211,7 @@ return `<div class="history-date-card">
       download:download ? (receipt.name||"receipt") : false
     });
     if(error || !data?.signedUrl){
-      alert("无法读取收据："+(error?.message||"Unknown error"));
+      alert("Unable to open receipt: "+(error?.message||"Unknown error"));
       return;
     }
 
@@ -3231,24 +3231,24 @@ return `<div class="history-date-card">
   function pettyReceiptHistoryCell(entry,rowId,entryIndex){
     const receipt=entry?.receipt;
     if(entry?.receipt_expired_at && !receipt){
-      return '<span class="helper">已过期删除</span>';
+      return '<span class="helper">Expired / Deleted</span>';
     }
     if(!receipt?.path) return '<span class="helper">—</span>';
-    if(receiptIsExpired(receipt)) return '<span class="helper">待自动清理</span>';
+    if(receiptIsExpired(receipt)) return '<span class="helper">Pending Auto Delete</span>';
 
     const name=escHtml(receipt.name||"Receipt");
     const processed=Boolean(receipt.processed_at);
     const status=processed
-      ? `<span class="helper ok" style="font-weight:800">✓ 已处理</span>`
-      : `<span class="helper" style="font-weight:800;color:#b7791f">待处理</span>`;
+      ? `<span class="helper ok" style="font-weight:800">✓ Processed</span>`
+      : `<span class="helper" style="font-weight:800;color:#b7791f">Pending</span>`;
 
     return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       ${status}
       <span class="helper" style="max-width:180px;overflow:hidden;text-overflow:ellipsis">${name}</span>
-      <button type="button" class="mini" data-petty-receipt-view="${escHtml(receipt.path)}">查看</button>
+      <button type="button" class="mini" data-petty-receipt-view="${escHtml(receipt.path)}">View</button>
       <button type="button" class="mini" data-petty-receipt-download="${escHtml(receipt.path)}"
         data-petty-receipt-row="${Number(rowId)||0}"
-        data-petty-receipt-index="${Number(entryIndex)||0}">下载</button>
+        data-petty-receipt-index="${Number(entryIndex)||0}">Download</button>
     </div>`;
   }
 
@@ -3293,11 +3293,11 @@ return `<div class="history-date-card">
 
   async function downloadPettyReceiptAndProcess(receipt,rowId,entryIndex){
     if(!receipt?.path){
-      alert("这笔记录没有收据文件。");
+      alert("No receipt file for this entry.");
       return;
     }
     if(receiptIsExpired(receipt)){
-      alert("这张收据已超过 6 个月保存期限，文件已过期。");
+      alert("This receipt has expired after 6 months.");
       return;
     }
 
@@ -3305,7 +3305,7 @@ return `<div class="history-date-card">
       download:receipt.name||"receipt"
     });
     if(error || !data?.signedUrl){
-      alert("无法下载收据："+(error?.message||"Unknown error"));
+      alert("Unable to download receipt: "+(error?.message||"Unknown error"));
       return;
     }
 
@@ -3420,14 +3420,14 @@ return `<div class="history-date-card">
   function renderPetty(){
     const body=$("pettyBody");body.innerHTML="";
     if(!pettyEntries.length){
-      body.innerHTML='<tr><td colspan="5">还没有记录。</td></tr>';
+      body.innerHTML='<tr><td colspan="5">No records yet.</td></tr>';
       return;
     }
     pettyEntries.forEach((e,i)=>{
       const tr=document.createElement("tr");
       const receiptState=e?.receipt?.path
-        ? '<span class="helper ok">已上传</span>'
-        : (e?.receipt_expired_at?'<span class="helper">已过期删除</span>':'<span class="helper">—</span>');
+        ? '<span class="helper ok">Uploaded</span>'
+        : (e?.receipt_expired_at?'<span class="helper">Expired / Deleted</span>':'<span class="helper">—</span>');
       tr.innerHTML=`<td>${e.type==="in"?"进":"出"}</td>
         <td>${escHtml(e.reason||"-")}</td>
         <td>${money(e.amount)}</td>
@@ -3440,7 +3440,7 @@ return `<div class="history-date-card">
       const index=Number(btn.dataset.del);
       const entry=pettyEntries[index];
       if(!entry) return;
-      const ok=confirm("删除这项 Petty Cash 记录？");
+      const ok=confirm("Delete this Petty Cash entry?");
       if(!ok) return;
 
       if(entry?.receipt?.path){
@@ -3692,7 +3692,7 @@ return `<div class="history-date-card">
 
   function renderHistory(){
     const body=$("historyBody");body.innerHTML="";const rows=allRows.filter(r=>r.branch===currentBranch);
-    if(!rows.length){body.innerHTML='<tr><td colspan="18">还没有记录。</td></tr>';return;}
+    if(!rows.length){body.innerHTML='<tr><td colspan="18">No records yet.</td></tr>';return;}
     rows.forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${r.settlement_date}</td>
       <td>${r.branch}</td>
       <td>${r.staff||"-"}</td>
@@ -3735,13 +3735,20 @@ return `<div class="history-date-card">
   function updateTodayTotalCash(){
     const el=$("todayTotalCash"); if(!el) return;
     const selectedDate=$("settlementDate")?.value||getActiveDailyDate();
-    const existing=(allRows||[]).find(r=>r.branch===currentBranch&&r.settlement_date===selectedDate);
-    let balance=0;
-    if(existing){
-      balance=Number(existing.cash_balance||0);
-    }else{
-      balance=(Number($("cashOpening")?.value)||0)+(Number($("cash")?.value)||0)-(Number($("cashWithdrawal")?.value)||0);
+
+    // Same canonical formula used by Total Cash Remaining for Withdrawal:
+    // all CASH up to the selected date minus all Cash Withdrawal up to that date.
+    let balance=directCashRemainingForBranch(currentBranch,allRows,selectedDate);
+
+    // If the selected day is new / unsaved, include what is currently typed on screen.
+    const existing=(allRows||[]).find(r=>
+      String(r.branch||"").trim()===String(currentBranch||"").trim() &&
+      String(r.settlement_date||"")===String(selectedDate||"")
+    );
+    if(!existing){
+      balance+=num("cash")-num("cashWithdrawal");
     }
+
     el.textContent=money(balance);
   }
 
@@ -3815,10 +3822,7 @@ return `<div class="history-date-card">
     if(pettyClearBtn) pettyClearBtn.onclick=()=>{pendingPettyReceiptFile=null;refreshPendingPettyReceiptUI();};
     refreshPendingPettyReceiptUI();
 
-    if($("pettyType")) $("pettyType").onchange=()=>{
-      const note=$("pettyReceiptRequiredNote");
-      if(note) note.textContent=$("pettyType").value==="out"?"(OUT 必须上传)":"(IN 可不上传)";
-    };
+    if($("pettyType")) $("pettyType").onchange=()=>{};
 
     if($("addPettyBtn")) $("addPettyBtn").onclick=async()=>{
       const amount=num("pettyAmount");
@@ -3827,7 +3831,7 @@ return `<div class="history-date-card">
       if(amount<=0){alert("Please enter an amount");return;}
       if(!reason){alert("Please enter a reason");return;}
       if(type==="out" && !pendingPettyReceiptFile){
-        alert("每一项 Petty Cash OUT 花费都必须拍照或上传收据文件。");
+        alert("Every Petty Cash OUT entry requires a receipt photo or file.");
         return;
       }
 
@@ -3937,7 +3941,7 @@ return `<div class="history-date-card">
       if(await fetchRows()){
         if(isSystemAdmin){
           try{
-            const repairKey="nd_carry_repair_v20261005_cash_direct_formula_v3";
+            const repairKey="nd_carry_repair_v20261005_same_formula_v4";
             if(!sessionStorage.getItem(repairKey)){
               await repairAllHistoricalCarryForwardBalances({silent:true});
               sessionStorage.setItem(repairKey,"1");
