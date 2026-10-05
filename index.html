@@ -5764,7 +5764,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 .bonus-title{font-size:24px;font-weight:900}
 .bonus-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
 .bonus-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
-.bonus-metrics{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin-top:14px}
+.bonus-metrics{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px;margin-top:14px}
 .bonus-metric{border:1px solid var(--line);border-radius:14px;padding:14px}
 .bonus-metric .k{font-size:11px;color:var(--muted);font-weight:800}
 .bonus-metric .v{font-size:22px;font-weight:900;margin-top:5px}
@@ -5799,7 +5799,9 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
    <div class="bonus-metrics">
     <div class="bonus-metric"><div class="k">Branch Total Performance</div><div class="v" id="bonusBranchPerformance">RM 0.00</div></div>
     <div class="bonus-metric"><div class="k">1% Bonus Pool After Deduction</div><div class="v" id="bonusPool">RM 0.00</div></div>
-    <div class="bonus-metric"><div class="k">Eligible Staff</div><div class="v" id="bonusEligibleCount">0</div></div><div class="bonus-metric"><div class="k">Manager Bonus</div><div class="v" id="bonusManagerAmount">RM 0.00</div></div>
+    <div class="bonus-metric"><div class="k">Eligible Staff</div><div class="v" id="bonusEligibleCount">0</div></div>
+    <div class="bonus-metric"><div class="k">Manager Bonus</div><div class="v" id="bonusManagerAmount">RM 0.00</div></div>
+    <div class="bonus-metric global-total-card"><div class="k">Monthly Bonus Payable</div><div class="v" id="bonusMonthlyPayable">RM 0.00</div></div>
    </div>
   </div>
   <div class="bonus-card">
@@ -6995,10 +6997,11 @@ function payrollDaysInSelectedMonth(){
 }
 function otHourlyRate(e){
   const basic=Math.max(0,Number(e?.guaranteed_pay||0));
+  const allowance=Math.max(0,Number(e?.allowance||0));
+  const otBase=basic+allowance;
   const daysInMonth=Math.max(1,payrollDaysInSelectedMonth());
-  // Matches the payroll summary logic:
-  // Basic Salary ÷ calendar days in the month ÷ 8 hours
-  return basic>0 ? basic/daysInMonth/8 : 0;
+  // OT Rate = (Basic Salary + Allowance) ÷ calendar days in the month ÷ 8 hours
+  return otBase>0 ? otBase/daysInMonth/8 : 0;
 }
 function calculateOtTotalHours(m={}){
   const offDays=Math.max(0,Number(m?.ot_day_qty||0));
@@ -10469,7 +10472,7 @@ function salaryMonthParts(){
 }
 
 
-async function capturePayslipForPdf(slip,scale=2,quality=0.96){
+window.capturePayslipForPdf=async function(slip,scale=2,quality=0.96){
   if(!slip) throw new Error("Payslip not found");
 
   const oldTransform=slip.style.transform;
@@ -10512,7 +10515,7 @@ async function capturePayslipForPdf(slip,scale=2,quality=0.96){
     heightMm,
     img:canvas.toDataURL("image/jpeg",quality)
   };
-}
+};
 
 async function downloadSalaryPdf(pdf,filename,isIOS=false,previewWindow=null){
   const blob=pdf.output("blob");
@@ -10549,7 +10552,7 @@ async function buildBranchPayslipPdf(branch,type,employees){
     const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
     if(!slip) continue;
 
-    const captured=await capturePayslipForPdf(slip,1.8,0.94);
+    const captured=await window.capturePayslipForPdf(slip,1.8,0.94);
     const {widthMm,heightMm,img}=captured;
     const orientation=widthMm>heightMm?"landscape":"portrait";
 
@@ -10831,7 +10834,7 @@ async function exportSalaryPayslipCategory(mode){
       const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
       if(!slip) continue;
 
-      const captured=await capturePayslipForPdf(slip,1.8,0.94);
+      const captured=await window.capturePayslipForPdf(slip,1.8,0.94);
     const {widthMm,heightMm,img}=captured;
     const orientation=widthMm>heightMm?"landscape":"portrait";
 
@@ -10893,7 +10896,7 @@ async function buildPayslipPdfFile(){
   if(typeof html2canvas!=="function") throw new Error("PDF renderer not loaded");
   if(!window.jspdf?.jsPDF) throw new Error("PDF library not loaded");
 
-  const captured=await capturePayslipForPdf(slip,2,0.96);
+  const captured=await window.capturePayslipForPdf(slip,2,0.96);
   const {widthMm,heightMm,img}=captured;
 
   const {jsPDF}=window.jspdf;
@@ -19409,10 +19412,22 @@ input,select,textarea,button,a{
    const managerPct=Number(fixedManagerSetting?.manager_percent||0);
    const managerAmount=bonusBranchTotal*managerPct/100;
 
+   // Amount actually payable for the selected month:
+   // all staff bonuses shown in the table + Manager Bonus.
+   const staffBonusPayable=rows.reduce((sum,x)=>{
+     const saved=bonusSaved[Number(x.e.id)]||{};
+     const amount=x.fixedExcluded
+       ? 0
+       : Number(saved.manual_bonus_override ?? (x.eligible?each:0));
+     return sum+Math.max(0,amount||0);
+   },0);
+   const monthlyBonusPayable=staffBonusPayable+Math.max(0,managerAmount||0);
+
    $("bonusBranchPerformance").textContent=moneyBonus(bonusBranchTotal);
    $("bonusPool").textContent=moneyBonus(pool);
    $("bonusEligibleCount").textContent=String(count);
    if($("bonusManagerAmount"))$("bonusManagerAmount").textContent=moneyBonus(managerAmount);
+   if($("bonusMonthlyPayable"))$("bonusMonthlyPayable").textContent=moneyBonus(monthlyBonusPayable);
    if($("bonusManagerPct")){$("bonusManagerPct").value=managerPct;$("bonusManagerPct").disabled=!isUmoBonus();}
 
    if($("bonusDeductionTotal")) $("bonusDeductionTotal").textContent=moneyBonus(deductionTotal);
