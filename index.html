@@ -6995,13 +6995,16 @@ function payrollDaysInSelectedMonth(){
   const [year,month]=monthKey().split("-").map(Number);
   return new Date(year,month,0).getDate();
 }
-function otHourlyRate(e){
-  const basic=Math.max(0,Number(e?.guaranteed_pay||0));
-  const allowance=Math.max(0,Number(e?.allowance||0));
+function otHourlyRateFromPay(basicPay,allowancePay){
+  const basic=Math.max(0,Number(basicPay||0));
+  const allowance=Math.max(0,Number(allowancePay||0));
   const otBase=basic+allowance;
   const daysInMonth=Math.max(1,payrollDaysInSelectedMonth());
-  // OT Rate = (Basic Salary + Allowance) ÷ calendar days in the month ÷ 8 hours
+  // OT Rate = (Basic Pay + Allowance) ÷ calendar days in selected month ÷ 8
   return otBase>0 ? otBase/daysInMonth/8 : 0;
+}
+function otHourlyRate(e){
+  return otHourlyRateFromPay(e?.guaranteed_pay,e?.allowance);
 }
 function calculateOtTotalHours(m={}){
   const offDays=Math.max(0,Number(m?.ot_day_qty||0));
@@ -8542,6 +8545,30 @@ function salaryPayslipCell(empId,type,confirmed){
 function normalizedSevenSnapshot(e,snap){
   if(!snap) return null;
   const s={...snap};
+
+  // IMPORTANT:
+  // Old confirmed snapshots may contain OT calculated from Basic Pay only.
+  // Always normalize the displayed / payslip OT using:
+  // (Basic Pay + Allowance) ÷ calendar days ÷ 8 × Total OT Hours.
+  const basic=Math.max(0,Number(s.guaranteed_pay ?? e?.guaranteed_pay ?? 0));
+  const allowance=Math.max(0,Number(s.allowance ?? e?.allowance ?? 0));
+  const otDayQty=Math.max(0,Number(s.ot_day_qty||0));
+  const otHourQty=Math.max(0,Number(s.ot_hour_qty||0));
+  const totalOtHours=+(otDayQty*8+otHourQty).toFixed(2);
+  const otRate=otHourlyRateFromPay(basic,allowance);
+  const otAmount=+(totalOtHours*otRate).toFixed(2);
+
+  s.guaranteed_pay=basic;
+  s.allowance=allowance;
+  s.ot_day_qty=otDayQty;
+  s.ot_hour_qty=otHourQty;
+  s.ot_total_hours=totalOtHours;
+  s.ot_hourly_rate=+otRate.toFixed(4);
+  s.ot_days=+(otDayQty*8*otRate).toFixed(2);
+  s.ot_hours=otAmount;
+  s.ot=otAmount;
+  s.gross_pay=+(basic+allowance+otAmount).toFixed(2);
+
   const hasSocso=!!String(e?.socso_no||"").trim();
   const st=hasSocso ? statutory(Number(s.gross_pay||0)) : {
     employee_socso:0,employer_socso:0,employee_lindung24:0,employee_eis:0,employer_eis:0
@@ -8594,7 +8621,7 @@ function renderSevenTable(emps){
         <td data-live-ottotalhrs="${e.id}"><strong>${Number(s.ot_total_hours ?? calculateOtTotalHours(m)).toFixed(2)}</strong></td>
         <td data-live-otamount="${e.id}">
           <strong>${money(s.ot||0)}</strong>
-          <div class="helper">Rate ${otHourlyRate(e).toFixed(4)}</div>
+          <div class="helper">Rate ${Number(s.ot_hourly_rate ?? otHourlyRate(e)).toFixed(4)}</div>
         </td>
         <td>${money(s.guaranteed_pay)}</td><td>${money(s.allowance)}</td>
         <td>${money(s.employee_epf)}</td><td>${money(s.employer_epf)}</td>
@@ -11685,7 +11712,7 @@ function renderSettlementTabs(){
   const names=settlementOutlets.map(x=>x.name);
   root.innerHTML=[
     ...names.map(name=>`<button class="settlement-tab ${name===settlementCurrentOutlet?"active":""}" type="button" data-settlement-branch="${settlementEsc(name)}">${settlementEsc(name)}</button>`),
-    `<button class="settlement-tab ${settlementCurrentOutlet==="__TOTAL__"?"active":""}" type="button" data-settlement-branch="__TOTAL__">Total Branches</button>`
+    `<button class="settlement-tab ${settlementCurrentOutlet==="__TOTAL__"?"active":""}" type="button" data-settlement-branch="__TOTAL__">Total Branches · All Expenses</button>`
   ].join("");
 }
 async function refreshSettlementAccess(){
@@ -11749,22 +11776,61 @@ async function refreshSettlementAccess(){
   }
 }
 async function loadSettlementOutlets(){
-  const {data,error}=await settlementDb().from("daily_outlets")
-    .select("id,name,is_active").eq("is_active",true).order("id");
-  if(error) throw error;
-  settlementOutlets=data||[];
+  const db=settlementDb();
+  const names=[];
+  const add=name=>{
+    name=String(name||"").trim();
+    if(name && !names.includes(name)) names.push(name);
+  };
+
+  // Query each source independently. One missing/RLS-blocked source must not
+  // stop the rest of Report from loading.
+  const sources=[
+    ["daily_outlets", ()=>db.from("daily_outlets").select("id,name,is_active").eq("is_active",true).order("id"), r=>r.name],
+    ["salary_outlets",()=>db.from("salary_outlets").select("*").order("id"), r=>r.name||r.outlet||r.outlet_name],
+    ["employees",()=>db.from("employees").select("outlet"), r=>r.outlet],
+    ["settlement_monthly_expenses",()=>db.from("settlement_monthly_expenses").select("outlet"), r=>r.outlet],
+    ["daily_settlements",()=>db.from("daily_settlements").select("branch"), r=>r.branch]
+  ];
+
+  for(const [label,getter,pick] of sources){
+    try{
+      const res=await getter();
+      if(res.error){
+        console.warn("Report branch source unavailable:",label,res.error.message);
+        continue;
+      }
+      (res.data||[]).forEach(r=>add(pick(r)));
+    }catch(err){
+      console.warn("Report branch source unavailable:",label,err);
+    }
+  }
+
+  // Preserve the known main branches even if a table is temporarily unavailable.
+  add("Eco Botanic");
+  add("Nusa Bestari");
+  add("Global");
+
+  settlementOutlets=names.map((name,i)=>({id:i+1,name,is_active:true}));
+
   if(!settlementCurrentOutlet){
     try{
       const remembered=localStorage.getItem("nd_report_last_branch_v1")||"";
-      if(remembered==="__TOTAL__" || settlementOutlets.some(x=>x.name===remembered)) settlementCurrentOutlet=remembered;
+      if(remembered==="__TOTAL__" || settlementOutlets.some(x=>x.name===remembered)){
+        settlementCurrentOutlet=remembered;
+      }
     }catch(_){}
   }
-  if(!settlementCurrentOutlet || (!settlementOutlets.some(x=>x.name===settlementCurrentOutlet) && settlementCurrentOutlet!=="__TOTAL__")){
+
+  if(
+    !settlementCurrentOutlet ||
+    (!settlementOutlets.some(x=>x.name===settlementCurrentOutlet) && settlementCurrentOutlet!=="__TOTAL__")
+  ){
     settlementCurrentOutlet=settlementOutlets[0]?.name||"";
   }
+
   renderSettlementTabs();
 }
-
 async function loadSettlementPaymentMethods(){
   if(!settlementCurrentOutlet || settlementCurrentOutlet==="__TOTAL__") return;
   const db=settlementDb(), ym=settlementCurrentMonth();
@@ -12091,21 +12157,91 @@ function settlementExpenseRecordTotals(record){
 
 async function settlementDynamicBranchMonth(outlet,monthDate){
   const db=settlementDb();
+  const ym=String(monthDate||"").slice(0,7);
+  const [y,m]=ym.split("-").map(Number);
+  const start=ym+"-01";
+  const next=(m===12)?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,"0")}-01`;
 
-  const [autoRes,expenseRecord]=await Promise.all([
-    db.rpc("settlement_month_summary",{p_outlet:outlet,p_month:monthDate}),
-    settlementEffectiveExpenseRecord(outlet,monthDate)
+  // Direct branch data. Do not depend on an old SQL summary function,
+  // because old functions may omit newly-created branches.
+  const [dailyRes,expenseRecord,empRes,s7Res,s14Res,monthlyRes]=await Promise.all([
+    db.from("daily_settlements")
+      .select("grand_total,petty_out,petty_in,petty_entries")
+      .eq("branch",outlet)
+      .gte("settlement_date",start)
+      .lt("settlement_date",next),
+    settlementEffectiveExpenseRecord(outlet,monthDate),
+    db.from("employees").select("*").eq("outlet",outlet),
+    db.from("payroll_snapshot").select("*").eq("salary_month",monthDate),
+    db.from("payroll_commission_snapshot").select("employee_id,net_pay").eq("salary_month",monthDate),
+    db.from("employee_salary_monthly").select("*").eq("salary_month",monthDate)
   ]);
-  if(autoRes.error) throw autoRes.error;
 
-  const auto=Array.isArray(autoRes.data)?(autoRes.data[0]||{}):(autoRes.data||{});
+  if(dailyRes.error) throw dailyRes.error;
+  if(empRes.error) throw empRes.error;
+  if(s7Res.error) throw s7Res.error;
+  if(s14Res.error) throw s14Res.error;
+  if(monthlyRes.error) throw monthlyRes.error;
+
+  const daily=dailyRes.data||[];
+
+  const revenue=daily.reduce((sum,r)=>sum+Number(r.grand_total||0),0);
+
+  // Petty Cash expense = OUT movements for the selected month.
+  // Use petty_entries when available; fall back to petty_out.
+  const petty_cash=daily.reduce((sum,r)=>{
+    if(Array.isArray(r.petty_entries)){
+      return sum+r.petty_entries
+        .filter(x=>String(x?.type||"").toLowerCase()==="out")
+        .reduce((s,x)=>s+Number(x?.amount||0),0);
+    }
+    return sum+Number(r.petty_out||0);
+  },0);
+
+  const employees=empRes.data||[];
+  const ids=new Set(employees.map(e=>String(e.id)));
+  const s7Map=new Map((s7Res.data||[]).map(x=>[String(x.employee_id),x]));
+  const monthlyMap=new Map((monthlyRes.data||[]).map(x=>[String(x.employee_id),x]));
+
+  let salary7=0, epfEmployee=0, epfEmployer=0;
+  let socsoEmployee=0, socsoEmployer=0, eisEmployee=0, eisEmployer=0;
+  let lindung24=0, taxPcb=0;
+
+  employees.forEach(e=>{
+    if(String(e.employment_type||"full_time")==="part_time") return;
+    const id=String(e.id);
+    try{
+      const snap=s7Map.get(id);
+      const calc=snap ? normalizedSevenSnapshot(e,snap) : calculate7th(e,monthlyMap.get(id)||{});
+      salary7+=Number(calc.net_pay||0);
+      epfEmployee+=Number(calc.employee_epf||0);
+      epfEmployer+=Number(calc.employer_epf||0);
+      socsoEmployee+=Number(calc.employee_socso||0);
+      socsoEmployer+=Number(calc.employer_socso||0);
+      eisEmployee+=Number(calc.employee_eis||0);
+      eisEmployer+=Number(calc.employer_eis||0);
+      lindung24+=Number(calc.employee_lindung24||0);
+      taxPcb+=Number(calc.tax||0);
+    }catch(err){
+      console.warn("Report payroll calculation failed:",outlet,e?.id,err);
+    }
+  });
+
+  const salary14=(s14Res.data||[])
+    .filter(x=>ids.has(String(x.employee_id)))
+    .reduce((s,x)=>s+Number(x.net_pay||0),0);
+
+  const salary=
+    salary7+salary14+
+    epfEmployee+epfEmployer+
+    socsoEmployee+socsoEmployer+
+    eisEmployee+eisEmployer+
+    lindung24+taxPcb;
+
   const exp=settlementExpenseRecordTotals(expenseRecord);
-
-  const revenue=Number(auto.revenue||0);
-  const salary=Number(auto.salary||0);
-  const petty_cash=Number(auto.petty_cash||0);
   const manual_expenses=Number(exp.manual_expenses||0);
   const project_expenses=Number(exp.project_expenses||0);
+  const sst=Number(exp.sst||0);
   const total_expenses=salary+petty_cash+manual_expenses+project_expenses;
   const profit=revenue-total_expenses;
 
@@ -12114,18 +12250,17 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     revenue:+revenue.toFixed(2),
     salary:+salary.toFixed(2),
     petty_cash:+petty_cash.toFixed(2),
-    sst:+Number(exp.sst||0).toFixed(2),
+    sst:+sst.toFixed(2),
     manual_expenses:+manual_expenses.toFixed(2),
     project_expenses:+project_expenses.toFixed(2),
     total_expenses:+total_expenses.toFixed(2),
     profit:+profit.toFixed(2)
   };
 }
-
 async function settlementAllBranchesForMonth(monthDate){
-  // Use the live outlet list rather than a fixed SQL function result.
-  // This guarantees every newly added branch appears in Report.
-  if(!settlementOutlets.length) await loadSettlementOutlets();
+  // Always refresh the merged branch list before total calculation.
+  await loadSettlementOutlets();
+
   const names=[...new Set(
     (settlementOutlets||[])
       .map(x=>String(x.name||"").trim())
@@ -13186,7 +13321,9 @@ function ndStartLiveSync(){
       "salary_management_admins","salary_manager_profiles",
       "settlement_monthly_expenses","settlement_admins",
       "monthly_roster_day_assignments","roster_outlet_settings",
-      "employee_rest_day_overrides"
+      "employee_rest_day_overrides",
+      "branch_bonus_monthly","branch_bonus_deductions",
+      "branch_bonus_fixed_settings","branch_bonus_fixed_exclusions"
     ];
 
     let ch=liveDb.channel("ndacc-live-sync-v1");
@@ -19319,40 +19456,79 @@ input,select,textarea,button,a{
  async function loadBonus(){
    if(!$("bonusPage"))return;
    await syncBonusAuth();
-   const state=$("bonusSyncState");if(state)state.textContent="Loading...";
+
+   const state=$("bonusSyncState");
+   if(state)state.textContent="Loading...";
+
    const m=monthBonus(),start=m+"-01";
    const endDate=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1);
    const end=endDate.toISOString().slice(0,10);
 
-   const [empRes,settRes,saveRes,profileRes,mgrRes,fixedRes,dedRes,excludeRes]=await Promise.all([
-     salaryDb.from("employees").select("*").order("outlet").order("name"),
-     salaryDb.from("daily_settlements").select("branch,grand_total,settlement_date").gte("settlement_date",start).lt("settlement_date",end),
-     salaryDb.from("branch_bonus_monthly").select("*").eq("bonus_month",bonusMonthDate()),
-     salaryDb.from("salary_manager_profiles").select("name,email,is_owner"),
-     salaryDb.from("branch_bonus_manager_settings").select("*").eq("bonus_month",bonusMonthDate()),
-     salaryDb.from("branch_bonus_fixed_settings").select("*"),
-     salaryDb.from("branch_bonus_deductions").select("*").eq("bonus_month",bonusMonthDate()).order("created_at",{ascending:true}),
-     salaryDb.from("branch_bonus_fixed_exclusions").select("*")
+   // Employees are the only required source.
+   const empRes=await salaryDb.from("employees").select("*").order("outlet").order("name");
+   if(empRes.error){
+     if(state) state.textContent="Employee load failed: "+empRes.error.message;
+     bonusEmployees=[];
+     renderBonus();
+     return;
+   }
+
+   // All bonus setup/history tables are optional here.
+   // If one table is unavailable, keep employees visible and use empty defaults.
+   const safe=async promise=>{
+     try{
+       const res=await promise;
+       if(res?.error){
+         console.warn("Bonus optional source unavailable:",res.error.message);
+         return [];
+       }
+       return res?.data||[];
+     }catch(err){
+       console.warn("Bonus optional source unavailable:",err);
+       return [];
+     }
+   };
+
+   const [settData,saveData,profileData,mgrData,fixedData,dedData,excludeData,dailyOutletData,salaryOutletData]=await Promise.all([
+     safe(salaryDb.from("daily_settlements").select("branch,grand_total,settlement_date").gte("settlement_date",start).lt("settlement_date",end)),
+     safe(salaryDb.from("branch_bonus_monthly").select("*").eq("bonus_month",bonusMonthDate())),
+     safe(salaryDb.from("salary_manager_profiles").select("name,email,is_owner")),
+     safe(salaryDb.from("branch_bonus_manager_settings").select("*").eq("bonus_month",bonusMonthDate())),
+     safe(salaryDb.from("branch_bonus_fixed_settings").select("*")),
+     safe(salaryDb.from("branch_bonus_deductions").select("*").eq("bonus_month",bonusMonthDate()).order("created_at",{ascending:true})),
+     safe(salaryDb.from("branch_bonus_fixed_exclusions").select("*")),
+     safe(salaryDb.from("daily_outlets").select("name,is_active").eq("is_active",true)),
+     safe(salaryDb.from("salary_outlets").select("name"))
    ]);
-   const err=empRes.error||settRes.error||saveRes.error||mgrRes.error||fixedRes.error||dedRes.error||excludeRes.error;
-   if(err){if(state)state.textContent="Bonus setup required: "+err.message;return;}
 
-   bonusEmployees=empRes.data||[];
-   bonusSaved={};(saveRes.data||[]).forEach(r=>bonusSaved[Number(r.employee_id)]=r);
-   bonusFixedExclusionRows=excludeRes.data||[];
-   bonusDeductions=(dedRes.data||[]).filter(r=>String(r.branch||"")===String(bonusBranch||""));
+   bonusEmployees=(empRes.data||[]).filter(e=>isFullTimeBonusEmployee(e));
 
-   // Managers are excluded from the employee 1% pool.
-   const managerNames=new Set((profileRes.data||[]).map(x=>String(x.name||"").trim().toLowerCase()).filter(Boolean));
-   bonusEmployees=bonusEmployees.filter(e=>isFullTimeBonusEmployee(e));
+   bonusSaved={};
+   (saveData||[]).forEach(r=>bonusSaved[Number(r.employee_id)]=r);
 
-   // Exactly the same branch scope as Salary.
-   let branches=[...new Set(bonusEmployees.map(e=>String(e.outlet||"").trim()).filter(Boolean))];
+   bonusFixedExclusionRows=excludeData||[];
+
+   // Build branch tabs from employees + both branch tables + saved bonus records.
+   let branches=[];
+   const addBranch=b=>{
+     b=String(b||"").trim();
+     if(b && !branches.includes(b)) branches.push(b);
+   };
+   bonusEmployees.forEach(e=>addBranch(e.outlet));
+   (dailyOutletData||[]).forEach(x=>addBranch(x.name));
+   (salaryOutletData||[]).forEach(x=>addBranch(x.name));
+   (saveData||[]).forEach(x=>addBranch(x.branch));
+
    if(!window.isGlobalAdmin && !window.isPayrollManager && Array.isArray(window.accessibleSalaryOutlets)){
      branches=branches.filter(b=>window.accessibleSalaryOutlets.includes(b));
    }
-   if(!bonusBranch||!branches.includes(bonusBranch))bonusBranch=branches[0]||"";
-   bonusDeductions=(dedRes.data||[]).filter(r=>String(r.branch||"")===String(bonusBranch||""));
+
+   if(!bonusBranch || !branches.includes(bonusBranch)){
+     bonusBranch=branches[0] || String(bonusEmployees[0]?.outlet||"").trim() || "";
+   }
+
+   bonusDeductions=(dedData||[]).filter(r=>String(r.branch||"")===String(bonusBranch||""));
+
    bonusFixedExcludedIds=new Set(
      (bonusFixedExclusionRows||[])
        .filter(r=>String(r.branch||"")===String(bonusBranch||""))
@@ -19360,16 +19536,29 @@ input,select,textarea,button,a{
    );
 
    const tabs=$("bonusBranchTabs");
-   if(tabs)tabs.innerHTML=branches.map(b=>`<button type="button" class="bonus-branch-btn ${b===bonusBranch?"active":""}" data-bonus-branch="${String(b).replace(/"/g,"&quot;")}">${b}</button>`).join("");
+   if(tabs){
+     tabs.innerHTML=branches.map(b=>`
+       <button type="button"
+         class="bonus-branch-btn ${b===bonusBranch?"active":""}"
+         data-bonus-branch="${String(b).replace(/"/g,"&quot;")}">${b} (${bonusEmployees.filter(e=>String(e.outlet||"").trim()===String(b).trim()).length})</button>
+     `).join("");
+   }
 
-   bonusBranchTotal=(settRes.data||[]).filter(r=>String(r.branch)===bonusBranch).reduce((n,r)=>n+Number(r.grand_total||0),0);
-   fixedManagerSetting=(fixedRes.data||[]).find(r=>String(r.branch)===bonusBranch)||null;
-   // Initial defaults come from existing Salary employees; after saving, DB setting always wins.
+   bonusBranchTotal=(settData||[])
+     .filter(r=>String(r.branch||"")===String(bonusBranch||""))
+     .reduce((n,r)=>n+Number(r.grand_total||0),0);
+
+   fixedManagerSetting=(fixedData||[]).find(r=>String(r.branch||"")===String(bonusBranch||""))||null;
+
+   // Keep existing manager defaults only when there is an actual matching manager.
    if(!fixedManagerSetting){
      const bn=String(bonusBranch||"").trim().toLowerCase();
      const defaultName=bn.includes("eco")?"sam":(bn.includes("nusa")?"sam":"");
      const defaultPct=bn.includes("eco")?3:(bn.includes("nusa")?1:0);
-     const defaultEmp=bonusEmployees.find(e=>String(e.name||"").trim().toLowerCase()===defaultName);
+     const defaultEmp=bonusEmployees.find(e=>
+       String(e.outlet||"").trim()===String(bonusBranch||"").trim() &&
+       String(e.name||"").trim().toLowerCase()===defaultName
+     );
      if(defaultEmp){
        fixedManagerSetting={
          branch:bonusBranch,
@@ -19379,18 +19568,22 @@ input,select,textarea,button,a{
        };
      }
    }
+
    managerSetting={manager_percent:Number(fixedManagerSetting?.manager_percent||0)};
+
    renderBonus();
    if(state)state.textContent="Cloud synced ✓";
  }
-
  function renderBonus(){
    const grossPool=bonusBranchTotal*0.01;
    const deductionTotal=(bonusDeductions||[]).reduce((s,r)=>s+Number(r.amount||0),0);
    const pool=Math.max(0,grossPool-deductionTotal);
-   const allBranchEmps=bonusEmployees.filter(e=>String(e.outlet||"")===bonusBranch);
+   const allBranchEmps=bonusEmployees.filter(e=>String(e.outlet||"").trim()===String(bonusBranch||"").trim());
    const managerId=Number(fixedManagerSetting?.manager_employee_id||0);
-   const emps=allBranchEmps.filter(e=>Number(e.id)!==managerId);
+
+   // Keep every employee visible in Branch Bonus.
+   // Manager remains visible but is excluded from the shared 1% employee pool.
+   const emps=[...allBranchEmps];
    const mgrSel=$("bonusManagerEmployee");
    if(mgrSel){
      const managerChoices=[...bonusEmployees];
@@ -19404,8 +19597,9 @@ input,select,textarea,button,a{
      const target=r.target_achieved!==false;
      const mc=!!r.has_mc;
      const fixedExcluded=bonusFixedExcludedIds.has(Number(e.id));
-     const eligible=target&&!mc&&!fixedExcluded;
-     return {e,target,mc,fixedExcluded,eligible};
+     const isManager=managerId>0 && Number(e.id)===managerId;
+     const eligible=target&&!mc&&!fixedExcluded&&!isManager;
+     return {e,target,mc,fixedExcluded,isManager,eligible};
    });
    const count=rows.filter(x=>x.eligible).length;
    const each=count?pool/count:0;
@@ -19416,7 +19610,7 @@ input,select,textarea,button,a{
    // all staff bonuses shown in the table + Manager Bonus.
    const staffBonusPayable=rows.reduce((sum,x)=>{
      const saved=bonusSaved[Number(x.e.id)]||{};
-     const amount=x.fixedExcluded
+     const amount=(x.fixedExcluded || x.isManager)
        ? 0
        : Number(saved.manual_bonus_override ?? (x.eligible?each:0));
      return sum+Math.max(0,amount||0);
@@ -19464,10 +19658,16 @@ input,select,textarea,button,a{
      <td><strong>${x.e.name||"-"}</strong></td>
      <td><input type="checkbox" data-bonus-target="${x.e.id}" ${x.target?"checked":""} ${(edit&&!x.fixedExcluded)?"":"disabled"}/></td>
      <td><input type="checkbox" data-bonus-mc="${x.e.id}" ${x.mc?"checked":""} ${(edit&&!x.fixedExcluded)?"":"disabled"}/></td>
-     <td class="${x.eligible?"bonus-yes":"bonus-no"}">${x.fixedExcluded?"Fixed Excluded":(x.eligible?"Eligible":"Not eligible")}</td>
+     <td class="${x.eligible?"bonus-yes":"bonus-no"}">${x.isManager?"Manager":(x.fixedExcluded?"Fixed Excluded":(x.eligible?"Eligible":"Not eligible"))}</td>
      <td class="bonus-amount-cell">
-       <span>${moneyBonus(x.eligible ? (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? each) : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? 0))}</span>
-       ${(edit&&!x.fixedExcluded)?`<button type="button" class="bonus-pencil" data-bonus-edit-amount="${x.e.id}" title="Edit Bonus">✎</button>`:""}
+       <span>${moneyBonus(
+         x.isManager
+           ? 0
+           : (x.eligible
+               ? (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? each)
+               : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? 0))
+       )}</span>
+       ${(edit&&!x.fixedExcluded&&!x.isManager)?`<button type="button" class="bonus-pencil" data-bonus-edit-amount="${x.e.id}" title="Edit Bonus">✎</button>`:""}
      </td>
     </tr>`).join(""):`<tr><td colspan="5">No employees for this branch.</td></tr>`;
    $("bonusSaveBtn").style.display=(edit||isUmoBonus())?"":"none";
@@ -19487,8 +19687,16 @@ input,select,textarea,button,a{
 
    // Save employee eligibility/results.
    if(editStaff){
-     const managerId=Number(fixedManagerSetting?.manager_employee_id||0); const emps=bonusEmployees.filter(e=>String(e.outlet||"")===bonusBranch && Number(e.id)!==managerId);
-     const states=emps.map(e=>({e,...readRow(e.id)}));
+     const managerId=Number(fixedManagerSetting?.manager_employee_id||0);
+     const emps=bonusEmployees.filter(e=>String(e.outlet||"")===bonusBranch);
+     const states=emps.map(e=>{
+       const row={e,...readRow(e.id)};
+       if(managerId>0 && Number(e.id)===managerId){
+         row.eligible=false;
+         row.isManager=true;
+       }
+       return row;
+     });
      const eligibleCount=states.filter(x=>x.eligible).length;
      const grossPool=bonusBranchTotal*0.01;
      const deductionTotal=(bonusDeductions||[]).reduce((s,r)=>s+Number(r.amount||0),0);
@@ -19500,12 +19708,14 @@ input,select,textarea,button,a{
        target_achieved:x.target,has_mc:x.mc,manager_selected:true,
        eligible:x.eligible,
        bonus_amount:Number(
-         x.fixedExcluded
+         (x.fixedExcluded || x.isManager)
            ? 0
            : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ??
               (x.eligible?Number(each.toFixed(2)):0))
        ),
-       manual_bonus_override:x.fixedExcluded ? null : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? null),
+       manual_bonus_override:(x.fixedExcluded || x.isManager)
+         ? null
+         : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? null),
        updated_at:new Date().toISOString()
      }));
      if(rows.length){
