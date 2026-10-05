@@ -11344,6 +11344,7 @@ document.addEventListener("DOMContentLoaded",()=>{
      if(panel) panel.style.display="block";
      const state2=$("bonusFixedExcludeSaveState");
      if(state2) state2.textContent="Saved ✓";
+     renderBonus();
    }catch(err){
      if(state) state.textContent="Save failed";
      alert("Fixed Excluded Staff save failed: "+(err?.message||err));
@@ -19960,7 +19961,7 @@ input,select,textarea,button,a{
 
    bonusFixedExcludedIds=new Set(
      (bonusFixedExclusionRows||[])
-       .filter(r=>String(r.branch||"")===String(bonusBranch||""))
+       .filter(r=>String(r.branch||"").trim()===String(bonusBranch||"").trim())
        .map(r=>Number(r.employee_id))
    );
    bonusFixedExcludedDraft=new Set(bonusFixedExcludedIds);
@@ -20011,9 +20012,9 @@ input,select,textarea,button,a{
    const allBranchEmps=bonusEmployees.filter(e=>String(e.outlet||"").trim()===String(bonusBranch||"").trim());
    const managerId=Number(fixedManagerSetting?.manager_employee_id||0);
 
-   // Keep every employee visible in Branch Bonus.
-   // Manager remains visible but is excluded from the shared 1% employee pool.
-   const emps=[...allBranchEmps];
+   // Fixed Excluded Staff are permanently removed from the monthly Bonus table.
+   // They remain visible only inside the Fixed Excluded Staff picker so they can be restored later.
+   const emps=allBranchEmps.filter(e=>!bonusFixedExcludedIds.has(Number(e.id)));
    const mgrSel=$("bonusManagerEmployee");
    if(mgrSel){
      const managerChoices=[...bonusEmployees];
@@ -20026,9 +20027,9 @@ input,select,textarea,button,a{
      // A manually saved false remains unchecked.
      const target=r.target_achieved!==false;
      const mc=!!r.has_mc;
-     const fixedExcluded=bonusFixedExcludedIds.has(Number(e.id));
+     const fixedExcluded=false;
      const isManager=managerId>0 && Number(e.id)===managerId;
-     const eligible=target&&!mc&&!fixedExcluded&&!isManager;
+     const eligible=target&&!mc&&!isManager;
      return {e,target,mc,fixedExcluded,isManager,eligible};
    });
    const count=rows.filter(x=>x.eligible).length;
@@ -20118,7 +20119,10 @@ input,select,textarea,button,a{
    // Save employee eligibility/results.
    if(editStaff){
      const managerId=Number(fixedManagerSetting?.manager_employee_id||0);
-     const emps=bonusEmployees.filter(e=>String(e.outlet||"")===bonusBranch);
+     const emps=bonusEmployees.filter(e=>
+       String(e.outlet||"").trim()===String(bonusBranch||"").trim() &&
+       !bonusFixedExcludedIds.has(Number(e.id))
+     );
      const states=emps.map(e=>{
        const row={e,...readRow(e.id)};
        if(managerId>0 && Number(e.id)===managerId){
