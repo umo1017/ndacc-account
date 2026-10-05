@@ -1547,6 +1547,30 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="payslip-close-button-style">
+#salaryPayslipModal .salary-dialog,
+#payslipModal .salary-dialog,
+#salaryPayslipPreviewModal .salary-dialog,
+#salaryPayslipModal,
+#payslipModal,
+#salaryPayslipPreviewModal{position:relative}
+#closePayslipModal{
+  -webkit-tap-highlight-color:transparent;
+}
+@media(max-width:700px){
+  #closePayslipModal{
+    position:sticky!important;
+    top:10px!important;
+    margin-left:auto!important;
+    display:block!important;
+    width:44px!important;
+    height:44px!important;
+    line-height:38px!important;
+  }
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -1605,7 +1629,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <div class="card span12">
 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
 <div class="branch-toggle" id="dailyBranchToggle" style="flex:1"></div>
-<button class="btn" id="addDailyOutletBtn" style="display:none" type="button">+ Add Outlet</button>
+<button class="btn" id="addDailyOutletBtn" style="display:none" type="button">+ Add Branch</button>
 </div>
 </div>
 <div class="card span8">
@@ -1757,7 +1781,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   let canViewDailyHistory=false;
   let isSystemAdmin=false;
   const DAILY_BRANCH_KEY="nd_daily_branch_v1";
-  let currentBranch=(()=>{try{return localStorage.getItem(DAILY_BRANCH_KEY)||"Eco Botanic"}catch(_){return "Eco Botanic"}})(), currentStatus="pending", currentId=null, pettyEntries=[], allRows=[], dailyOutlets=["Eco Botanic","Nusa Bestari"];
+  let currentBranch=(()=>{try{return localStorage.getItem(DAILY_BRANCH_KEY)||"Eco Botanic"}catch(_){return "Eco Botanic"}})(), currentStatus="pending", currentId=null, pettyEntries=[], allRows=[], dailyOutlets=["Global","Eco Botanic","Nusa Bestari"];
   const paymentIds=["visa","amex","bedFee","tng","cash","alipay","onlineCard","bankTransfer","tips"];
   let saveTimer=null;
   let cashWithdrawalHistoryBranch="";
@@ -1792,9 +1816,18 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
       n=String(n||"").trim();
       if(n && !names.includes(n)) names.push(n);
     };
+
+    // Permanent branch available in Daily Settlement.
+    add("Global");
+
+    // Existing / future branches from Supabase and historical records.
     (dailyOutlets||[]).forEach(add);
     (allRows||[]).forEach(r=>add(r.branch));
-    if(!names.length){ add("Eco Botanic"); add("Nusa Bestari"); }
+
+    // Keep original branches available as safe fallbacks.
+    add("Eco Botanic");
+    add("Nusa Bestari");
+
     return names;
   }
 
@@ -1808,7 +1841,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     }
     const names=dailyBranchNames();
     if(!names.includes(currentBranch)){
-      currentBranch=names[0]||"Eco Botanic";
+      currentBranch=names.includes("Global")?"Global":(names[0]||"Eco Botanic");
       try{localStorage.setItem(DAILY_BRANCH_KEY,currentBranch);}catch(_){}
     }
     renderDailyBranchButtons();
@@ -1848,9 +1881,9 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     if(!isSystemAdmin){ alert("Admin only."); return; }
     const name=($("dailyOutletName")?.value||"").trim();
     const msg=$("dailyOutletMsg");
-    if(!name){ msg.textContent="Outlet name is required."; return; }
+    if(!name){ msg.textContent="Branch name is required."; return; }
     const existing=dailyBranchNames().some(x=>x.toLowerCase()===name.toLowerCase());
-    if(existing){ msg.textContent="Outlet already exists."; return; }
+    if(existing){ msg.textContent="Branch already exists."; return; }
 
     msg.textContent="Saving...";
     const {error}=await db.from("daily_outlets").insert({name,is_active:true});
@@ -1866,7 +1899,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     await loadDate(d);
     renderAll();
     $("dailyOutletModal").classList.remove("open");
-    $("syncState").textContent="Outlet added ✓";
+    $("syncState").textContent="Branch added ✓";
     $("syncState").className="ok";
   }
 
@@ -2007,7 +2040,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     const bf=$("bedFeeHistoryBtn");
     if(bf) bf.style.display=canViewDailyHistory?"":"none";
     const addOutlet=$("addDailyOutletBtn");
-    if(addOutlet) addOutlet.style.display="none";
+    if(addOutlet) addOutlet.style.display=isSystemAdmin?"":"none";
   }
 
   function escHtml(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
@@ -2896,7 +2929,7 @@ return `<div class="history-date-card">
         <span>Opening ${money(opening)} &nbsp; + IN ${money(totalIn)} &nbsp; − OUT ${money(totalOut)} &nbsp; = Closing ${money(closing)}</span>
       </div>
       ${tableRows.length?`<div class="table-wrap" style="margin-top:10px"><table>
-        <thead><tr><th>Date</th><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th>Opening</th><th>Remaining</th></tr></thead>
+        <thead><tr><th>Date</th><th>Type</th><th>Reason / Person in Charge</th><th>Amount</th><th>Receipt</th><th>Opening</th><th>Remaining</th></tr></thead>
         <tbody>${tableRows.join("")}</tbody>
       </table></div>`:`<div class="helper" style="margin-top:10px">No Petty Cash history for this branch in this month.</div>`}
     </div>`;
@@ -3013,6 +3046,7 @@ return `<div class="history-date-card">
     $("cashOpening").value=cashCarry;
     $("pettyType").value="out";
     $("pettyReason").value="";
+    $("pettyReason").placeholder="Reason";
     $("pettyAmount").value="";
     $("currentStatus").textContent="Pending";
     calc();
@@ -3979,14 +4013,24 @@ return `<div class="history-date-card">
     if(pettyClearBtn) pettyClearBtn.onclick=()=>{pendingPettyReceiptFile=null;refreshPendingPettyReceiptUI();};
     refreshPendingPettyReceiptUI();
 
-    if($("pettyType")) $("pettyType").onchange=()=>{};
+    if($("pettyType")) $("pettyType").onchange=()=>{
+      const isIn=$("pettyType").value==="in";
+      const reason=$("pettyReason");
+      if(reason){
+        reason.placeholder=isIn?"Person in Charge":"Reason";
+        reason.setAttribute("aria-label",isIn?"Person in Charge":"Reason");
+      }
+    };
 
     if($("addPettyBtn")) $("addPettyBtn").onclick=async()=>{
       const amount=num("pettyAmount");
       const type=$("pettyType").value;
       const reason=$("pettyReason").value.trim();
       if(amount<=0){alert("Please enter an amount");return;}
-      if(!reason){alert("Please enter a reason");return;}
+      if(!reason){
+        alert(type==="in"?"Please enter the Person in Charge.":"Please enter a reason.");
+        return;
+      }
       if(type==="out" && !pendingPettyReceiptFile){
         alert("Every Petty Cash OUT entry requires a receipt photo or file.");
         return;
@@ -4166,14 +4210,14 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="salary-modal" id="dailyOutletModal">
 <div class="salary-dialog" style="width:min(560px,94vw)">
 <div class="outlet-title">
-<h3 style="margin:0">Add Daily Settlement Outlet</h3>
+<h3 style="margin:0">Add Daily Settlement Branch</h3>
 <button class="main-page-close" id="closeDailyOutletModal" type="button">×</button>
 </div>
 <div class="salary-card" style="box-shadow:none">
-<label>Outlet Name</label>
-<input id="dailyOutletName" placeholder="Outlet name" type="text"/>
+<label>Branch Name</label>
+<input id="dailyOutletName" placeholder="Branch name" type="text"/>
 <div style="display:flex;gap:8px;margin-top:12px">
-<button class="btn" id="saveDailyOutletBtn" type="button">Add Outlet</button>
+<button class="btn" id="saveDailyOutletBtn" type="button">Add Branch</button>
 </div>
 <div class="helper" id="dailyOutletMsg" style="margin-top:8px"></div>
 </div>
@@ -4531,7 +4575,18 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
    <div class="helper" style="margin-bottom:10px"></div>
    <div id="bonusManagerSetting" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:10px 0 14px"><div class="field"><label>Manager</label><select id="bonusManagerEmployee" style="min-width:180px"></select></div>
     <div class="field"><label>Manager %</label><input id="bonusManagerPct" type="number" min="0" step="0.01" value="0" style="width:100px"/></div>
+    <button class="btn" id="bonusFixedExcludeBtn" type="button">Fixed Excluded Staff</button>
     <div class="helper"></div>
+   </div>
+   <div id="bonusFixedExcludePanel" style="display:none;border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 14px">
+    <div class="outlet-title">
+      <div>
+        <strong>Fixed Excluded Staff</strong>
+        <div class="helper">Selected staff will not participate in the 1% Bonus every month for this branch.</div>
+      </div>
+      <button class="mini" id="bonusFixedExcludeCloseBtn" type="button">Close</button>
+    </div>
+    <div id="bonusFixedExcludeList" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-top:12px"></div>
    </div>
    <div class="bonus-table-wrap">
     <table class="bonus-table">
@@ -4780,6 +4835,45 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 <input disabled="" id="settlementSalary14Input" readonly="" type="number"/>
 </div>
+
+<div class="settlement-expense-row" data-expense-payment-key="salary_epf">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <div>
+    <strong>EPF</strong> <span class="branch-chip">AUTO</span>
+    <div class="helper" id="settlementEpfBreakdown">Employee RM 0.00 + Employer RM 0.00</div>
+  </div>
+</div>
+<input disabled="" id="settlementEpfInput" readonly="" type="number"/>
+</div>
+
+<div class="settlement-expense-row" data-expense-payment-key="salary_socso_eis">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <div>
+    <strong>SOCSO / EIS</strong> <span class="branch-chip">AUTO</span>
+    <div class="helper" id="settlementSocsoEisBreakdown">Employee RM 0.00 + Employer RM 0.00</div>
+  </div>
+</div>
+<input disabled="" id="settlementSocsoEisInput" readonly="" type="number"/>
+</div>
+
+<div class="settlement-expense-row" data-expense-payment-key="salary_taxpcb">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <div>
+    <strong>Tax PCB</strong> <span class="branch-chip">AUTO</span>
+    <div class="helper" id="settlementTaxPcbBreakdown">Employee RM 0.00 · Employer RM 0.00</div>
+  </div>
+</div>
+<input disabled="" id="settlementTaxPcbInput" readonly="" type="number"/>
+</div>
+
+<div class="settlement-expense-row" data-expense-payment-key="sst">
+<div style="display:flex;align-items:center;gap:6px">
+  <strong id="settlementLabel_sst">SST</strong>
+  <button class="mini" data-expense-edit="sst" type="button">✎</button>
+</div>
+<input data-finance-field="sst" min="0" readonly="" step="0.01" type="number"/>
+</div>
+
 <div class="settlement-expense-row" data-expense-payment-key="petty_cash">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 <strong>Petty Cash Record</strong>
@@ -5220,7 +5314,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </button>
 <div class="settings-section-body">
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<input id="settingsDailyOutletName" placeholder="Outlet name" style="flex:1;min-width:220px"/>
+<input id="settingsDailyOutletName" placeholder="Branch name" style="flex:1;min-width:220px"/>
 <button class="btn" id="settingsAddDailyOutletBtn" type="button">Add</button>
 </div>
 <div class="branch-admin-panel" id="settingsDailyOutletList" style="margin-top:12px"></div>
@@ -6308,7 +6402,7 @@ async function ownerDeleteSalaryManagerProfile(id,email){
 async function ownerAddDailyOutlet(){
   if(!isGlobalAdmin) return;
   const name=(byId("settingsDailyOutletName").value||"").trim();
-  if(!name) return alert("Outlet name is required.");
+  if(!name) return alert("Branch name is required.");
   const {error}=await salaryDb.from("daily_outlets").insert({name,is_active:true});
   if(error) return alert(error.message);
   byId("settingsDailyOutletName").value="";
@@ -7669,8 +7763,10 @@ async function confirm7th(empId){
   // Lindung 24 Jam is display-only. The existing payroll_snapshot table
   // does not have an employee_lindung24 column, so never send it to Supabase.
   const {employee_lindung24,...snapshotCalc}=calc;
-  const {error}=await salaryDb.from("payroll_snapshot").insert({
+  const {error}=await salaryDb.from("payroll_snapshot").upsert({
     employee_id:e.id,salary_month:monthDate(),...snapshotCalc
+  },{
+    onConflict:"employee_id,salary_month"
   });
   if(error){ alert("Confirm failed: "+error.message); return; }
   await refreshSalaryStayHere();
@@ -8356,7 +8452,7 @@ async function openPayslip(empId,type){
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div><div style="height:140px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(s.gross_pay||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div><div class="payslip-line"><span>Lindung 24 Jam</span><span class="amt">${Number((s.employee_lindung24 ?? statutory(s.gross_pay).employee_lindung24)||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">${Number(s.total_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div><div class="payslip-line"><span>OT</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div><div style="height:140px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(s.gross_pay||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">${Number(s.total_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div><div class="payslip-line"><span>OT</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div></div></div>
 <div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${Number(s.net_pay||0).toFixed(2)}</span></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;----------CURRENT MONTH----------&gt;</div><div class="payslip-mini-table"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Income Tax PCB</div><div>EMPLOYEE</div><div class="v">${Number(s.employee_epf||0).toFixed(2)}</div><div class="v">${Number(s.employee_socso||0).toFixed(2)}</div><div class="v">${Number(s.employee_eis||0).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div><div>EMPLOYER</div><div class="v">${Number(s.employer_epf||0).toFixed(2)}</div><div class="v">${Number(s.employer_socso||0).toFixed(2)}</div><div class="v">${Number(s.employer_eis||0).toFixed(2)}</div><div class="v"></div><div>TOTAL</div><div class="v">${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_socso||0)+Number(s.employer_socso||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;---------------YEAR-TO-DATE---------------&gt;</div><div class="payslip-mini-table ytd"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Income Tax PCB</div><div class="h">GROSS PAY</div><div class="h">NET PAY</div><div></div><div class="v">${(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis")).toFixed(2)}</div><div class="v">${ytdSum(empId,"tax").toFixed(2)}</div><div class="v">${ytdSum(empId,"gross_pay").toFixed(2)}</div><div class="v">${ytdSum(empId,"net_pay").toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
@@ -9377,6 +9473,36 @@ document.addEventListener("DOMContentLoaded",()=>{
   // Restore the exact main page after refresh.
   // Delay slightly so Salary / Settlement / Orders permissions finish loading first.
  
+
+ async function setFixedBonusExclusion(empId,excluded){
+   if(!canEditStaffBonus()) return;
+   empId=Number(empId||0);
+   const emp=bonusEmployees.find(e=>Number(e.id)===empId);
+   if(!emp) return;
+
+   const state=$("bonusSyncState");
+   if(excluded){
+     const payload={
+       branch:bonusBranch,
+       employee_id:empId,
+       employee_name:emp.name||"",
+       updated_by:currentBonusEmail(),
+       updated_at:new Date().toISOString()
+     };
+     const {error}=await salaryDb.from("branch_bonus_fixed_exclusions")
+       .upsert(payload,{onConflict:"branch,employee_id"});
+     if(error){alert("Fixed exclusion save failed: "+error.message);return;}
+   }else{
+     const {error}=await salaryDb.from("branch_bonus_fixed_exclusions")
+       .delete()
+       .eq("branch",bonusBranch)
+       .eq("employee_id",empId);
+     if(error){alert("Fixed exclusion remove failed: "+error.message);return;}
+   }
+   if(state)state.textContent="Fixed excluded staff saved ✓";
+   await loadBonus();
+ }
+
  async function addBonusDeduction(){
    if(!canEditStaffBonus()) return;
    const reason=String($("bonusDeductionReason")?.value||"").trim();
@@ -9508,7 +9634,23 @@ let settlementOwner=false;
 let settlementOutlets=[];
 let settlementCurrentOutlet="";
 let settlementProjects=[];
-let settlementAuto={revenue:0,salary:0,petty_cash:0};
+let settlementAuto={
+  revenue:0,
+  salary:0,
+  salary7:0,
+  salary14:0,
+  petty_cash:0,
+  epf_employee:0,
+  epf_employer:0,
+  epf_total:0,
+  socso_employee:0,
+  socso_employer:0,
+  eis_employee:0,
+  eis_employer:0,
+  lindung24:0,
+  socso_eis_total:0,
+  taxpcb_employee:0
+};
 let settlementRecord=null;
 let settlementCarrySource=null;
 let settlementPaymentMeta={};
@@ -9517,7 +9659,7 @@ let settlementPaymentSchedule={};
 const SETTLEMENT_OWNERS=["umo1017@gmail.com","mars83002566@gmail.com"];
 const SETTLEMENT_EXPENSE_FIELDS=[
   "rent","water","electricity","internet","advertising",
-  "maintenance","secretary_fee","machine_fee","tax","other_amount"
+  "maintenance","secretary_fee","machine_fee","tax","sst","other_amount"
 ];
 
 function settlementDb(){
@@ -9545,7 +9687,13 @@ function settlementNumber(field){
 }
 
 function settlementIsSalaryPaymentKey(key){
-  return key==="branch_salary_7th" || key==="branch_salary_14th";
+  return [
+    "branch_salary_7th",
+    "branch_salary_14th",
+    "salary_epf",
+    "salary_socso_eis",
+    "salary_taxpcb"
+  ].includes(String(key||""));
 }
 
 function settlementTodayISO(){
@@ -9896,10 +10044,40 @@ function settlementRecalculate(){
 
   const salary7Input=document.getElementById("settlementSalary7Input");
   const salary14Input=document.getElementById("settlementSalary14Input");
+  const epfInput=document.getElementById("settlementEpfInput");
+  const socsoEisInput=document.getElementById("settlementSocsoEisInput");
+  const taxPcbInput=document.getElementById("settlementTaxPcbInput");
   const pettyInput=document.getElementById("settlementPettyInput");
+
   if(salary7Input) salary7Input.value=Number(settlementAuto.salary7||0).toFixed(2);
   if(salary14Input) salary14Input.value=Number(settlementAuto.salary14||0).toFixed(2);
+  if(epfInput) epfInput.value=Number(settlementAuto.epf_total||0).toFixed(2);
+  if(socsoEisInput) socsoEisInput.value=Number(settlementAuto.socso_eis_total||0).toFixed(2);
+  if(taxPcbInput) taxPcbInput.value=Number(settlementAuto.taxpcb_employee||0).toFixed(2);
   if(pettyInput) pettyInput.value=Number(settlementAuto.petty_cash||0).toFixed(2);
+
+  const epfBreakdown=document.getElementById("settlementEpfBreakdown");
+  if(epfBreakdown){
+    epfBreakdown.textContent=
+      `Employee ${settlementMoney(settlementAuto.epf_employee)} + Employer ${settlementMoney(settlementAuto.epf_employer)}`;
+  }
+
+  const socsoBreakdown=document.getElementById("settlementSocsoEisBreakdown");
+  if(socsoBreakdown){
+    const employeeTotal=Number(settlementAuto.socso_employee||0)+
+      Number(settlementAuto.eis_employee||0)+
+      Number(settlementAuto.lindung24||0);
+    const employerTotal=Number(settlementAuto.socso_employer||0)+
+      Number(settlementAuto.eis_employer||0);
+    socsoBreakdown.textContent=
+      `Employee ${settlementMoney(employeeTotal)} + Employer ${settlementMoney(employerTotal)}`;
+  }
+
+  const pcbBreakdown=document.getElementById("settlementTaxPcbBreakdown");
+  if(pcbBreakdown){
+    pcbBreakdown.textContent=
+      `Employee ${settlementMoney(settlementAuto.taxpcb_employee)} · Employer RM 0.00`;
+  }
 }
 function renderSettlementProjects(){
   const root=document.getElementById("settlementProjects");
@@ -10050,16 +10228,26 @@ async function loadSettlementMonth(){
   const auto=Array.isArray(autoRes.data)?autoRes.data[0]:autoRes.data;
   settlementAuto={
     revenue:Number(auto?.revenue||0),
-    salary:Number(auto?.salary||0),
+    salary:0,
     salary7:0,
     salary14:0,
-    petty_cash:Number(auto?.petty_cash||0)
+    petty_cash:Number(auto?.petty_cash||0),
+    epf_employee:0,
+    epf_employer:0,
+    epf_total:0,
+    socso_employee:0,
+    socso_employer:0,
+    eis_employee:0,
+    eis_employer:0,
+    lindung24:0,
+    socso_eis_total:0,
+    taxpcb_employee:0
   };
   try{
     const monthKey=String(monthDate).slice(0,7)+"-01";
     const [empRes,s7Res,s14Res,monthlyRes]=await Promise.all([
       db.from("employees").select("*").eq("outlet",settlementCurrentOutlet),
-      db.from("payroll_snapshot").select("employee_id,net_pay").eq("salary_month",monthKey),
+      db.from("payroll_snapshot").select("*").eq("salary_month",monthKey),
       db.from("payroll_commission_snapshot").select("employee_id,net_pay").eq("salary_month",monthKey),
       db.from("employee_salary_monthly").select("*").eq("salary_month",monthKey)
     ]);
@@ -10070,30 +10258,81 @@ async function loadSettlementMonth(){
 
     const branchEmployees=empRes.data||[];
     const ids=new Set(branchEmployees.map(x=>String(x.id)));
-    const confirmed7=new Map((s7Res.data||[]).map(x=>[String(x.employee_id),Number(x.net_pay||0)]));
+    const confirmed7=new Map((s7Res.data||[]).map(x=>[String(x.employee_id),x]));
     const monthlyMap=new Map((monthlyRes.data||[]).map(x=>[String(x.employee_id),x]));
 
-    // 7th Monthly Expenses is an estimate before payroll confirmation.
-    // Once an employee is confirmed, use the confirmed snapshot amount.
-    settlementAuto.salary7=branchEmployees.reduce((sum,e)=>{
-      if(String(e.employment_type||"full_time")==="part_time") return sum;
+    // 7th salary = employee NET PAY.
+    // Statutory remittances are shown separately below Branch Salary 14th:
+    // EPF = employee + employer
+    // SOCSO/EIS = employee + employer (+ Lindung 24 Jam)
+    // PCB = employee withholding only; employer portion is RM 0.00.
+    let salary7=0;
+    let epfEmployee=0, epfEmployer=0;
+    let socsoEmployee=0, socsoEmployer=0;
+    let eisEmployee=0, eisEmployer=0;
+    let lindung24=0, taxPcb=0;
+
+    branchEmployees.forEach(e=>{
+      if(String(e.employment_type||"full_time")==="part_time") return;
       const id=String(e.id);
-      if(confirmed7.has(id)) return sum+Number(confirmed7.get(id)||0);
+      let calc=null;
+
       try{
-        return sum+Number(calculate7th(e,monthlyMap.get(id)||{}).net_pay||0);
-      }catch(_){
-        // Safe fallback so an unconfirmed employee still appears in the estimate.
+        const snap=confirmed7.get(id);
+        calc=snap ? normalizedSevenSnapshot(e,snap) : calculate7th(e,monthlyMap.get(id)||{});
+      }catch(err){
+        console.warn("Settlement statutory calculation failed",e?.id,err);
+      }
+
+      if(calc){
+        salary7+=Number(calc.net_pay||0);
+        epfEmployee+=Number(calc.employee_epf||0);
+        epfEmployer+=Number(calc.employer_epf||0);
+        socsoEmployee+=Number(calc.employee_socso||0);
+        socsoEmployer+=Number(calc.employer_socso||0);
+        eisEmployee+=Number(calc.employee_eis||0);
+        eisEmployer+=Number(calc.employer_eis||0);
+        lindung24+=Number(calc.employee_lindung24||0);
+        taxPcb+=Number(calc.tax||0);
+      }else{
         const guaranteed=Number(e.guaranteed_pay||0);
         const allowance=Number(e.allowance||0);
         const ot=Number(monthlyMap.get(id)?.ot||0);
-        return sum+Math.max(0,guaranteed+allowance+ot);
+        salary7+=Math.max(0,guaranteed+allowance+ot);
       }
-    },0);
+    });
+
+    settlementAuto.salary7=+salary7.toFixed(2);
+    settlementAuto.epf_employee=+epfEmployee.toFixed(2);
+    settlementAuto.epf_employer=+epfEmployer.toFixed(2);
+    settlementAuto.epf_total=+(epfEmployee+epfEmployer).toFixed(2);
+
+    settlementAuto.socso_employee=+socsoEmployee.toFixed(2);
+    settlementAuto.socso_employer=+socsoEmployer.toFixed(2);
+    settlementAuto.eis_employee=+eisEmployee.toFixed(2);
+    settlementAuto.eis_employer=+eisEmployer.toFixed(2);
+    settlementAuto.lindung24=+lindung24.toFixed(2);
+    settlementAuto.socso_eis_total=+(
+      socsoEmployee+socsoEmployer+
+      eisEmployee+eisEmployer+
+      lindung24
+    ).toFixed(2);
+
+    settlementAuto.taxpcb_employee=+taxPcb.toFixed(2);
 
     settlementAuto.salary14=(s14Res.data||[])
       .filter(x=>ids.has(String(x.employee_id)))
       .reduce((s,x)=>s+Number(x.net_pay||0),0);
-    settlementAuto.salary=settlementAuto.salary7+settlementAuto.salary14;
+
+    // Full company payroll cash cost:
+    // employee net salary + 14th salary + statutory remittances.
+    settlementAuto.salary=+(
+      settlementAuto.salary7+
+      settlementAuto.salary14+
+      settlementAuto.epf_total+
+      settlementAuto.socso_eis_total+
+      settlementAuto.taxpcb_employee
+    ).toFixed(2);
   }catch(err){ console.warn("Salary 7th/14th split unavailable",err); }
 
   settlementRecord=recordRes.data||null;
@@ -10221,10 +10460,23 @@ async function loadSettlementTotalMonth(){
     monthEl.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
   }
   const month=(monthEl?.value||settlementCurrentMonth())+"-01";
-  const {data,error}=await settlementDb().rpc("settlement_total_month_summary",{p_month:month});
+  const [{data,error},{data:sstRows,error:sstError}]=await Promise.all([
+    settlementDb().rpc("settlement_total_month_summary",{p_month:month}),
+    settlementDb().from("settlement_monthly_expenses").select("outlet,sst").eq("month_date",month)
+  ]);
   if(error) throw error;
+  if(sstError) throw sstError;
 
-  const rows=data||[];
+  const sstByOutlet=new Map((sstRows||[]).map(r=>[String(r.outlet||""),Number(r.sst||0)]));
+  const rows=(data||[]).map(r=>{
+    const sst=Number(sstByOutlet.get(String(r.outlet||""))||0);
+    return {
+      ...r,
+      manual_expenses:Number(r.manual_expenses||0)+sst,
+      total_expenses:Number(r.total_expenses||0)+sst,
+      profit:Number(r.profit||0)-sst
+    };
+  });
   const root=document.getElementById("settlementTotalMonthTable");
   const totalProfit=rows.reduce((s,r)=>s+Number(r.profit||0),0);
   const profitEl=document.getElementById("settlementTotalMonthProfit");
@@ -10237,6 +10489,7 @@ async function loadSettlementTotalMonth(){
         <th>Revenue</th>
         <th>Salary</th>
         <th>Petty Cash</th>
+        <th>SST</th>
         <th>Other Expenses</th>
         <th>Total Expenses</th>
         <th>Profit</th>
@@ -10248,7 +10501,8 @@ async function loadSettlementTotalMonth(){
             <td>${settlementMoney(r.revenue)}</td>
             <td>${settlementMoney(r.salary)}</td>
             <td>${settlementMoney(r.petty_cash)}</td>
-            <td>${settlementMoney(Number(r.manual_expenses||0)+Number(r.project_expenses||0))}</td>
+            <td>${settlementMoney(sstByOutlet.get(String(r.outlet||""))||0)}</td>
+            <td>${settlementMoney(Number(r.manual_expenses||0)+Number(r.project_expenses||0)-(sstByOutlet.get(String(r.outlet||""))||0))}</td>
             <td>${settlementMoney(r.total_expenses)}</td>
             <td><strong>${settlementMoney(r.profit)}</strong></td>
           </tr>`).join("")}
@@ -10257,7 +10511,8 @@ async function loadSettlementTotalMonth(){
           <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.revenue||0),0))}</strong></td>
           <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.salary||0),0))}</strong></td>
           <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.petty_cash||0),0))}</strong></td>
-          <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.manual_expenses||0)+Number(r.project_expenses||0),0))}</strong></td>
+          <td><strong>${settlementMoney((sstRows||[]).reduce((s,r)=>s+Number(r.sst||0),0))}</strong></td>
+          <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.manual_expenses||0)+Number(r.project_expenses||0),0)-(sstRows||[]).reduce((s,r)=>s+Number(r.sst||0),0))}</strong></td>
           <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.total_expenses||0),0))}</strong></td>
           <td><strong>${settlementMoney(totalProfit)}</strong></td>
         </tr>
@@ -10269,10 +10524,31 @@ async function loadSettlementTotalMonth(){
 async function loadSettlementYear(){
   initSettlementYears();
   const year=Number(document.getElementById("settlementYear")?.value||new Date().getFullYear());
-  const {data,error}=await settlementDb().rpc("settlement_year_summary",{p_year:year});
+  const start=`${year}-01-01`;
+  const end=`${year+1}-01-01`;
+  const [{data,error},{data:sstRows,error:sstError}]=await Promise.all([
+    settlementDb().rpc("settlement_year_summary",{p_year:year}),
+    settlementDb().from("settlement_monthly_expenses").select("month_date,sst").gte("month_date",start).lt("month_date",end)
+  ]);
   if(error) throw error;
+  if(sstError) throw sstError;
 
-  const rows=data||[];
+  const sstByMonth=new Map();
+  (sstRows||[]).forEach(r=>{
+    const key=String(r.month_date||"").slice(0,7);
+    sstByMonth.set(key,Number(sstByMonth.get(key)||0)+Number(r.sst||0));
+  });
+
+  const rows=(data||[]).map(r=>{
+    const key=String(r.month_date||"").slice(0,7);
+    const sst=Number(sstByMonth.get(key)||0);
+    return {
+      ...r,
+      manual_expenses:Number(r.manual_expenses||0)+sst,
+      total_expenses:Number(r.total_expenses||0)+sst,
+      profit:Number(r.profit||0)-sst
+    };
+  });
   const root=document.getElementById("settlementYearTable");
   const totalProfit=rows.reduce((s,r)=>s+Number(r.profit||0),0);
   const profitEl=document.getElementById("settlementYearProfit");
@@ -10280,14 +10556,15 @@ async function loadSettlementYear(){
 
   if(root){
     root.innerHTML=`<table>
-      <thead><tr><th>Month</th><th>Revenue</th><th>Salary</th><th>Petty Cash</th><th>Other Expenses</th><th>Total Expenses</th><th>Profit</th></tr></thead>
+      <thead><tr><th>Month</th><th>Revenue</th><th>Salary</th><th>Petty Cash</th><th>SST</th><th>Other Expenses</th><th>Total Expenses</th><th>Profit</th></tr></thead>
       <tbody>${rows.map(r=>`
         <tr>
           <td><strong>${String(r.month_date||"").slice(0,7)}</strong></td>
           <td>${settlementMoney(r.revenue)}</td>
           <td>${settlementMoney(r.salary)}</td>
           <td>${settlementMoney(r.petty_cash)}</td>
-          <td>${settlementMoney(Number(r.manual_expenses||0)+Number(r.project_expenses||0))}</td>
+          <td>${settlementMoney(sstByMonth.get(String(r.month_date||"").slice(0,7))||0)}</td>
+          <td>${settlementMoney(Number(r.manual_expenses||0)+Number(r.project_expenses||0)-(sstByMonth.get(String(r.month_date||"").slice(0,7))||0))}</td>
           <td>${settlementMoney(r.total_expenses)}</td>
           <td><strong>${settlementMoney(r.profit)}</strong></td>
         </tr>`).join("")}
@@ -10296,7 +10573,8 @@ async function loadSettlementYear(){
           <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.revenue||0),0))}</strong></td>
           <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.salary||0),0))}</strong></td>
           <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.petty_cash||0),0))}</strong></td>
-          <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.manual_expenses||0)+Number(r.project_expenses||0),0))}</strong></td>
+          <td><strong>${settlementMoney((sstRows||[]).reduce((s,r)=>s+Number(r.sst||0),0))}</strong></td>
+          <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.manual_expenses||0)+Number(r.project_expenses||0),0)-(sstRows||[]).reduce((s,r)=>s+Number(r.sst||0),0))}</strong></td>
           <td><strong>${settlementMoney(rows.reduce((s,r)=>s+Number(r.total_expenses||0),0))}</strong></td>
           <td><strong>${settlementMoney(totalProfit)}</strong></td>
         </tr>
@@ -14941,7 +15219,7 @@ html,body{max-width:100%;overflow-x:hidden!important}
         el.matches?.("strong")
       );
       let amountNode=current.find(el=>
-        el.matches?.("[data-finance-field],#settlementSalary7Input,#settlementSalary14Input,#settlementPettyInput") ||
+        el.matches?.("[data-finance-field],#settlementSalary7Input,#settlementSalary14Input,#settlementEpfInput,#settlementSocsoEisInput,#settlementTaxPcbInput,#settlementPettyInput") ||
         el.querySelector?.("[data-finance-field]")
       );
       const dateNode=row.querySelector("[data-payment-date]");
@@ -17214,7 +17492,7 @@ input,select,textarea,button,a{
 (function(){
  const $=id=>document.getElementById(id);
  const UMO="umo1017@gmail.com";
- let bonusBranch="", bonusEmployees=[], bonusSaved={}, bonusBranchTotal=0, managerSetting=null, fixedManagerSetting=null, bonusDeductions=[];
+ let bonusBranch="", bonusEmployees=[], bonusSaved={}, bonusBranchTotal=0, managerSetting=null, fixedManagerSetting=null, bonusDeductions=[], bonusFixedExclusionRows=[], bonusFixedExcludedIds=new Set();
 
  function moneyBonus(v){return "RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
  function monthBonus(){return $("bonusMonth")?.value || new Date().toISOString().slice(0,7);}
@@ -17271,20 +17549,22 @@ input,select,textarea,button,a{
    const endDate=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1);
    const end=endDate.toISOString().slice(0,10);
 
-   const [empRes,settRes,saveRes,profileRes,mgrRes,fixedRes,dedRes]=await Promise.all([
+   const [empRes,settRes,saveRes,profileRes,mgrRes,fixedRes,dedRes,excludeRes]=await Promise.all([
      salaryDb.from("employees").select("*").order("outlet").order("name"),
      salaryDb.from("daily_settlements").select("branch,grand_total,settlement_date").gte("settlement_date",start).lt("settlement_date",end),
      salaryDb.from("branch_bonus_monthly").select("*").eq("bonus_month",bonusMonthDate()),
      salaryDb.from("salary_manager_profiles").select("name,email,is_owner"),
      salaryDb.from("branch_bonus_manager_settings").select("*").eq("bonus_month",bonusMonthDate()),
      salaryDb.from("branch_bonus_fixed_settings").select("*"),
-     salaryDb.from("branch_bonus_deductions").select("*").eq("bonus_month",bonusMonthDate()).order("created_at",{ascending:true})
+     salaryDb.from("branch_bonus_deductions").select("*").eq("bonus_month",bonusMonthDate()).order("created_at",{ascending:true}),
+     salaryDb.from("branch_bonus_fixed_exclusions").select("*")
    ]);
-   const err=empRes.error||settRes.error||saveRes.error||mgrRes.error||fixedRes.error||dedRes.error;
+   const err=empRes.error||settRes.error||saveRes.error||mgrRes.error||fixedRes.error||dedRes.error||excludeRes.error;
    if(err){if(state)state.textContent="Bonus setup required: "+err.message;return;}
 
    bonusEmployees=empRes.data||[];
    bonusSaved={};(saveRes.data||[]).forEach(r=>bonusSaved[Number(r.employee_id)]=r);
+   bonusFixedExclusionRows=excludeRes.data||[];
    bonusDeductions=(dedRes.data||[]).filter(r=>String(r.branch||"")===String(bonusBranch||""));
 
    // Managers are excluded from the employee 1% pool.
@@ -17298,6 +17578,11 @@ input,select,textarea,button,a{
    }
    if(!bonusBranch||!branches.includes(bonusBranch))bonusBranch=branches[0]||"";
    bonusDeductions=(dedRes.data||[]).filter(r=>String(r.branch||"")===String(bonusBranch||""));
+   bonusFixedExcludedIds=new Set(
+     (bonusFixedExclusionRows||[])
+       .filter(r=>String(r.branch||"")===String(bonusBranch||""))
+       .map(r=>Number(r.employee_id))
+   );
 
    const tabs=$("bonusBranchTabs");
    if(tabs)tabs.innerHTML=branches.map(b=>`<button type="button" class="bonus-branch-btn ${b===bonusBranch?"active":""}" data-bonus-branch="${String(b).replace(/"/g,"&quot;")}">${b}</button>`).join("");
@@ -17343,8 +17628,9 @@ input,select,textarea,button,a{
      // A manually saved false remains unchecked.
      const target=r.target_achieved!==false;
      const mc=!!r.has_mc;
-     const eligible=target&&!mc;
-     return {e,target,mc,eligible};
+     const fixedExcluded=bonusFixedExcludedIds.has(Number(e.id));
+     const eligible=target&&!mc&&!fixedExcluded;
+     return {e,target,mc,fixedExcluded,eligible};
    });
    const count=rows.filter(x=>x.eligible).length;
    const each=count?pool/count:0;
@@ -17371,15 +17657,30 @@ input,select,textarea,button,a{
    if($("bonusDeductionAddBtn")) $("bonusDeductionAddBtn").style.display=canEditStaffBonus()?"":"none";
 
    const edit=canEditStaffBonus();
+
+   if($("bonusFixedExcludeBtn")) $("bonusFixedExcludeBtn").style.display=edit?"":"none";
+   if($("bonusFixedExcludeList")){
+     const pickerPeople=allBranchEmps.filter(e=>Number(e.id)!==managerId);
+     $("bonusFixedExcludeList").innerHTML=pickerPeople.length
+       ? pickerPeople.map(e=>{
+           const checked=bonusFixedExcludedIds.has(Number(e.id));
+           return `<label style="display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px;cursor:${edit?"pointer":"default"}">
+             <input type="checkbox" data-fixed-bonus-exclude="${e.id}" ${checked?"checked":""} ${edit?"":"disabled"}/>
+             <span><strong>${e.name||"-"}</strong><br/><span class="helper">${bonusBranch}</span></span>
+           </label>`;
+         }).join("")
+       : '<div class="helper">No employees for this branch.</div>';
+   }
+
    $("bonusStaffBody").innerHTML=rows.length?rows.map(x=>`
     <tr data-bonus-emp="${x.e.id}">
      <td><strong>${x.e.name||"-"}</strong></td>
-     <td><input type="checkbox" data-bonus-target="${x.e.id}" ${x.target?"checked":""} ${edit?"":"disabled"}/></td>
-     <td><input type="checkbox" data-bonus-mc="${x.e.id}" ${x.mc?"checked":""} ${edit?"":"disabled"}/></td>
-     <td class="${x.eligible?"bonus-yes":"bonus-no"}">${x.eligible?"Eligible":"Not eligible"}</td>
+     <td><input type="checkbox" data-bonus-target="${x.e.id}" ${x.target?"checked":""} ${(edit&&!x.fixedExcluded)?"":"disabled"}/></td>
+     <td><input type="checkbox" data-bonus-mc="${x.e.id}" ${x.mc?"checked":""} ${(edit&&!x.fixedExcluded)?"":"disabled"}/></td>
+     <td class="${x.eligible?"bonus-yes":"bonus-no"}">${x.fixedExcluded?"Fixed Excluded":(x.eligible?"Eligible":"Not eligible")}</td>
      <td class="bonus-amount-cell">
        <span>${moneyBonus(x.eligible ? (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? each) : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? 0))}</span>
-       ${edit?`<button type="button" class="bonus-pencil" data-bonus-edit-amount="${x.e.id}" title="Edit Bonus">✎</button>`:""}
+       ${(edit&&!x.fixedExcluded)?`<button type="button" class="bonus-pencil" data-bonus-edit-amount="${x.e.id}" title="Edit Bonus">✎</button>`:""}
      </td>
     </tr>`).join(""):`<tr><td colspan="5">No employees for this branch.</td></tr>`;
    $("bonusSaveBtn").style.display=(edit||isUmoBonus())?"":"none";
@@ -17388,7 +17689,8 @@ input,select,textarea,button,a{
  function readRow(id){
    const target=$("bonusStaffBody").querySelector(`[data-bonus-target="${id}"]`)?.checked??true;
    const mc=$("bonusStaffBody").querySelector(`[data-bonus-mc="${id}"]`)?.checked??false;
-   return {target,mc,eligible:target&&!mc};
+   const fixedExcluded=bonusFixedExcludedIds.has(Number(id));
+   return {target,mc,fixedExcluded,eligible:target&&!mc&&!fixedExcluded};
  }
 
  async function saveBonus(){
@@ -17411,10 +17713,12 @@ input,select,textarea,button,a{
        target_achieved:x.target,has_mc:x.mc,manager_selected:true,
        eligible:x.eligible,
        bonus_amount:Number(
-         bonusSaved[Number(x.e.id)]?.manual_bonus_override ??
-         (x.eligible?Number(each.toFixed(2)):0)
+         x.fixedExcluded
+           ? 0
+           : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ??
+              (x.eligible?Number(each.toFixed(2)):0))
        ),
-       manual_bonus_override:bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? null,
+       manual_bonus_override:x.fixedExcluded ? null : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? null),
        updated_at:new Date().toISOString()
      }));
      if(rows.length){
@@ -17445,13 +17749,26 @@ input,select,textarea,button,a{
    $("closeBonusPage")?.addEventListener("click",()=>{if(typeof showDaily==="function")showDaily();});
    $("bonusRefreshBtn")?.addEventListener("click",loadBonus);
    $("bonusSaveBtn")?.addEventListener("click",saveBonus);
+   $("bonusFixedExcludeBtn")?.addEventListener("click",()=>{
+     const panel=$("bonusFixedExcludePanel");
+     if(panel) panel.style.display=panel.style.display==="none"?"block":"none";
+   });
+   $("bonusFixedExcludeCloseBtn")?.addEventListener("click",()=>{
+     const panel=$("bonusFixedExcludePanel");
+     if(panel) panel.style.display="none";
+   });
+   $("bonusFixedExcludeList")?.addEventListener("change",e=>{
+     const cb=e.target.closest("[data-fixed-bonus-exclude]");
+     if(!cb)return;
+     setFixedBonusExclusion(Number(cb.dataset.fixedBonusExclude||0),!!cb.checked);
+   });
    $("bonusDeductionAddBtn")?.addEventListener("click",addBonusDeduction);
    $("bonusDeductionBody")?.addEventListener("click",e=>{
      const btn=e.target.closest("[data-bonus-deduction-delete]");
      if(btn) deleteBonusDeduction(btn.dataset.bonusDeductionDelete);
    });
    $("bonusMonth")?.addEventListener("change",loadBonus);
-   $("bonusBranchTabs")?.addEventListener("click",e=>{const b=e.target.closest("[data-bonus-branch]");if(!b)return;bonusBranch=b.dataset.bonusBranch||"";loadBonus();});
+   $("bonusBranchTabs")?.addEventListener("click",e=>{const b=e.target.closest("[data-bonus-branch]");if(!b)return;bonusBranch=b.dataset.bonusBranch||"";if($("bonusFixedExcludePanel"))$("bonusFixedExcludePanel").style.display="none";loadBonus();});
    $("bonusStaffBody")?.addEventListener("click",async e=>{
      const btn=e.target.closest("[data-bonus-edit-amount]");
      if(!btn||!canEditStaffBonus())return;
@@ -19676,6 +19993,22 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bind,{once:true});else bind();
  setTimeout(bind,0);
 })();
+
+
+  const closePayslipBtn=document.getElementById("closePayslipModal");
+  if(closePayslipBtn){
+    closePayslipBtn.onclick=()=>{
+      const modal=
+        document.getElementById("salaryPayslipModal")||
+        document.getElementById("payslipModal")||
+        document.getElementById("salaryPayslipPreviewModal");
+      if(!modal) return;
+      modal.classList.remove("open");
+      modal.style.display="";
+      document.body.style.overflow="";
+    };
+  }
+
 </script>
 
 </body>
