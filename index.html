@@ -1724,6 +1724,79 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="payslip-mobile-fit-width">
+/* Keep print/PDF dimensions unchanged; only scale the on-screen mobile preview. */
+@media screen and (max-width:700px){
+  #payslipModal{
+    overflow:hidden!important;
+    padding:8px!important;
+  }
+
+  #payslipModal .salary-dialog,
+  #payslipModal .payslip-dialog{
+    width:100%!important;
+    max-width:100%!important;
+    overflow:hidden!important;
+    padding-left:6px!important;
+    padding-right:6px!important;
+  }
+
+  #payslipModal #salaryPayslipPrint{
+    width:100%!important;
+    max-width:100%!important;
+    overflow:hidden!important;
+    display:flex!important;
+    justify-content:center!important;
+  }
+
+  #payslipModal #salaryPayslipPrint .payslip-sheet{
+    /* Original 7th payslip is 180mm wide.
+       Scale it down so the full left/right content fits on an iPhone screen. */
+    transform:scale(var(--payslip-mobile-scale, .60))!important;
+    transform-origin:top center!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+  }
+
+  #payslipModal #salaryPayslipPrint .payslip-sheet.payslip-14-reference{
+    /* 14th payslip is narrower, so use a slightly larger scale. */
+    transform:scale(var(--payslip-mobile-scale-14, .72))!important;
+    transform-origin:top center!important;
+  }
+
+  /* Prevent the scaled sheet from leaving a huge blank height. */
+  #payslipModal #salaryPayslipPrint{
+    min-height:0!important;
+  }
+}
+</style>
+
+
+<style id="payslip-close-mobile-fixed">
+@media screen and (max-width:700px){
+  #closePayslipModal{
+    position:fixed!important;
+    top:calc(env(safe-area-inset-top, 0px) + 14px)!important;
+    right:16px!important;
+    z-index:100005!important;
+    width:36px!important;
+    min-width:36px!important;
+    height:36px!important;
+    min-height:36px!important;
+    padding:0!important;
+    margin:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    border-radius:50%!important;
+    font-size:22px!important;
+    line-height:1!important;
+    box-shadow:0 4px 14px rgba(0,0,0,.16)!important;
+  }
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -7429,7 +7502,7 @@ function renderSevenTable(emps){
   if(!emps.length) return '';
   return `<div class="salary-table-wrap"><table class="salary-table">
     <thead><tr>
-      <th>Name</th><th>Off Day</th><th>OT Off-Days</th><th>Clocked Hrs</th><th>Total Hrs</th><th>OT (RM)</th><th>Basic Pay</th><th>Allowance</th>
+      <th>Name</th><th>Off Days Taken</th><th>Off-Day OT</th><th>OT Hours</th><th>Total OT Hours</th><th>Overtime (RM)</th><th>Basic Pay</th><th>Allowance</th>
       <th>Employee EPF</th><th>Employer EPF</th>
       <th>Employee SOCSO</th><th>Employer SOCSO</th>
       <th>Lindung 24 Jam</th>
@@ -20436,6 +20509,7 @@ function openPayslipModalOverlay(modal){
     modal.scrollTop=0;
     const dialog=modal.querySelector(".salary-dialog,.payslip-dialog");
     if(dialog) dialog.scrollTop=0;
+    fitPayslipToMobileWidth();
   });
 }
 
@@ -20447,6 +20521,44 @@ document.addEventListener("click",e=>{
   modal.classList.remove("open");
   modal.style.display="none";
   document.body.style.overflow="";
+});
+
+
+
+function fitPayslipToMobileWidth(){
+  if(window.innerWidth>700) return;
+  const modal=document.getElementById("payslipModal");
+  const sheet=modal?.querySelector("#salaryPayslipPrint .payslip-sheet");
+  if(!modal || !sheet) return;
+
+  // Measure the sheet's natural width without scaling.
+  const prev=sheet.style.transform;
+  sheet.style.transform="none";
+  const naturalWidth=sheet.getBoundingClientRect().width || sheet.scrollWidth || 1;
+
+  const available=Math.max(240, Math.min(window.innerWidth-28, modal.clientWidth-24));
+  const scale=Math.min(1, available/naturalWidth);
+
+  if(sheet.classList.contains("payslip-14-reference")){
+    sheet.style.setProperty("--payslip-mobile-scale-14", String(scale));
+  }else{
+    sheet.style.setProperty("--payslip-mobile-scale", String(scale));
+  }
+
+  sheet.style.transform=prev;
+  requestAnimationFrame(()=>{
+    sheet.style.transform="";
+    const scaledHeight=sheet.getBoundingClientRect().height;
+    const printRoot=modal.querySelector("#salaryPayslipPrint");
+    if(printRoot) printRoot.style.height=Math.ceil(scaledHeight)+"px";
+  });
+}
+
+
+
+window.addEventListener("resize",()=>{
+  const modal=document.getElementById("payslipModal");
+  if(modal?.classList.contains("open")) fitPayslipToMobileWidth();
 });
 
 </script>
