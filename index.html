@@ -2263,6 +2263,38 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 #settlementPage table{max-width:none !important;}
 </style>
 
+
+<style id="receipt-ios-upload-fix">
+.receipt-native-file-input{
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  opacity:0 !important;
+  overflow:hidden !important;
+  pointer-events:none !important;
+  left:-9999px !important;
+}
+.receipt-upload-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  width:100%;
+}
+.receipt-file-label{
+  display:flex !important;
+  align-items:center;
+  justify-content:center;
+  min-height:48px;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+}
+@media(max-width:520px){
+  .receipt-upload-actions{grid-template-columns:1fr 1fr}
+  .receipt-file-label{padding:11px 8px !important;font-size:14px}
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -5925,8 +5957,12 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
         <div class="outlet-title"><strong>Scan Receipt</strong><span class="branch-chip">OCR</span></div>
         <div class="ai-receipt-drop" style="margin-top:12px">
           <img id="aiReceiptPreview" class="ai-receipt-preview" alt="Receipt preview"/>
-          <input id="aiReceiptFile" type="file" accept="image/*,.pdf" capture="environment" style="display:none"/>
-          <button class="btn" id="aiReceiptChooseBtn" type="button">Take Photo / Upload Receipt</button>
+          <input id="aiReceiptCameraFile" class="receipt-native-file-input" type="file" accept="image/*" capture="environment"/>
+          <input id="aiReceiptFile" class="receipt-native-file-input" type="file" accept="image/*,.pdf"/>
+          <div class="receipt-upload-actions">
+            <label class="btn receipt-file-label" for="aiReceiptCameraFile">Take Photo</label>
+            <label class="btn receipt-file-label" for="aiReceiptFile">Upload Receipt</label>
+          </div>
           <div class="helper" id="aiReceiptFileState" style="margin-top:8px">No receipt selected</div>
           <button class="btn primary" id="aiReceiptScanBtn" type="button" style="margin-top:12px;width:100%" disabled>Scan Receipt</button>
           <div class="ai-receipt-progress"><div id="aiReceiptProgressBar"></div></div>
@@ -6013,7 +6049,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 
     <div class="salary-card" style="margin-top:14px">
       <div class="outlet-title">
-        <strong>Receipt History</strong>
+        <strong>Receipt History</strong><span class="branch-chip">Petty Cash receipts auto-import</span>
         <input id="aiReceiptHistoryMonth" type="month" style="width:auto"/>
       </div>
       <div class="ai-receipt-kpis" style="margin-top:12px">
@@ -12612,6 +12648,8 @@ async function loadSettlementMonth(){
     return sum+Number(r.petty_out||0);
   },0);
 
+  let settlementAutoPayrollSourceMonth=String(monthDate).slice(0,7);
+
   settlementAuto={
     revenue:+latestRevenue.toFixed(2),
     salary:0,
@@ -12633,9 +12671,15 @@ async function loadSettlementMonth(){
     const monthKey=String(monthDate).slice(0,7)+"-01";
     const [empRes,s7Res,s14Res,monthlyRes]=await Promise.all([
       db.from("employees").select("*").eq("outlet",settlementCurrentOutlet),
-      db.from("payroll_snapshot").select("*").eq("salary_month",monthKey),
-      db.from("payroll_commission_snapshot").select("employee_id,net_pay").eq("salary_month",monthKey),
-      db.from("employee_salary_monthly").select("*").eq("salary_month",monthKey)
+      db.from("payroll_snapshot").select("*")
+        .lte("salary_month",monthKey)
+        .order("salary_month",{ascending:false}),
+      db.from("payroll_commission_snapshot").select("*")
+        .lte("salary_month",monthKey)
+        .order("salary_month",{ascending:false}),
+      db.from("employee_salary_monthly").select("*")
+        .lte("salary_month",monthKey)
+        .order("salary_month",{ascending:false})
     ]);
     if(empRes.error) throw empRes.error;
     if(s7Res.error) throw s7Res.error;
@@ -12644,8 +12688,29 @@ async function loadSettlementMonth(){
 
     const branchEmployees=empRes.data||[];
     const ids=new Set(branchEmployees.map(x=>String(x.id)));
-    const confirmed7=new Map((s7Res.data||[]).map(x=>[String(x.employee_id),x]));
-    const monthlyMap=new Map((monthlyRes.data||[]).map(x=>[String(x.employee_id),x]));
+
+    // AUTO · LIVE uses the newest payroll record available at or before
+    // the selected Report month. This prevents a new month from showing
+    // 0.00 before that month's salary page has been confirmed/saved.
+    const newestPerEmployee=(rows)=>{
+      const map=new Map();
+      (rows||[]).forEach(x=>{
+        const id=String(x.employee_id);
+        if(!map.has(id)) map.set(id,x);
+      });
+      return map;
+    };
+
+    const confirmed7=newestPerEmployee(s7Res.data||[]);
+    const commissionSnapMap=newestPerEmployee(s14Res.data||[]);
+    const monthlyMap=newestPerEmployee(monthlyRes.data||[]);
+
+    const sourceMonths=[
+      ...(s7Res.data||[]),
+      ...(s14Res.data||[]),
+      ...(monthlyRes.data||[])
+    ].map(r=>String(r?.salary_month||"").slice(0,7)).filter(Boolean).sort().reverse();
+    if(sourceMonths[0]) settlementAutoPayrollSourceMonth=sourceMonths[0];
 
     // 7th salary = employee NET PAY.
     // Statutory remittances are shown separately below Branch Salary 14th:
@@ -12707,8 +12772,7 @@ async function loadSettlementMonth(){
     settlementAuto.taxpcb_employee=+taxPcb.toFixed(2);
 
     // 14th AUTO must always use the newest available data.
-    // Confirmed snapshot wins; otherwise calculate from current monthly commission values.
-    const commissionSnapMap=new Map((s14Res.data||[]).map(x=>[String(x.employee_id),x]));
+    // Confirmed snapshot wins; otherwise calculate from the newest monthly commission values.
     let salary14Latest=0;
 
     for(const e of branchEmployees){
@@ -12811,7 +12875,7 @@ async function loadSettlementMonth(){
   settlementRenderPaymentMeta();
   settlementRecalculate();
 
-  if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()}`;
+  if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · AUTO LIVE ${settlementAutoPayrollSourceMonth}`;
   if(carryState){
     carryState.textContent=`Auto Budget · ${String(monthDate||"").slice(0,7)}`;
   }
@@ -12961,9 +13025,9 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
       .lt("settlement_date",next),
     settlementEffectiveExpenseRecord(outlet,monthDate),
     db.from("employees").select("*").eq("outlet",outlet),
-    db.from("payroll_snapshot").select("*").eq("salary_month",monthDate),
-    db.from("payroll_commission_snapshot").select("employee_id,net_pay").eq("salary_month",monthDate),
-    db.from("employee_salary_monthly").select("*").eq("salary_month",monthDate)
+    db.from("payroll_snapshot").select("*").lte("salary_month",monthDate).order("salary_month",{ascending:false}),
+    db.from("payroll_commission_snapshot").select("*").lte("salary_month",monthDate).order("salary_month",{ascending:false}),
+    db.from("employee_salary_monthly").select("*").lte("salary_month",monthDate).order("salary_month",{ascending:false})
   ]);
 
   if(dailyRes.error) throw dailyRes.error;
@@ -12989,8 +13053,17 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
 
   const employees=empRes.data||[];
   const ids=new Set(employees.map(e=>String(e.id)));
-  const s7Map=new Map((s7Res.data||[]).map(x=>[String(x.employee_id),x]));
-  const monthlyMap=new Map((monthlyRes.data||[]).map(x=>[String(x.employee_id),x]));
+  const newestPerEmployee=(rows)=>{
+    const map=new Map();
+    (rows||[]).forEach(x=>{
+      const id=String(x.employee_id);
+      if(!map.has(id)) map.set(id,x);
+    });
+    return map;
+  };
+  const s7Map=newestPerEmployee(s7Res.data||[]);
+  const s14Map=newestPerEmployee(s14Res.data||[]);
+  const monthlyMap=newestPerEmployee(monthlyRes.data||[]);
 
   let salary7=0, epfEmployee=0, epfEmployer=0;
   let socsoEmployee=0, socsoEmployer=0, eisEmployee=0, eisEmployer=0;
@@ -20392,6 +20465,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
   }
 
   async function syncRecordToReport(record){
+    if(String(record.source_type||"")=="petty_cash") return {synced:false,reason:"petty_cash_already_counted"};
     if(String(record.auto_post_report||"yes")!=="yes") return {synced:false,reason:"disabled"};
     if(!record.branch || record.branch==="Global") return {synced:false,reason:"global"};
 
@@ -20527,7 +20601,8 @@ Bed Fee: Amlee / + merchant / database memory checked.
       }
 
       selectedFile=null; uploadedReceipt=null;
-      $("aiReceiptFile").value="";
+      if($("aiReceiptFile")) $("aiReceiptFile").value="";
+      if($("aiReceiptCameraFile")) $("aiReceiptCameraFile").value="";
       $("aiReceiptPreview").src="";
       $("aiReceiptPreview").style.display="none";
       $("aiReceiptFileState").textContent="No receipt selected";
@@ -20575,9 +20650,93 @@ Bed Fee: Amlee / + merchant / database memory checked.
     window.scrollTo({top:0,behavior:"smooth"});
   }
 
+
+  async function syncPettyCashReceiptsToReceiptScan(){
+    const ym=$("aiReceiptHistoryMonth")?.value||currentMonth();
+    const start=ym+"-01";
+    const [yy,mm]=ym.split("-").map(Number);
+    const next=mm===12?`${yy+1}-01-01`:`${yy}-${String(mm+1).padStart(2,"0")}-01`;
+
+    const db=dbClient();
+
+    const {data:dailyRows,error:dailyError}=await db.from("daily_settlements")
+      .select("id,settlement_date,branch,petty_entries")
+      .gte("settlement_date",start)
+      .lt("settlement_date",next);
+
+    if(dailyError){
+      console.warn("Petty Cash receipt auto-import failed:",dailyError.message);
+      return;
+    }
+
+    const candidates=[];
+    (dailyRows||[]).forEach(row=>{
+      const entries=Array.isArray(row.petty_entries)?row.petty_entries:[];
+      entries.forEach((entry,index)=>{
+        if(String(entry?.type||"").toLowerCase()!=="out") return;
+        if(!entry?.receipt?.path) return;
+
+        candidates.push({
+          source_ref:`daily_settlements:${row.id}:petty:${index}`,
+          receipt_date:row.settlement_date,
+          branch:String(row.branch||"").trim(),
+          merchant:String(entry.reason||"Petty Cash").trim()||"Petty Cash",
+          invoice_no:"",
+          category:"Supplies",
+          subtotal:Number(entry.amount||0),
+          sst_amount:0,
+          total_amount:Number(entry.amount||0),
+          notes:"Imported automatically from Petty Cash",
+          ocr_text:"",
+          ocr_confidence:0,
+          receipt_file:entry.receipt,
+          payment_status:"paid",
+          payment_date:row.settlement_date,
+          payment_method:"Cash",
+          auto_post_report:"no",
+          supplier_tin:"",
+          supplier_reg_no:"",
+          einvoice_status:"not_required",
+          myinvois_uuid:"",
+          report_synced:false,
+          report_field:null,
+          report_synced_at:null,
+          source_type:"petty_cash",
+          created_by:String(entry?.receipt?.uploaded_by||window.currentUserEmail||"")
+        });
+      });
+    });
+
+    if(!candidates.length) return;
+
+    const refs=candidates.map(x=>x.source_ref);
+    const {data:existing,error:existingError}=await db.from("ai_receipt_records")
+      .select("source_ref")
+      .eq("source_type","petty_cash")
+      .in("source_ref",refs);
+
+    if(existingError){
+      console.warn("Petty Cash receipt duplicate check failed:",existingError.message);
+      return;
+    }
+
+    const existingRefs=new Set((existing||[]).map(x=>String(x.source_ref||"")));
+    const missing=candidates.filter(x=>!existingRefs.has(x.source_ref));
+    if(!missing.length) return;
+
+    const {error:insertError}=await db.from("ai_receipt_records").insert(missing);
+    if(insertError){
+      console.warn("Petty Cash receipt auto-import insert failed:",insertError.message);
+    }
+  }
+
   async function loadHistory(){
     const root=$("aiReceiptHistoryWrap");
     if(!root) return;
+
+    // Petty Cash OUT receipts are automatically added to Receipt Scan.
+    // They do NOT auto-post to Report because Petty Cash is already counted there.
+    await syncPettyCashReceiptsToReceiptScan();
     const ym=$("aiReceiptHistoryMonth")?.value||currentMonth();
     $("aiReceiptHistoryMonth").value=ym;
     const start=ym+"-01";
@@ -20608,12 +20767,15 @@ Bed Fee: Amlee / + merchant / database memory checked.
 
     root.innerHTML=rows.length?`<table>
       <thead><tr>
-        <th>Date</th><th>Branch</th><th>Merchant</th><th>Invoice No.</th><th>Category</th>
+        <th>Date</th><th>Branch</th><th>Source</th><th>Merchant</th><th>Invoice No.</th><th>Category</th>
         <th>Subtotal</th><th>SST / Tax</th><th>Total</th><th>Payment</th><th>Report</th><th>e-Invoice</th><th>Receipt</th><th></th>
       </tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td>${esc(r.receipt_date||"")}</td>
         <td>${esc(r.branch||"")}</td>
+        <td>${r.source_type==="petty_cash"
+          ? '<span class="receipt-status-pill synced">Petty Cash</span>'
+          : '<span class="receipt-status-pill">Receipt Scan</span>'}</td>
         <td><strong>${esc(r.merchant||"")}</strong></td>
         <td>${esc(r.invoice_no||"—")}</td>
         <td>${esc(r.category||"")}</td>
@@ -20774,21 +20936,45 @@ Bed Fee: Amlee / + merchant / database memory checked.
     $("closeAiReceiptPage")?.addEventListener("click",()=>window.showDaily?.());
     $("aiReceiptRefreshBtn")?.addEventListener("click",async()=>Promise.all([loadHistory(),loadSupplierMemory(),loadReportSyncSummary()]));
     $("aiReceiptSupplierRefreshBtn")?.addEventListener("click",loadSupplierMemory);
-    $("aiReceiptChooseBtn")?.addEventListener("click",()=>$("aiReceiptFile")?.click());
-    $("aiReceiptFile")?.addEventListener("change",e=>{
-      selectedFile=e.target.files?.[0]||null;
+    const handleReceiptFile=(file,input)=>{
+      selectedFile=file||null;
       uploadedReceipt=null;
       if(!selectedFile) return;
-      $("aiReceiptFileState").textContent=`Selected: ${selectedFile.name}`;
-      $("aiReceiptScanBtn").disabled=false;
+
+      $("aiReceiptFileState").textContent=`Selected: ${selectedFile.name||"Receipt"}`;
+      $("aiReceiptScanBtn").disabled=!String(selectedFile.type||"").startsWith("image/");
       $("aiReceiptSaveState").textContent="";
-      if(selectedFile.type.startsWith("image/")){
-        const url=URL.createObjectURL(selectedFile);
-        $("aiReceiptPreview").src=url;
-        $("aiReceiptPreview").style.display="block";
+      $("aiReceiptScanState").textContent="";
+
+      if(String(selectedFile.type||"").startsWith("image/")){
+        try{
+          const url=URL.createObjectURL(selectedFile);
+          $("aiReceiptPreview").src=url;
+          $("aiReceiptPreview").style.display="block";
+        }catch(_){
+          $("aiReceiptPreview").style.display="none";
+        }
       }else{
+        $("aiReceiptPreview").src="";
         $("aiReceiptPreview").style.display="none";
+        $("aiReceiptScanState").textContent="PDF can be saved directly. OCR scan is for image receipts.";
       }
+
+      // Clear the other input so choosing the same file again still triggers change.
+      if(input?.id==="aiReceiptFile"){
+        const other=$("aiReceiptCameraFile");
+        if(other) other.value="";
+      }else{
+        const other=$("aiReceiptFile");
+        if(other) other.value="";
+      }
+    };
+
+    $("aiReceiptFile")?.addEventListener("change",e=>{
+      handleReceiptFile(e.target.files?.[0]||null,e.target);
+    });
+    $("aiReceiptCameraFile")?.addEventListener("change",e=>{
+      handleReceiptFile(e.target.files?.[0]||null,e.target);
     });
     $("aiReceiptScanBtn")?.addEventListener("click",scanReceipt);
     $("aiReceiptSaveBtn")?.addEventListener("click",saveRecord);
