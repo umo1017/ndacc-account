@@ -1098,6 +1098,7 @@ body{
 </style>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 /* Mobile stability/performance: reduce off-screen rendering work. */
 .salary-card,.roster-calendar-card,.history-date-card{contain:layout style;}
@@ -1138,7 +1139,8 @@ body[data-nd-visible-page="daily"] #rosterPage,
 body[data-nd-visible-page="daily"] #settlementPage,
 body[data-nd-visible-page="daily"] #ordersPage,
 body[data-nd-visible-page="daily"] #settingsPage,
-body[data-nd-visible-page="daily"] #bonusPage{display:none!important}
+body[data-nd-visible-page="daily"] #bonusPage,
+body[data-nd-visible-page="daily"] #aiReceiptPage{display:none!important}
 body[data-nd-visible-page]:not([data-nd-visible-page="daily"]) #appView{display:none!important}
 body[data-nd-visible-page]:not([data-nd-visible-page="salary"]) #salaryPage{display:none!important}
 body[data-nd-visible-page]:not([data-nd-visible-page="roster"]) #rosterPage{display:none!important}
@@ -1146,6 +1148,7 @@ body[data-nd-visible-page]:not([data-nd-visible-page="settlement"]) #settlementP
 body[data-nd-visible-page]:not([data-nd-visible-page="orders"]) #ordersPage{display:none!important}
 body[data-nd-visible-page]:not([data-nd-visible-page="settings"]) #settingsPage{display:none!important}
 body[data-nd-visible-page]:not([data-nd-visible-page="bonus"]) #bonusPage{display:none!important}
+body[data-nd-visible-page]:not([data-nd-visible-page="ai_receipt"]) #aiReceiptPage{display:none!important}
 </style><style id="nd-exclusive-screen-final">
 body[data-nd-visible-page] #appView,
 body[data-nd-visible-page] #rosterPage,
@@ -1153,7 +1156,8 @@ body[data-nd-visible-page] #salaryPage,
 body[data-nd-visible-page] #bonusPage,
 body[data-nd-visible-page] #settlementPage,
 body[data-nd-visible-page] #ordersPage,
-body[data-nd-visible-page] #settingsPage{display:none!important}
+body[data-nd-visible-page] #settingsPage,
+body[data-nd-visible-page] #aiReceiptPage{display:none!important}
 body[data-nd-visible-page="daily"] #appView{display:block!important}
 body[data-nd-visible-page="roster"] #rosterPage{display:block!important}
 body[data-nd-visible-page="salary"] #salaryPage{display:block!important}
@@ -1161,6 +1165,7 @@ body[data-nd-visible-page="bonus"] #bonusPage{display:block!important}
 body[data-nd-visible-page="settlement"] #settlementPage{display:block!important}
 body[data-nd-visible-page="orders"] #ordersPage{display:block!important}
 body[data-nd-visible-page="settings"] #settingsPage{display:block!important}
+body[data-nd-visible-page="ai_receipt"] #aiReceiptPage{display:block!important}
 </style><style id="nd-roster-responsive-final">
 /* FINAL RESPONSIVE ROSTER: seven calendar dates and all branch staff visible
    across the available width on both desktop and phone. */
@@ -2128,6 +2133,52 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="ai-receipt-page-style">
+#aiReceiptPage{display:none}
+#aiReceiptPage.active{display:block}
+#aiReceiptPage .salary-shell{max-width:1380px;margin:0 auto}
+.ai-receipt-grid{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(360px,1.1fr);gap:14px}
+.ai-receipt-drop{
+  border:2px dashed var(--line);border-radius:18px;padding:18px;text-align:center;background:#fafafa;
+}
+.ai-receipt-preview{
+  width:100%;max-height:420px;object-fit:contain;border-radius:14px;background:#f3f3f3;display:none;
+}
+.ai-receipt-progress{height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:10px}
+.ai-receipt-progress > div{height:100%;width:0%;background:#111;transition:width .2s}
+.ai-receipt-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ai-receipt-form .wide{grid-column:1/-1}
+.ai-receipt-form label{display:block;font-size:12px;font-weight:800;margin-bottom:5px}
+.ai-receipt-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.ai-receipt-kpi{border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff}
+.ai-receipt-kpi strong{font-size:20px;display:block;margin-top:4px}
+#aiReceiptHistoryWrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#aiReceiptHistoryWrap table{min-width:980px}
+@media(max-width:820px){
+  .ai-receipt-grid{grid-template-columns:1fr}
+  .ai-receipt-form{grid-template-columns:1fr}
+  .ai-receipt-form .wide{grid-column:auto}
+  .ai-receipt-kpis{grid-template-columns:1fr 1fr}
+}
+</style>
+
+
+<style id="receipt-full-version-style">
+.receipt-status-pill{
+  display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;
+  font-size:11px;font-weight:800;white-space:nowrap
+}
+.receipt-status-pill.paid{background:#edf7ef;color:#1f7a48}
+.receipt-status-pill.unpaid{background:#fff7df;color:#8a5a00}
+.receipt-status-pill.synced{background:#eef6ff;color:#245b9e}
+.receipt-status-pill.error{background:#fff0ee;color:#b42318}
+#aiReceiptSupplierMemoryWrap table,
+#aiReceiptReportSyncWrap table{min-width:760px}
+#aiReceiptSupplierMemoryWrap,
+#aiReceiptReportSyncWrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -2137,6 +2188,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <button class="sidebar-btn" id="sidebarSalary" style="display:none" type="button">Salary</button>
 <button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
+<button class="sidebar-btn" id="sidebarAiReceipt" style="display:none" type="button">Receipt Scan</button>
 <button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">Orders</button>
 <button class="sidebar-btn" id="sidebarSocial" style="display:none" type="button">Social Media</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Setting</button>
@@ -3645,7 +3697,8 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
 
     const receipt=kind==="card" ? row?.card_settlement_receipt : row?.tng_settlement_receipt;
     const field=kind==="card" ? "card_settlement_proof" : "tng_settlement_proof";
-    const status=(row?.payment_statuses||{})[field]||"";
+    let status=(row?.payment_statuses||{})[field]||"";
+    if(kind==="tng" && receipt?.path && !status) status="accepted";
     const label=kind==="card" ? "Card" : "TNG";
 
     if(!receipt?.path){
@@ -3656,7 +3709,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     }
 
     const badge=status==="accepted"
-      ? `<div class="helper" style="color:#087f72;font-weight:800">✓ Verified</div>`
+      ? `<div class="helper" style="color:#087f72;font-weight:800">${kind==="tng"?"✓ Auto Verified":"✓ Verified"}</div>`
       : status==="adjust"
         ? `<div class="helper" style="color:#b42318;font-weight:800">✕ Error</div>`
         : `<div class="helper" style="color:#b7791f;font-weight:800">Pending</div>`;
@@ -3664,7 +3717,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const actions=isSystemAdmin
       ? `<div class="inline-actions" style="margin-top:5px">
            <button type="button" class="mini" data-daily-proof-view="${Number(row.id)||0}" data-proof-kind="${kind}">View</button>
-           <button type="button" class="mini correct" data-daily-proof-status="${Number(row.id)||0}" data-proof-kind="${kind}" data-proof-value="accepted">Verify</button>
+           ${kind==="tng"?"":`<button type="button" class="mini correct" data-daily-proof-status="${Number(row.id)||0}" data-proof-kind="${kind}" data-proof-value="accepted">Verify</button>`}
            <button type="button" class="mini error" data-daily-proof-status="${Number(row.id)||0}" data-proof-kind="${kind}" data-proof-value="adjust">Error</button>
          </div>`
       : `<div class="inline-actions" style="margin-top:5px">
@@ -4390,15 +4443,33 @@ return `<div class="history-date-card">
     const p=payload();
     if(!p) return;
     const oldRow=allRows.find(r=>r.branch===p.branch&&r.settlement_date===p.settlement_date);
+    const statuses={...(oldRow?.payment_statuses||{})};
+
     if(oldRow){
-      const statuses={...(oldRow.payment_statuses||{})};
       let anyPaymentChanged=false;
       for(const field of ["visa","master","amex","tng","cash","alipay","online_card","bank_transfer","tips"]){
-        if(Number(oldRow[field]||0)!==Number(p[field]||0)){ delete statuses[field]; anyPaymentChanged=true; }
+        if(Number(oldRow[field]||0)!==Number(p[field]||0)){
+          delete statuses[field];
+          anyPaymentChanged=true;
+        }
       }
       if(anyPaymentChanged) delete statuses.grand_total;
-      p.payment_statuses=statuses;
     }
+
+    // TNG Proof is automatically marked Verified once a TNG/eWallet proof exists.
+    // If management has explicitly marked the proof as Error, keep that Error
+    // until a new proof file is submitted.
+    if(String(p.branch||"").trim()!=="Global" && p.tng_settlement_receipt?.path){
+      const oldPath=oldRow?.tng_settlement_receipt?.path||"";
+      const newPath=p.tng_settlement_receipt?.path||"";
+      const proofReplaced=!!newPath && newPath!==oldPath;
+
+      if(proofReplaced || statuses.tng_settlement_proof!=="adjust"){
+        statuses.tng_settlement_proof="accepted";
+      }
+    }
+
+    p.payment_statuses=statuses;
     const {data,error}=await db.from("daily_settlements").upsert(p,{onConflict:"settlement_date,branch"}).select().single();
     if(error){$("syncState").textContent="Save failed: "+error.message;$("syncState").className="bad";return;}
     try{ await recalculateBranchFromDate(p.branch,p.settlement_date); }
@@ -5749,6 +5820,143 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     </div>
   </div>
 </div>
+</div>
+
+
+<div class="salary-page" id="aiReceiptPage">
+  <div class="salary-shell">
+    <div class="salary-top">
+      <div>
+        <div class="salary-title">Receipt Scan</div>
+        <div class="helper">Receipt Scan · Bookkeeping · Payment · Report Sync</div>
+      </div>
+      <div class="salary-right">
+        <button class="btn" id="aiReceiptRefreshBtn" type="button">Refresh</button>
+        <button class="main-page-close" id="closeAiReceiptPage" type="button">×</button>
+      </div>
+    </div>
+
+    <div class="ai-receipt-grid">
+      <div class="salary-card">
+        <div class="outlet-title"><strong>Scan Receipt</strong><span class="branch-chip">OCR</span></div>
+        <div class="ai-receipt-drop" style="margin-top:12px">
+          <img id="aiReceiptPreview" class="ai-receipt-preview" alt="Receipt preview"/>
+          <input id="aiReceiptFile" type="file" accept="image/*,.pdf" capture="environment" style="display:none"/>
+          <button class="btn" id="aiReceiptChooseBtn" type="button">Take Photo / Upload Receipt</button>
+          <div class="helper" id="aiReceiptFileState" style="margin-top:8px">No receipt selected</div>
+          <button class="btn primary" id="aiReceiptScanBtn" type="button" style="margin-top:12px;width:100%" disabled>Scan Receipt</button>
+          <div class="ai-receipt-progress"><div id="aiReceiptProgressBar"></div></div>
+          <div class="helper" id="aiReceiptScanState" style="margin-top:8px"></div>
+        </div>
+        <details style="margin-top:12px">
+          <summary style="font-weight:800;cursor:pointer">OCR Text</summary>
+          <textarea id="aiReceiptRawText" rows="10" readonly style="margin-top:8px;width:100%"></textarea>
+        </details>
+      </div>
+
+      <div class="salary-card">
+        <div class="outlet-title"><strong>Receipt Details</strong><span id="aiReceiptConfidence" class="branch-chip">—</span></div>
+        <div class="ai-receipt-form" style="margin-top:12px">
+          <div><label>Date</label><input id="aiReceiptDate" type="date"/></div>
+          <div><label>Branch</label><select id="aiReceiptBranch"></select></div>
+          <div class="wide"><label>Merchant / Supplier</label><input id="aiReceiptMerchant" type="text" placeholder="Merchant"/></div>
+          <div><label>Invoice / Receipt No.</label><input id="aiReceiptInvoiceNo" type="text" placeholder="Invoice No."/></div>
+          <div><label>Category</label>
+            <select id="aiReceiptCategory">
+              <option>Supplies</option>
+              <option>Water</option>
+              <option>Electricity</option>
+              <option>Internet</option>
+              <option>Advertising</option>
+              <option>Maintenance</option>
+              <option>Rent</option>
+              <option>Machine Fee</option>
+              <option>Secretary Fee</option>
+              <option>Tax</option>
+              <option>SST</option>
+              <option>Transport</option>
+              <option>Food</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div><label>Payment Status</label>
+            <select id="aiReceiptPaidStatus">
+              <option value="unpaid">Not Paid</option>
+              <option value="paid">Paid</option>
+            </select>
+          </div>
+          <div><label>Payment Date</label><input id="aiReceiptPaymentDate" type="date"/></div>
+          <div><label>Payment Method</label>
+            <select id="aiReceiptPaymentMethod">
+              <option value="">Select</option>
+              <option>Cash</option>
+              <option>Bank Transfer</option>
+              <option>Credit Card</option>
+              <option>TNG / eWallet</option>
+              <option>Online</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div><label>Auto Post to Report</label>
+            <select id="aiReceiptAutoPost">
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+          <div><label>Subtotal (RM)</label><input id="aiReceiptSubtotal" type="number" min="0" step="0.01"/></div>
+          <div><label>SST / Tax (RM)</label><input id="aiReceiptSst" type="number" min="0" step="0.01"/></div>
+          <div class="wide"><label>Total (RM)</label><input id="aiReceiptTotal" type="number" min="0" step="0.01"/></div>
+          <div><label>Supplier TIN</label><input id="aiReceiptSupplierTin" type="text" placeholder="Optional"/></div>
+          <div><label>Supplier Registration No.</label><input id="aiReceiptSupplierRegNo" type="text" placeholder="Optional"/></div>
+          <div><label>e-Invoice Status</label>
+            <select id="aiReceiptEinvoiceStatus">
+              <option value="not_required">Not Required</option>
+              <option value="pending">Pending</option>
+              <option value="ready">Ready</option>
+              <option value="submitted">Submitted</option>
+              <option value="validated">Validated</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+          <div><label>MyInvois UUID</label><input id="aiReceiptMyInvoisUuid" type="text" placeholder="Optional"/></div>
+          <div class="wide"><label>Notes</label><textarea id="aiReceiptNotes" rows="3"></textarea></div>
+        </div>
+        <div id="aiReceiptDuplicateWarning" class="bad" style="display:none;margin-top:12px"></div>
+        <button class="btn primary" id="aiReceiptSaveBtn" type="button" style="width:100%;margin-top:14px">Save Bookkeeping Record</button>
+        <div class="helper" id="aiReceiptSaveState" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="salary-card" style="margin-top:14px">
+      <div class="outlet-title">
+        <strong>Receipt History</strong>
+        <input id="aiReceiptHistoryMonth" type="month" style="width:auto"/>
+      </div>
+      <div class="ai-receipt-kpis" style="margin-top:12px">
+        <div class="ai-receipt-kpi"><span class="helper">Records</span><strong id="aiReceiptKpiCount">0</strong></div>
+        <div class="ai-receipt-kpi"><span class="helper">Subtotal</span><strong id="aiReceiptKpiSubtotal">RM 0.00</strong></div>
+        <div class="ai-receipt-kpi"><span class="helper">SST / Tax</span><strong id="aiReceiptKpiSst">RM 0.00</strong></div>
+        <div class="ai-receipt-kpi"><span class="helper">Total</span><strong id="aiReceiptKpiTotal">RM 0.00</strong></div>
+      </div>
+      <div id="aiReceiptHistoryWrap" style="margin-top:12px"></div>
+    </div>
+
+    <div class="salary-card" style="margin-top:14px">
+      <div class="outlet-title">
+        <strong>Supplier Memory</strong>
+        <button class="btn" id="aiReceiptSupplierRefreshBtn" type="button">Refresh</button>
+      </div>
+      <div id="aiReceiptSupplierMemoryWrap" style="margin-top:12px"></div>
+    </div>
+
+    <div class="salary-card" style="margin-top:14px">
+      <div class="outlet-title">
+        <strong>Report Sync Summary</strong>
+        <span id="aiReceiptReportSyncTotal">RM 0.00</span>
+      </div>
+      <div id="aiReceiptReportSyncWrap" style="margin-top:12px"></div>
+    </div>
+  </div>
 </div>
 
 <div class="salary-modal" id="historyModal">
@@ -19792,6 +20000,742 @@ Bed Fee: Amlee / + merchant / database memory checked.
 -->
 
 
+
+<script id="ai-receipt-bookkeeping-v2">
+(function(){
+  const $=id=>document.getElementById(id);
+  let selectedFile=null;
+  let uploadedReceipt=null;
+  let currentEditId=null;
+  let currentRows=[];
+
+  function dbClient(){
+    if(window.salaryDb) return window.salaryDb;
+    if(window.db) return window.db;
+    return window.supabase?.createClient?.(
+      'https://cofmjwsejcbfsgdrswku.supabase.co',
+      'sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU'
+    );
+  }
+
+  function money(v){
+    return "RM "+Number(v||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+  function esc(v){
+    return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+  }
+  function isoToday(){
+    const d=new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+  function currentMonth(){ return isoToday().slice(0,7); }
+  function monthDateFromDate(date){ return String(date||isoToday()).slice(0,7)+"-01"; }
+
+  async function loadBranches(){
+    const sel=$("aiReceiptBranch");
+    if(!sel) return;
+    const db=dbClient();
+    let names=[];
+    try{
+      const {data,error}=await db.from("daily_outlets").select("name,is_active").eq("is_active",true).order("id");
+      if(!error) names=(data||[]).map(x=>String(x.name||"").trim()).filter(Boolean);
+    }catch(_){}
+    ["Eco Botanic","Nusa Bestari","Global"].forEach(x=>{if(!names.includes(x)) names.push(x)});
+    sel.innerHTML=names.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  }
+
+  function clearForm(keepBranch=true){
+    const branch=keepBranch ? $("aiReceiptBranch")?.value : "";
+    [
+      "aiReceiptMerchant","aiReceiptInvoiceNo","aiReceiptSubtotal","aiReceiptSst","aiReceiptTotal",
+      "aiReceiptNotes","aiReceiptRawText","aiReceiptSupplierTin","aiReceiptSupplierRegNo","aiReceiptMyInvoisUuid"
+    ].forEach(id=>{ if($(id)) $(id).value=""; });
+    $("aiReceiptDate").value=isoToday();
+    $("aiReceiptCategory").value="Supplies";
+    $("aiReceiptPaidStatus").value="unpaid";
+    $("aiReceiptPaymentDate").value="";
+    $("aiReceiptPaymentMethod").value="";
+    $("aiReceiptAutoPost").value="yes";
+    $("aiReceiptEinvoiceStatus").value="not_required";
+    if(keepBranch && branch) $("aiReceiptBranch").value=branch;
+    $("aiReceiptConfidence").textContent="—";
+    $("aiReceiptDuplicateWarning").style.display="none";
+    $("aiReceiptDuplicateWarning").textContent="";
+    currentEditId=null;
+    $("aiReceiptSaveBtn").textContent="Save Bookkeeping Record";
+  }
+
+  function parseMoney(s){
+    if(!s) return 0;
+    const n=Number(String(s).replace(/[^\d.,-]/g,"").replace(/,/g,""));
+    return Number.isFinite(n)?Math.max(0,n):0;
+  }
+
+  function extractDate(text){
+    const patterns=[
+      /\b(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/,
+      /\b(\d{1,2})[-\/.](\d{1,2})[-\/.](20\d{2})\b/,
+      /\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2})\b/
+    ];
+    let m=text.match(patterns[0]);
+    if(m) return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
+    m=text.match(patterns[1]);
+    if(m) return `${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+    m=text.match(patterns[2]);
+    if(m) return `20${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+    return isoToday();
+  }
+
+  function extractInvoice(text){
+    const m=text.match(/(?:invoice|inv|receipt|bill|ref|no\.?|#)\s*(?:no\.?)?\s*[:#-]?\s*([A-Z0-9\-\/]{4,30})/i);
+    return m?.[1]||"";
+  }
+
+  function extractLabeledAmount(lines,labels){
+    for(const line of [...lines].reverse()){
+      const low=line.toLowerCase();
+      if(labels.some(k=>low.includes(k))){
+        const nums=line.match(/(?:RM\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2})/gi)||[];
+        if(nums.length) return parseMoney(nums[nums.length-1]);
+      }
+    }
+    return 0;
+  }
+
+  function extractLargestAmount(text){
+    const nums=[...(text.matchAll(/(?:RM\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2})/gi))]
+      .map(m=>parseMoney(m[1]))
+      .filter(n=>n>0 && n<1000000);
+    return nums.length?Math.max(...nums):0;
+  }
+
+  function merchantFromLines(lines){
+    const bad=/receipt|invoice|tax|sst|cash|total|subtotal|change|date|time|tel|phone|www|http|thank|welcome|customer|gst|myr|rm\b/i;
+    for(const line of lines.slice(0,10)){
+      const clean=line.replace(/\s+/g," ").trim();
+      if(clean.length>=3 && clean.length<=70 && /[A-Za-z]/.test(clean) && !bad.test(clean)){
+        return clean;
+      }
+    }
+    return (lines.find(x=>x.trim().length>=3)||"").trim();
+  }
+
+  function autoCategory(text){
+    const s=text.toLowerCase();
+    if(/tnb|electric|electricity/.test(s)) return "Electricity";
+    if(/syabas|water|air johor|ranu/.test(s)) return "Water";
+    if(/unifi|maxis|celcom|digi|time broadband|internet/.test(s)) return "Internet";
+    if(/meta|facebook|google ads|tiktok|advertis|marketing/.test(s)) return "Advertising";
+    if(/repair|maintenance|hardware|plumbing|electrical|service/.test(s)) return "Maintenance";
+    if(/rent|rental|tenancy/.test(s)) return "Rent";
+    if(/machine|equipment|device/.test(s)) return "Machine Fee";
+    if(/secretary|company secretary|ssm/.test(s)) return "Secretary Fee";
+    if(/tax|lhdn|income tax/.test(s)) return "Tax";
+    if(/sst|service tax|sales tax/.test(s)) return "SST";
+    if(/grab|taxi|toll|petrol|shell|petronas|caltex|transport/.test(s)) return "Transport";
+    if(/restaurant|cafe|food|bakery|kopitiam|mcd|kfc/.test(s)) return "Food";
+    return "Supplies";
+  }
+
+  async function applySupplierMemory(merchant){
+    merchant=String(merchant||"").trim();
+    if(!merchant) return false;
+    const db=dbClient();
+    const {data,error}=await db.from("receipt_supplier_memory")
+      .select("*")
+      .ilike("merchant_name",merchant)
+      .limit(1)
+      .maybeSingle();
+    if(error || !data) return false;
+
+    if(data.default_category) $("aiReceiptCategory").value=data.default_category;
+    if(data.default_branch) $("aiReceiptBranch").value=data.default_branch;
+    if(data.default_payment_method) $("aiReceiptPaymentMethod").value=data.default_payment_method;
+    if(data.supplier_tin) $("aiReceiptSupplierTin").value=data.supplier_tin;
+    if(data.supplier_reg_no) $("aiReceiptSupplierRegNo").value=data.supplier_reg_no;
+    return true;
+  }
+
+  async function applyOcr(text,confidence){
+    const lines=String(text||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+    const total=extractLabeledAmount(lines,["grand total","amount due","total due","net total","total"]) || extractLargestAmount(text);
+    const sst=extractLabeledAmount(lines,["sst","service tax","sales tax","tax"]);
+    let subtotal=extractLabeledAmount(lines,["subtotal","sub total","before tax"]);
+    if(!subtotal && total>0 && sst>0 && total>=sst) subtotal=+(total-sst).toFixed(2);
+
+    $("aiReceiptRawText").value=text||"";
+    $("aiReceiptDate").value=extractDate(text);
+    $("aiReceiptMerchant").value=merchantFromLines(lines);
+    $("aiReceiptInvoiceNo").value=extractInvoice(text);
+    $("aiReceiptSubtotal").value=subtotal||"";
+    $("aiReceiptSst").value=sst||"";
+    $("aiReceiptTotal").value=total||"";
+    $("aiReceiptCategory").value=autoCategory(text);
+    $("aiReceiptConfidence").textContent=`${Math.round(Number(confidence||0))}%`;
+
+    await applySupplierMemory($("aiReceiptMerchant").value);
+    await checkDuplicate();
+  }
+
+  async function scanReceipt(){
+    if(!selectedFile) return;
+    if(!window.Tesseract){
+      alert("OCR engine did not load. Please refresh and try again.");
+      return;
+    }
+    if(selectedFile.type==="application/pdf"){
+      alert("PDF text scan is not enabled yet. Please upload a photo/image of the receipt.");
+      return;
+    }
+
+    const btn=$("aiReceiptScanBtn");
+    const state=$("aiReceiptScanState");
+    const bar=$("aiReceiptProgressBar");
+    btn.disabled=true;
+    state.textContent="Scanning receipt...";
+    bar.style.width="3%";
+
+    try{
+      const result=await window.Tesseract.recognize(selectedFile,"eng",{
+        logger:m=>{
+          if(m.status==="recognizing text"){
+            const p=Math.round((m.progress||0)*100);
+            bar.style.width=`${p}%`;
+            state.textContent=`Scanning receipt... ${p}%`;
+          }else if(m.status){
+            state.textContent=m.status;
+          }
+        }
+      });
+      await applyOcr(result?.data?.text||"",result?.data?.confidence||0);
+      state.textContent="Scan complete ✓";
+      bar.style.width="100%";
+    }catch(err){
+      console.error(err);
+      state.textContent="Scan failed";
+      alert("OCR scan failed: "+(err?.message||err));
+    }finally{
+      btn.disabled=false;
+    }
+  }
+
+  async function uploadReceipt(){
+    if(!selectedFile) return uploadedReceipt;
+    const db=dbClient();
+    const safe=String(selectedFile.name||"receipt.jpg").replace(/[^\w.\-]+/g,"_").slice(-100);
+    const branch=String($("aiReceiptBranch")?.value||"unknown").toLowerCase().replace(/[^a-z0-9]+/g,"-");
+    const id=(crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const path=`receipt-bookkeeping/${branch}/${$("aiReceiptDate").value||isoToday()}/${id}-${safe}`;
+    const {error}=await db.storage.from("petty-receipts").upload(path,selectedFile,{upsert:false,contentType:selectedFile.type||undefined});
+    if(error) throw error;
+    uploadedReceipt={
+      path,name:selectedFile.name,type:selectedFile.type,size:Number(selectedFile.size||0),
+      uploaded_at:new Date().toISOString(),uploaded_by:String(window.currentUserEmail||"")
+    };
+    return uploadedReceipt;
+  }
+
+  async function checkDuplicate(){
+    const warn=$("aiReceiptDuplicateWarning");
+    if(!warn) return false;
+    warn.style.display="none";
+    warn.textContent="";
+
+    const merchant=String($("aiReceiptMerchant")?.value||"").trim();
+    const date=$("aiReceiptDate")?.value||"";
+    const invoice=String($("aiReceiptInvoiceNo")?.value||"").trim();
+    const total=Number($("aiReceiptTotal")?.value||0);
+    if(!merchant || !date || total<=0) return false;
+
+    const db=dbClient();
+    let q=db.from("ai_receipt_records")
+      .select("id,receipt_date,merchant,invoice_no,total_amount,branch")
+      .eq("receipt_date",date)
+      .eq("total_amount",total)
+      .ilike("merchant",merchant);
+
+    const {data,error}=await q.limit(5);
+    if(error) return false;
+
+    const duplicate=(data||[]).find(r=>{
+      if(currentEditId && Number(r.id)===Number(currentEditId)) return false;
+      if(invoice && r.invoice_no) return String(r.invoice_no).trim().toLowerCase()===invoice.toLowerCase();
+      return true;
+    });
+
+    if(duplicate){
+      warn.innerHTML=`Possible duplicate: ${esc(duplicate.branch)} · ${esc(duplicate.receipt_date)} · ${esc(duplicate.merchant)} · ${money(duplicate.total_amount)}`;
+      warn.style.display="block";
+      return true;
+    }
+    return false;
+  }
+
+  async function saveSupplierMemory(){
+    const merchant=String($("aiReceiptMerchant")?.value||"").trim();
+    if(!merchant) return;
+    const db=dbClient();
+    const row={
+      merchant_name:merchant,
+      default_category:String($("aiReceiptCategory")?.value||"Other"),
+      default_branch:String($("aiReceiptBranch")?.value||""),
+      default_payment_method:String($("aiReceiptPaymentMethod")?.value||""),
+      supplier_tin:String($("aiReceiptSupplierTin")?.value||"").trim(),
+      supplier_reg_no:String($("aiReceiptSupplierRegNo")?.value||"").trim(),
+      updated_at:new Date().toISOString()
+    };
+    await db.from("receipt_supplier_memory").upsert(row,{onConflict:"merchant_name"});
+  }
+
+  function reportFieldForCategory(category){
+    const map={
+      "Water":"water",
+      "Electricity":"electricity",
+      "Internet":"internet",
+      "Advertising":"advertising",
+      "Maintenance":"maintenance",
+      "Rent":"rent",
+      "Machine Fee":"machine_fee",
+      "Secretary Fee":"secretary_fee",
+      "Tax":"tax",
+      "SST":"sst",
+      "Supplies":"other_amount",
+      "Transport":"other_amount",
+      "Food":"other_amount",
+      "Other":"other_amount"
+    };
+    return map[category]||"other_amount";
+  }
+
+  async function syncRecordToReport(record){
+    if(String(record.auto_post_report||"yes")!=="yes") return {synced:false,reason:"disabled"};
+    if(!record.branch || record.branch==="Global") return {synced:false,reason:"global"};
+
+    const db=dbClient();
+    const monthDate=monthDateFromDate(record.receipt_date);
+    const field=reportFieldForCategory(record.category);
+    const amount=Number(record.total_amount||0);
+
+    const {data:existing,error:loadErr}=await db.from("settlement_monthly_expenses")
+      .select("*")
+      .eq("outlet",record.branch)
+      .eq("month_date",monthDate)
+      .maybeSingle();
+    if(loadErr) throw loadErr;
+
+    const patch={outlet:record.branch,month_date:monthDate};
+    patch[field]=Number(existing?.[field]||0)+amount;
+
+    if(field==="other_amount"){
+      const label=String(existing?.other_label||"Other").trim();
+      patch.other_label=label;
+    }
+
+    const {error}=await db.from("settlement_monthly_expenses")
+      .upsert(patch,{onConflict:"outlet,month_date"});
+    if(error) throw error;
+
+    await db.from("ai_receipt_records")
+      .update({report_synced:true,report_field:field,report_synced_at:new Date().toISOString()})
+      .eq("id",record.id);
+
+    return {synced:true,field};
+  }
+
+  async function unsyncRecordFromReport(record){
+    if(!record?.report_synced || !record?.report_field) return;
+    if(!record.branch || record.branch==="Global") return;
+
+    const db=dbClient();
+    const monthDate=monthDateFromDate(record.receipt_date);
+    const field=record.report_field;
+    const {data:existing,error:loadErr}=await db.from("settlement_monthly_expenses")
+      .select("*")
+      .eq("outlet",record.branch)
+      .eq("month_date",monthDate)
+      .maybeSingle();
+    if(loadErr || !existing) return;
+
+    const next=Math.max(0,Number(existing[field]||0)-Number(record.total_amount||0));
+    const patch={outlet:record.branch,month_date:monthDate};
+    patch[field]=next;
+    await db.from("settlement_monthly_expenses")
+      .upsert(patch,{onConflict:"outlet,month_date"});
+  }
+
+  async function saveRecord(){
+    const state=$("aiReceiptSaveState");
+    const merchant=String($("aiReceiptMerchant").value||"").trim();
+    const date=$("aiReceiptDate").value||isoToday();
+    const branch=String($("aiReceiptBranch").value||"").trim();
+    const total=Math.max(0,Number($("aiReceiptTotal").value||0));
+    if(!merchant){alert("Merchant / Supplier is required.");return;}
+    if(!branch){alert("Branch is required.");return;}
+    if(total<=0){alert("Total must be more than RM 0.");return;}
+
+    const duplicate=await checkDuplicate();
+    if(duplicate && !confirm("Possible duplicate detected. Save anyway?")) return;
+
+    state.textContent="Saving...";
+    try{
+      const db=dbClient();
+
+      if(currentEditId){
+        const old=currentRows.find(r=>Number(r.id)===Number(currentEditId));
+        if(old?.report_synced) await unsyncRecordFromReport(old);
+      }
+
+      const receipt=selectedFile ? await uploadReceipt() : uploadedReceipt;
+      const payload={
+        receipt_date:date,
+        branch,
+        merchant,
+        invoice_no:String($("aiReceiptInvoiceNo").value||"").trim(),
+        category:String($("aiReceiptCategory").value||"Other"),
+        subtotal:Number($("aiReceiptSubtotal").value||0),
+        sst_amount:Number($("aiReceiptSst").value||0),
+        total_amount:total,
+        notes:String($("aiReceiptNotes").value||"").trim(),
+        ocr_text:String($("aiReceiptRawText").value||""),
+        ocr_confidence:Number(String($("aiReceiptConfidence").textContent||"0").replace("%",""))||0,
+        receipt_file:receipt,
+        payment_status:String($("aiReceiptPaidStatus").value||"unpaid"),
+        payment_date:$("aiReceiptPaidStatus").value==="paid" ? ($("aiReceiptPaymentDate").value||isoToday()) : null,
+        payment_method:String($("aiReceiptPaymentMethod").value||""),
+        auto_post_report:String($("aiReceiptAutoPost").value||"yes"),
+        supplier_tin:String($("aiReceiptSupplierTin").value||"").trim(),
+        supplier_reg_no:String($("aiReceiptSupplierRegNo").value||"").trim(),
+        einvoice_status:String($("aiReceiptEinvoiceStatus").value||"not_required"),
+        myinvois_uuid:String($("aiReceiptMyInvoisUuid").value||"").trim(),
+        created_by:String(window.currentUserEmail||""),
+        report_synced:false,
+        report_field:null,
+        report_synced_at:null
+      };
+
+      let saved=null;
+      if(currentEditId){
+        const {data,error}=await db.from("ai_receipt_records")
+          .update(payload)
+          .eq("id",currentEditId)
+          .select()
+          .single();
+        if(error) throw error;
+        saved=data;
+      }else{
+        const {data,error}=await db.from("ai_receipt_records")
+          .insert(payload)
+          .select()
+          .single();
+        if(error) throw error;
+        saved=data;
+      }
+
+      await saveSupplierMemory();
+
+      try{
+        const sync=await syncRecordToReport(saved);
+        if(sync.synced) state.textContent=`Saved ✓ · Report synced to ${sync.field}`;
+        else state.textContent="Saved ✓";
+      }catch(syncErr){
+        console.warn("Report sync failed",syncErr);
+        state.textContent="Saved ✓ · Report sync failed";
+      }
+
+      selectedFile=null; uploadedReceipt=null;
+      $("aiReceiptFile").value="";
+      $("aiReceiptPreview").src="";
+      $("aiReceiptPreview").style.display="none";
+      $("aiReceiptFileState").textContent="No receipt selected";
+      $("aiReceiptScanBtn").disabled=true;
+      $("aiReceiptProgressBar").style.width="0%";
+      clearForm(true);
+      await Promise.all([loadHistory(),loadSupplierMemory(),loadReportSyncSummary()]);
+    }catch(err){
+      state.textContent="Save failed";
+      alert("Save failed: "+(err?.message||err));
+    }
+  }
+
+  async function openReceipt(receipt){
+    if(!receipt?.path){alert("No receipt file.");return;}
+    const db=dbClient();
+    const {data,error}=await db.storage.from("petty-receipts").createSignedUrl(receipt.path,300);
+    if(error||!data?.signedUrl){alert("Unable to open receipt.");return;}
+    window.open(data.signedUrl,"_blank","noopener");
+  }
+
+  function editRecord(r){
+    currentEditId=Number(r.id);
+    $("aiReceiptDate").value=r.receipt_date||isoToday();
+    $("aiReceiptBranch").value=r.branch||"";
+    $("aiReceiptMerchant").value=r.merchant||"";
+    $("aiReceiptInvoiceNo").value=r.invoice_no||"";
+    $("aiReceiptCategory").value=r.category||"Other";
+    $("aiReceiptSubtotal").value=Number(r.subtotal||0)||"";
+    $("aiReceiptSst").value=Number(r.sst_amount||0)||"";
+    $("aiReceiptTotal").value=Number(r.total_amount||0)||"";
+    $("aiReceiptNotes").value=r.notes||"";
+    $("aiReceiptRawText").value=r.ocr_text||"";
+    $("aiReceiptConfidence").textContent=`${Math.round(Number(r.ocr_confidence||0))}%`;
+    $("aiReceiptPaidStatus").value=r.payment_status||"unpaid";
+    $("aiReceiptPaymentDate").value=r.payment_date||"";
+    $("aiReceiptPaymentMethod").value=r.payment_method||"";
+    $("aiReceiptAutoPost").value=r.auto_post_report||"yes";
+    $("aiReceiptSupplierTin").value=r.supplier_tin||"";
+    $("aiReceiptSupplierRegNo").value=r.supplier_reg_no||"";
+    $("aiReceiptEinvoiceStatus").value=r.einvoice_status||"not_required";
+    $("aiReceiptMyInvoisUuid").value=r.myinvois_uuid||"";
+    uploadedReceipt=r.receipt_file||null;
+    $("aiReceiptSaveBtn").textContent="Update Bookkeeping Record";
+    window.scrollTo({top:0,behavior:"smooth"});
+  }
+
+  async function loadHistory(){
+    const root=$("aiReceiptHistoryWrap");
+    if(!root) return;
+    const ym=$("aiReceiptHistoryMonth")?.value||currentMonth();
+    $("aiReceiptHistoryMonth").value=ym;
+    const start=ym+"-01";
+    const [y,m]=ym.split("-").map(Number);
+    const next=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,"0")}-01`;
+    root.innerHTML='<div class="helper">Loading...</div>';
+
+    const db=dbClient();
+    const {data,error}=await db.from("ai_receipt_records")
+      .select("*")
+      .gte("receipt_date",start)
+      .lt("receipt_date",next)
+      .order("receipt_date",{ascending:false})
+      .order("created_at",{ascending:false});
+
+    if(error){
+      root.innerHTML=`<div class="bad">${esc(error.message)}</div>`;
+      return;
+    }
+
+    currentRows=data||[];
+    const rows=currentRows;
+    const sum=(k)=>rows.reduce((s,r)=>s+Number(r[k]||0),0);
+    $("aiReceiptKpiCount").textContent=String(rows.length);
+    $("aiReceiptKpiSubtotal").textContent=money(sum("subtotal"));
+    $("aiReceiptKpiSst").textContent=money(sum("sst_amount"));
+    $("aiReceiptKpiTotal").textContent=money(sum("total_amount"));
+
+    root.innerHTML=rows.length?`<table>
+      <thead><tr>
+        <th>Date</th><th>Branch</th><th>Merchant</th><th>Invoice No.</th><th>Category</th>
+        <th>Subtotal</th><th>SST / Tax</th><th>Total</th><th>Payment</th><th>Report</th><th>e-Invoice</th><th>Receipt</th><th></th>
+      </tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td>${esc(r.receipt_date||"")}</td>
+        <td>${esc(r.branch||"")}</td>
+        <td><strong>${esc(r.merchant||"")}</strong></td>
+        <td>${esc(r.invoice_no||"—")}</td>
+        <td>${esc(r.category||"")}</td>
+        <td>${money(r.subtotal)}</td>
+        <td>${money(r.sst_amount)}</td>
+        <td><strong>${money(r.total_amount)}</strong></td>
+        <td><span class="receipt-status-pill ${r.payment_status==="paid"?"paid":"unpaid"}">${r.payment_status==="paid"?"Paid ✓":"Not Paid"}</span></td>
+        <td><span class="receipt-status-pill ${r.report_synced?"synced":"unpaid"}">${r.report_synced?"Synced ✓":"Not Synced"}</span></td>
+        <td>${esc(r.einvoice_status||"not_required")}</td>
+        <td>${r.receipt_file?.path?`<button class="btn" type="button" data-receipt-view="${r.id}">View</button>`:"—"}</td>
+        <td style="display:flex;gap:6px">
+          <button class="btn" type="button" data-receipt-edit="${r.id}">Edit</button>
+          <button class="btn staff-delete-btn" type="button" data-receipt-delete="${r.id}">Delete</button>
+        </td>
+      </tr>`).join("")}</tbody>
+    </table>`:'<div class="helper" style="padding:14px 0">No receipt records for this month.</div>';
+
+    root.querySelectorAll("[data-receipt-view]").forEach(btn=>{
+      btn.onclick=()=>{
+        const row=rows.find(r=>Number(r.id)===Number(btn.dataset.receiptView));
+        if(row) openReceipt(row.receipt_file);
+      };
+    });
+
+    root.querySelectorAll("[data-receipt-edit]").forEach(btn=>{
+      btn.onclick=()=>{
+        const row=rows.find(r=>Number(r.id)===Number(btn.dataset.receiptEdit));
+        if(row) editRecord(row);
+      };
+    });
+
+    root.querySelectorAll("[data-receipt-delete]").forEach(btn=>{
+      btn.onclick=async()=>{
+        if(!confirm("Delete this receipt record?")) return;
+        const row=rows.find(r=>Number(r.id)===Number(btn.dataset.receiptDelete));
+        if(row?.report_synced) {
+          try{await unsyncRecordFromReport(row);}catch(err){console.warn(err);}
+        }
+        const {error}=await db.from("ai_receipt_records").delete().eq("id",Number(btn.dataset.receiptDelete));
+        if(error){alert("Delete failed: "+error.message);return;}
+        if(row?.receipt_file?.path){
+          try{await db.storage.from("petty-receipts").remove([row.receipt_file.path]);}catch(_){}
+        }
+        await Promise.all([loadHistory(),loadReportSyncSummary()]);
+      };
+    });
+  }
+
+  async function loadSupplierMemory(){
+    const root=$("aiReceiptSupplierMemoryWrap");
+    if(!root) return;
+    const db=dbClient();
+    const {data,error}=await db.from("receipt_supplier_memory")
+      .select("*")
+      .order("merchant_name");
+    if(error){
+      root.innerHTML=`<div class="bad">${esc(error.message)}</div>`;
+      return;
+    }
+    const rows=data||[];
+    root.innerHTML=rows.length?`<table>
+      <thead><tr><th>Merchant</th><th>Category</th><th>Branch</th><th>Payment Method</th><th>TIN</th><th>Reg No.</th><th></th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><strong>${esc(r.merchant_name)}</strong></td>
+        <td>${esc(r.default_category||"")}</td>
+        <td>${esc(r.default_branch||"")}</td>
+        <td>${esc(r.default_payment_method||"")}</td>
+        <td>${esc(r.supplier_tin||"—")}</td>
+        <td>${esc(r.supplier_reg_no||"—")}</td>
+        <td><button class="btn staff-delete-btn" type="button" data-supplier-delete="${r.id}">Delete</button></td>
+      </tr>`).join("")}</tbody>
+    </table>`:'<div class="helper">No supplier memory yet.</div>';
+
+    root.querySelectorAll("[data-supplier-delete]").forEach(btn=>{
+      btn.onclick=async()=>{
+        if(!confirm("Delete supplier memory?")) return;
+        const {error}=await db.from("receipt_supplier_memory").delete().eq("id",Number(btn.dataset.supplierDelete));
+        if(error){alert("Delete failed: "+error.message);return;}
+        await loadSupplierMemory();
+      };
+    });
+  }
+
+  async function loadReportSyncSummary(){
+    const root=$("aiReceiptReportSyncWrap");
+    if(!root) return;
+    const ym=$("aiReceiptHistoryMonth")?.value||currentMonth();
+    const start=ym+"-01";
+    const [y,m]=ym.split("-").map(Number);
+    const next=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,"0")}-01`;
+
+    const db=dbClient();
+    const {data,error}=await db.from("ai_receipt_records")
+      .select("branch,category,total_amount,report_synced")
+      .gte("receipt_date",start)
+      .lt("receipt_date",next)
+      .eq("report_synced",true);
+
+    if(error){
+      root.innerHTML=`<div class="bad">${esc(error.message)}</div>`;
+      return;
+    }
+
+    const map=new Map();
+    (data||[]).forEach(r=>{
+      const key=`${r.branch}|||${r.category}`;
+      const cur=map.get(key)||{branch:r.branch,category:r.category,count:0,total:0};
+      cur.count++;
+      cur.total+=Number(r.total_amount||0);
+      map.set(key,cur);
+    });
+    const rows=[...map.values()].sort((a,b)=>String(a.branch).localeCompare(String(b.branch))||String(a.category).localeCompare(String(b.category)));
+    const grand=rows.reduce((s,r)=>s+r.total,0);
+    $("aiReceiptReportSyncTotal").textContent=money(grand);
+
+    root.innerHTML=rows.length?`<table>
+      <thead><tr><th>Branch</th><th>Category</th><th>Records</th><th>Synced Amount</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><strong>${esc(r.branch)}</strong></td>
+        <td>${esc(r.category)}</td>
+        <td>${r.count}</td>
+        <td><strong>${money(r.total)}</strong></td>
+      </tr>`).join("")}
+      <tr><td colspan="3"><strong>ALL SYNCED</strong></td><td><strong>${money(grand)}</strong></td></tr>
+      </tbody>
+    </table>`:'<div class="helper">No synced receipt expenses for this month.</div>';
+  }
+
+  async function showReceiptPage(){
+    window.activeMainPage="ai_receipt";
+    try{
+      localStorage.setItem("nd_last_page_v2","ai_receipt");
+      localStorage.setItem("nd_last_page_v3","ai_receipt");
+    }catch(_){}
+    document.body.dataset.ndVisiblePage="ai_receipt";
+    ["appView","rosterPage","salaryPage","bonusPage","settlementPage","ordersPage","settingsPage","socialPage"]
+      .forEach(id=>document.getElementById(id)?.classList.remove("active","sidebar-offset"));
+    document.getElementById("appView")?.classList.add("hidden");
+    const page=$("aiReceiptPage");
+    page?.classList.add("active","sidebar-offset");
+    if(page) page.style.display="block";
+    try{window.closeMobileSidebar?.()}catch(_){}
+    await loadBranches();
+    if(!$("aiReceiptDate").value) $("aiReceiptDate").value=isoToday();
+    if(!$("aiReceiptHistoryMonth").value) $("aiReceiptHistoryMonth").value=currentMonth();
+    await Promise.all([loadHistory(),loadSupplierMemory(),loadReportSyncSummary()]);
+  }
+  window.showAiReceipt=showReceiptPage;
+
+  document.addEventListener("DOMContentLoaded",()=>{
+    const nav=$("sidebarAiReceipt");
+    if(nav){
+      const email=String(window.currentUserEmail||"").toLowerCase();
+      nav.style.display=(email==="umo1017@gmail.com"||email==="mars83002566@gmail.com")?"":"none";
+      nav.onclick=showReceiptPage;
+    }
+
+    $("closeAiReceiptPage")?.addEventListener("click",()=>window.showDaily?.());
+    $("aiReceiptRefreshBtn")?.addEventListener("click",async()=>Promise.all([loadHistory(),loadSupplierMemory(),loadReportSyncSummary()]));
+    $("aiReceiptSupplierRefreshBtn")?.addEventListener("click",loadSupplierMemory);
+    $("aiReceiptChooseBtn")?.addEventListener("click",()=>$("aiReceiptFile")?.click());
+    $("aiReceiptFile")?.addEventListener("change",e=>{
+      selectedFile=e.target.files?.[0]||null;
+      uploadedReceipt=null;
+      if(!selectedFile) return;
+      $("aiReceiptFileState").textContent=`Selected: ${selectedFile.name}`;
+      $("aiReceiptScanBtn").disabled=false;
+      $("aiReceiptSaveState").textContent="";
+      if(selectedFile.type.startsWith("image/")){
+        const url=URL.createObjectURL(selectedFile);
+        $("aiReceiptPreview").src=url;
+        $("aiReceiptPreview").style.display="block";
+      }else{
+        $("aiReceiptPreview").style.display="none";
+      }
+    });
+    $("aiReceiptScanBtn")?.addEventListener("click",scanReceipt);
+    $("aiReceiptSaveBtn")?.addEventListener("click",saveRecord);
+    $("aiReceiptHistoryMonth")?.addEventListener("change",async()=>Promise.all([loadHistory(),loadReportSyncSummary()]));
+    $("aiReceiptMerchant")?.addEventListener("change",async()=>{
+      await applySupplierMemory($("aiReceiptMerchant").value);
+      await checkDuplicate();
+    });
+    ["aiReceiptDate","aiReceiptInvoiceNo","aiReceiptTotal"].forEach(id=>{
+      $(id)?.addEventListener("change",checkDuplicate);
+    });
+    $("aiReceiptPaidStatus")?.addEventListener("change",()=>{
+      if($("aiReceiptPaidStatus").value==="paid" && !$("aiReceiptPaymentDate").value){
+        $("aiReceiptPaymentDate").value=isoToday();
+      }
+      if($("aiReceiptPaidStatus").value!=="paid"){
+        $("aiReceiptPaymentDate").value="";
+      }
+    });
+  });
+
+  setInterval(()=>{
+    const nav=$("sidebarAiReceipt");
+    if(!nav) return;
+    const email=String(window.currentUserEmail||"").toLowerCase();
+    nav.style.display=(email==="umo1017@gmail.com"||email==="mars83002566@gmail.com")?"":"none";
+  },1500);
+})();
+</script>
+
+
 <script>
 /* ===== PERMISSION-AWARE SAME PAGE MEMORY FINAL =====
    A user only returns to a page that is actually visible/authorized for that account.
@@ -19805,6 +20749,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     salary:{nav:"sidebarSalary",open:"showSalary"},
     bonus:{nav:"sidebarBonus",open:"showBonus"},
     settlement:{nav:"sidebarSettlement",open:"showSettlement"},
+    ai_receipt:{nav:"sidebarAiReceipt",open:"showAiReceipt"},
     orders:{nav:"sidebarOrders",open:"showOrders"},
     settings:{nav:"sidebarSettings",open:"showSettings"}
   };
@@ -23052,7 +23997,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
 
 <script id="social-page-hide-guard-v1">
 (function(){
- const names=["showDaily","showSalary","showRoster","showSettlement","showOrders","showSettings"];
+ const names=["showDaily","showSalary","showRoster","showSettlement","showOrders","showSettings","showAiReceipt"];
  function bind(){
    names.forEach(n=>{
      const f=window[n];if(typeof f!=="function"||f.__socialGuard)return;
@@ -23171,6 +24116,28 @@ window.addEventListener("resize",()=>{
     </div>
   </div>
 </div>
+
+
+<script id="ai-receipt-page-hide-guard-v1">
+(function(){
+  const names=["showDaily","showSalary","showRoster","showBonus","showSettlement","showOrders","showSettings"];
+  function bind(){
+    names.forEach(n=>{
+      const f=window[n];
+      if(typeof f!=="function"||f.__aiReceiptGuard) return;
+      const w=function(){
+        const p=document.getElementById("aiReceiptPage");
+        if(p){p.classList.remove("active","sidebar-offset");p.style.display="none"}
+        return f.apply(this,arguments);
+      };
+      w.__aiReceiptGuard=true;
+      window[n]=w;
+    });
+  }
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",bind,{once:true}); else bind();
+  setTimeout(bind,0);
+})();
+</script>
 
 </body>
 </html>
