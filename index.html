@@ -6522,7 +6522,10 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 <div class="salary-card">
 <div class="outlet-title">
-<strong>Year-End Bonus by Branch</strong>
+<div>
+  <strong>Year-End Bonus by Branch</strong>
+  <div id="settlementYearEndBonusPeriod" style="font-size:12px;color:var(--muted);margin-top:3px"></div>
+</div>
 <span id="settlementYearEndBonusTotal">RM 0.00</span>
 </div>
 <div class="table-wrap" id="settlementYearEndBonusTable" style="margin-top:12px"></div>
@@ -12936,6 +12939,17 @@ async function loadSettlementTotalMonth(){
 }
 
 
+
+function yearEndBonusAllowedThroughMonth(year){
+  const now=new Date();
+  const currentYear=now.getFullYear();
+  const currentMonth=now.getMonth()+1;
+
+  if(Number(year)<currentYear) return 12;
+  if(Number(year)>currentYear) return 0;
+  return currentMonth;
+}
+
 async function loadYearEndBonusSettings(year){
   const db=settlementDb();
   const {data,error}=await db.from("branch_year_end_bonus_settings")
@@ -12967,7 +12981,15 @@ async function saveYearEndBonusPercent(branch,year,percent){
 async function renderYearEndBonusByBranch(year,yearBranchTotals){
   const root=document.getElementById("settlementYearEndBonusTable");
   const totalEl=document.getElementById("settlementYearEndBonusTotal");
+  const periodEl=document.getElementById("settlementYearEndBonusPeriod");
   if(!root) return;
+
+  const through=yearEndBonusAllowedThroughMonth(year);
+  if(periodEl){
+    periodEl.textContent=through>0
+      ? `Calculated through ${year}-${String(through).padStart(2,"0")}`
+      : `No elapsed months in ${year}`;
+  }
 
   const settings=await loadYearEndBonusSettings(year);
 
@@ -12997,7 +13019,7 @@ async function renderYearEndBonusByBranch(year,yearBranchTotals){
     <thead>
       <tr>
         <th>Branch</th>
-        <th>Year Profit</th>
+        <th>Profit to Date</th>
         <th>Bonus %</th>
         <th>Year-End Bonus</th>
         <th>Profit After Bonus</th>
@@ -13227,15 +13249,23 @@ async function loadSettlementYear(){
         try{
           const branchRows=await settlementAllBranchesForMonth(monthDate);
 
-          branchRows.forEach(r=>{
-            const branch=String(r.outlet||"").trim();
-            if(!branch) return;
-            const cur=yearBranchTotals.get(branch)||{profit:0,revenue:0,total_expenses:0};
-            cur.profit+=Number(r.profit||0);
-            cur.revenue+=Number(r.revenue||0);
-            cur.total_expenses+=Number(r.total_expenses||0);
-            yearBranchTotals.set(branch,cur);
-          });
+          // Year-End Bonus must only use months that have already occurred.
+          // Future months may have recurring budget expenses in Report,
+          // but those future expenses must NOT reduce the year-end bonus profit.
+          const monthNo=Number(String(monthDate).slice(5,7));
+          const bonusThroughMonth=yearEndBonusAllowedThroughMonth(year);
+
+          if(monthNo<=bonusThroughMonth){
+            branchRows.forEach(r=>{
+              const branch=String(r.outlet||"").trim();
+              if(!branch) return;
+              const cur=yearBranchTotals.get(branch)||{profit:0,revenue:0,total_expenses:0};
+              cur.profit+=Number(r.profit||0);
+              cur.revenue+=Number(r.revenue||0);
+              cur.total_expenses+=Number(r.total_expenses||0);
+              yearBranchTotals.set(branch,cur);
+            });
+          }
 
           return {
             month_date:monthDate,
