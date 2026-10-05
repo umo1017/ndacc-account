@@ -101,6 +101,13 @@ table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px 
   justify-content:center;padding:18px;z-index:1500
 }
 .salary-modal.open{display:flex}
+
+/* ===== Staff Edit Modal stacking fix =====
+   Keep the Staff list open underneath, but always show Edit Staff in front. */
+#staffListModal{z-index:1500;}
+#editStaffModal{z-index:1800;}
+#staffReviewModal{z-index:1850;}
+
 .salary-dialog{
   width:min(820px,100%);max-height:92vh;overflow:auto;background:#fff;
   border-radius:18px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.18)
@@ -2295,6 +2302,10 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="myinvois-submit-ui">
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -2304,7 +2315,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <button class="sidebar-btn" id="sidebarSalary" style="display:none" type="button">Salary</button>
 <button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
-<button class="sidebar-btn" id="sidebarAiReceipt" style="display:none" type="button">Receipt Scan</button>
+<button class="sidebar-btn" id="sidebarAiReceipt" style="display:none" type="button">Expenses</button>
 <button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">Orders</button>
 <button class="sidebar-btn" id="sidebarSocial" style="display:none" type="button">Social Media</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Setting</button>
@@ -5944,7 +5955,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     <div class="salary-top">
       <div>
         <div class="salary-title">Receipt Scan</div>
-        <div class="helper">Receipt Scan · Bookkeeping · Payment · Report Sync</div>
+        <div class="helper">Receipt Scan · Expense Claim · Payment · Report Sync</div>
       </div>
       <div class="salary-right">
         <button class="btn" id="aiReceiptRefreshBtn" type="button">Refresh</button>
@@ -5963,7 +5974,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
             <label class="btn receipt-file-label" for="aiReceiptCameraFile">Take Photo</label>
             <label class="btn receipt-file-label" for="aiReceiptFile">Upload Receipt</label>
           </div>
-          <div class="helper" id="aiReceiptFileState" style="margin-top:8px">No receipt selected</div>
+          <div class="helper" id="aiReceiptFileState" style="margin-top:8px">No receipt selected</div><div class="helper" style="margin-top:6px">For best scan: keep the receipt flat, fill the frame, avoid shadows and blur.</div>
           <button class="btn primary" id="aiReceiptScanBtn" type="button" style="margin-top:12px;width:100%" disabled>Scan Receipt</button>
           <div class="ai-receipt-progress"><div id="aiReceiptProgressBar"></div></div>
           <div class="helper" id="aiReceiptScanState" style="margin-top:8px"></div>
@@ -6026,39 +6037,61 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
           <div><label>Subtotal (RM)</label><input id="aiReceiptSubtotal" type="number" min="0" step="0.01"/></div>
           <div><label>SST / Tax (RM)</label><input id="aiReceiptSst" type="number" min="0" step="0.01"/></div>
           <div class="wide"><label>Total (RM)</label><input id="aiReceiptTotal" type="number" min="0" step="0.01"/></div>
-          <div><label>Supplier TIN</label><input id="aiReceiptSupplierTin" type="text" placeholder="Optional"/></div>
-          <div><label>Supplier Registration No.</label><input id="aiReceiptSupplierRegNo" type="text" placeholder="Optional"/></div>
-          <div><label>e-Invoice Status</label>
-            <select id="aiReceiptEinvoiceStatus">
-              <option value="not_required">Not Required</option>
+          <div class="wide"><label>Paid By / Claimant</label><input id="aiReceiptClaimant" type="text" placeholder="Company / owner / staff name"/></div>
+          <div><label>Expense Claim Status</label>
+            <select id="aiReceiptClaimStatus">
+              <option value="no_claim">No Claim</option>
               <option value="pending">Pending</option>
-              <option value="ready">Ready</option>
-              <option value="submitted">Submitted</option>
-              <option value="validated">Validated</option>
+              <option value="approved">Approved</option>
+              <option value="reimbursed">Reimbursed</option>
               <option value="rejected">Rejected</option>
             </select>
           </div>
-          <div><label>MyInvois UUID</label><input id="aiReceiptMyInvoisUuid" type="text" placeholder="Optional"/></div>
+          <div><label>Reimbursement Date</label><input id="aiReceiptReimbursementDate" type="date"/></div>
+          <div><label>Reimbursement Method</label>
+            <select id="aiReceiptReimbursementMethod">
+              <option value="">Select</option>
+              <option>Cash</option>
+              <option>Bank Transfer</option>
+              <option>TNG / eWallet</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div><label>Claim Reference</label><input id="aiReceiptClaimReference" type="text" placeholder="Optional"/></div>
           <div class="wide"><label>Notes</label><textarea id="aiReceiptNotes" rows="3"></textarea></div>
         </div>
         <div id="aiReceiptDuplicateWarning" class="bad" style="display:none;margin-top:12px"></div>
-        <button class="btn primary" id="aiReceiptSaveBtn" type="button" style="width:100%;margin-top:14px">Save Bookkeeping Record</button>
+        <button class="btn primary" id="aiReceiptSaveBtn" type="button" style="width:100%;margin-top:14px">Save Expense Record</button>
         <div class="helper" id="aiReceiptSaveState" style="margin-top:8px"></div>
       </div>
     </div>
 
+
     <div class="salary-card" style="margin-top:14px">
       <div class="outlet-title">
-        <strong>Receipt History</strong><span class="branch-chip">Petty Cash receipts auto-import</span>
-        <input id="aiReceiptHistoryMonth" type="month" style="width:auto"/>
+        <strong>Expense History</strong><span class="branch-chip">Petty Cash receipts auto-import</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="aiReceiptHistoryMonth" type="month" style="width:auto"/>
+          <button class="btn" id="aiReceiptExportCsvBtn" type="button">Export CSV</button>
+        </div>
       </div>
       <div class="ai-receipt-kpis" style="margin-top:12px">
         <div class="ai-receipt-kpi"><span class="helper">Records</span><strong id="aiReceiptKpiCount">0</strong></div>
         <div class="ai-receipt-kpi"><span class="helper">Subtotal</span><strong id="aiReceiptKpiSubtotal">RM 0.00</strong></div>
         <div class="ai-receipt-kpi"><span class="helper">SST / Tax</span><strong id="aiReceiptKpiSst">RM 0.00</strong></div>
         <div class="ai-receipt-kpi"><span class="helper">Total</span><strong id="aiReceiptKpiTotal">RM 0.00</strong></div>
+        <div class="ai-receipt-kpi"><span class="helper">Pending / Approved Claims</span><strong id="aiReceiptKpiClaimPending">RM 0.00</strong></div>
+        <div class="ai-receipt-kpi"><span class="helper">Reimbursed</span><strong id="aiReceiptKpiReimbursed">RM 0.00</strong></div>
       </div>
       <div id="aiReceiptHistoryWrap" style="margin-top:12px"></div>
+    </div>
+
+    <div class="salary-card" style="margin-top:14px">
+      <div class="outlet-title">
+        <strong>Expense Claim Summary</strong>
+        <span id="aiReceiptClaimSummaryTotal">RM 0.00</span>
+      </div>
+      <div id="aiReceiptClaimSummaryWrap" style="margin-top:12px"></div>
     </div>
 
     <div class="salary-card" style="margin-top:14px">
@@ -20205,7 +20238,8 @@ Bed Fee: Amlee / + merchant / database memory checked.
     const branch=keepBranch ? $("aiReceiptBranch")?.value : "";
     [
       "aiReceiptMerchant","aiReceiptInvoiceNo","aiReceiptSubtotal","aiReceiptSst","aiReceiptTotal",
-      "aiReceiptNotes","aiReceiptRawText","aiReceiptSupplierTin","aiReceiptSupplierRegNo","aiReceiptMyInvoisUuid"
+      "aiReceiptNotes","aiReceiptRawText","aiReceiptClaimant","aiReceiptReimbursementDate",
+      "aiReceiptReimbursementMethod","aiReceiptClaimReference"
     ].forEach(id=>{ if($(id)) $(id).value=""; });
     $("aiReceiptDate").value=isoToday();
     $("aiReceiptCategory").value="Supplies";
@@ -20213,13 +20247,13 @@ Bed Fee: Amlee / + merchant / database memory checked.
     $("aiReceiptPaymentDate").value="";
     $("aiReceiptPaymentMethod").value="";
     $("aiReceiptAutoPost").value="yes";
-    $("aiReceiptEinvoiceStatus").value="not_required";
+    if($("aiReceiptClaimStatus")) $("aiReceiptClaimStatus").value="no_claim";
     if(keepBranch && branch) $("aiReceiptBranch").value=branch;
     $("aiReceiptConfidence").textContent="—";
     $("aiReceiptDuplicateWarning").style.display="none";
     $("aiReceiptDuplicateWarning").textContent="";
     currentEditId=null;
-    $("aiReceiptSaveBtn").textContent="Save Bookkeeping Record";
+    $("aiReceiptSaveBtn").textContent="Save Expense Record";
   }
 
   function parseMoney(s){
@@ -20308,15 +20342,13 @@ Bed Fee: Amlee / + merchant / database memory checked.
     if(data.default_category) $("aiReceiptCategory").value=data.default_category;
     if(data.default_branch) $("aiReceiptBranch").value=data.default_branch;
     if(data.default_payment_method) $("aiReceiptPaymentMethod").value=data.default_payment_method;
-    if(data.supplier_tin) $("aiReceiptSupplierTin").value=data.supplier_tin;
-    if(data.supplier_reg_no) $("aiReceiptSupplierRegNo").value=data.supplier_reg_no;
     return true;
   }
 
   async function applyOcr(text,confidence){
     const lines=String(text||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-    const total=extractLabeledAmount(lines,["grand total","amount due","total due","net total","total"]) || extractLargestAmount(text);
-    const sst=extractLabeledAmount(lines,["sst","service tax","sales tax","tax"]);
+    const total=extractLabeledAmount(lines,["grand total","amount due","total due","net total","total payable","amount payable","jumlah","jumlah besar","total"]) || extractLargestAmount(text);
+    const sst=extractLabeledAmount(lines,["sst","service tax","sales tax","service charge tax","tax"]);
     let subtotal=extractLabeledAmount(lines,["subtotal","sub total","before tax"]);
     if(!subtotal && total>0 && sst>0 && total>=sst) subtotal=+(total-sst).toFixed(2);
 
@@ -20334,6 +20366,154 @@ Bed Fee: Amlee / + merchant / database memory checked.
     await checkDuplicate();
   }
 
+
+  async function receiptFileToBitmap(file){
+    if(window.createImageBitmap){
+      try{return await createImageBitmap(file);}
+      catch(_){}
+    }
+    return await new Promise((resolve,reject)=>{
+      const img=new Image();
+      const url=URL.createObjectURL(file);
+      img.onload=()=>{URL.revokeObjectURL(url);resolve(img);};
+      img.onerror=e=>{URL.revokeObjectURL(url);reject(e);};
+      img.src=url;
+    });
+  }
+
+  function receiptCanvasFromBitmap(bitmap){
+    const srcW=bitmap.width||bitmap.naturalWidth||1;
+    const srcH=bitmap.height||bitmap.naturalHeight||1;
+
+    // OCR is much more reliable when text is not too small.
+    const maxSide=2400;
+    const minTargetWidth=1500;
+    let scale=Math.min(1,maxSide/Math.max(srcW,srcH));
+    if(srcW*scale<minTargetWidth){
+      scale=Math.min(maxSide/Math.max(srcW,srcH),minTargetWidth/srcW);
+    }
+
+    const w=Math.max(1,Math.round(srcW*scale));
+    const h=Math.max(1,Math.round(srcH*scale));
+    const canvas=document.createElement("canvas");
+    canvas.width=w;
+    canvas.height=h;
+    const ctx=canvas.getContext("2d",{willReadFrequently:true});
+    ctx.drawImage(bitmap,0,0,w,h);
+    return canvas;
+  }
+
+  function receiptAutoCrop(canvas){
+    const ctx=canvas.getContext("2d",{willReadFrequently:true});
+    const {width:w,height:h}=canvas;
+    const img=ctx.getImageData(0,0,w,h);
+    const d=img.data;
+
+    // Estimate page region by looking for pixels that differ from the outer background.
+    const sample=[];
+    const edgeStep=Math.max(4,Math.floor(Math.min(w,h)/120));
+    for(let x=0;x<w;x+=edgeStep){
+      for(const y of [0,Math.min(h-1,edgeStep),Math.max(0,h-1-edgeStep),h-1]){
+        const i=(y*w+x)*4;
+        sample.push((d[i]+d[i+1]+d[i+2])/3);
+      }
+    }
+    for(let y=0;y<h;y+=edgeStep){
+      for(const x of [0,Math.min(w-1,edgeStep),Math.max(0,w-1-edgeStep),w-1]){
+        const i=(y*w+x)*4;
+        sample.push((d[i]+d[i+1]+d[i+2])/3);
+      }
+    }
+    sample.sort((a,b)=>a-b);
+    const bg=sample.length?sample[Math.floor(sample.length/2)]:245;
+    const diffThreshold=bg>180?24:34;
+
+    let minX=w,minY=h,maxX=0,maxY=0,found=0;
+    const step=Math.max(2,Math.floor(Math.min(w,h)/900));
+    for(let y=0;y<h;y+=step){
+      for(let x=0;x<w;x+=step){
+        const i=(y*w+x)*4;
+        const lum=(d[i]+d[i+1]+d[i+2])/3;
+        if(Math.abs(lum-bg)>diffThreshold){
+          minX=Math.min(minX,x); minY=Math.min(minY,y);
+          maxX=Math.max(maxX,x); maxY=Math.max(maxY,y);
+          found++;
+        }
+      }
+    }
+
+    if(found<100 || maxX<=minX || maxY<=minY) return canvas;
+
+    const pad=Math.round(Math.min(w,h)*0.025);
+    minX=Math.max(0,minX-pad); minY=Math.max(0,minY-pad);
+    maxX=Math.min(w-1,maxX+pad); maxY=Math.min(h-1,maxY+pad);
+
+    const cw=maxX-minX+1, ch=maxY-minY+1;
+    if(cw<0.45*w || ch<0.45*h) return canvas;
+
+    const cropped=document.createElement("canvas");
+    cropped.width=cw; cropped.height=ch;
+    cropped.getContext("2d").drawImage(canvas,minX,minY,cw,ch,0,0,cw,ch);
+    return cropped;
+  }
+
+  function receiptEnhanceCanvas(canvas){
+    const out=document.createElement("canvas");
+    out.width=canvas.width;
+    out.height=canvas.height;
+    const ctx=out.getContext("2d",{willReadFrequently:true});
+    ctx.drawImage(canvas,0,0);
+
+    const img=ctx.getImageData(0,0,out.width,out.height);
+    const d=img.data;
+    const gray=new Uint8Array(out.width*out.height);
+
+    // grayscale
+    let sum=0;
+    for(let p=0,i=0;i<d.length;i+=4,p++){
+      const g=Math.round(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]);
+      gray[p]=g;
+      sum+=g;
+    }
+
+    // Otsu threshold
+    const hist=new Uint32Array(256);
+    for(const g of gray) hist[g]++;
+    const total=gray.length;
+    let sumB=0,wB=0,maxVar=0,threshold=150;
+    for(let t=0;t<256;t++){
+      wB+=hist[t];
+      if(!wB) continue;
+      const wF=total-wB;
+      if(!wF) break;
+      sumB+=t*hist[t];
+      const mB=sumB/wB;
+      const mF=(sum-sumB)/wF;
+      const between=wB*wF*(mB-mF)*(mB-mF);
+      if(between>maxVar){maxVar=between;threshold=t;}
+    }
+
+    // Keep receipts white and text black, with a modest contrast margin.
+    threshold=Math.max(115,Math.min(205,threshold+10));
+    for(let p=0,i=0;i<d.length;i+=4,p++){
+      const v=gray[p] < threshold ? 0 : 255;
+      d[i]=d[i+1]=d[i+2]=v;
+      d[i+3]=255;
+    }
+    ctx.putImageData(img,0,0);
+    return out;
+  }
+
+  async function prepareReceiptForOcr(file){
+    const bitmap=await receiptFileToBitmap(file);
+    let canvas=receiptCanvasFromBitmap(bitmap);
+    canvas=receiptAutoCrop(canvas);
+    return {
+      original:canvas,
+      enhanced:receiptEnhanceCanvas(canvas)
+    };
+  }
+
   async function scanReceipt(){
     if(!selectedFile) return;
     if(!window.Tesseract){
@@ -20349,28 +20529,50 @@ Bed Fee: Amlee / + merchant / database memory checked.
     const state=$("aiReceiptScanState");
     const bar=$("aiReceiptProgressBar");
     btn.disabled=true;
-    state.textContent="Scanning receipt...";
+    state.textContent="Preparing receipt...";
     bar.style.width="3%";
 
     try{
-      const result=await window.Tesseract.recognize(selectedFile,"eng",{
-        logger:m=>{
-          if(m.status==="recognizing text"){
-            const p=Math.round((m.progress||0)*100);
-            bar.style.width=`${p}%`;
-            state.textContent=`Scanning receipt... ${p}%`;
-          }else if(m.status){
-            state.textContent=m.status;
+      const prepared=await prepareReceiptForOcr(selectedFile);
+
+      const runOcr=async(source,startPct,endPct)=>{
+        return await window.Tesseract.recognize(source,"eng+msa",{
+          logger:m=>{
+            if(m.status==="recognizing text"){
+              const raw=Math.max(0,Math.min(1,m.progress||0));
+              const p=Math.round(startPct+(endPct-startPct)*raw);
+              bar.style.width=`${p}%`;
+              state.textContent=`Scanning receipt... ${p}%`;
+            }else if(m.status){
+              state.textContent=m.status;
+            }
           }
+        });
+      };
+
+      // First pass uses a clean black/white version.
+      const enhancedResult=await runOcr(prepared.enhanced,8,72);
+      let best=enhancedResult;
+
+      // If confidence is weak, run a second pass on the cropped colour image.
+      if(Number(enhancedResult?.data?.confidence||0)<78){
+        state.textContent="Checking scan accuracy...";
+        const originalResult=await runOcr(prepared.original,72,98);
+        if(Number(originalResult?.data?.confidence||0)>Number(best?.data?.confidence||0)){
+          best=originalResult;
+        }else if(originalResult?.data?.text){
+          // Some totals can survive in one pass but not the other.
+          best.data.text=`${best?.data?.text||""}\n${originalResult.data.text||""}`.trim();
         }
-      });
-      await applyOcr(result?.data?.text||"",result?.data?.confidence||0);
-      state.textContent="Scan complete ✓";
+      }
+
+      await applyOcr(best?.data?.text||"",best?.data?.confidence||0);
+      state.textContent=`Scan complete ✓ · ${Math.round(Number(best?.data?.confidence||0))}%`;
       bar.style.width="100%";
     }catch(err){
       console.error(err);
       state.textContent="Scan failed";
-      alert("OCR scan failed: "+(err?.message||err));
+      alert("Receipt scan failed: "+(err?.message||err));
     }finally{
       btn.disabled=false;
     }
@@ -20437,8 +20639,6 @@ Bed Fee: Amlee / + merchant / database memory checked.
       default_category:String($("aiReceiptCategory")?.value||"Other"),
       default_branch:String($("aiReceiptBranch")?.value||""),
       default_payment_method:String($("aiReceiptPaymentMethod")?.value||""),
-      supplier_tin:String($("aiReceiptSupplierTin")?.value||"").trim(),
-      supplier_reg_no:String($("aiReceiptSupplierRegNo")?.value||"").trim(),
       updated_at:new Date().toISOString()
     };
     await db.from("receipt_supplier_memory").upsert(row,{onConflict:"merchant_name"});
@@ -20561,10 +20761,11 @@ Bed Fee: Amlee / + merchant / database memory checked.
         payment_date:$("aiReceiptPaidStatus").value==="paid" ? ($("aiReceiptPaymentDate").value||isoToday()) : null,
         payment_method:String($("aiReceiptPaymentMethod").value||""),
         auto_post_report:String($("aiReceiptAutoPost").value||"yes"),
-        supplier_tin:String($("aiReceiptSupplierTin").value||"").trim(),
-        supplier_reg_no:String($("aiReceiptSupplierRegNo").value||"").trim(),
-        einvoice_status:String($("aiReceiptEinvoiceStatus").value||"not_required"),
-        myinvois_uuid:String($("aiReceiptMyInvoisUuid").value||"").trim(),
+        paid_by_name:String($("aiReceiptClaimant")?.value||"").trim(),
+        claim_status:String($("aiReceiptClaimStatus")?.value||"no_claim"),
+        reimbursement_date:$("aiReceiptClaimStatus")?.value==="reimbursed" ? ($("aiReceiptReimbursementDate")?.value||isoToday()) : ($("aiReceiptReimbursementDate")?.value||null),
+        reimbursement_method:String($("aiReceiptReimbursementMethod")?.value||""),
+        claim_reference:String($("aiReceiptClaimReference")?.value||"").trim(),
         created_by:String(window.currentUserEmail||""),
         report_synced:false,
         report_field:null,
@@ -20609,7 +20810,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
       $("aiReceiptScanBtn").disabled=true;
       $("aiReceiptProgressBar").style.width="0%";
       clearForm(true);
-      await Promise.all([loadHistory(),loadSupplierMemory(),loadReportSyncSummary()]);
+      await Promise.all([loadHistory(),loadSupplierMemory(),loadReportSyncSummary(),loadClaimSummary()]);
     }catch(err){
       state.textContent="Save failed";
       alert("Save failed: "+(err?.message||err));
@@ -20641,12 +20842,13 @@ Bed Fee: Amlee / + merchant / database memory checked.
     $("aiReceiptPaymentDate").value=r.payment_date||"";
     $("aiReceiptPaymentMethod").value=r.payment_method||"";
     $("aiReceiptAutoPost").value=r.auto_post_report||"yes";
-    $("aiReceiptSupplierTin").value=r.supplier_tin||"";
-    $("aiReceiptSupplierRegNo").value=r.supplier_reg_no||"";
-    $("aiReceiptEinvoiceStatus").value=r.einvoice_status||"not_required";
-    $("aiReceiptMyInvoisUuid").value=r.myinvois_uuid||"";
+    $("aiReceiptClaimant").value=r.paid_by_name||"";
+    $("aiReceiptClaimStatus").value=r.claim_status||"no_claim";
+    $("aiReceiptReimbursementDate").value=r.reimbursement_date||"";
+    $("aiReceiptReimbursementMethod").value=r.reimbursement_method||"";
+    $("aiReceiptClaimReference").value=r.claim_reference||"";
     uploadedReceipt=r.receipt_file||null;
-    $("aiReceiptSaveBtn").textContent="Update Bookkeeping Record";
+    $("aiReceiptSaveBtn").textContent="Update Expense Record";
     window.scrollTo({top:0,behavior:"smooth"});
   }
 
@@ -20694,10 +20896,11 @@ Bed Fee: Amlee / + merchant / database memory checked.
           payment_date:row.settlement_date,
           payment_method:"Cash",
           auto_post_report:"no",
-          supplier_tin:"",
-          supplier_reg_no:"",
-          einvoice_status:"not_required",
-          myinvois_uuid:"",
+          paid_by_name:"Company / Petty Cash",
+          claim_status:"no_claim",
+          reimbursement_date:null,
+          reimbursement_method:"",
+          claim_reference:"",
           report_synced:false,
           report_field:null,
           report_synced_at:null,
@@ -20764,11 +20967,15 @@ Bed Fee: Amlee / + merchant / database memory checked.
     $("aiReceiptKpiSubtotal").textContent=money(sum("subtotal"));
     $("aiReceiptKpiSst").textContent=money(sum("sst_amount"));
     $("aiReceiptKpiTotal").textContent=money(sum("total_amount"));
+    const claimPending=rows.filter(r=>["pending","approved"].includes(String(r.claim_status||""))).reduce((s,r)=>s+Number(r.total_amount||0),0);
+    const reimbursed=rows.filter(r=>String(r.claim_status||"")==="reimbursed").reduce((s,r)=>s+Number(r.total_amount||0),0);
+    if($("aiReceiptKpiClaimPending")) $("aiReceiptKpiClaimPending").textContent=money(claimPending);
+    if($("aiReceiptKpiReimbursed")) $("aiReceiptKpiReimbursed").textContent=money(reimbursed);
 
     root.innerHTML=rows.length?`<table>
       <thead><tr>
         <th>Date</th><th>Branch</th><th>Source</th><th>Merchant</th><th>Invoice No.</th><th>Category</th>
-        <th>Subtotal</th><th>SST / Tax</th><th>Total</th><th>Payment</th><th>Report</th><th>e-Invoice</th><th>Receipt</th><th></th>
+        <th>Subtotal</th><th>SST / Tax</th><th>Total</th><th>Payment</th><th>Paid By / Claimant</th><th>Claim Status</th><th>Report</th><th>Receipt</th><th></th>
       </tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td>${esc(r.receipt_date||"")}</td>
@@ -20783,8 +20990,9 @@ Bed Fee: Amlee / + merchant / database memory checked.
         <td>${money(r.sst_amount)}</td>
         <td><strong>${money(r.total_amount)}</strong></td>
         <td><span class="receipt-status-pill ${r.payment_status==="paid"?"paid":"unpaid"}">${r.payment_status==="paid"?"Paid ✓":"Not Paid"}</span></td>
+        <td>${esc(r.paid_by_name||"—")}</td>
+        <td><span class="receipt-status-pill ${String(r.claim_status||"")==="reimbursed"?"paid":String(r.claim_status||"")==="rejected"?"error":["pending","approved"].includes(String(r.claim_status||""))?"unpaid":"synced"}">${esc(({no_claim:"No Claim",pending:"Pending",approved:"Approved",reimbursed:"Reimbursed ✓",rejected:"Rejected"})[r.claim_status]||"No Claim")}</span>${r.reimbursement_date?`<div class="helper">${esc(r.reimbursement_date)}</div>`:""}</td>
         <td><span class="receipt-status-pill ${r.report_synced?"synced":"unpaid"}">${r.report_synced?"Synced ✓":"Not Synced"}</span></td>
-        <td>${esc(r.einvoice_status||"not_required")}</td>
         <td>${r.receipt_file?.path?`<button class="btn" type="button" data-receipt-view="${r.id}">View</button>`:"—"}</td>
         <td style="display:flex;gap:6px">
           <button class="btn" type="button" data-receipt-edit="${r.id}">Edit</button>
@@ -20837,14 +21045,12 @@ Bed Fee: Amlee / + merchant / database memory checked.
     }
     const rows=data||[];
     root.innerHTML=rows.length?`<table>
-      <thead><tr><th>Merchant</th><th>Category</th><th>Branch</th><th>Payment Method</th><th>TIN</th><th>Reg No.</th><th></th></tr></thead>
+      <thead><tr><th>Merchant</th><th>Category</th><th>Branch</th><th>Payment Method</th><th></th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td><strong>${esc(r.merchant_name)}</strong></td>
         <td>${esc(r.default_category||"")}</td>
         <td>${esc(r.default_branch||"")}</td>
         <td>${esc(r.default_payment_method||"")}</td>
-        <td>${esc(r.supplier_tin||"—")}</td>
-        <td>${esc(r.supplier_reg_no||"—")}</td>
         <td><button class="btn staff-delete-btn" type="button" data-supplier-delete="${r.id}">Delete</button></td>
       </tr>`).join("")}</tbody>
     </table>`:'<div class="helper">No supplier memory yet.</div>';
@@ -20904,6 +21110,54 @@ Bed Fee: Amlee / + merchant / database memory checked.
     </table>`:'<div class="helper">No synced receipt expenses for this month.</div>';
   }
 
+
+  async function loadClaimSummary(){
+    const root=$("aiReceiptClaimSummaryWrap");
+    if(!root) return;
+    const rows=currentRows||[];
+    const map=new Map();
+    rows.filter(r=>String(r.claim_status||"no_claim")!=="no_claim").forEach(r=>{
+      const name=String(r.paid_by_name||"Unassigned").trim()||"Unassigned";
+      const cur=map.get(name)||{name,pending:0,approved:0,reimbursed:0,rejected:0,total:0,count:0};
+      const amount=Number(r.total_amount||0);
+      const st=String(r.claim_status||"no_claim");
+      cur.count++; cur.total+=amount;
+      if(st==="pending") cur.pending+=amount;
+      else if(st==="approved") cur.approved+=amount;
+      else if(st==="reimbursed") cur.reimbursed+=amount;
+      else if(st==="rejected") cur.rejected+=amount;
+      map.set(name,cur);
+    });
+    const list=[...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+    const outstanding=list.reduce((s,x)=>s+x.pending+x.approved,0);
+    if($("aiReceiptClaimSummaryTotal")) $("aiReceiptClaimSummaryTotal").textContent=money(outstanding);
+    root.innerHTML=list.length?`<table>
+      <thead><tr><th>Claimant</th><th>Records</th><th>Pending</th><th>Approved</th><th>Reimbursed</th><th>Outstanding</th></tr></thead>
+      <tbody>${list.map(x=>`<tr><td><strong>${esc(x.name)}</strong></td><td>${x.count}</td><td>${money(x.pending)}</td><td>${money(x.approved)}</td><td>${money(x.reimbursed)}</td><td><strong>${money(x.pending+x.approved)}</strong></td></tr>`).join("")}</tbody>
+    </table>`:'<div class="helper">No expense claims for this month.</div>';
+  }
+
+  function exportExpenseCsv(){
+    const rows=currentRows||[];
+    if(!rows.length){alert("No expense records to export.");return;}
+    const escCsv=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+    const header=["Date","Branch","Source","Merchant","Invoice No.","Category","Subtotal","SST / Tax","Total","Receipt Payment","Payment Method","Paid By / Claimant","Claim Status","Reimbursement Date","Reimbursement Method","Claim Reference","Report Synced","Notes"];
+    const lines=[header.map(escCsv).join(",")];
+    rows.forEach(r=>lines.push([
+      r.receipt_date,r.branch,r.source_type==="petty_cash"?"Petty Cash":"Receipt Scan",r.merchant,r.invoice_no,r.category,
+      Number(r.subtotal||0).toFixed(2),Number(r.sst_amount||0).toFixed(2),Number(r.total_amount||0).toFixed(2),
+      r.payment_status,r.payment_method,r.paid_by_name,r.claim_status||"no_claim",r.reimbursement_date,r.reimbursement_method,r.claim_reference,
+      r.report_synced?"Yes":"No",r.notes
+    ].map(escCsv).join(",")));
+    const blob=new Blob(["\ufeff"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`expense-report-${$("aiReceiptHistoryMonth")?.value||currentMonth()}.csv`;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
   async function showReceiptPage(){
     window.activeMainPage="ai_receipt";
     try{
@@ -20922,6 +21176,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     if(!$("aiReceiptDate").value) $("aiReceiptDate").value=isoToday();
     if(!$("aiReceiptHistoryMonth").value) $("aiReceiptHistoryMonth").value=currentMonth();
     await Promise.all([loadHistory(),loadSupplierMemory(),loadReportSyncSummary()]);
+    await loadClaimSummary();
   }
   window.showAiReceipt=showReceiptPage;
 
@@ -20978,13 +21233,19 @@ Bed Fee: Amlee / + merchant / database memory checked.
     });
     $("aiReceiptScanBtn")?.addEventListener("click",scanReceipt);
     $("aiReceiptSaveBtn")?.addEventListener("click",saveRecord);
-    $("aiReceiptHistoryMonth")?.addEventListener("change",async()=>Promise.all([loadHistory(),loadReportSyncSummary()]));
+    $("aiReceiptHistoryMonth")?.addEventListener("change",async()=>{await Promise.all([loadHistory(),loadReportSyncSummary()]);await loadClaimSummary();});
+    $("aiReceiptExportCsvBtn")?.addEventListener("click",exportExpenseCsv);
     $("aiReceiptMerchant")?.addEventListener("change",async()=>{
       await applySupplierMemory($("aiReceiptMerchant").value);
       await checkDuplicate();
     });
     ["aiReceiptDate","aiReceiptInvoiceNo","aiReceiptTotal"].forEach(id=>{
       $(id)?.addEventListener("change",checkDuplicate);
+    });
+    $("aiReceiptClaimStatus")?.addEventListener("change",()=>{
+      if($("aiReceiptClaimStatus").value==="reimbursed" && !$("aiReceiptReimbursementDate").value){
+        $("aiReceiptReimbursementDate").value=isoToday();
+      }
     });
     $("aiReceiptPaidStatus")?.addEventListener("change",()=>{
       if($("aiReceiptPaidStatus").value==="paid" && !$("aiReceiptPaymentDate").value){
