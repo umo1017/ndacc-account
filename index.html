@@ -1797,6 +1797,96 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="salary-staff-order-style">
+[data-move-staff-up],
+[data-move-staff-down]{
+  min-width:34px!important;
+  width:34px!important;
+  padding:6px!important;
+  font-size:17px!important;
+  font-weight:800!important;
+}
+</style>
+
+
+<style id="payslip-pdf-capture-fix">
+@media print{
+  #salaryPayslipPrint .payslip-sheet{
+    transform:none!important;
+    zoom:1!important;
+  }
+}
+</style>
+
+
+<style id="cash-remittance-style">
+.cash-remittance-entry{
+  display:grid;
+  grid-template-columns:minmax(180px,.8fr) minmax(260px,1.2fr) auto;
+  gap:12px;
+  align-items:end;
+}
+.cash-remittance-upload{min-width:0}
+.cash-remittance-upload #cashRemittanceFileBtn{width:100%;min-height:42px}
+.cash-remittance-submit-wrap{min-width:190px}
+#cashRemittanceSubmitBtn{min-height:42px;font-weight:800}
+.cash-remittance-status{
+  display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;
+  font-size:11px;font-weight:800;white-space:nowrap
+}
+.cash-remittance-status.pending{background:#fff7df;color:#8a5a00}
+.cash-remittance-status.verified{background:#edf7ef;color:#1f7a48}
+.cash-remittance-status.rejected{background:#fff0ee;color:#b42318}
+@media(max-width:700px){
+  .cash-remittance-entry{grid-template-columns:1fr 1.2fr;gap:10px}
+  .cash-remittance-submit-wrap{grid-column:1/-1}
+  #cashRemittanceSubmitBtn{width:100%}
+}
+</style>
+
+
+<style id="daily-settlement-proof-style">
+.daily-proof-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.daily-proof-box{
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:12px;
+  background:var(--soft);
+}
+.daily-proof-box label{
+  display:block;
+  font-weight:800;
+  margin-bottom:8px;
+}
+.daily-proof-box .btn{
+  width:100%;
+  min-height:44px;
+  white-space:normal;
+}
+.daily-proof-box .mini{
+  margin-top:7px;
+}
+@media(max-width:700px){
+  .daily-proof-grid{grid-template-columns:1fr}
+}
+</style>
+
+
+<style id="daily-history-admin-only-style">
+#historyRecordsBtn,
+#pettyCashHistoryBtn,
+#bedFeeHistoryBtn,
+#cashRemittanceHistoryBtn,
+#cashWithdrawalHistoryBtn{
+  display:none;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -1870,7 +1960,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 </div>
 <div class="form-row">
 <label for="cashierBalance">Cashier Balance</label>
-<div class="money-wrap"><span class="rm-prefix">RM</span><input id="cashierBalance" min="0" step="0.01" type="number" value="500"/></div>
+<div class="money-wrap"><span class="rm-prefix">RM</span><input id="cashierBalance" min="0" step="0.01" type="number" value="0"/></div>
 </div>
 </div>
 <input id="pettyOpening" type="hidden" value="0"/><input id="cashOpening" type="hidden" value="0"/>
@@ -1965,12 +2055,61 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <div id="monthGrid"></div>
 <div id="autoSaveState"></div>
 </div>
+<div class="card span12" id="dailySettlementProofCard">
+  <div style="margin-bottom:10px">
+    <h3 style="margin:0">Daily Settlement Proof</h3>
+    <div class="helper">Required every day before Submit Daily Settlement · Records retained for 7 years.</div>
+  </div>
+  <div class="daily-proof-grid">
+    <div class="daily-proof-box">
+      <label>Card Settlement Receipt *</label>
+      <input id="dailyCardProofFile" type="file" accept="image/*,.pdf" style="display:none"/>
+      <button class="btn" id="dailyCardProofBtn" type="button">+ Add Card Settlement Photo / File</button>
+      <button class="mini" id="dailyCardProofViewBtn" type="button" style="display:none">View</button>
+      <button class="mini" id="dailyCardProofClearBtn" type="button" style="display:none">Clear</button>
+      <div class="helper" id="dailyCardProofState">Required</div>
+    </div>
+    <div class="daily-proof-box">
+      <label>TNG / eWallet Receipt *</label>
+      <input id="dailyTngProofFile" type="file" accept="image/*,.pdf" style="display:none"/>
+      <button class="btn" id="dailyTngProofBtn" type="button">+ Add TNG / eWallet Photo / File</button>
+      <button class="mini" id="dailyTngProofViewBtn" type="button" style="display:none">View</button>
+      <button class="mini" id="dailyTngProofClearBtn" type="button" style="display:none">Clear</button>
+      <div class="helper" id="dailyTngProofState">Required</div>
+    </div>
+  </div>
+</div>
+<div class="card span12" id="cashRemittanceCard">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <div>
+      <h3 style="margin:0">Cash Remittance</h3>
+      <div class="helper">Staff can submit a cash remittance. Total Cash is deducted only after management verifies it.</div>
+    </div>
+  </div>
+  <div class="cash-remittance-entry">
+    <div class="money-line">
+      <label for="cashRemittanceAmount">Amount</label>
+      <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashRemittanceAmount" min="0" step="0.01" type="number" placeholder="0.00"/></div>
+    </div>
+    <div class="cash-remittance-upload">
+      <label>Receipt</label>
+      <input id="cashRemittanceFile" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none"/>
+      <button class="btn" id="cashRemittanceFileBtn" type="button">+ Add Photo / File</button>
+      <button class="mini" id="cashRemittanceFileClearBtn" type="button" style="display:none">Clear</button>
+      <div class="helper" id="cashRemittanceFileState" style="margin-top:5px">No receipt selected</div>
+    </div>
+    <div class="cash-remittance-submit-wrap">
+      <button class="btn" id="cashRemittanceSubmitBtn" type="button">Submit Cash Remittance</button>
+      <div class="helper" id="cashRemittanceSubmitState" style="margin-top:5px"></div>
+    </div>
+  </div>
+</div>
 <div class="card span12" style="padding:0;border:0;background:transparent;box-shadow:none">
 <button class="btn" id="dailySubmitBtn" style="width:100%;min-height:58px;font-size:17px;font-weight:800" type="button">Submit Daily Settlement</button>
 <span class="helper" id="dailySubmitState" style="display:block;text-align:center;margin-top:6px"></span>
 </div>
 <div class="card span12">
-<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><div class="helper">Today Total Cash</div><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong></div><div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="bedFeeHistoryBtn" type="button">Bed Fee History</button><button class="btn" id="cashWithdrawalHistoryBtn" type="button">Cash Withdrawal Record</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div></div>
+<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><div class="helper">Today Total Cash</div><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong></div><div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="bedFeeHistoryBtn" type="button">Bed Fee History</button><button class="btn" id="cashRemittanceHistoryBtn" type="button">Cash Remittance History</button><button class="btn" id="cashWithdrawalHistoryBtn" type="button">Cash Withdrawal Record</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div></div>
 <div class="card" style="background:var(--soft);margin-top:12px">
 <label>Cash Withdrawal</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashWithdrawal" min="0" step="0.01" type="number" value=""/></div>
@@ -2007,10 +2146,11 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   let canViewDailyHistory=false;
   let isSystemAdmin=false;
   const DAILY_BRANCH_KEY="nd_daily_branch_v1";
-  let currentBranch=(()=>{try{return localStorage.getItem(DAILY_BRANCH_KEY)||"Eco Botanic"}catch(_){return "Eco Botanic"}})(), currentStatus="pending", currentId=null, pettyEntries=[], allRows=[], dailyOutlets=["Eco Botanic","Nusa Bestari","Global"];
+  let currentBranch=(()=>{try{return localStorage.getItem(DAILY_BRANCH_KEY)||"Eco Botanic"}catch(_){return "Eco Botanic"}})(), currentStatus="pending", currentId=null, pettyEntries=[], allRows=[], cashRemittances=[], dailyOutlets=["Eco Botanic","Nusa Bestari","Global"];
   const paymentIds=["visa","amex","bedFee","tng","cash","alipay","onlineCard","bankTransfer","tips"];
   let saveTimer=null;
   let cashWithdrawalHistoryBranch="";
+  let cashRemittanceHistoryBranch="";
   let pettyHistoryBranch="";
   let bedFeeHistoryBranch="";
 
@@ -2260,21 +2400,34 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   $("logoutBtn").onclick=async()=>{await db.auth.signOut();location.reload();};
 
   async function refreshDailyHistoryPermission(){
-    if(!currentUserEmail){ canViewDailyHistory=false; return; }
-    if(isSystemAdmin){ canViewDailyHistory=true; }
-    else {
-      const {data,error}=await db.from("daily_history_access").select("email").eq("email",currentUserEmail).maybeSingle();
-      canViewDailyHistory=!error && !!data;
-    }
-    const b=$("historyRecordsBtn");
-    if(b){ b.style.display=canViewDailyHistory?"":"none"; }
+    // All Daily Settlement history is management-only.
+    canViewDailyHistory=Boolean(currentUserEmail && isSystemAdmin);
+
+    const historyIds=[
+      "historyRecordsBtn",
+      "pettyCashHistoryBtn",
+      "bedFeeHistoryBtn",
+      "cashRemittanceHistoryBtn",
+      "cashWithdrawalHistoryBtn"
+    ];
+    historyIds.forEach(id=>{
+      const el=$(id);
+      if(el) el.style.display=canViewDailyHistory?"":"none";
+    });
+
     const a=$("historyAccessBtn");
     if(a) a.style.display="none";
-    const p=$("pettyCashHistoryBtn");
-    if(p) p.style.display=isSystemAdmin?"":"none";
-    const bf=$("bedFeeHistoryBtn");
-    if(bf) bf.style.display=canViewDailyHistory?"":"none";
 
+    // If a non-admin somehow has an old modal open, close it immediately.
+    if(!canViewDailyHistory){
+      [
+        "historyModal",
+        "pettyCashHistoryModal",
+        "bedFeeHistoryModal",
+        "cashRemittanceHistoryModal",
+        "cashWithdrawalHistoryModal"
+      ].forEach(id=>$(id)?.classList.remove("open"));
+    }
   }
 
   function escHtml(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
@@ -2296,7 +2449,310 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     return {pin:Number(r?.petty_in||0),pout:Number(r?.petty_out||0)};
   }
 
-  function computedCarryBefore(branch,date,sourceRows=allRows){
+  
+  const CASH_REMITTANCE_BUCKET="petty-receipts";
+  const CASH_REMITTANCE_MAX_BYTES=15*1024*1024;
+  let pendingCashRemittanceFile=null;
+
+  function verifiedCashRemittanceTotal(branch,cutoffDate="",beforeDate=""){
+    const target=String(branch||"").trim();
+    const cutoff=String(cutoffDate||"").trim();
+    const before=String(beforeDate||"").trim();
+    return (cashRemittances||[])
+      .filter(x=>{
+        if(String(x.branch||"").trim()!==target) return false;
+        if(String(x.status||"")!=="verified") return false;
+        const d=String(x.remittance_date||"");
+        if(cutoff && d>cutoff) return false;
+        if(before && d>=before) return false;
+        return true;
+      })
+      .reduce((s,x)=>s+Number(x.amount||0),0);
+  }
+
+  function verifiedCashRemittanceForDate(branch,date){
+    return (cashRemittances||[])
+      .filter(x=>
+        String(x.branch||"").trim()===String(branch||"").trim() &&
+        String(x.remittance_date||"")===String(date||"") &&
+        String(x.status||"")==="verified"
+      )
+      .reduce((s,x)=>s+Number(x.amount||0),0);
+  }
+
+  function refreshCashRemittanceFileUI(){
+    const label=$("cashRemittanceFileState");
+    const clearBtn=$("cashRemittanceFileClearBtn");
+    if(!label || !clearBtn) return;
+    if(pendingCashRemittanceFile){
+      label.textContent=`Selected: ${pendingCashRemittanceFile.name}`;
+      label.className="helper ok";
+      clearBtn.style.display="";
+    }else{
+      label.textContent="No receipt selected";
+      label.className="helper";
+      clearBtn.style.display="none";
+    }
+  }
+
+  function chooseCashRemittanceFile(file){
+    if(!file) return;
+    if(file.size>CASH_REMITTANCE_MAX_BYTES){
+      alert("Receipt file cannot exceed 15MB.");
+      return;
+    }
+    pendingCashRemittanceFile=file;
+    refreshCashRemittanceFileUI();
+  }
+
+  async function uploadCashRemittanceReceipt(file){
+    if(!file) return null;
+    const date=$("settlementDate")?.value||today();
+    const uid=(crypto?.randomUUID?.()||(`${Date.now()}-${Math.random().toString(36).slice(2)}`));
+    const path=`cash-remittance/${receiptBranchSlug(currentBranch)}/${date}/${uid}-${safeReceiptName(file.name)}`;
+    const {error}=await db.storage.from(CASH_REMITTANCE_BUCKET).upload(path,file,{
+      cacheControl:"3600",
+      upsert:false,
+      contentType:file.type||undefined
+    });
+    if(error) throw new Error("Receipt upload failed: "+error.message);
+    return {
+      path,
+      name:file.name||"receipt",
+      type:file.type||"",
+      size:Number(file.size||0)
+    };
+  }
+
+  function cashRemittanceReceiptExpired(item){
+    const raw=item?.submitted_at;
+    if(!raw) return false;
+    const d=new Date(raw);
+    if(Number.isNaN(d.getTime())) return false;
+    d.setMonth(d.getMonth()+3);
+    return d.getTime()<=Date.now();
+  }
+
+  async function openCashRemittanceReceipt(item){
+    if(!item?.receipt_path){
+      alert("Receipt is no longer available.");
+      return;
+    }
+    const {data,error}=await db.storage.from(CASH_REMITTANCE_BUCKET).createSignedUrl(item.receipt_path,300);
+    if(error || !data?.signedUrl){
+      alert("Unable to open receipt: "+(error?.message||"Unknown error"));
+      return;
+    }
+    window.open(data.signedUrl,"_blank","noopener");
+  }
+
+  async function submitCashRemittance(){
+    const amount=Math.max(0,Number($("cashRemittanceAmount")?.value||0));
+    const state=$("cashRemittanceSubmitState");
+    const btn=$("cashRemittanceSubmitBtn");
+    const date=$("settlementDate")?.value||today();
+    const branch=String(currentBranch||"").trim();
+    const staffName=String($("staff")?.value||"").trim();
+
+    if(!amount){
+      alert("Please enter Cash Remittance amount.");
+      $("cashRemittanceAmount")?.focus();
+      return;
+    }
+    if(!pendingCashRemittanceFile){
+      alert("Please add the remittance receipt.");
+      return;
+    }
+
+    if(btn){btn.disabled=true;btn.textContent="Submitting...";}
+    if(state){state.textContent="Uploading receipt...";state.className="helper";}
+
+    let uploaded=null;
+    try{
+      uploaded=await uploadCashRemittanceReceipt(pendingCashRemittanceFile);
+      const payload={
+        remittance_date:date,
+        branch,
+        staff_name:staffName||currentUserEmail||"",
+        amount:+amount.toFixed(2),
+        receipt_path:uploaded.path,
+        receipt_name:uploaded.name,
+        receipt_type:uploaded.type,
+        receipt_size:uploaded.size,
+        status:"pending",
+        submitted_by:currentUserEmail||""
+      };
+      const {error}=await db.from("cash_remittances").insert(payload);
+      if(error) throw new Error(error.message);
+
+      $("cashRemittanceAmount").value="";
+      pendingCashRemittanceFile=null;
+      refreshCashRemittanceFileUI();
+      if(state){state.textContent="Submitted · Pending Verification";state.className="helper ok";}
+      await fetchRows();
+      renderAll();
+      setTimeout(()=>{if(state)state.textContent="";},2500);
+    }catch(err){
+      if(uploaded?.path){
+        try{await db.storage.from(CASH_REMITTANCE_BUCKET).remove([uploaded.path]);}catch(_){}
+      }
+      if(state){state.textContent="Submit failed";state.className="helper bad";}
+      alert("Cash Remittance submit failed: "+(err?.message||err));
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent="Submit Cash Remittance";}
+    }
+  }
+
+  function renderCashRemittanceHistoryBranchButtons(){
+    const root=$("cashRemittanceHistoryBranchToggle");
+    if(!root) return;
+    const month=$("cashRemittanceHistoryMonth")?.value||today().slice(0,7);
+    const monthBranches=(cashRemittances||[])
+      .filter(x=>String(x.remittance_date||"").slice(0,7)===month)
+      .map(x=>String(x.branch||"").trim()).filter(Boolean);
+    const names=[...dailyBranchNames(),...monthBranches.filter(x=>!dailyBranchNames().includes(x))];
+    const unique=[...new Set(names)];
+    if(!cashRemittanceHistoryBranch || !unique.includes(cashRemittanceHistoryBranch)){
+      cashRemittanceHistoryBranch=unique.includes(currentBranch)?currentBranch:(unique[0]||"");
+    }
+    root.innerHTML=unique.map(name=>`
+      <button type="button" class="branch-btn ${name===cashRemittanceHistoryBranch?"active":""}"
+        data-remittance-history-branch="${escHtml(name)}">${escHtml(name)}</button>`).join("");
+    root.querySelectorAll("[data-remittance-history-branch]").forEach(btn=>{
+      btn.onclick=()=>{
+        cashRemittanceHistoryBranch=btn.dataset.remittanceHistoryBranch||"";
+        renderCashRemittanceHistory();
+      };
+    });
+  }
+
+  function renderCashRemittanceHistory(){
+    const root=$("cashRemittanceHistoryRoot");
+    if(!root) return;
+    if(!isSystemAdmin){
+      root.innerHTML="";
+      return;
+    }
+    const ym=$("cashRemittanceHistoryMonth")?.value||today().slice(0,7);
+    renderCashRemittanceHistoryBranchButtons();
+
+    const rows=(cashRemittances||[])
+      .filter(x=>
+        String(x.remittance_date||"").slice(0,7)===ym &&
+        String(x.branch||"")===String(cashRemittanceHistoryBranch||"")
+      )
+      .sort((a,b)=>String(b.remittance_date||"").localeCompare(String(a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
+
+    const pending=rows.filter(x=>String(x.status||"")==="pending").reduce((s,x)=>s+Number(x.amount||0),0);
+    const verified=rows.filter(x=>String(x.status||"")==="verified").reduce((s,x)=>s+Number(x.amount||0),0);
+
+    if($("cashRemittanceHistorySummary")){
+      $("cashRemittanceHistorySummary").innerHTML=
+        `<strong>${escHtml(cashRemittanceHistoryBranch||"")}</strong>`+
+        ` &nbsp; Pending <strong>${money(pending)}</strong>`+
+        ` &nbsp; Verified / Deducted <strong>${money(verified)}</strong>`;
+    }
+
+    if(!rows.length){
+      root.innerHTML='<div class="helper" style="padding:16px">No Cash Remittance records for this month.</div>';
+      return;
+    }
+
+    root.innerHTML=`<div class="history-two-row"><table>
+      <thead><tr><th>Date</th><th>Branch</th><th>Staff</th><th>Amount</th><th>Receipt</th><th>Status</th><th>Verification</th></tr></thead>
+      <tbody>${rows.map(x=>{
+        const status=String(x.status||"pending");
+        const receipt=x.receipt_path
+          ? `<button class="mini" type="button" data-remittance-receipt="${Number(x.id)}">View Receipt</button>`
+          : `<span class="helper">${cashRemittanceReceiptExpired(x)?"Expired / Deleted":"—"}</span>`;
+        const statusHtml=`<span class="cash-remittance-status ${status}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Pending"}</span>`;
+        const actions=isSystemAdmin
+          ? (status==="pending"
+              ? `<div class="inline-actions"><button class="mini correct" type="button" data-remittance-verify="${Number(x.id)}">Verify</button><button class="mini error" type="button" data-remittance-reject="${Number(x.id)}">Reject</button></div>`
+              : `<span class="helper">${x.verified_by?escHtml(x.verified_by):"—"}</span>`)
+          : `<span class="helper">Management only</span>`;
+        return `<tr>
+          <td>${escHtml(x.remittance_date||"")}</td>
+          <td><strong>${escHtml(x.branch||"")}</strong></td>
+          <td>${escHtml(x.staff_name||x.submitted_by||"-")}</td>
+          <td><strong>${money(x.amount)}</strong></td>
+          <td>${receipt}</td>
+          <td>${statusHtml}</td>
+          <td>${actions}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>`;
+
+    root.querySelectorAll("[data-remittance-receipt]").forEach(btn=>{
+      btn.onclick=()=>{
+        const item=(cashRemittances||[]).find(x=>Number(x.id)===Number(btn.dataset.remittanceReceipt));
+        if(item) openCashRemittanceReceipt(item);
+      };
+    });
+    root.querySelectorAll("[data-remittance-verify]").forEach(btn=>{
+      btn.onclick=()=>setCashRemittanceStatus(Number(btn.dataset.remittanceVerify),"verified");
+    });
+    root.querySelectorAll("[data-remittance-reject]").forEach(btn=>{
+      btn.onclick=()=>setCashRemittanceStatus(Number(btn.dataset.remittanceReject),"rejected");
+    });
+  }
+
+  async function setCashRemittanceStatus(id,status){
+    if(!isSystemAdmin){
+      alert("Management verification only.");
+      return;
+    }
+    const item=(cashRemittances||[]).find(x=>Number(x.id)===Number(id));
+    if(!item) return;
+    const next=status==="verified"?"verified":"rejected";
+    const label=next==="verified"?"verify and deduct this amount from Total Cash":"reject this Cash Remittance";
+    if(!confirm(`Confirm to ${label}?`)) return;
+
+    const patch={
+      status:next,
+      verified_by:currentUserEmail||"",
+      verified_at:new Date().toISOString()
+    };
+    const {error}=await db.from("cash_remittances").update(patch).eq("id",id);
+    if(error){
+      alert("Verification failed: "+error.message);
+      return;
+    }
+
+    await fetchRows();
+    try{await recalculateBranchFromDate(item.branch,item.remittance_date);}catch(err){console.warn(err);}
+    await fetchRows();
+
+    const activeDate=$("settlementDate")?.value||today();
+    await loadDate(activeDate);
+    renderAll();
+    renderCashRemittanceHistory();
+  }
+
+  async function cleanupExpiredCashRemittanceReceipts(){
+    if(!isSystemAdmin) return;
+    const cutoff=new Date();
+    cutoff.setMonth(cutoff.getMonth()-3);
+    const expired=(cashRemittances||[]).filter(x=>
+      x.receipt_path && x.submitted_at && new Date(x.submitted_at).getTime()<=cutoff.getTime()
+    );
+    for(const item of expired){
+      try{
+        await db.storage.from(CASH_REMITTANCE_BUCKET).remove([item.receipt_path]);
+        await db.from("cash_remittances").update({
+          receipt_path:null,
+          receipt_name:null,
+          receipt_type:null,
+          receipt_size:null
+        }).eq("id",item.id);
+      }catch(err){
+        console.warn("Cash Remittance receipt cleanup failed",item.id,err);
+      }
+    }
+    if(expired.length) await fetchRows();
+  }
+
+function computedCarryBefore(branch,date,sourceRows=allRows){
     const rows=(sourceRows||[])
       .filter(r=>String(r.branch||"")===String(branch||"") && String(r.settlement_date||"")<String(date||""))
       .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
@@ -2315,6 +2771,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
       const mv=pettyMovementFromRow(r);
       petty+=mv.pin-mv.pout;
     });
+    cash-=verifiedCashRemittanceTotal(branch,"",date);
     return {cash,petty};
   }
 
@@ -2328,7 +2785,8 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
         if(cutoff && String(r.settlement_date||"")>cutoff) return false;
         return true;
       })
-      .reduce((sum,r)=>sum+Number(r.cash||0)-Number(r.cash_withdrawal||0),0);
+      .reduce((sum,r)=>sum+Number(r.cash||0)-Number(r.cash_withdrawal||0),0)
+      - verifiedCashRemittanceTotal(target,cutoff);
   }
 
   function computedLatestBalancesByBranch(sourceRows=allRows){
@@ -2386,21 +2844,22 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
         .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
       if(!branchRows.length) continue;
 
-      // CASH opening is derived only; repair the complete historical chain from RM0.
+      // CASH opening is derived from historical CASH, withdrawals and verified remittances.
       // Petty Cash can retain an intentional historical starting float.
-      let carryCash=0;
       let carryPetty=Number(branchRows[0].petty_opening||0);
 
       for(const r of branchRows){
         const mv=pettyMovementFromRow(r);
         const grand=["visa","master","amex","bed_fee","tng","cash","alipay","online_card","bank_transfer","tips"]
           .reduce((sum,k)=>sum+Number(r[k]||0),0);
-        const cashBalance=carryCash+Number(r.cash||0)-Number(r.cash_withdrawal||0);
+        const cashOpening=computedCarryBefore(branch,r.settlement_date,rows).cash;
+        const remittanceToday=verifiedCashRemittanceForDate(branch,r.settlement_date);
+        const cashBalance=cashOpening+Number(r.cash||0)-Number(r.cash_withdrawal||0)-remittanceToday;
         const pettyNet=carryPetty+mv.pin-mv.pout;
 
         const patch={
           grand_total:grand,
-          cash_opening:carryCash,
+          cash_opening:cashOpening,
           cash_balance:cashBalance,
           petty_opening:carryPetty,
           petty_in:mv.pin,
@@ -2410,7 +2869,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 
         const differs=
           Math.abs(Number(r.grand_total||0)-grand)>0.005 ||
-          Math.abs(Number(r.cash_opening||0)-carryCash)>0.005 ||
+          Math.abs(Number(r.cash_opening||0)-cashOpening)>0.005 ||
           Math.abs(Number(r.cash_balance||0)-cashBalance)>0.005 ||
           Math.abs(Number(r.petty_opening||0)-carryPetty)>0.005 ||
           Math.abs(Number(r.petty_in||0)-mv.pin)>0.005 ||
@@ -2429,7 +2888,6 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
           changed++;
         }
 
-        carryCash=cashBalance;
         carryPetty=pettyNet;
       }
     }
@@ -2831,6 +3289,10 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 
   function renderCashWithdrawalMonthlyHistory(){
     const root=$("cashWithdrawalHistoryRoot"); if(!root) return;
+    if(!isSystemAdmin){
+      root.innerHTML="";
+      return;
+    }
     const ym=$("cashWithdrawalHistoryMonth")?.value||today().slice(0,7);
 
     renderCashWithdrawalHistoryBranchButtons();
@@ -2851,6 +3313,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     );
     const allCash=branchAllRows.reduce((s,r)=>s+Number(r.cash||0),0);
     const allWithdrawal=branchAllRows.reduce((s,r)=>s+Number(r.cash_withdrawal||0),0);
+    const allRemittance=verifiedCashRemittanceTotal(cashWithdrawalHistoryBranch,today());
     const remaining=directCashRemainingForBranch(cashWithdrawalHistoryBranch,allRows,today());
 
     if($("cashWithdrawalHistorySummary")){
@@ -2858,7 +3321,8 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
       $("cashWithdrawalHistorySummary").innerHTML=
         `<strong>${escHtml(cashWithdrawalHistoryBranch||"")}</strong>`+
         ` &nbsp; All-time CASH <strong>${money(allCash)}</strong>`+
-        ` &nbsp; − All-time Withdrawal <strong>${money(allWithdrawal)}</strong>`+
+        ` &nbsp; − Withdrawal <strong>${money(allWithdrawal)}</strong>`+
+        ` &nbsp; − Verified Remittance <strong>${money(allRemittance)}</strong>`+
         ` &nbsp; = Remaining <strong>${money(remaining)}</strong>`+
         ` &nbsp; | &nbsp; ${escHtml(ym)} Withdrawal <strong>${money(total)}</strong>`;
     }
@@ -2879,6 +3343,86 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
         <td>${money(r.cash_balance)}</td>
       </tr>`).join("")}</tbody>
     </table></div>`;
+  }
+
+
+  async function openHistoricalDailyProof(receipt){
+    if(!receipt?.path){
+      alert("No saved proof file.");
+      return;
+    }
+    if(dailyProofIsExpired(receipt)){
+      alert("This proof has reached the 7-year retention period.");
+      return;
+    }
+    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300);
+    if(error || !data?.signedUrl){
+      alert("Unable to open proof: "+(error?.message||"Unknown error"));
+      return;
+    }
+    window.open(data.signedUrl,"_blank","noopener");
+  }
+
+  function dailyProofHistoryCell(row,kind){
+    if(String(row?.branch||"").trim()==="Global"){
+      return `<span class="helper">N/A</span>`;
+    }
+
+    const receipt=kind==="card" ? row?.card_settlement_receipt : row?.tng_settlement_receipt;
+    const field=kind==="card" ? "card_settlement_proof" : "tng_settlement_proof";
+    const status=(row?.payment_statuses||{})[field]||"";
+    const label=kind==="card" ? "Card" : "TNG";
+
+    if(!receipt?.path){
+      if(receipt?.expired_at){
+        return `<span class="helper">Expired after 7 years</span>`;
+      }
+      return `<span class="helper bad">Missing</span>`;
+    }
+
+    const badge=status==="accepted"
+      ? `<div class="helper" style="color:#087f72;font-weight:800">✓ Verified</div>`
+      : status==="adjust"
+        ? `<div class="helper" style="color:#b42318;font-weight:800">✕ Error</div>`
+        : `<div class="helper" style="color:#b7791f;font-weight:800">Pending</div>`;
+
+    const actions=isSystemAdmin
+      ? `<div class="inline-actions" style="margin-top:5px">
+           <button type="button" class="mini" data-daily-proof-view="${Number(row.id)||0}" data-proof-kind="${kind}">View</button>
+           <button type="button" class="mini correct" data-daily-proof-status="${Number(row.id)||0}" data-proof-kind="${kind}" data-proof-value="accepted">Verify</button>
+           <button type="button" class="mini error" data-daily-proof-status="${Number(row.id)||0}" data-proof-kind="${kind}" data-proof-value="adjust">Error</button>
+         </div>`
+      : `<div class="inline-actions" style="margin-top:5px">
+           <button type="button" class="mini" data-daily-proof-view="${Number(row.id)||0}" data-proof-kind="${kind}">View</button>
+         </div>`;
+
+    return `${badge}${actions}`;
+  }
+
+  async function setDailyProofStatus(rowId,kind,status){
+    if(!isSystemAdmin){
+      alert("Management verification only.");
+      return;
+    }
+
+    const row=(allRows||[]).find(r=>Number(r.id)===Number(rowId));
+    if(!row) return;
+
+    const field=kind==="card" ? "card_settlement_proof" : "tng_settlement_proof";
+    const statuses={...(row.payment_statuses||{})};
+    statuses[field]=status;
+
+    const {error}=await db.from("daily_settlements")
+      .update({payment_statuses:statuses})
+      .eq("id",rowId);
+
+    if(error){
+      alert("Verification failed: "+error.message);
+      return;
+    }
+
+    row.payment_statuses=statuses;
+    renderCombinedHistory();
   }
 
   function renderCombinedHistory(){
@@ -2938,6 +3482,8 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
             ${mergedTng}
             <td class="helper">-</td><td class="helper">-</td><td class="helper">-</td>
             <td class="helper">-</td><td class="helper">-</td><td class="helper">-</td>
+            <td class="helper">-</td><td class="helper">-</td><td class="helper">-</td>
+            <td class="helper">-</td><td class="helper">-</td>
             <td class="helper">-</td><td class="helper">-</td><td class="helper">-</td><td class="helper">-</td>
             <td><button class="btn" type="button" data-daily-order-date="${escHtml(date)}" data-daily-order-branch="${escHtml(r.branch)}">Order</button></td>
           </tr>`;
@@ -2954,6 +3500,8 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
           <td>${paymentHistoryCell(r,"online_card")}</td>
           <td>${paymentHistoryCell(r,"amex")}</td>
           <td>${bedFeeHistoryCell(r)}</td>
+          <td>${dailyProofHistoryCell(r,"card")}</td>
+          <td>${dailyProofHistoryCell(r,"tng")}</td>
           <td>${money(r.grand_total)}</td>
           <td>${money(r.cash_withdrawal)}</td>
           <td>${money(r.petty_net)}</td>
@@ -2969,7 +3517,8 @@ return `<div class="history-date-card">
               <tr>
                 <th>Branch</th><th>Staff</th><th>VISA / MASTER</th>
                 <th>TNG</th><th>CASH</th><th>Bank Transfer</th><th>Tips</th>
-                <th>ALIPAY</th><th>Online Card</th><th>AMEX</th><th>Bed Fee</th><th>Grand Total</th>
+                <th>ALIPAY</th><th>Online Card</th><th>AMEX</th><th>Bed Fee</th>
+                <th>Card Proof</th><th>TNG Proof</th><th>Grand Total</th>
                 <th>Cash Withdrawal</th><th>Petty Cash</th><th>Status</th><th>Order</th>
               </tr>
             </thead>
@@ -2991,6 +3540,25 @@ return `<div class="history-date-card">
       btn.onclick=()=>setDailyTngTotalReview(
         btn.dataset.tngTotalDate,
         btn.dataset.tngTotalStatus
+      );
+    });
+
+    root.querySelectorAll("[data-daily-proof-view]").forEach(btn=>{
+      btn.onclick=()=>{
+        const row=(allRows||[]).find(r=>Number(r.id)===Number(btn.dataset.dailyProofView));
+        if(!row) return;
+        const receipt=btn.dataset.proofKind==="card"
+          ? row.card_settlement_receipt
+          : row.tng_settlement_receipt;
+        openHistoricalDailyProof(receipt);
+      };
+    });
+
+    root.querySelectorAll("[data-daily-proof-status]").forEach(btn=>{
+      btn.onclick=()=>setDailyProofStatus(
+        Number(btn.dataset.dailyProofStatus),
+        btn.dataset.proofKind,
+        btn.dataset.proofValue
       );
     });
 
@@ -3182,9 +3750,18 @@ return `<div class="history-date-card">
 
   async function fetchRows(){
     $("syncState").textContent="正在同步…";
-    const {data,error}=await db.from("daily_settlements").select("*").order("settlement_date",{ascending:false});
-    if(error){$("syncState").textContent="同步失败："+error.message;$("syncState").className="bad";return false;}
-    allRows=data||[];
+    const [dailyRes,remittanceRes]=await Promise.all([
+      db.from("daily_settlements").select("*").order("settlement_date",{ascending:false}),
+      db.from("cash_remittances").select("*").order("remittance_date",{ascending:false}).order("id",{ascending:false})
+    ]);
+    if(dailyRes.error){$("syncState").textContent="同步失败："+dailyRes.error.message;$("syncState").className="bad";return false;}
+    allRows=dailyRes.data||[];
+    if(remittanceRes.error){
+      console.warn("cash_remittances unavailable:",remittanceRes.error.message);
+      cashRemittances=[];
+    }else{
+      cashRemittances=remittanceRes.data||[];
+    }
     renderDailyBranchButtons();
     $("syncState").textContent="云端已同步 ✓";$("syncState").className="ok";return true;
   }
@@ -3198,7 +3775,8 @@ return `<div class="history-date-card">
     const pettyRemaining=pettyOpening+pin-pout;
     const cashOpening=Number($("cashOpening").value)||0;
     const cashWithdrawal=num("cashWithdrawal");
-    const cashBalance=cashOpening+num("cash")-cashWithdrawal;
+    const cashRemittance=verifiedCashRemittanceForDate(currentBranch,$("settlementDate")?.value||today());
+    const cashBalance=cashOpening+num("cash")-cashWithdrawal-cashRemittance;
     $("grandTotal").value=money(total);
     $("cashBalance").value=money(cashBalance);
     $("pettyRemaining").value=money(pettyRemaining);
@@ -3212,6 +3790,49 @@ return `<div class="history-date-card">
 
   async function previousCashBalance(date){
     return Number(computedCarryBefore(currentBranch,date).cash||0);
+  }
+
+  function previousCashierBalance(date,branch=currentBranch){
+    if(String(branch||"").trim()==="Global") return 0;
+    const target=String(branch||"").trim();
+    const prior=(allRows||[])
+      .filter(r=>String(r.branch||"").trim()===target && String(r.settlement_date||"")<String(date||""))
+      .sort((a,b)=>String(b.settlement_date||"").localeCompare(String(a.settlement_date||"")))[0];
+    return prior ? Math.max(0,Number(prior.cashier_balance||0)) : 0;
+  }
+
+  function applyGlobalDailyFieldRules(branch=currentBranch){
+    const isGlobal=String(branch||"").trim()==="Global";
+    const staffInput=$("staff");
+    if(staffInput){
+      // Global Staff is entered manually by the employee.
+      staffInput.readOnly=false;
+      staffInput.title="";
+      if(isGlobal) staffInput.placeholder="Staff";
+    }
+
+    const proofCard=$("dailySettlementProofCard");
+    if(proofCard) proofCard.style.display=isGlobal?"none":"";
+
+    if(isGlobal){
+      pendingDailyCardProofFile=null;
+      pendingDailyTngProofFile=null;
+      currentDailyCardProof=null;
+      currentDailyTngProof=null;
+      refreshDailyProofUI("card");
+      refreshDailyProofUI("tng");
+    }
+  }
+
+  function applyCashierBalanceRule(date,branch=currentBranch){
+    const input=$("cashierBalance");
+    if(!input) return;
+    const isGlobal=String(branch||"").trim()==="Global";
+    input.value=isGlobal ? 0 : previousCashierBalance(date,branch);
+    input.readOnly=isGlobal;
+    input.title=isGlobal
+      ? "Global Cashier Balance is fixed at RM0.00"
+      : "Carried forward from the previous Daily Settlement";
   }
 
   async function previousPetty(date){
@@ -3269,9 +3890,13 @@ return `<div class="history-date-card">
     currentId=null;
     currentStatus="pending";
     pettyEntries=[];
+    resetDailyProofState();
     $("settlementDate").value=date;
-    $("staff").value=await rosterStaffForDaily(currentBranch,date);
-    $("cashierBalance").value=500;
+    $("staff").value=String(currentBranch||"").trim()==="Global"
+      ? ""
+      : await rosterStaffForDaily(currentBranch,date);
+    applyGlobalDailyFieldRules(currentBranch);
+    applyCashierBalanceRule(date,currentBranch);
     paymentIds.forEach(id=>$(id).value="");
     $("bedFeeMerchant").value="";
     $("cashWithdrawal").value="";
@@ -3296,8 +3921,25 @@ return `<div class="history-date-card">
     $("branchRecordState").textContent=currentBranch;
 
     $("settlementDate").value=r.settlement_date;
-    $("staff").value=String(r.staff||"").trim() || await rosterStaffForDaily(r.branch,r.settlement_date);
-    $("cashierBalance").value=r.cashier_balance||0;
+    $("staff").value=String(r.staff||"").trim() ||
+      (String(r.branch||"").trim()==="Global" ? "" : await rosterStaffForDaily(r.branch,r.settlement_date));
+    applyGlobalDailyFieldRules(r.branch);
+    if(String(r.branch||"").trim()==="Global"){
+      $("cashierBalance").value=0;
+      $("cashierBalance").readOnly=true;
+      $("cashierBalance").title="Global Cashier Balance is fixed at RM0.00";
+    }else{
+      $("cashierBalance").value=Number(r.cashier_balance||0);
+      $("cashierBalance").readOnly=false;
+      $("cashierBalance").title="Carried forward from the previous Daily Settlement";
+    }
+
+    pendingDailyCardProofFile=null;
+    pendingDailyTngProofFile=null;
+    currentDailyCardProof=r.card_settlement_receipt||null;
+    currentDailyTngProof=r.tng_settlement_receipt||null;
+    refreshDailyProofUI("card");
+    refreshDailyProofUI("tng");
 
     $("visa").value=Number(r.visa||0)+Number(r.master||0);
     $("master").value=0;
@@ -3351,13 +3993,16 @@ return `<div class="history-date-card">
     const pettyOpening=Number($("pettyOpening").value)||0;
     const cashOpening=Number($("cashOpening").value)||0;
     const cashWithdrawal=num("cashWithdrawal");
-    const cashBalance=cashOpening+num("cash")-cashWithdrawal;
+    const cashRemittance=verifiedCashRemittanceForDate(currentBranch,$("settlementDate")?.value||today());
+    const cashBalance=cashOpening+num("cash")-cashWithdrawal-cashRemittance;
 
     return {
       settlement_date:$("settlementDate").value,
       branch:currentBranch,
       staff:$("staff").value.trim(),
-      cashier_balance:num("cashierBalance"),
+      cashier_balance:String(currentBranch||"").trim()==="Global" ? 0 : num("cashierBalance"),
+      card_settlement_receipt:String(currentBranch||"").trim()==="Global" ? null : currentDailyCardProof,
+      tng_settlement_receipt:String(currentBranch||"").trim()==="Global" ? null : currentDailyTngProof,
 
       visa:num("visa"),
       master:0,
@@ -3388,26 +4033,31 @@ return `<div class="history-date-card">
   }
 
   async function recalculateBranchFromDate(branch,fromDate){
-    // Rebuild the carry entering fromDate from raw movements before that date.
-    // This prevents a stale stored previous balance from contaminating future months.
-    const before=computedCarryBefore(branch,fromDate,allRows);
-    let carryCash=Number(before.cash||0);
-    let carryPetty=Number(before.petty||0);
-
-    const {data:rows,error}=await db.from("daily_settlements")
-      .select("*").eq("branch",branch).gte("settlement_date",fromDate)
+    const {data:branchRows,error}=await db.from("daily_settlements")
+      .select("*").eq("branch",branch)
       .order("settlement_date",{ascending:true});
     if(error) throw error;
 
-    for(const r of (rows||[])){
+    const fullRows=(branchRows||[]);
+    let carryPetty=fullRows.length?Number(fullRows[0].petty_opening||0):0;
+
+    // Rebuild petty carry through records before fromDate.
+    fullRows.filter(r=>String(r.settlement_date||"")<String(fromDate||"")).forEach(r=>{
+      const mv=pettyMovementFromRow(r);
+      carryPetty+=mv.pin-mv.pout;
+    });
+
+    for(const r of fullRows.filter(r=>String(r.settlement_date||"")>=String(fromDate||""))){
       const grand=["visa","master","amex","bed_fee","tng","cash","alipay","online_card","bank_transfer","tips"]
         .reduce((sum,k)=>sum+Number(r[k]||0),0);
       const mv=pettyMovementFromRow(r);
-      const cashBalance=carryCash+Number(r.cash||0)-Number(r.cash_withdrawal||0);
+      const cashOpening=computedCarryBefore(branch,r.settlement_date,fullRows).cash;
+      const remittanceToday=verifiedCashRemittanceForDate(branch,r.settlement_date);
+      const cashBalance=cashOpening+Number(r.cash||0)-Number(r.cash_withdrawal||0)-remittanceToday;
       const pettyNet=carryPetty+mv.pin-mv.pout;
       const {error:updateError}=await db.from("daily_settlements").update({
         grand_total:grand,
-        cash_opening:carryCash,
+        cash_opening:cashOpening,
         cash_balance:cashBalance,
         petty_opening:carryPetty,
         petty_in:mv.pin,
@@ -3415,7 +4065,6 @@ return `<div class="history-date-card">
         petty_net:pettyNet
       }).eq("id",r.id);
       if(updateError) throw updateError;
-      carryCash=cashBalance;
       carryPetty=pettyNet;
     }
   }
@@ -3425,6 +4074,7 @@ return `<div class="history-date-card">
     if(!staffName){
       $("syncState").textContent="Staff is required";
       $("syncState").className="bad";
+      $("staff")?.focus();
       return;
     }
     $("syncState").textContent="Saving...";
@@ -3497,6 +4147,27 @@ return `<div class="history-date-card">
       state.className="helper";
     }
 
+    try{
+      const proofs=await prepareDailySettlementProofs();
+      currentDailyCardProof=proofs.card;
+      currentDailyTngProof=proofs.tng;
+      pendingDailyCardProofFile=null;
+      pendingDailyTngProofFile=null;
+      refreshDailyProofUI("card");
+      refreshDailyProofUI("tng");
+    }catch(err){
+      if(btn){
+        btn.disabled=false;
+        btn.textContent="Submit Daily Settlement";
+      }
+      if(state){
+        state.textContent=err?.message||"Both settlement proofs are required.";
+        state.className="helper bad";
+      }
+      alert(err?.message||"Both settlement proofs are required.");
+      return;
+    }
+
     await saveNow();
 
     const sync=$("syncState");
@@ -3551,6 +4222,10 @@ return `<div class="history-date-card">
   const PETTY_RECEIPT_BUCKET="petty-receipts";
   const PETTY_RECEIPT_MAX_BYTES=15*1024*1024;
   let pendingPettyReceiptFile=null;
+  let pendingDailyCardProofFile=null;
+  let pendingDailyTngProofFile=null;
+  let currentDailyCardProof=null;
+  let currentDailyTngProof=null;
 
   function receiptExpiryDate(uploadedAt){
     const d=new Date(uploadedAt||Date.now());
@@ -3572,6 +4247,236 @@ return `<div class="history-date-card">
 
   function receiptBranchSlug(name){
     return String(name||"outlet").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"outlet";
+  }
+
+
+  const DAILY_PROOF_RETENTION_YEARS=7;
+
+  function dailyProofLabel(kind){
+    return kind==="card" ? "Card Settlement Receipt" : "TNG / eWallet Receipt";
+  }
+
+  function dailyProofExpiryDate(receipt){
+    const d=new Date(receipt?.uploaded_at||Date.now());
+    if(Number.isNaN(d.getTime())) return null;
+    d.setFullYear(d.getFullYear()+DAILY_PROOF_RETENTION_YEARS);
+    return d;
+  }
+
+  function dailyProofIsExpired(receipt){
+    if(!receipt?.uploaded_at) return false;
+    const expiry=dailyProofExpiryDate(receipt);
+    return expiry ? expiry.getTime()<=Date.now() : false;
+  }
+
+  function dailyProofParts(kind){
+    return kind==="card"
+      ? {
+          input:$("dailyCardProofFile"),
+          btn:$("dailyCardProofBtn"),
+          view:$("dailyCardProofViewBtn"),
+          clear:$("dailyCardProofClearBtn"),
+          state:$("dailyCardProofState")
+        }
+      : {
+          input:$("dailyTngProofFile"),
+          btn:$("dailyTngProofBtn"),
+          view:$("dailyTngProofViewBtn"),
+          clear:$("dailyTngProofClearBtn"),
+          state:$("dailyTngProofState")
+        };
+  }
+
+  function currentDailyProof(kind){
+    return kind==="card" ? currentDailyCardProof : currentDailyTngProof;
+  }
+
+  function pendingDailyProof(kind){
+    return kind==="card" ? pendingDailyCardProofFile : pendingDailyTngProofFile;
+  }
+
+  function setPendingDailyProof(kind,file){
+    if(kind==="card") pendingDailyCardProofFile=file;
+    else pendingDailyTngProofFile=file;
+  }
+
+  function setCurrentDailyProof(kind,receipt){
+    if(kind==="card") currentDailyCardProof=receipt||null;
+    else currentDailyTngProof=receipt||null;
+  }
+
+  function refreshDailyProofUI(kind){
+    const ui=dailyProofParts(kind);
+    if(!ui.state) return;
+    const pending=pendingDailyProof(kind);
+    const existing=currentDailyProof(kind);
+
+    if(pending){
+      ui.state.textContent=`Selected: ${pending.name}`;
+      ui.state.className="helper ok";
+      if(ui.view) ui.view.style.display="none";
+      if(ui.clear) ui.clear.style.display="";
+      return;
+    }
+
+    if(existing?.path){
+      ui.state.textContent=`Saved: ${existing.name||dailyProofLabel(kind)}`;
+      ui.state.className="helper ok";
+      if(ui.view) ui.view.style.display="";
+      if(ui.clear) ui.clear.style.display="";
+      return;
+    }
+
+    ui.state.textContent="Required";
+    ui.state.className="helper bad";
+    if(ui.view) ui.view.style.display="none";
+    if(ui.clear) ui.clear.style.display="none";
+  }
+
+  function chooseDailyProof(kind,file){
+    if(!file) return;
+    if(file.size>PETTY_RECEIPT_MAX_BYTES){
+      alert("File cannot exceed 15MB.");
+      return;
+    }
+    setPendingDailyProof(kind,file);
+    refreshDailyProofUI(kind);
+  }
+
+  async function uploadDailyProof(kind,file){
+    if(!file) return currentDailyProof(kind)||null;
+    const date=$("settlementDate")?.value||today();
+    const uid=(crypto?.randomUUID?.()||(`${Date.now()}-${Math.random().toString(36).slice(2)}`));
+    const path=`daily-settlement-proof/${receiptBranchSlug(currentBranch)}/${date}/${kind}/${uid}-${safeReceiptName(file.name)}`;
+
+    const {error}=await db.storage.from(PETTY_RECEIPT_BUCKET).upload(path,file,{
+      cacheControl:"3600",
+      upsert:false,
+      contentType:file.type||undefined
+    });
+    if(error) throw new Error(`${dailyProofLabel(kind)} upload failed: `+error.message);
+
+    return {
+      path,
+      name:file.name||dailyProofLabel(kind),
+      type:file.type||"",
+      size:Number(file.size||0),
+      uploaded_at:new Date().toISOString(),
+      uploaded_by:currentUserEmail||""
+    };
+  }
+
+  async function openDailyProof(kind){
+    const receipt=currentDailyProof(kind);
+    if(!receipt?.path){
+      alert("No saved file.");
+      return;
+    }
+    if(dailyProofIsExpired(receipt)){
+      alert("This Daily Settlement proof has reached the 7-year retention period.");
+      return;
+    }
+    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300);
+    if(error || !data?.signedUrl){
+      alert("Unable to open file: "+(error?.message||"Unknown error"));
+      return;
+    }
+    window.open(data.signedUrl,"_blank","noopener");
+  }
+
+  async function cleanupExpiredDailySettlementProofs(){
+    if(!isSystemAdmin) return;
+
+    const cutoff=new Date();
+    cutoff.setFullYear(cutoff.getFullYear()-DAILY_PROOF_RETENTION_YEARS);
+
+    const expiredRows=(allRows||[]).filter(r=>{
+      const card=r.card_settlement_receipt;
+      const tng=r.tng_settlement_receipt;
+      const cardOld=card?.path && card?.uploaded_at && new Date(card.uploaded_at).getTime()<=cutoff.getTime();
+      const tngOld=tng?.path && tng?.uploaded_at && new Date(tng.uploaded_at).getTime()<=cutoff.getTime();
+      return cardOld || tngOld;
+    });
+
+    for(const row of expiredRows){
+      const patch={};
+      const removePaths=[];
+
+      const card=row.card_settlement_receipt;
+      if(card?.path && card?.uploaded_at && new Date(card.uploaded_at).getTime()<=cutoff.getTime()){
+        removePaths.push(card.path);
+        patch.card_settlement_receipt={
+          name:card.name||"Card Settlement Receipt",
+          uploaded_at:card.uploaded_at,
+          uploaded_by:card.uploaded_by||"",
+          expired_at:new Date().toISOString(),
+          retention_years:DAILY_PROOF_RETENTION_YEARS
+        };
+      }
+
+      const tng=row.tng_settlement_receipt;
+      if(tng?.path && tng?.uploaded_at && new Date(tng.uploaded_at).getTime()<=cutoff.getTime()){
+        removePaths.push(tng.path);
+        patch.tng_settlement_receipt={
+          name:tng.name||"TNG / eWallet Receipt",
+          uploaded_at:tng.uploaded_at,
+          uploaded_by:tng.uploaded_by||"",
+          expired_at:new Date().toISOString(),
+          retention_years:DAILY_PROOF_RETENTION_YEARS
+        };
+      }
+
+      if(removePaths.length){
+        try{
+          await db.storage.from(PETTY_RECEIPT_BUCKET).remove(removePaths);
+          await db.from("daily_settlements").update(patch).eq("id",row.id);
+        }catch(err){
+          console.warn("Daily Settlement 7-year proof cleanup failed",row.id,err);
+        }
+      }
+    }
+
+    if(expiredRows.length) await fetchRows();
+  }
+
+  async function prepareDailySettlementProofs(){
+    if(String(currentBranch||"").trim()==="Global"){
+      currentDailyCardProof=null;
+      currentDailyTngProof=null;
+      pendingDailyCardProofFile=null;
+      pendingDailyTngProofFile=null;
+      return {card:null,tng:null};
+    }
+
+    let card=currentDailyCardProof;
+    let tng=currentDailyTngProof;
+
+    if(!card?.path && !pendingDailyCardProofFile){
+      throw new Error("Card Settlement Receipt is required.");
+    }
+    if(!tng?.path && !pendingDailyTngProofFile){
+      throw new Error("TNG / eWallet Receipt is required.");
+    }
+
+    if(pendingDailyCardProofFile){
+      card=await uploadDailyProof("card",pendingDailyCardProofFile);
+    }
+    if(pendingDailyTngProofFile){
+      tng=await uploadDailyProof("tng",pendingDailyTngProofFile);
+    }
+
+    currentDailyCardProof=card;
+    currentDailyTngProof=tng;
+    return {card,tng};
+  }
+
+  function resetDailyProofState(){
+    pendingDailyCardProofFile=null;
+    pendingDailyTngProofFile=null;
+    currentDailyCardProof=null;
+    currentDailyTngProof=null;
+    refreshDailyProofUI("card");
+    refreshDailyProofUI("tng");
   }
 
   function refreshPendingPettyReceiptUI(){
@@ -4234,6 +5139,66 @@ return `<div class="history-date-card">
     $("cashWithdrawal").oninput=()=>{calc();scheduleSave();};
     const dailySubmitBtn=$("dailySubmitBtn");
     if(dailySubmitBtn) dailySubmitBtn.onclick=submitDailySettlement;
+
+    const dailyCardProofFile=$("dailyCardProofFile");
+    const dailyTngProofFile=$("dailyTngProofFile");
+    if($("dailyCardProofBtn")) $("dailyCardProofBtn").onclick=()=>dailyCardProofFile?.click();
+    if($("dailyTngProofBtn")) $("dailyTngProofBtn").onclick=()=>dailyTngProofFile?.click();
+    if(dailyCardProofFile) dailyCardProofFile.onchange=()=>{
+      chooseDailyProof("card",dailyCardProofFile.files?.[0]);
+      dailyCardProofFile.value="";
+      scheduleSave();
+    };
+    if(dailyTngProofFile) dailyTngProofFile.onchange=()=>{
+      chooseDailyProof("tng",dailyTngProofFile.files?.[0]);
+      dailyTngProofFile.value="";
+      scheduleSave();
+    };
+    if($("dailyCardProofViewBtn")) $("dailyCardProofViewBtn").onclick=()=>openDailyProof("card");
+    if($("dailyTngProofViewBtn")) $("dailyTngProofViewBtn").onclick=()=>openDailyProof("tng");
+    if($("dailyCardProofClearBtn")) $("dailyCardProofClearBtn").onclick=()=>{
+      pendingDailyCardProofFile=null;
+      currentDailyCardProof=null;
+      refreshDailyProofUI("card");
+      scheduleSave();
+    };
+    if($("dailyTngProofClearBtn")) $("dailyTngProofClearBtn").onclick=()=>{
+      pendingDailyTngProofFile=null;
+      currentDailyTngProof=null;
+      refreshDailyProofUI("tng");
+      scheduleSave();
+    };
+    refreshDailyProofUI("card");
+    refreshDailyProofUI("tng");
+
+    const cashRemittanceFile=$("cashRemittanceFile");
+    const cashRemittanceFileBtn=$("cashRemittanceFileBtn");
+    const cashRemittanceFileClearBtn=$("cashRemittanceFileClearBtn");
+    const cashRemittanceSubmitBtn=$("cashRemittanceSubmitBtn");
+    if(cashRemittanceFileBtn) cashRemittanceFileBtn.onclick=()=>cashRemittanceFile?.click();
+    if(cashRemittanceFile) cashRemittanceFile.onchange=()=>{
+      chooseCashRemittanceFile(cashRemittanceFile.files?.[0]);
+      cashRemittanceFile.value="";
+    };
+    if(cashRemittanceFileClearBtn) cashRemittanceFileClearBtn.onclick=()=>{
+      pendingCashRemittanceFile=null;
+      refreshCashRemittanceFileUI();
+    };
+    if(cashRemittanceSubmitBtn) cashRemittanceSubmitBtn.onclick=submitCashRemittance;
+    refreshCashRemittanceFileUI();
+
+    const cashRemittanceHistoryBtn=$("cashRemittanceHistoryBtn");
+    if(cashRemittanceHistoryBtn) cashRemittanceHistoryBtn.onclick=()=>{
+      if(!isSystemAdmin){ alert("Management only."); return; }
+      const m=$("cashRemittanceHistoryMonth");
+      if(m) m.value=($("settlementDate")?.value||today()).slice(0,7);
+      cashRemittanceHistoryBranch=currentBranch;
+      renderCashRemittanceHistory();
+      $("cashRemittanceHistoryModal")?.classList.add("open");
+    };
+    if($("closeCashRemittanceHistoryModal")) $("closeCashRemittanceHistoryModal").onclick=()=>$("cashRemittanceHistoryModal")?.classList.remove("open");
+    if($("cashRemittanceHistoryMonth")) $("cashRemittanceHistoryMonth").onchange=renderCashRemittanceHistory;
+
     const pettyCamera=$("pettyReceiptCamera");
     const pettyFile=$("pettyReceiptFile");
     const pettyCameraBtn=$("pettyReceiptCameraBtn");
@@ -4326,7 +5291,9 @@ return `<div class="history-date-card">
         alert(err?.message||String(err));
       }
     };
-    $("refreshBtn").onclick=async()=>{await fetchRows();renderAll();await loadDate($("settlementDate").value||today());};
+    $("refreshBtn").onclick=async()=>{await fetchRows();
+    try{await cleanupExpiredCashRemittanceReceipts();}catch(_){}
+    try{await cleanupExpiredDailySettlementProofs();}catch(_){}renderAll();await loadDate($("settlementDate").value||today());};
     $("exportBtn").onclick=exportCsv;
     $("clearDayBtn").onclick=clearSelectedDay;
 
@@ -4497,6 +5464,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div id="historyMonthlyBranchSummary" style="margin-top:12px"></div>
 <div id="historyBedFeeUnverifiedSummary" style="margin-top:12px"></div>
 </div>
+<div class="helper" style="margin:8px 0">Card Proof / TNG Proof must be manually verified in History by management.</div>
 <div id="historyCombinedRoot"></div>
 </div>
 </div>
@@ -4631,6 +5599,25 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <strong>Order History</strong>
 <div id="dailyOrderHistory" style="margin-top:10px"></div>
 </div>
+</div>
+</div>
+<div class="salary-modal" id="cashRemittanceHistoryModal">
+<div class="salary-dialog" style="width:min(1100px,96vw)">
+<div class="outlet-title">
+<div><h3 style="margin:0">Cash Remittance History</h3><div class="helper">Verified remittances are automatically deducted from Total Cash.</div></div>
+<button class="main-page-close" id="closeCashRemittanceHistoryModal" type="button">×</button>
+</div>
+<div class="salary-card" style="box-shadow:none">
+<div class="salary-toolbar">
+<div class="field">
+<label>Month</label>
+<input id="cashRemittanceHistoryMonth" type="month"/>
+</div>
+</div>
+<div class="branch-toggle" id="cashRemittanceHistoryBranchToggle" style="margin:10px 0 12px"></div>
+<div class="helper" id="cashRemittanceHistorySummary" style="margin-top:10px"></div>
+</div>
+<div id="cashRemittanceHistoryRoot"></div>
 </div>
 </div>
 <div class="salary-modal" id="cashWithdrawalHistoryModal">
@@ -7315,6 +8302,70 @@ function reviewStaffBeforeSubmit(){
   byId("staffReviewModal").classList.add("open");
 }
 
+
+function salaryStaffSort(a,b){
+  const pa=Number(!!a?.is_pinned), pb=Number(!!b?.is_pinned);
+  if(pa!==pb) return pb-pa;
+
+  const ao=(a?.staff_sort_order===null || a?.staff_sort_order===undefined || a?.staff_sort_order==="")
+    ? Number.MAX_SAFE_INTEGER : Number(a.staff_sort_order);
+  const bo=(b?.staff_sort_order===null || b?.staff_sort_order===undefined || b?.staff_sort_order==="")
+    ? Number.MAX_SAFE_INTEGER : Number(b.staff_sort_order);
+  if(ao!==bo) return ao-bo;
+
+  return String(a?.name||"").localeCompare(String(b?.name||""));
+}
+
+async function moveSalaryStaff(empId,direction){
+  if(!(staffEditManager || isGlobalAdmin)){
+    alert("Management access only.");
+    return;
+  }
+
+  const emp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!emp) return;
+
+  // Order is maintained separately inside each branch.
+  const rows=salaryEmployees
+    .filter(x=>String(x.outlet||"")===String(emp.outlet||""))
+    .sort(salaryStaffSort);
+
+  const index=rows.findIndex(x=>Number(x.id)===Number(empId));
+  const swapIndex=direction==="up" ? index-1 : index+1;
+  if(index<0 || swapIndex<0 || swapIndex>=rows.length) return;
+
+  // Normalize the branch first so old/null orders become deterministic.
+  rows.forEach((x,i)=>{ x.staff_sort_order=i+1; });
+
+  const current=rows[index];
+  const other=rows[swapIndex];
+  const tmp=current.staff_sort_order;
+  current.staff_sort_order=other.staff_sort_order;
+  other.staff_sort_order=tmp;
+
+  const updates=rows.map(x=>({
+    id:Number(x.id),
+    staff_sort_order:Number(x.staff_sort_order)
+  }));
+
+  const results=await Promise.all(updates.map(x=>
+    salaryDb.from("employees").update({staff_sort_order:x.staff_sort_order}).eq("id",x.id)
+  ));
+  const failed=results.find(r=>r.error);
+  if(failed){
+    alert("Staff order update failed: "+failed.error.message);
+    return;
+  }
+
+  salaryEmployees.sort((a,b)=>{
+    const branchCompare=String(a.outlet||"").localeCompare(String(b.outlet||""));
+    return branchCompare || salaryStaffSort(a,b);
+  });
+
+  renderSalary();
+  renderStaffList();
+}
+
 async function loadSalaryData(){
   await determineManager();
   await loadSalaryBranches();
@@ -7343,9 +8394,8 @@ async function loadSalaryData(){
       return accessibleSalaryOutlets.includes(e.outlet);
     })
     .sort((a,b)=>{
-      const pa=Number(!!a.is_pinned), pb=Number(!!b.is_pinned);
-      if(pa!==pb) return pb-pa;
-      return String(a.name||"").localeCompare(String(b.name||""));
+      const branchCompare=String(a.outlet||"").localeCompare(String(b.outlet||""));
+      return branchCompare || salaryStaffSort(a,b);
     });
   salaryMonthly=monthlyRes.data||[];
   salarySnapshots=snapRes.data||[];
@@ -7789,7 +8839,7 @@ function renderSalary(){
     : "";
 
   const branchCards=branchNames.map(outlet=>{
-    const all=active.filter(e=>e.outlet===outlet);
+    const all=active.filter(e=>e.outlet===outlet).sort(salaryStaffSort);
     const sum=summaryForOutlet(all);
     const total7=Object.values(sum.seven).reduce((a,b)=>a+b,0);
     const total14=Object.values(sum.fourteen).reduce((a,b)=>a+b,0);
@@ -8857,11 +9907,7 @@ async function rehireStaff(empId){
 window.rehireStaff=rehireStaff;
 function renderStaffList(){
   byId("staffListContent").innerHTML=salaryBranches.map(b=>b.name).map(outlet=>{
-    const rows=salaryEmployees.filter(e=>e.outlet===outlet).sort((a,b)=>{
-      const pa=Number(!!a.is_pinned),pb=Number(!!b.is_pinned);
-      if(pa!==pb)return pb-pa;
-      return String(a.name||"").localeCompare(String(b.name||""));
-    });
+    const rows=salaryEmployees.filter(e=>e.outlet===outlet).sort(salaryStaffSort);
     const staffTable=(list,title)=>`<div class="staff-list-section"><h5>${title} <span>(${list.length})</span></h5><div class="salary-table-wrap"><table class="salary-table">
       <thead><tr><th>Name</th><th>Type</th><th>Birthday</th><th>Join Date</th><th>Last Working Date</th><th>Payment Method</th><th>Basic Pay</th><th>Allowance</th><th>Bank Name</th><th>Bank Account</th><th>NRIC / Passport</th><th>Phone</th><th>Employee No.</th><th>SOCSO No.</th><th>KWSP / EPF No.</th><th>Tax No.</th><th>Action</th></tr></thead>
       <tbody>${list.map(e=>`<tr>
@@ -8882,6 +9928,8 @@ function renderStaffList(){
 <td><span class="employee-edit-cell">${e.epf_no||"-"}${staffPencil(e.id,"editEmpEpf")}</span></td>
 <td><span class="employee-edit-cell">${e.tax_no||"-"}${staffPencil(e.id,"editEmpTax")}</span></td>
 <td>${staffEditManager?`<div class="staff-action-wrap">
+  <button class="btn" type="button" data-move-staff-up="${e.id}" title="Move Up">↑</button>
+  <button class="btn" type="button" data-move-staff-down="${e.id}" title="Move Down">↓</button>
   <button class="btn staff-pin-btn" data-pin-staff="${e.id}" data-pinned="${e.is_pinned?"1":"0"}">${e.is_pinned?"Unpin":"Pin Top"}</button>
   ${staffHasLeft(e)?`<button class="btn staff-rehire-btn" type="button" data-rehire-staff="${e.id}">↩ Rehire / 复职</button>`:""}
   <button class="btn" data-edit-staff="${e.id}">Edit</button>
@@ -8890,6 +9938,18 @@ function renderStaffList(){
     return `<div class="staff-group"><h4>${staffSafe(outlet)}</h4>${staffTable(rows.filter(e=>!staffHasLeft(e)),"Active Staff")}${staffTable(rows.filter(staffHasLeft),"Resigned Staff")}</div>`;
   }).join("");
 }
+
+
+document.addEventListener("click",async ev=>{
+  const up=ev.target.closest?.("[data-move-staff-up]");
+  const down=ev.target.closest?.("[data-move-staff-down]");
+  const btn=up||down;
+  if(!btn) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const empId=Number(up?up.dataset.moveStaffUp:down.dataset.moveStaffDown);
+  if(empId) await moveSalaryStaff(empId,up?"up":"down");
+});
 
 function ytdSum(empId,key){
   return salaryYtdSnapshots
@@ -9392,6 +10452,52 @@ function salaryMonthParts(){
   };
 }
 
+
+async function capturePayslipForPdf(slip,scale=2,quality=0.96){
+  if(!slip) throw new Error("Payslip not found");
+
+  const oldTransform=slip.style.transform;
+  const oldTransformOrigin=slip.style.transformOrigin;
+  const oldZoom=slip.style.zoom;
+
+  slip.style.setProperty("transform","none","important");
+  slip.style.setProperty("transform-origin","top left","important");
+  slip.style.zoom="1";
+
+  void slip.offsetWidth;
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+
+  const widthPx=Math.max(1,slip.offsetWidth||slip.scrollWidth||1);
+  const heightPx=Math.max(1,slip.offsetHeight||slip.scrollHeight||1);
+
+  const canvas=await html2canvas(slip,{
+    scale,
+    backgroundColor:"#ffffff",
+    useCORS:true,
+    logging:false,
+    width:widthPx,
+    height:heightPx,
+    windowWidth:Math.max(document.documentElement.clientWidth,widthPx),
+    windowHeight:Math.max(document.documentElement.clientHeight,heightPx)
+  });
+
+  const widthMm=widthPx*25.4/96;
+  const heightMm=heightPx*25.4/96;
+
+  if(oldTransform) slip.style.transform=oldTransform;
+  else slip.style.removeProperty("transform");
+  if(oldTransformOrigin) slip.style.transformOrigin=oldTransformOrigin;
+  else slip.style.removeProperty("transform-origin");
+  if(oldZoom) slip.style.zoom=oldZoom;
+  else slip.style.removeProperty("zoom");
+
+  return {
+    widthMm,
+    heightMm,
+    img:canvas.toDataURL("image/jpeg",quality)
+  };
+}
+
 async function downloadSalaryPdf(pdf,filename,isIOS=false,previewWindow=null){
   const blob=pdf.output("blob");
   const url=URL.createObjectURL(blob);
@@ -9427,18 +10533,9 @@ async function buildBranchPayslipPdf(branch,type,employees){
     const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
     if(!slip) continue;
 
-    const canvas=await html2canvas(slip,{
-      scale:1.6,
-      backgroundColor:"#ffffff",
-      useCORS:true,
-      logging:false
-    });
-
-    const rect=slip.getBoundingClientRect();
-    const widthMm=Math.max(1,rect.width*25.4/96);
-    const heightMm=Math.max(1,rect.height*25.4/96);
+    const captured=await capturePayslipForPdf(slip,1.8,0.94);
+    const {widthMm,heightMm,img}=captured;
     const orientation=widthMm>heightMm?"landscape":"portrait";
-    const img=canvas.toDataURL("image/jpeg",0.92);
 
     if(!pdf){
       pdf=new jsPDF({orientation,unit:"mm",format:[widthMm,heightMm]});
@@ -9718,18 +10815,9 @@ async function exportSalaryPayslipCategory(mode){
       const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
       if(!slip) continue;
 
-      const canvas=await html2canvas(slip,{
-        scale:1.6,
-        backgroundColor:"#ffffff",
-        useCORS:true,
-        logging:false
-      });
-
-      const rect=slip.getBoundingClientRect();
-      const widthMm=Math.max(1,rect.width*25.4/96);
-      const heightMm=Math.max(1,rect.height*25.4/96);
-      const orientation=widthMm>heightMm?"landscape":"portrait";
-      const img=canvas.toDataURL("image/jpeg",0.92);
+      const captured=await capturePayslipForPdf(slip,1.8,0.94);
+    const {widthMm,heightMm,img}=captured;
+    const orientation=widthMm>heightMm?"landscape":"portrait";
 
       if(!pdf){
         pdf=new jsPDF({orientation,unit:"mm",format:[widthMm,heightMm]});
@@ -9789,14 +10877,8 @@ async function buildPayslipPdfFile(){
   if(typeof html2canvas!=="function") throw new Error("PDF renderer not loaded");
   if(!window.jspdf?.jsPDF) throw new Error("PDF library not loaded");
 
-  const canvas=await html2canvas(slip,{
-    scale:2,
-    backgroundColor:"#ffffff",
-    useCORS:true
-  });
-
-  const widthMm=slip.getBoundingClientRect().width * 25.4 / 96;
-  const heightMm=slip.getBoundingClientRect().height * 25.4 / 96;
+  const captured=await capturePayslipForPdf(slip,2,0.96);
+  const {widthMm,heightMm,img}=captured;
 
   const {jsPDF}=window.jspdf;
   const orientation=widthMm>heightMm ? "landscape" : "portrait";
@@ -9807,7 +10889,6 @@ async function buildPayslipPdfFile(){
     format:[widthMm,heightMm]
   });
 
-  const img=canvas.toDataURL("image/jpeg",0.96);
   pdf.addImage(img,"JPEG",0,0,widthMm,heightMm);
 
   const blob=pdf.output("blob");
