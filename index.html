@@ -2072,6 +2072,62 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="year-end-bonus-style">
+#settlementYearEndBonusTable{
+  width:100%;
+  max-width:100%;
+  overflow-x:auto !important;
+  -webkit-overflow-scrolling:touch;
+}
+#settlementYearEndBonusTable table{
+  min-width:820px !important;
+  width:max-content !important;
+}
+#settlementYearEndBonusTable th,
+#settlementYearEndBonusTable td{
+  min-width:145px;
+  white-space:nowrap !important;
+  padding:10px 12px;
+}
+#settlementYearEndBonusTable th:first-child,
+#settlementYearEndBonusTable td:first-child{
+  min-width:160px;
+}
+@media(max-width:700px){
+  #settlementYearEndBonusTable th:first-child,
+  #settlementYearEndBonusTable td:first-child{
+    position:sticky;
+    left:0;
+    z-index:2;
+    background:#fff;
+    box-shadow:1px 0 0 var(--line);
+  }
+  #settlementYearEndBonusTable thead th:first-child{z-index:3}
+  #settlementYearEndBonusTable .global-total-card td:first-child{background:inherit}
+}
+</style>
+
+
+<style id="profit-share-person-style">
+#profitSharePersonTable{
+  width:100%;
+  max-width:100%;
+  overflow-x:auto !important;
+  -webkit-overflow-scrolling:touch;
+}
+#profitSharePersonTable table{
+  min-width:760px !important;
+  width:max-content !important;
+}
+#profitSharePersonTable th,
+#profitSharePersonTable td{
+  min-width:130px;
+  white-space:nowrap !important;
+  padding:10px 12px;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -3156,7 +3212,10 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const ym=($("historyMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7));
     if($("historyMonth") && !$("historyMonth").value) $("historyMonth").value=ym;
 
-    const rows=(allRows||[]).filter(r=>String(r.settlement_date||"").slice(0,7)===ym);
+    const rows=(allRows||[]).filter(r=>
+      String(r.settlement_date||"").slice(0,7)===ym &&
+      String(r.settlement_date||"")<=today()
+    );
     const branchNames=dailyBranchNames();
     const dataBranches=rows.map(r=>String(r.branch||"")).filter(Boolean);
     const names=[...branchNames,...dataBranches.filter(x=>!branchNames.includes(x))];
@@ -3261,15 +3320,22 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const names=[...base,...monthBranches.filter(x=>!base.includes(x))];
     const unique=[...new Set(names)];
 
-    if(!bedFeeHistoryBranch || !unique.includes(bedFeeHistoryBranch)){
-      bedFeeHistoryBranch=unique.includes(currentBranch)?currentBranch:(unique[0]||"");
+    const ALL="__ALL__";
+
+    if(!bedFeeHistoryBranch || (bedFeeHistoryBranch!==ALL && !unique.includes(bedFeeHistoryBranch))){
+      bedFeeHistoryBranch=unique.includes(currentBranch)?currentBranch:(unique[0]||ALL);
     }
 
-    root.innerHTML=unique.map(name=>`
-      <button type="button"
-        class="branch-btn ${name===bedFeeHistoryBranch?"active":""}"
-        data-bedfee-history-branch="${escHtml(name)}">${escHtml(name)}</button>
-    `).join("");
+    root.innerHTML=[
+      ...unique.map(name=>`
+        <button type="button"
+          class="branch-btn ${name===bedFeeHistoryBranch?"active":""}"
+          data-bedfee-history-branch="${escHtml(name)}">${escHtml(name)}</button>
+      `),
+      `<button type="button"
+        class="branch-btn ${bedFeeHistoryBranch===ALL?"active":""}"
+        data-bedfee-history-branch="${ALL}">All Branches</button>`
+    ].join("");
 
     root.querySelectorAll("[data-bedfee-history-branch]").forEach(btn=>{
       btn.onclick=()=>{
@@ -3308,27 +3374,34 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
 
     renderBedFeeHistoryBranchButtons();
 
+    const isAllBranches=bedFeeHistoryBranch==="__ALL__";
+
     const rows=(allRows||[])
       .filter(r=>
         String(r.settlement_date||"").slice(0,7)===ym &&
-        String(r.branch||"").trim()===String(bedFeeHistoryBranch||"").trim() &&
+        (isAllBranches || String(r.branch||"").trim()===String(bedFeeHistoryBranch||"").trim()) &&
         Number(r.bed_fee||0)>0
       )
-      .sort((a,b)=>String(b.settlement_date||"").localeCompare(String(a.settlement_date||"")));
+      .sort((a,b)=>{
+        const d=String(b.settlement_date||"").localeCompare(String(a.settlement_date||""));
+        if(d) return d;
+        return String(a.branch||"").localeCompare(String(b.branch||""));
+      });
 
     const total=rows.reduce((s,r)=>s+Number(r.bed_fee||0),0);
     const accepted=rows.filter(r=>(r.payment_statuses||{}).bed_fee==="accepted").length;
     const pending=rows.length-accepted;
 
+    const label=isAllBranches?"All Branches":(bedFeeHistoryBranch||"");
     summary.innerHTML=
-      `<strong>${escHtml(bedFeeHistoryBranch||"")}</strong>`+
+      `<strong>${escHtml(label)}</strong>`+
       ` &nbsp; ${escHtml(ym)}`+
       ` &nbsp; Total <strong>${money(total)}</strong>`+
       ` &nbsp; Accepted <strong>${accepted}</strong>`+
       ` &nbsp; Pending/Error <strong>${pending}</strong>`;
 
     if(!rows.length){
-      root.innerHTML='<div class="helper" style="padding:16px">No Bed Fee records for this branch in this month.</div>';
+      root.innerHTML=`<div class="helper" style="padding:16px">No Bed Fee records for ${isAllBranches?"all branches":"this branch"} in this month.</div>`;
       return;
     }
 
@@ -3352,6 +3425,11 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
               <td><strong>${money(r.bed_fee)}</strong></td>
               <td>${bedFeeVerificationCell(r)}</td>
             </tr>`).join("")}
+            ${isAllBranches?`<tr class="global-total-card">
+              <td colspan="3"><strong>ALL BRANCHES TOTAL</strong></td>
+              <td><strong>${money(total)}</strong></td>
+              <td></td>
+            </tr>`:""}
           </tbody>
         </table>
       </div>
@@ -3378,7 +3456,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const pending=(allRows||[]).filter(r=>{
       const amount=Number(r.bed_fee||0);
       const state=(r.payment_statuses||{}).bed_fee||"";
-      return amount>0 && state!=="accepted";
+      return String(r.settlement_date||"")<=today() && amount>0 && state!=="accepted";
     });
 
     const byMerchant={};
@@ -3632,10 +3710,32 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
 
     renderHistoryMonthlyBranchSummary();
 
-    const monthRows=(allRows||[]).filter(r=>String(r.settlement_date||"").slice(0,7)===ym);
+    const monthRows=(allRows||[]).filter(r=>
+      String(r.settlement_date||"").slice(0,7)===ym &&
+      String(r.settlement_date||"")<=today()
+    );
+    const meaningfulMonthRows=monthRows.filter(r=>{
+      const hasMoney=[
+        "visa","master","tng","cash","bank_transfer","tips","alipay","online_card",
+        "amex","bed_fee","grand_total","cash_withdrawal","petty_net","petty_in","petty_out"
+      ].some(k=>Number(r?.[k]||0)!==0);
+
+      const hasStaff=String(r?.staff||"").trim()!=="";
+      const hasProof=!!(
+        r?.card_settlement_receipt?.path ||
+        r?.tng_settlement_receipt?.path
+      );
+      const hasStatus=!!(
+        r?.status ||
+        (r?.payment_statuses && Object.keys(r.payment_statuses).length)
+      );
+
+      return hasMoney || hasStaff || hasProof || hasStatus;
+    });
+
     const map=new Map();
 
-    [...monthRows]
+    [...meaningfulMonthRows]
       .sort((a,b)=>String(b.settlement_date).localeCompare(String(a.settlement_date)))
       .forEach(r=>{
         if(!map.has(r.settlement_date)) map.set(r.settlement_date,[]);
@@ -3788,7 +3888,13 @@ return `<div class="history-date-card">
       .eq("settlement_date",dailyOrderTarget.date)
       .eq("branch",dailyOrderTarget.branch)
       .order("created_at",{ascending:false});
-    if(error){root.innerHTML=`<div class="bad">${escHtml(error.message)}</div>`;return;}
+    if(error){
+      const missingTable=String(error.message||"").includes("daily_order_records");
+      root.innerHTML=missingTable
+        ? `<div class="bad">Order Record database is not set up yet.</div>`
+        : `<div class="bad">${escHtml(error.message)}</div>`;
+      return;
+    }
     root.innerHTML=(data||[]).map(x=>`<div style="border-bottom:1px solid var(--line);padding:9px 0">
       <div style="display:flex;justify-content:space-between;gap:10px">
         <strong>${x.is_ordered?"Ordered ✓":"Pending"}</strong>
@@ -3811,7 +3917,13 @@ return `<div class="history-date-card">
       is_ordered:Boolean(markOrdered),
       created_by:currentUserEmail||""
     });
-    if(error){state.textContent=error.message;state.className="bad";return;}
+    if(error){
+      state.textContent=String(error.message||"").includes("daily_order_records")
+        ? "Order Record database is not set up yet."
+        : error.message;
+      state.className="bad";
+      return;
+    }
     state.textContent=markOrdered?"Ordered ✓":"Saved ✓";
     state.className="ok";
     $("dailyOrderNote").value="";
@@ -6207,8 +6319,8 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 <div class="settlement-kpis">
 <div class="settlement-kpi"><div class="k">Revenue</div><div class="v" id="settlementRevenue">RM 0.00</div></div>
-<div class="settlement-kpi"><div class="k">Branch Salary <span class="branch-chip">AUTO</span></div><div class="v" id="settlementSalary">RM 0.00</div></div>
-<div class="settlement-kpi"><div class="k">Petty Cash Record <span class="branch-chip">AUTO</span></div><div class="v" id="settlementPetty">RM 0.00</div></div>
+<div class="settlement-kpi"><div class="k">Branch Salary <span class="branch-chip">AUTO · LIVE</span></div><div class="v" id="settlementSalary">RM 0.00</div></div>
+<div class="settlement-kpi"><div class="k">Petty Cash Record <span class="branch-chip">AUTO · LIVE</span></div><div class="v" id="settlementPetty">RM 0.00</div></div>
 <div class="settlement-kpi"><div class="k">Profit</div><div class="v" id="settlementProfit">RM 0.00</div></div>
 </div>
 <div class="salary-card" id="settlementPaymentMethodsCard">
@@ -6249,12 +6361,12 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 <div class="settlement-expense-row" data-expense-payment-key="salary7">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-<strong>Branch Salary 7th</strong><span class="branch-chip">AUTO</span>
+<strong>Branch Salary 7th</strong><span class="branch-chip">AUTO · LIVE</span>
 </div>
 <input disabled="" id="settlementSalary7Input" readonly="" type="number"/>
 </div><div class="settlement-expense-row" data-expense-payment-key="salary14">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-<strong>Branch Salary 14th</strong><span class="branch-chip">AUTO</span>
+<strong>Branch Salary 14th</strong><span class="branch-chip">AUTO · LIVE</span>
 </div>
 <input disabled="" id="settlementSalary14Input" readonly="" type="number"/>
 </div>
@@ -6262,7 +6374,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="settlement-expense-row" data-expense-payment-key="salary_epf">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
   <div>
-    <strong>EPF</strong> <span class="branch-chip">AUTO</span>
+    <strong>EPF</strong> <span class="branch-chip">AUTO · LIVE</span>
     <div class="helper" id="settlementEpfBreakdown">Employee RM 0.00 + Employer RM 0.00</div>
   </div>
 </div>
@@ -6272,7 +6384,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="settlement-expense-row" data-expense-payment-key="salary_socso_eis">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
   <div>
-    <strong>SOCSO / EIS</strong> <span class="branch-chip">AUTO</span>
+    <strong>SOCSO / EIS</strong> <span class="branch-chip">AUTO · LIVE</span>
     <div class="helper" id="settlementSocsoEisBreakdown">Employee RM 0.00 + Employer RM 0.00</div>
   </div>
 </div>
@@ -6282,7 +6394,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="settlement-expense-row" data-expense-payment-key="salary_taxpcb">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
   <div>
-    <strong>Tax PCB</strong> <span class="branch-chip">AUTO</span>
+    <strong>Tax PCB</strong> <span class="branch-chip">AUTO · LIVE</span>
     <div class="helper" id="settlementTaxPcbBreakdown">Employee RM 0.00 · Employer RM 0.00</div>
   </div>
 </div>
@@ -6300,7 +6412,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="settlement-expense-row" data-expense-payment-key="petty_cash">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 <strong>Petty Cash Record</strong>
-<span class="branch-chip">AUTO</span>
+<span class="branch-chip">AUTO · LIVE</span>
 </div>
 <input disabled="" id="settlementPettyInput" readonly="" type="number"/>
 </div>
@@ -6407,6 +6519,20 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="salary-card">
 <div class="outlet-title"><strong>History · Total Branches Year Profit &amp; Loss</strong><span id="settlementYearProfit">RM 0.00</span></div>
 <div class="table-wrap" id="settlementYearTable" style="margin-top:12px"></div>
+</div>
+<div class="salary-card">
+<div class="outlet-title">
+<strong>Year-End Bonus by Branch</strong>
+<span id="settlementYearEndBonusTotal">RM 0.00</span>
+</div>
+<div class="table-wrap" id="settlementYearEndBonusTable" style="margin-top:12px"></div>
+</div>
+<div class="salary-card">
+<div class="outlet-title">
+<strong>Profit Share by Person</strong>
+<button class="btn" id="addProfitSharePersonBtn" type="button">+ Add Profit Share Person</button>
+</div>
+<div class="table-wrap" id="profitSharePersonTable" style="margin-top:12px"></div>
 </div>
 </div>
 </div>
@@ -11901,6 +12027,29 @@ function settlementManualExpense(){
 function settlementProjectExpense(){
   return settlementProjects.reduce((s,p)=>s+Number(p.amount||0),0);
 }
+
+function settlementApplyMonthlyExpenseValues(effective){
+  SETTLEMENT_EXPENSE_FIELDS.forEach(field=>{
+    const el=document.querySelector(`[data-finance-field="${field}"]`);
+    if(!el) return;
+    el.value=Number(effective?.[field]||0);
+    el.readOnly=true;
+  });
+}
+
+function settlementClearAutoMonthlyRows(){
+  [
+    "settlementSalary7Input",
+    "settlementSalary14Input",
+    "settlementEpfInput",
+    "settlementSocsoEisInput",
+    "settlementTaxPcbInput",
+    "settlementPettyInput"
+  ].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.value="";
+  });
+}
 function settlementRecalculate(){
   const manual=settlementManualExpense();
   const projects=settlementProjectExpense();
@@ -12127,29 +12276,53 @@ async function loadSettlementMonth(){
   if(state) state.textContent="Loading...";
   if(carryState) carryState.textContent="";
 
+  // Prevent previous month's AUTO values from staying visible while this month loads.
+  settlementClearAutoMonthlyRows();
+
   const monthDate=settlementMonthDate();
   const db=settlementDb();
 
   try{ await loadSettlementPaymentMethods(); }catch(err){ console.warn("Payment Methods unavailable",err); }
 
-  const [autoRes,recordRes]=await Promise.all([
-    db.rpc("settlement_month_summary",{p_outlet:settlementCurrentOutlet,p_month:monthDate}),
+  const ym=String(monthDate).slice(0,7);
+  const [yy,mm]=ym.split("-").map(Number);
+  const monthStart=ym+"-01";
+  const nextMonth=(mm===12)
+    ? `${yy+1}-01-01`
+    : `${yy}-${String(mm+1).padStart(2,"0")}-01`;
+
+  const [dailyRes,recordRes]=await Promise.all([
+    db.from("daily_settlements")
+      .select("grand_total,petty_out,petty_in,petty_entries")
+      .eq("branch",settlementCurrentOutlet)
+      .gte("settlement_date",monthStart)
+      .lt("settlement_date",nextMonth),
     db.from("settlement_monthly_expenses").select("*")
       .eq("outlet",settlementCurrentOutlet)
       .eq("month_date",monthDate)
       .maybeSingle()
   ]);
 
-  if(autoRes.error) throw autoRes.error;
+  if(dailyRes.error) throw dailyRes.error;
   if(recordRes.error) throw recordRes.error;
 
-  const auto=Array.isArray(autoRes.data)?autoRes.data[0]:autoRes.data;
+  const dailyRows=dailyRes.data||[];
+  const latestRevenue=dailyRows.reduce((sum,r)=>sum+Number(r.grand_total||0),0);
+  const latestPetty=dailyRows.reduce((sum,r)=>{
+    if(Array.isArray(r.petty_entries)){
+      return sum+r.petty_entries
+        .filter(x=>String(x?.type||"").toLowerCase()==="out")
+        .reduce((s,x)=>s+Number(x?.amount||0),0);
+    }
+    return sum+Number(r.petty_out||0);
+  },0);
+
   settlementAuto={
-    revenue:Number(auto?.revenue||0),
+    revenue:+latestRevenue.toFixed(2),
     salary:0,
     salary7:0,
     salary14:0,
-    petty_cash:Number(auto?.petty_cash||0),
+    petty_cash:+latestPetty.toFixed(2),
     epf_employee:0,
     epf_employer:0,
     epf_total:0,
@@ -12238,12 +12411,54 @@ async function loadSettlementMonth(){
 
     settlementAuto.taxpcb_employee=+taxPcb.toFixed(2);
 
-    settlementAuto.salary14=(s14Res.data||[])
-      .filter(x=>ids.has(String(x.employee_id)))
-      .reduce((s,x)=>s+Number(x.net_pay||0),0);
+    // 14th AUTO must always use the newest available data.
+    // Confirmed snapshot wins; otherwise calculate from current monthly commission values.
+    const commissionSnapMap=new Map((s14Res.data||[]).map(x=>[String(x.employee_id),x]));
+    let salary14Latest=0;
+
+    for(const e of branchEmployees){
+      if(String(e.employment_type||"full_time")==="part_time") continue;
+      const id=String(e.id);
+      const confirmed14=commissionSnapMap.get(id);
+
+      if(confirmed14){
+        salary14Latest+=Number(confirmed14.net_pay||0);
+        continue;
+      }
+
+      const monthlyRow=monthlyMap.get(id)||{};
+      const confirmed7=confirmed7.get(id);
+      let sevenCalc=null;
+
+      try{
+        sevenCalc=confirmed7
+          ? normalizedSevenSnapshot(e,confirmed7)
+          : calculate7th(e,monthlyRow);
+      }catch(_){
+        sevenCalc=null;
+      }
+
+      let threeBonus=0;
+      try{
+        if(window.ndQuarter3Bonus?.isPayoutMonth?.(ym) && window.ndQuarter3Bonus?.calculateEmployee){
+          threeBonus=Number(await window.ndQuarter3Bonus.calculateEmployee(Number(e.id),ym)||0);
+        }
+      }catch(err){
+        console.warn("Report latest 3-Bonus failed",e?.id,err);
+      }
+
+      try{
+        const latest14=calculate14th(monthlyRow,sevenCalc,threeBonus);
+        salary14Latest+=Number(latest14.net_pay||0);
+      }catch(err){
+        console.warn("Report latest 14th calculation failed",e?.id,err);
+      }
+    }
+
+    settlementAuto.salary14=+salary14Latest.toFixed(2);
 
     // Full company payroll cash cost:
-    // employee net salary + 14th salary + statutory remittances.
+    // employee net salary + latest 14th + statutory remittances.
     settlementAuto.salary=+(
       settlementAuto.salary7+
       settlementAuto.salary14+
@@ -12279,13 +12494,7 @@ async function loadSettlementMonth(){
     }
   }
 
-  SETTLEMENT_EXPENSE_FIELDS.forEach(field=>{
-    const el=document.querySelector(`[data-finance-field="${field}"]`);
-    if(el){
-      el.value=Number(effective?.[field]||0);
-      el.readOnly=true;
-    }
-  });
+  settlementApplyMonthlyExpenseValues(effective);
   try{
     const savedLabels=JSON.parse(localStorage.getItem("nd_report_expense_labels_v1_"+settlementCurrentOutlet)||"{}");
     Object.entries(savedLabels).forEach(([field,label])=>{
@@ -12336,6 +12545,7 @@ async function saveSettlementMonth(){
     document.querySelectorAll("[data-finance-field]").forEach(el=>{ el.readOnly=true; });
     document.querySelectorAll("[data-expense-edit]").forEach(btn=>{ btn.textContent="✎"; btn.title="Edit"; });
     await loadSettlementMonth();
+    settlementRecalculate();
   }catch(err){
     alert("Settlement save failed: "+(err?.message||err));
   }finally{
@@ -12725,6 +12935,264 @@ async function loadSettlementTotalMonth(){
   }
 }
 
+
+async function loadYearEndBonusSettings(year){
+  const db=settlementDb();
+  const {data,error}=await db.from("branch_year_end_bonus_settings")
+    .select("branch,bonus_percent")
+    .eq("bonus_year",Number(year));
+  if(error){
+    console.warn("Year-End Bonus settings unavailable:",error.message);
+    return new Map();
+  }
+  return new Map((data||[]).map(r=>[
+    String(r.branch||"").trim(),
+    Number(r.bonus_percent||0)
+  ]));
+}
+
+async function saveYearEndBonusPercent(branch,year,percent){
+  const db=settlementDb();
+  const value=Math.max(0,Number(percent||0));
+  const {error}=await db.from("branch_year_end_bonus_settings")
+    .upsert({
+      branch:String(branch||"").trim(),
+      bonus_year:Number(year),
+      bonus_percent:value,
+      updated_at:new Date().toISOString()
+    },{onConflict:"branch,bonus_year"});
+  if(error) throw error;
+}
+
+async function renderYearEndBonusByBranch(year,yearBranchTotals){
+  const root=document.getElementById("settlementYearEndBonusTable");
+  const totalEl=document.getElementById("settlementYearEndBonusTotal");
+  if(!root) return;
+
+  const settings=await loadYearEndBonusSettings(year);
+
+  yearEndBranchProfitMap=new Map(
+    [...yearBranchTotals.entries()].map(([branch,values])=>[
+      branch,
+      Number(values.profit||0)
+    ])
+  );
+
+  const rows=[...yearBranchTotals.entries()]
+    .map(([branch,values])=>{
+      const profit=Number(values.profit||0);
+      const pct=Number(settings.get(branch)||0);
+      const bonus=Math.max(0,profit)*pct/100;
+      return {branch,profit,pct,bonus};
+    })
+    .sort((a,b)=>String(a.branch).localeCompare(String(b.branch)));
+
+  const totalProfit=rows.reduce((s,r)=>s+Number(r.profit||0),0);
+  const totalBonus=rows.reduce((s,r)=>s+Number(r.bonus||0),0);
+  const totalAfter=rows.reduce((s,r)=>s+Number(r.profit-r.bonus),0);
+
+  if(totalEl) totalEl.textContent=settlementMoney(totalBonus);
+
+  root.innerHTML=`<table>
+    <thead>
+      <tr>
+        <th>Branch</th>
+        <th>Year Profit</th>
+        <th>Bonus %</th>
+        <th>Year-End Bonus</th>
+        <th>Profit After Bonus</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(r=>`
+        <tr>
+          <td><strong>${settlementEsc(r.branch)}</strong></td>
+          <td>${settlementMoney(r.profit)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px;min-width:150px">
+              <input type="number" min="0" step="0.1"
+                value="${Number(r.pct||0)}"
+                data-year-bonus-percent="${settlementEsc(r.branch)}"
+                style="width:90px"/>
+              <span>%</span>
+            </div>
+          </td>
+          <td data-year-bonus-amount="${settlementEsc(r.branch)}"><strong>${settlementMoney(r.bonus)}</strong></td>
+          <td data-year-bonus-after="${settlementEsc(r.branch)}">${settlementMoney(r.profit-r.bonus)}</td>
+        </tr>
+      `).join("")}
+      <tr class="global-total-card">
+        <td><strong>ALL BRANCHES</strong></td>
+        <td><strong>${settlementMoney(totalProfit)}</strong></td>
+        <td></td>
+        <td><strong id="yearEndBonusGrandTotal">${settlementMoney(totalBonus)}</strong></td>
+        <td><strong id="yearEndProfitAfterBonus">${settlementMoney(totalAfter)}</strong></td>
+      </tr>
+    </tbody>
+  </table>`;
+
+  root.querySelectorAll("[data-year-bonus-percent]").forEach(input=>{
+    input.onchange=async()=>{
+      const branch=input.dataset.yearBonusPercent||"";
+      const pct=Math.max(0,Number(input.value||0));
+      input.disabled=true;
+
+      try{
+        await saveYearEndBonusPercent(branch,year,pct);
+
+        const row=rows.find(x=>x.branch===branch);
+        if(row){
+          row.pct=pct;
+          row.bonus=Math.max(0,row.profit)*pct/100;
+
+          const findByAttr=(attr,name)=>[...root.querySelectorAll(`[${attr}]`)]
+            .find(el=>String(el.getAttribute(attr)||"")===name);
+
+          const amountEl=findByAttr("data-year-bonus-amount",branch);
+          const afterEl=findByAttr("data-year-bonus-after",branch);
+
+          if(amountEl) amountEl.innerHTML=`<strong>${settlementMoney(row.bonus)}</strong>`;
+          if(afterEl) afterEl.textContent=settlementMoney(row.profit-row.bonus);
+
+          const grand=rows.reduce((s,r)=>s+Number(r.bonus||0),0);
+          const after=rows.reduce((s,r)=>s+Number(r.profit-r.bonus),0);
+
+          const grandEl=document.getElementById("yearEndBonusGrandTotal");
+          const afterGrandEl=document.getElementById("yearEndProfitAfterBonus");
+          if(grandEl) grandEl.textContent=settlementMoney(grand);
+          if(afterGrandEl) afterGrandEl.textContent=settlementMoney(after);
+          if(totalEl) totalEl.textContent=settlementMoney(grand);
+        }
+      }catch(err){
+        alert("Year-End Bonus % save failed: "+(err?.message||err));
+      }finally{
+        input.disabled=false;
+      }
+    };
+  });
+}
+
+
+let yearEndBranchProfitMap=new Map();
+
+async function loadProfitSharePeople(year){
+  const {data,error}=await settlementDb()
+    .from("branch_profit_share_people")
+    .select("*")
+    .eq("share_year",Number(year))
+    .order("branch")
+    .order("person_name");
+  if(error){
+    console.warn("Profit Share people unavailable:",error.message);
+    return [];
+  }
+  return data||[];
+}
+
+async function renderProfitSharePeople(year){
+  const root=document.getElementById("profitSharePersonTable");
+  if(!root) return;
+
+  const people=await loadProfitSharePeople(year);
+
+  if(!people.length){
+    root.innerHTML='<div style="padding:12px 0">No Profit Share Person.</div>';
+    return;
+  }
+
+  const rows=people.map(p=>{
+    const branch=String(p.branch||"").trim();
+    const profit=Number(yearEndBranchProfitMap.get(branch)||0);
+    const pct=Number(p.share_percent||0);
+    const amount=Math.max(0,profit)*pct/100;
+    return {...p,profit,amount};
+  });
+
+  root.innerHTML=`<table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Branch</th>
+        <th>Year Profit</th>
+        <th>Share %</th>
+        <th>Profit Share</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(r=>`
+        <tr>
+          <td><strong>${settlementEsc(r.person_name)}</strong></td>
+          <td>${settlementEsc(r.branch)}</td>
+          <td>${settlementMoney(r.profit)}</td>
+          <td>${Number(r.share_percent||0)}%</td>
+          <td><strong>${settlementMoney(r.amount)}</strong></td>
+          <td><button class="btn" type="button" data-profit-share-delete="${r.id}">Delete</button></td>
+        </tr>
+      `).join("")}
+    </tbody>
+  </table>`;
+
+  root.querySelectorAll("[data-profit-share-delete]").forEach(btn=>{
+    btn.onclick=async()=>{
+      if(!confirm("Delete this Profit Share Person?")) return;
+      const {error}=await settlementDb()
+        .from("branch_profit_share_people")
+        .delete()
+        .eq("id",Number(btn.dataset.profitShareDelete));
+      if(error){alert("Delete failed: "+error.message);return;}
+      await renderProfitSharePeople(year);
+    };
+  });
+}
+
+function openProfitSharePersonModal(year){
+  const modal=document.getElementById("profitSharePersonModal");
+  const branchSel=document.getElementById("profitSharePersonBranch");
+  if(branchSel){
+    const names=[...yearEndBranchProfitMap.keys()];
+    branchSel.innerHTML=names.map(b=>`<option value="${settlementEsc(b)}">${settlementEsc(b)}</option>`).join("");
+  }
+  document.getElementById("profitSharePersonName").value="";
+  document.getElementById("profitSharePersonPercent").value="";
+  document.getElementById("profitSharePersonSaveState").textContent="";
+  modal.dataset.shareYear=String(year);
+  modal.classList.add("open");
+}
+
+async function saveProfitSharePerson(){
+  const modal=document.getElementById("profitSharePersonModal");
+  const year=Number(modal.dataset.shareYear||new Date().getFullYear());
+  const name=String(document.getElementById("profitSharePersonName")?.value||"").trim();
+  const branch=String(document.getElementById("profitSharePersonBranch")?.value||"").trim();
+  const pct=Math.max(0,Number(document.getElementById("profitSharePersonPercent")?.value||0));
+  const state=document.getElementById("profitSharePersonSaveState");
+
+  if(!name){state.textContent="Name is required.";return;}
+  if(!branch){state.textContent="Branch is required.";return;}
+
+  state.textContent="Saving...";
+
+  const {error}=await settlementDb()
+    .from("branch_profit_share_people")
+    .insert({
+      share_year:year,
+      branch,
+      person_name:name,
+      share_percent:pct,
+      updated_at:new Date().toISOString()
+    });
+
+  if(error){
+    state.textContent=error.message;
+    return;
+  }
+
+  state.textContent="Saved ✓";
+  await renderProfitSharePeople(year);
+  setTimeout(()=>modal.classList.remove("open"),250);
+}
+
 async function loadSettlementYear(){
   initSettlementYears();
 
@@ -12752,10 +13220,22 @@ async function loadSettlementYear(){
 
     // Calculate all 12 months in parallel. A problem in one month must never
     // make the whole yearly report disappear.
+    const yearBranchTotals=new Map();
+
     const monthResults=await Promise.all(
       monthDates.map(async monthDate=>{
         try{
           const branchRows=await settlementAllBranchesForMonth(monthDate);
+
+          branchRows.forEach(r=>{
+            const branch=String(r.outlet||"").trim();
+            if(!branch) return;
+            const cur=yearBranchTotals.get(branch)||{profit:0,revenue:0,total_expenses:0};
+            cur.profit+=Number(r.profit||0);
+            cur.revenue+=Number(r.revenue||0);
+            cur.total_expenses+=Number(r.total_expenses||0);
+            yearBranchTotals.set(branch,cur);
+          });
 
           return {
             month_date:monthDate,
@@ -12842,6 +13322,9 @@ async function loadSettlementYear(){
         </tbody>
       </table>`;
     }
+
+    await renderYearEndBonusByBranch(year,yearBranchTotals);
+    await renderProfitSharePeople(year);
   }catch(err){
     console.error("Year Profit & Loss failed:",err);
     if(profitEl) profitEl.textContent="RM 0.00";
@@ -12850,6 +13333,10 @@ async function loadSettlementYear(){
         Year report load failed. Tap Refresh History to retry.
       </div>`;
     }
+    const bonusRoot=document.getElementById("settlementYearEndBonusTable");
+    if(bonusRoot) bonusRoot.innerHTML="";
+    const bonusTotal=document.getElementById("settlementYearEndBonusTotal");
+    if(bonusTotal) bonusTotal.textContent="RM 0.00";
   }
 }
 async function loadSettlementAdmins(){
@@ -12965,13 +13452,27 @@ document.addEventListener("DOMContentLoaded",()=>{
     }
   });
 
-  document.getElementById("settlementMonth")?.addEventListener("change",loadSettlementMonth);
-  document.getElementById("settlementRefreshBtn")?.addEventListener("click",loadSettlementMonth);
+  document.getElementById("settlementMonth")?.addEventListener("change",async()=>{
+    await loadSettlementMonth();
+    settlementRecalculate();
+  });
+  document.getElementById("settlementRefreshBtn")?.addEventListener("click",async()=>{
+    await loadSettlementMonth();
+    settlementRecalculate();
+  });
   document.getElementById("settlementSaveBtn")?.addEventListener("click",saveSettlementMonth);
   document.getElementById("settlementTotalMonth")?.addEventListener("change",loadSettlementTotalMonth);
   document.getElementById("settlementTotalMonthRefreshBtn")?.addEventListener("click",loadSettlementTotalMonth);
   document.getElementById("settlementYear")?.addEventListener("change",loadSettlementYear);
   document.getElementById("settlementYearRefreshBtn")?.addEventListener("click",loadSettlementYear);
+  document.getElementById("addProfitSharePersonBtn")?.addEventListener("click",()=>{
+    const year=Number(document.getElementById("settlementYear")?.value||new Date().getFullYear());
+    openProfitSharePersonModal(year);
+  });
+  document.getElementById("closeProfitSharePersonModal")?.addEventListener("click",()=>{
+    document.getElementById("profitSharePersonModal")?.classList.remove("open");
+  });
+  document.getElementById("saveProfitSharePersonBtn")?.addEventListener("click",saveProfitSharePerson);
 
   document.getElementById("settlementExpenseForm")?.addEventListener("change",async e=>{
     if(e.target?.matches?.("[data-payment-date]")){
@@ -22612,6 +23113,34 @@ window.addEventListener("resize",()=>{
 });
 
 </script>
+
+
+<div class="salary-modal" id="profitSharePersonModal">
+  <div class="salary-dialog" style="width:min(520px,94vw)">
+    <div class="outlet-title">
+      <div><h3 style="margin:0">Add Profit Share Person</h3></div>
+      <button class="main-page-close" id="closeProfitSharePersonModal" type="button">×</button>
+    </div>
+    <div class="salary-card" style="box-shadow:none">
+      <div class="field">
+        <label>Name</label>
+        <input id="profitSharePersonName" type="text" placeholder="Name">
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>Branch</label>
+        <select id="profitSharePersonBranch"></select>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>Share %</label>
+        <input id="profitSharePersonPercent" type="number" min="0" step="0.1" placeholder="0">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+        <button class="btn primary" id="saveProfitSharePersonBtn" type="button">Save</button>
+        <span class="helper" id="profitSharePersonSaveState"></span>
+      </div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
