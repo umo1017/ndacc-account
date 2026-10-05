@@ -5,6 +5,16 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes" name="viewport"/>
 <title>Nature's Dao Daily Settlement</title>
+
+<script>
+/* ===== LOCAL DATE HELPERS — Asia/Kuala_Lumpur browser-local safe ===== */
+function ndLocalDateISO(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function ndLocalMonthISO(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--bg:#f5f4ef;--card:#fff;--line:#e6e3da;--text:#191919;--muted:#707070;--gold:#b58a2b;--soft:#faf8f2;--ok:#1f7a48;--danger:#b42318}
@@ -1102,6 +1112,10 @@ body{
 .clean-peach{background:#ffe2d5}
 .cleaning-off{background:#f2f2f2;border-radius:8px;padding:5px;text-align:center}
 
+
+.money-input-box{display:flex;align-items:center;gap:6px;min-width:150px;}
+.money-input-prefix{font-weight:800;color:#555;white-space:nowrap;}
+.money-input-box input{min-width:0;width:100%;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -6481,7 +6495,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     <div id="bonusFixedExcludeList" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-top:12px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px;flex-wrap:wrap">
       <span class="helper" id="bonusFixedExcludeSaveState"></span>
-      <button class="btn primary" id="bonusFixedExcludeSaveBtn" type="button">Save Fixed Excluded Staff</button>
+      <button class="btn primary" id="bonusFixedExcludeSaveBtn" type="button">Save Again</button>
     </div>
    </div>
    <div class="bonus-table-wrap">
@@ -7341,7 +7355,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 <div class="salary-form">
 <div><label>Employee No.</label><input id="empNo" placeholder="Auto" readonly=""/></div>
-<div><label>Birthday *</label><input id="empBirthday" required="" type="date"/></div>
+<div><label>Birthday *</label><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input id="empBirthday" type="date" style="flex:1;min-width:160px"/><label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:700;white-space:nowrap"><input id="empBirthdayNA" type="checkbox"/> NA</label></div></div>
 <div><label>Join Date *</label><input id="empJoinDate" required="" type="date"/></div>
 <div><label>Last Working Date</label><input id="empLastDate" type="date"/></div>
 <div><label>Outlet *</label><select id="empOutlet" required=""></select></div>
@@ -7391,7 +7405,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <input id="editEmpId" type="hidden"/>
 <div class="salary-form">
 <div><label>Employee No.</label><input id="editEmpNo" readonly=""/></div>
-<div><label>Birthday</label><input id="editEmpBirthday" type="date"/></div>
+<div><label>Birthday</label><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input id="editEmpBirthday" type="date" style="flex:1;min-width:160px"/><label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:700;white-space:nowrap"><input id="editEmpBirthdayNA" type="checkbox"/> NA</label></div></div>
 <div><label>Join Date</label><input id="editEmpJoinDate" type="date"/></div>
 <div><label>Last Working Date</label><input id="editEmpLastDate" type="date"/></div>
 <div><label>Outlet</label><select id="editEmpOutlet"></select></div>
@@ -7565,7 +7579,7 @@ const money=v=>"RM "+Number(v||0).toLocaleString("en-MY",{minimumFractionDigits:
 const SALARY_START_MONTH="2026-08";
 const monthKey=()=>{
   const el=byId("salaryMonth");
-  let v=(el?.value||new Date().toISOString().slice(0,7));
+  let v=(el?.value||ndLocalMonthISO());
   if(v<SALARY_START_MONTH) v=SALARY_START_MONTH;
   if(el && el.value!==v) el.value=v;
   return v;
@@ -7599,7 +7613,7 @@ async function sha256Hex(s){
 function monthBounds(month){
   const [y,m]=month.split("-").map(Number);
   const start=`${month}-01`;
-  const end=new Date(y,m,0).toISOString().slice(0,10);
+  const end=`${y}-${String(m).padStart(2,"0")}-${String(new Date(y,m,0).getDate()).padStart(2,"0")}`;
   return {start,end};
 }
 function activeInMonth(e,month){
@@ -8922,7 +8936,8 @@ function prepareAutoEmployeeNo(){
 function collectStaffPayload(){
   return {
     employee_no:null,
-    birthday:byId("empBirthday")?.value||null,
+    birthday:byId("empBirthdayNA")?.checked?null:(byId("empBirthday")?.value||null),
+    birthday_na:!!byId("empBirthdayNA")?.checked,
     join_date:byId("empJoinDate").value||null,
     last_working_date:byId("empLastDate").value||null,
     outlet:byId("empOutlet").value,
@@ -8968,6 +8983,7 @@ function validateNewStaffRequiredFields(messageElId){
   const outlet=(byId("empOutlet")?.value||"").trim();
   const employmentType=(byId("empEmploymentType")?.value||"").trim();
   const birthday=(byId("empBirthday")?.value||"").trim();
+  const birthdayNA=!!byId("empBirthdayNA")?.checked;
   const joinDate=(byId("empJoinDate")?.value||"").trim();
   const name=(byId("empName")?.value||"").trim();
   const nric=(byId("empNric")?.value||"").trim();
@@ -8977,7 +8993,7 @@ function validateNewStaffRequiredFields(messageElId){
 
   if(!outlet) return fail("Please select Outlet.","empOutlet");
   if(!employmentType) return fail("Please select Employment Type.","empEmploymentType");
-  if(!birthday) return fail("Birthday is required.","empBirthday");
+  if(!birthday && !birthdayNA) return fail("Birthday is required or select NA.","empBirthday");
   if(!joinDate) return fail("Join Date is required.","empJoinDate");
   if(!name) return fail("Name is required.","empName");
   if(!phone) return fail("Phone is required.","empPhone");
@@ -8996,7 +9012,7 @@ function reviewStaffBeforeSubmit(){
 
   const rows=[
     ["Employee No.",byId("empNo")?.value||"-"] ,["Name",p.name],["Outlet",p.outlet],["Employment Type",p.employment_type==="part_time"?"Part Time":"Full Time"],
-    ["Birthday",p.birthday||"-"],["Join Date",p.join_date||"-"],["Last Working Date",p.last_working_date||"-"],
+    ["Birthday",p.birthday_na?"NA":(p.birthday||"-")],["Join Date",p.join_date||"-"],["Last Working Date",p.last_working_date||"-"],
     ["NRIC / Passport",p.nric_passport||"-"],["Phone",p.phone||"-"],["Email",p.email||"-"],["Pay By",p.payment_method],
     ["Bank Name",p.bank_name||"-"],["Bank Account",p.bank_account||"-"],
     ["SOCSO No.",p.socso_no||"-"],["KWSP / EPF No.",p.epf_no||"-"],["Tax No.",p.tax_no||"-"],
@@ -9108,6 +9124,20 @@ async function loadSalaryData(){
   salarySnapshots=snapRes.data||[];
   salaryCommissionSnapshots=commissionRes.data||[];
   salaryYtdSnapshots=ytdRes.data||[];
+  salaryLastLoadedMonth=month;
+
+  // If a live refresh happens while the user is editing 14th Commission,
+  // keep the unsaved values visible instead of silently replacing them with cloud values.
+  if(commissionPendingChanges.size && commissionPendingMonth===month+"-01"){
+    commissionPendingChanges.forEach((changes,empId)=>{
+      let row=salaryMonthly.find(x=>Number(x.employee_id)===Number(empId));
+      if(!row){
+        row={employee_id:Number(empId),salary_month:month+"-01"};
+        salaryMonthly.push(row);
+      }
+      Object.assign(row,changes);
+    });
+  }
 
   // One-time compatibility migration:
   // old Commission / Total Commission values move into Commission A
@@ -9189,7 +9219,8 @@ function summaryForOutlet(emps){
 }
 
 function editInput(empId,field,value,disabled=false){
-  return `<input type="number" min="0" step="0.01" value="${Number(value||0)}" data-month-edit="${empId}" data-field="${field}">`;
+  const n=Number(value||0);
+  return `<div class="money-input-box"><span class="money-input-prefix">RM</span><input type="number" min="0" step="0.01" value="${n}" data-original-value="${n}" data-month-edit="${empId}" data-field="${field}"></div>`;
 }
 
 
@@ -9405,18 +9436,16 @@ function salaryQuarter3BonusFor(empId){
 }
 let salaryViewMode=localStorage.getItem("nd_salary_view_mode_v1")||"7th";
 const commissionPendingChanges=new Map();
+let commissionPendingMonth="";
+let salaryLastLoadedMonth="";
 
-function markCommissionDirty(empId,field,value){
-  empId=Number(empId);
-  const existing=commissionPendingChanges.get(empId)||{};
-  existing[field]=Number(value||0);
-  commissionPendingChanges.set(empId,existing);
-
+function updateCommissionDirtyState(){
   const state=byId("commissionSubmitState");
   const btn=byId("commissionSubmitBtn");
+  const count=commissionPendingChanges.size;
   if(state){
-    state.textContent=`Unsaved Changes · ${commissionPendingChanges.size} Staff`;
-    state.className="helper bad";
+    state.textContent=count?`Unsaved Changes · ${count} Staff`:"Saved ✓";
+    state.className=count?"helper bad":"helper ok";
   }
   if(btn){
     btn.disabled=false;
@@ -9424,8 +9453,36 @@ function markCommissionDirty(empId,field,value){
   }
 }
 
+function markCommissionDirty(empId,field,value){
+  empId=Number(empId);
+  const currentMonth=monthDate();
+  if(!commissionPendingMonth) commissionPendingMonth=currentMonth;
+  // Never allow pending commission values from one month to silently move into another month.
+  if(commissionPendingMonth!==currentMonth){
+    alert("Unsaved Commission Changes belong to "+String(commissionPendingMonth).slice(0,7)+". Please return to that month or discard them first.");
+    return;
+  }
+  const existing=commissionPendingChanges.get(empId)||{};
+  existing[field]=Number(value||0);
+  commissionPendingChanges.set(empId,existing);
+  updateCommissionDirtyState();
+}
+
+function clearCommissionDirtyField(empId,field){
+  empId=Number(empId);
+  const existing=commissionPendingChanges.get(empId);
+  if(existing){
+    delete existing[field];
+    if(Object.keys(existing).length) commissionPendingChanges.set(empId,existing);
+    else commissionPendingChanges.delete(empId);
+  }
+  if(!commissionPendingChanges.size) commissionPendingMonth="";
+  updateCommissionDirtyState();
+}
+
 function clearCommissionDirty(){
   commissionPendingChanges.clear();
+  commissionPendingMonth="";
   const state=byId("commissionSubmitState");
   const btn=byId("commissionSubmitBtn");
   if(state){
@@ -9449,7 +9506,13 @@ async function submitCommissionChanges(){
     return;
   }
 
-  if(!assertRecordEditable(monthDate())) return;
+  const targetMonth=commissionPendingMonth||monthDate();
+  if(targetMonth!==monthDate()){
+    alert("These Unsaved Commission Changes belong to "+String(targetMonth).slice(0,7)+". Switch back to that month before submitting.");
+    return;
+  }
+
+  if(!assertRecordEditable(targetMonth)) return;
 
   const btn=byId("commissionSubmitBtn");
   const state=byId("commissionSubmitState");
@@ -9466,7 +9529,7 @@ async function submitCommissionChanges(){
   commissionPendingChanges.forEach((changes,empId)=>{
     rows.push({
       employee_id:Number(empId),
-      salary_month:monthDate(),
+      salary_month:targetMonth,
       ...changes
     });
   });
@@ -9741,13 +9804,18 @@ function bindSalaryTableActions(){
       const isCommissionField=["commission_a","commission_b","customer_referral","staff_referral","reward"].includes(field);
 
       if(isCommissionField){
-        markCommissionDirty(empId,field,value);
+        const original=Number(inp.dataset.originalValue||0);
+        if(Math.abs(value-original)<0.000001){
+          clearCommissionDirtyField(empId,field);
+        }else{
+          markCommissionDirty(empId,field,value);
+        }
         recalc14thLive(empId);
       }
     };
 
+    // input is enough; keyup caused duplicate dirty events on mobile Safari.
     inp.addEventListener("input",syncLocalAndRecalc);
-    inp.addEventListener("keyup",syncLocalAndRecalc);
 
     inp.addEventListener("change",async()=>{
       syncLocalAndRecalc();
@@ -10342,6 +10410,8 @@ function openEditStaff(empId){
   byId("editEmpId").value=e.id;
   byId("editEmpNo").value=e.employee_no||"";
   byId("editEmpBirthday").value=e.birthday||"";
+  byId("editEmpBirthdayNA").checked=!!e.birthday_na;
+  byId("editEmpBirthday").disabled=!!e.birthday_na;
   byId("editEmpJoinDate").value=e.join_date||"";
   byId("editEmpLastDate").value=e.last_working_date||"";
   populateOutletSelects();
@@ -10386,7 +10456,8 @@ async function updateStaff(){
   const id=Number(byId("editEmpId").value);
   const payload={
     employee_no:byId("editEmpNo").value.trim(),
-    birthday:byId("editEmpBirthday").value||null,
+    birthday:byId("editEmpBirthdayNA")?.checked?null:(byId("editEmpBirthday").value||null),
+    birthday_na:!!byId("editEmpBirthdayNA")?.checked,
     join_date:byId("editEmpJoinDate").value||null,
     last_working_date:byId("editEmpLastDate").value||null,
     outlet:byId("editEmpOutlet").value,
@@ -10646,7 +10717,7 @@ function renderStaffList(){
       <tbody>${list.map(e=>`<tr>
 <td><span class="employee-edit-cell">${staffSafe(e.name||"-")}${staffPencil(e.id,"editEmpName")}</span>${e.is_pinned?'<span class="staff-pin-badge">TOP</span>':""}</td>
 <td><span class="employee-edit-cell">${(e.employment_type||"full_time")==="part_time"?"Part Time":"Full Time"}${staffPencil(e.id,"editEmpEmploymentType")}</span></td>
-<td><span class="employee-edit-cell">${e.birthday||"-"}${staffPencil(e.id,"editEmpBirthday")}</span></td>
+<td><span class="employee-edit-cell">${e.birthday_na?"NA":(e.birthday||"-")}${staffPencil(e.id,"editEmpBirthday")}</span></td>
 <td><span class="employee-edit-cell">${e.join_date||"-"}${staffPencil(e.id,"editEmpJoinDate")}</span></td>
 <td><span class="employee-edit-cell">${staffSafe(e.last_working_date||"-")}${staffPencil(e.id,"editEmpLastDate")}</span></td>
 <td><span class="employee-edit-cell">${e.payment_method||"-"}${staffPencil(e.id,"editEmpPayBy")}</span></td>
@@ -10788,8 +10859,22 @@ async function initialize(){
     if(sb) sb.classList.toggle("open");
   };
 
-  byId("salaryMonth").onchange=async()=>{ 
-    
+  byId("salaryMonth").onchange=async()=>{
+    const monthInput=byId("salaryMonth");
+    const nextMonth=String(monthInput?.value||"");
+    const previousMonth=salaryLastLoadedMonth||String(commissionPendingMonth||"").slice(0,7);
+
+    if(commissionPendingChanges.size && commissionPendingMonth && commissionPendingMonth!==nextMonth+"-01"){
+      const discard=confirm(
+        "You have Unsaved Commission Changes for "+String(commissionPendingMonth).slice(0,7)+".\n\nPress OK to discard them and switch month.\nPress Cancel to stay on the current month."
+      );
+      if(!discard){
+        if(monthInput && previousMonth) monthInput.value=previousMonth;
+        return;
+      }
+      clearCommissionDirty();
+    }
+
     window.activeMainPage="salary";
     await loadSalaryData();
   };
@@ -12030,6 +12115,7 @@ const SETTLEMENT_EXPENSE_FIELDS=[
   "rent","water","electricity","internet","advertising",
   "maintenance","secretary_fee","machine_fee","tax","sst","other_amount"
 ];
+window.SETTLEMENT_EXPENSE_FIELDS=SETTLEMENT_EXPENSE_FIELDS;
 
 function settlementDb(){
   if(window.salaryDb) return window.salaryDb;
@@ -12719,8 +12805,7 @@ async function loadSettlementMonth(){
     if(s14Res.error) throw s14Res.error;
     if(monthlyRes.error) throw monthlyRes.error;
 
-    const branchEmployees=empRes.data||[];
-    const ids=new Set(branchEmployees.map(x=>String(x.id)));
+    const branchEmployees=(empRes.data||[]).filter(e=>activeInMonth(e,ym));
 
     // AUTO · LIVE uses the newest payroll record available at or before
     // the selected Report month. This prevents a new month from showing
@@ -12734,7 +12819,7 @@ async function loadSettlementMonth(){
       return map;
     };
 
-    const confirmed7=newestPerEmployee(s7Res.data||[]);
+    const confirmed7Map=newestPerEmployee(s7Res.data||[]);
     const commissionSnapMap=newestPerEmployee(s14Res.data||[]);
     const monthlyMap=newestPerEmployee(monthlyRes.data||[]);
 
@@ -12762,7 +12847,7 @@ async function loadSettlementMonth(){
       let calc=null;
 
       try{
-        const snap=confirmed7.get(id);
+        const snap=confirmed7Map.get(id);
         calc=snap ? normalizedSevenSnapshot(e,snap) : calculate7th(e,monthlyMap.get(id)||{});
       }catch(err){
         console.warn("Settlement statutory calculation failed",e?.id,err);
@@ -12809,7 +12894,6 @@ async function loadSettlementMonth(){
     let salary14Latest=0;
 
     for(const e of branchEmployees){
-      if(String(e.employment_type||"full_time")==="part_time") continue;
       const id=String(e.id);
       const confirmed14=commissionSnapMap.get(id);
 
@@ -12819,13 +12903,13 @@ async function loadSettlementMonth(){
       }
 
       const monthlyRow=monthlyMap.get(id)||{};
-      const confirmed7=confirmed7.get(id);
+      const confirmed7Row=confirmed7Map.get(id);
       let sevenCalc=null;
 
       try{
-        sevenCalc=confirmed7
-          ? normalizedSevenSnapshot(e,confirmed7)
-          : calculate7th(e,monthlyRow);
+        sevenCalc=confirmed7Row
+          ? normalizedSevenSnapshot(e,confirmed7Row)
+          : (String(e.employment_type||"full_time")==="part_time" ? null : calculate7th(e,monthlyRow));
       }catch(_){
         sevenCalc=null;
       }
@@ -12926,7 +13010,7 @@ async function saveSettlementMonth(){
       payment_meta:settlementCollectPaymentMeta(),
       updated_at:new Date().toISOString()
     };
-    SETTLEMENT_EXPENSE_FIELDS.forEach(f=>row[f]=(f==="internet" ? 391.15 : settlementNumber(f)));
+    SETTLEMENT_EXPENSE_FIELDS.forEach(f=>row[f]=settlementNumber(f));
 
     const {error}=await settlementDb().from("settlement_monthly_expenses")
       .upsert(row,{onConflict:"outlet,month_date"});
@@ -12977,16 +13061,21 @@ async function settlementEffectiveExpenseRecord(outlet,monthDate){
   // Start with current-month row if available.
   const effective={...(current||{})};
 
-  // For each recurring expense, find the latest non-zero value
-  // from the selected month or any earlier month.
+  // A value saved in the selected month is authoritative, including RM 0.00.
+  // If the selected month has no saved value/row, inherit the latest prior non-zero budget.
   SETTLEMENT_EXPENSE_FIELDS.forEach(field=>{
+    const currentRaw=current?.[field];
+    const currentHasValue=!!current && currentRaw!==undefined && currentRaw!==null && currentRaw!=="";
+
+    if(currentHasValue){
+      effective[field]=Number(currentRaw||0);
+      return;
+    }
+
     let chosen=null;
-
     for(const row of rows){
+      if(current && row===current) continue;
       const raw=row?.[field];
-
-      // Treat a current/old positive value as the latest monthly budget.
-      // This lets future selected months inherit the last known budget.
       if(raw!==undefined && raw!==null && raw!=="" && Number(raw||0)!==0){
         chosen=Number(raw);
         break;
@@ -12996,7 +13085,7 @@ async function settlementEffectiveExpenseRecord(outlet,monthDate){
     if(chosen===null){
       if(field==="rent") chosen=5500;
       else if(field==="internet") chosen=391.15;
-      else chosen=Number(current?.[field]||0);
+      else chosen=0;
     }
 
     effective[field]=chosen;
@@ -13019,14 +13108,11 @@ async function settlementEffectiveExpenseRecord(outlet,monthDate){
 function settlementExpenseRecordTotals(record){
   let manual=0;
   SETTLEMENT_EXPENSE_FIELDS.forEach(field=>{
-    if(field==="internet"){
-      // Same fixed rule as the branch Report page.
-      manual+=391.15;
-      return;
-    }
     const raw=record?.[field];
     if(field==="rent" && (raw===undefined || raw===null || raw==="")){
       manual+=5500;
+    }else if(field==="internet" && (raw===undefined || raw===null || raw==="")){
+      manual+=391.15;
     }else{
       manual+=Number(raw||0);
     }
@@ -13048,8 +13134,6 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
   const start=ym+"-01";
   const next=(m===12)?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,"0")}-01`;
 
-  // Direct branch data. Do not depend on an old SQL summary function,
-  // because old functions may omit newly-created branches.
   const [dailyRes,expenseRecord,empRes,s7Res,s14Res,monthlyRes]=await Promise.all([
     db.from("daily_settlements")
       .select("grand_total,petty_out,petty_in,petty_entries")
@@ -13070,11 +13154,7 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
   if(monthlyRes.error) throw monthlyRes.error;
 
   const daily=dailyRes.data||[];
-
   const revenue=daily.reduce((sum,r)=>sum+Number(r.grand_total||0),0);
-
-  // Petty Cash expense = OUT movements for the selected month.
-  // Use petty_entries when available; fall back to petty_out.
   const petty_cash=daily.reduce((sum,r)=>{
     if(Array.isArray(r.petty_entries)){
       return sum+r.petty_entries
@@ -13084,8 +13164,8 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     return sum+Number(r.petty_out||0);
   },0);
 
-  const employees=empRes.data||[];
-  const ids=new Set(employees.map(e=>String(e.id)));
+  // Only employees active during the selected report month may contribute to that month's payroll.
+  const employees=(empRes.data||[]).filter(e=>activeInMonth(e,ym));
   const newestPerEmployee=(rows)=>{
     const map=new Map();
     (rows||[]).forEach(x=>{
@@ -13122,17 +13202,44 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     }
   });
 
-  const salary14=(s14Res.data||[])
-    .filter(x=>ids.has(String(x.employee_id)))
-    .reduce((s,x)=>s+Number(x.net_pay||0),0);
+  // 14th payroll must count each active employee exactly once.
+  // Use the newest confirmed 14th snapshot at/before the selected month; if none exists,
+  // calculate from the newest monthly Commission values. Part-time staff are included here
+  // because the 14th Commission page also includes them.
+  let salary14=0;
+  for(const e of employees){
+    const id=String(e.id);
+    const confirmed14=s14Map.get(id);
+    if(confirmed14){
+      salary14+=Number(confirmed14.net_pay||0);
+      continue;
+    }
+
+    const monthlyRow=monthlyMap.get(id)||{};
+    const sevenSnap=s7Map.get(id);
+    let sevenCalc=null;
+    if(String(e.employment_type||"full_time")!=="part_time"){
+      try{ sevenCalc=sevenSnap ? normalizedSevenSnapshot(e,sevenSnap) : calculate7th(e,monthlyRow); }
+      catch(err){ console.warn("Report 7th basis failed:",outlet,e?.id,err); }
+    }
+
+    let threeBonus=0;
+    try{
+      if(window.ndQuarter3Bonus?.isPayoutMonth?.(ym) && window.ndQuarter3Bonus?.calculateEmployee){
+        threeBonus=Number(await window.ndQuarter3Bonus.calculateEmployee(Number(e.id),ym)||0);
+      }
+    }catch(err){ console.warn("Report 3-Bonus failed:",outlet,e?.id,err); }
+
+    try{
+      salary14+=Number(calculate14th(monthlyRow,sevenCalc,threeBonus).net_pay||0);
+    }catch(err){
+      console.warn("Report 14th calculation failed:",outlet,e?.id,err);
+    }
+  }
 
   const epfTotal=epfEmployee+epfEmployer;
   const socsoEisTotal=socsoEmployee+socsoEmployer+eisEmployee+eisEmployer+lindung24;
-  const salary=
-    salary7+salary14+
-    epfTotal+
-    socsoEisTotal+
-    taxPcb;
+  const salary=salary7+salary14+epfTotal+socsoEisTotal+taxPcb;
 
   const exp=settlementExpenseRecordTotals(expenseRecord);
   const manual_expenses=Number(exp.manual_expenses||0);
@@ -13144,16 +13251,13 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
   return {
     outlet,
     revenue:+revenue.toFixed(2),
-
     salary:+salary.toFixed(2),
     salary7:+salary7.toFixed(2),
     salary14:+salary14.toFixed(2),
     epf_total:+epfTotal.toFixed(2),
     socso_eis_total:+socsoEisTotal.toFixed(2),
     taxpcb:+taxPcb.toFixed(2),
-
     petty_cash:+petty_cash.toFixed(2),
-
     rent:Number(expenseRecord?.rent||0),
     water:Number(expenseRecord?.water||0),
     electricity:Number(expenseRecord?.electricity||0),
@@ -13166,12 +13270,12 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     sst:+sst.toFixed(2),
     other_amount:Number(expenseRecord?.other_amount||0),
     project_expenses:+project_expenses.toFixed(2),
-
     manual_expenses:+manual_expenses.toFixed(2),
     total_expenses:+total_expenses.toFixed(2),
     profit:+profit.toFixed(2)
   };
 }
+
 async function settlementAllBranchesForMonth(monthDate){
   // Always refresh the merged branch list before total calculation.
   await loadSettlementOutlets();
@@ -14444,7 +14548,7 @@ function renderRoster(){
   const [year,month]=m.split("-").map(Number);
   const days=rosterDaysInMonth(m);
   const firstDow=new Date(year,month-1,1).getDay();
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=ndLocalDateISO();
 
   const weekdayHead=ROSTER_WEEKDAYS.map(w=>`<div class="roster-weekday">${w}</div>`).join("");
   const blanks=Array.from({length:firstDow},()=>`<div class="roster-cal-empty"></div>`).join("");
@@ -14628,8 +14732,16 @@ async function ndRefreshVisibleData(changedTables){
 
     if(page==="salary" && salaryChanged){
       try{
-        await loadSalaryData();
-        renderSalary();
+        if(commissionPendingChanges?.size){
+          const st=byId("commissionSubmitState");
+          if(st){
+            st.textContent=`Unsaved Changes · ${commissionPendingChanges.size} Staff · Live refresh paused`;
+            st.className="helper bad";
+          }
+        }else{
+          await loadSalaryData();
+          renderSalary();
+        }
       }catch(err){console.warn("Salary live refresh skipped",err);}
     }
 
@@ -20681,11 +20793,25 @@ Bed Fee: Amlee / + merchant / database memory checked.
       .maybeSingle();
     if(loadErr) throw loadErr;
 
-    const patch={outlet:record.branch,month_date:monthDate};
-    patch[field]=Number(existing?.[field]||0)+amount;
+    let base=existing||null;
+    if(!base && typeof settlementEffectiveExpenseRecord==="function"){
+      try{ base=await settlementEffectiveExpenseRecord(record.branch,monthDate); }catch(_){ base=null; }
+    }
 
+    const patch={outlet:record.branch,month_date:monthDate};
+    // If Receipt Scan creates this report month before the Report page is saved,
+    // persist the inherited budget too. Otherwise database default zero values would
+    // accidentally erase carried Rent/Internet/etc for that month.
+    if(!existing && Array.isArray(window.SETTLEMENT_EXPENSE_FIELDS)){
+      window.SETTLEMENT_EXPENSE_FIELDS.forEach(f=>{patch[f]=Number(base?.[f]||0);});
+    }else if(!existing && typeof SETTLEMENT_EXPENSE_FIELDS!=="undefined"){
+      SETTLEMENT_EXPENSE_FIELDS.forEach(f=>{patch[f]=Number(base?.[f]||0);});
+    }
+    patch[field]=Number(base?.[field]||0)+amount;
+
+    if(!existing && Array.isArray(base?.projects)) patch.projects=base.projects;
     if(field==="other_amount"){
-      const label=String(existing?.other_label||"Other").trim();
+      const label=String(base?.other_label||"Other").trim();
       patch.other_label=label;
     }
 
@@ -20735,12 +20861,17 @@ Bed Fee: Amlee / + merchant / database memory checked.
     if(duplicate && !confirm("Possible duplicate detected. Save anyway?")) return;
 
     state.textContent="Saving...";
+    let oldRecord=null;
+    let oldWasUnsynced=false;
     try{
       const db=dbClient();
 
       if(currentEditId){
-        const old=currentRows.find(r=>Number(r.id)===Number(currentEditId));
-        if(old?.report_synced) await unsyncRecordFromReport(old);
+        oldRecord=currentRows.find(r=>Number(r.id)===Number(currentEditId))||null;
+        if(oldRecord?.report_synced){
+          await unsyncRecordFromReport(oldRecord);
+          oldWasUnsynced=true;
+        }
       }
 
       const receipt=selectedFile ? await uploadReceipt() : uploadedReceipt;
@@ -20766,7 +20897,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
         reimbursement_date:$("aiReceiptClaimStatus")?.value==="reimbursed" ? ($("aiReceiptReimbursementDate")?.value||isoToday()) : ($("aiReceiptReimbursementDate")?.value||null),
         reimbursement_method:String($("aiReceiptReimbursementMethod")?.value||""),
         claim_reference:String($("aiReceiptClaimReference")?.value||"").trim(),
-        created_by:String(window.currentUserEmail||""),
+        created_by:String(oldRecord?.created_by||window.currentUserEmail||""),
         report_synced:false,
         report_field:null,
         report_synced_at:null
@@ -20812,6 +20943,11 @@ Bed Fee: Amlee / + merchant / database memory checked.
       clearForm(true);
       await Promise.all([loadHistory(),loadSupplierMemory(),loadReportSyncSummary(),loadClaimSummary()]);
     }catch(err){
+      // If an edit removed the old Report amount but the database update then failed,
+      // restore the old Report sync so the financial report does not silently lose money.
+      if(oldWasUnsynced && oldRecord){
+        try{ await syncRecordToReport(oldRecord); }catch(restoreErr){ console.error("Report restore failed",restoreErr); }
+      }
       state.textContent="Save failed";
       alert("Save failed: "+(err?.message||err));
     }
@@ -21844,7 +21980,7 @@ input,select,textarea,button,a{
  let bonusBranch="", bonusEmployees=[], bonusSaved={}, bonusBranchTotal=0, managerSetting=null, fixedManagerSetting=null, bonusDeductions=[], bonusFixedExclusionRows=[], bonusFixedExcludedIds=new Set(), bonusFixedExcludedDraft=new Set();
 
  function moneyBonus(v){return "RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
- function monthBonus(){return $("bonusMonth")?.value || new Date().toISOString().slice(0,7);}
+ function monthBonus(){return $("bonusMonth")?.value || ndLocalMonthISO();}
  function bonusMonthDate(){return monthBonus()+"-01";}
  function currentBonusEmail(){
    return String(window.currentUserEmail||window.currentEmail||window.userEmail||"").trim().toLowerCase();
@@ -21898,8 +22034,10 @@ input,select,textarea,button,a{
    if(state)state.textContent="Loading...";
 
    const m=monthBonus(),start=m+"-01";
-   const endDate=new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1);
-   const end=endDate.toISOString().slice(0,10);
+   const [bonusYear,bonusMonthNum]=m.split("-").map(Number);
+   const end=bonusMonthNum===12
+     ? `${bonusYear+1}-01-01`
+     : `${bonusYear}-${String(bonusMonthNum+1).padStart(2,"0")}-01`;
 
    // Employees are the only required source.
    const empRes=await salaryDb.from("employees").select("*").order("outlet").order("name");
@@ -22182,7 +22320,7 @@ input,select,textarea,button,a{
  }
 
  document.addEventListener("DOMContentLoaded",()=>{
-   const bm=$("bonusMonth");if(bm&&!bm.value)bm.value=$("salaryMonth")?.value||new Date().toISOString().slice(0,7);
+   const bm=$("bonusMonth");if(bm&&!bm.value)bm.value=$("salaryMonth")?.value||ndLocalMonthISO();
    $("sidebarBonus")?.addEventListener("click",showBonus);
    $("closeBonusPage")?.addEventListener("click",()=>{if(typeof showDaily==="function")showDaily();});
    $("bonusRefreshBtn")?.addEventListener("click",loadBonus);
@@ -22207,15 +22345,67 @@ input,select,textarea,button,a{
      if(panel) panel.style.display="none";
    });
    $("bonusFixedExcludeSaveBtn")?.addEventListener("click",saveFixedBonusExclusions);
-   $("bonusFixedExcludeList")?.addEventListener("change",e=>{
+   $("bonusFixedExcludeList")?.addEventListener("change",async e=>{
      const cb=e.target.closest("[data-fixed-bonus-exclude]");
      if(!cb)return;
      const id=Number(cb.dataset.fixedBonusExclude||0);
      if(!id)return;
-     if(cb.checked) bonusFixedExcludedDraft.add(id);
+
+     const checked=!!cb.checked;
+     if(checked) bonusFixedExcludedDraft.add(id);
      else bonusFixedExcludedDraft.delete(id);
+
      const state=$("bonusFixedExcludeSaveState");
-     if(state) state.textContent="Unsaved changes";
+     const saveBtn=$("bonusFixedExcludeSaveBtn");
+     cb.disabled=true;
+     if(saveBtn) saveBtn.disabled=true;
+     if(state) state.textContent="Saving automatically...";
+
+     try{
+       const emp=bonusEmployees.find(x=>Number(x.id)===id);
+       if(!emp) throw new Error("Employee not found.");
+
+       if(checked){
+         const payload={
+           branch:bonusBranch,
+           employee_id:id,
+           employee_name:emp.name||"",
+           updated_by:currentBonusEmail(),
+           updated_at:new Date().toISOString()
+         };
+         const {error}=await salaryDb.from("branch_bonus_fixed_exclusions")
+           .upsert(payload,{onConflict:"branch,employee_id"});
+         if(error) throw error;
+         bonusFixedExcludedIds.add(id);
+       }else{
+         const {error}=await salaryDb.from("branch_bonus_fixed_exclusions")
+           .delete()
+           .eq("branch",bonusBranch)
+           .eq("employee_id",id);
+         if(error) throw error;
+         bonusFixedExcludedIds.delete(id);
+       }
+
+       bonusFixedExcludedDraft=new Set(bonusFixedExcludedIds);
+       if(state) state.textContent="Auto saved ✓";
+
+       // Refresh bonus calculations without closing the Fixed Excluded panel.
+       await loadBonus();
+       const panel=$("bonusFixedExcludePanel");
+       if(panel) panel.style.display="block";
+       const state2=$("bonusFixedExcludeSaveState");
+       if(state2) state2.textContent="Auto saved ✓";
+     }catch(err){
+       // Restore checkbox/draft when cloud save fails.
+       cb.checked=!checked;
+       if(checked) bonusFixedExcludedDraft.delete(id);
+       else bonusFixedExcludedDraft.add(id);
+       if(state) state.textContent="Auto save failed";
+       alert("Fixed Excluded Staff auto save failed: "+(err?.message||err));
+     }finally{
+       cb.disabled=false;
+       if(saveBtn) saveBtn.disabled=false;
+     }
    });
    $("bonusDeductionAddBtn")?.addEventListener("click",addBonusDeduction);
    $("bonusDeductionBody")?.addEventListener("click",e=>{
@@ -22299,7 +22489,7 @@ input,select,textarea,button,a{
  const PAYOUT=new Set([3,6,9,12]);
  const money=v=>"RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
  const monthEl=()=>document.getElementById("salaryMonth");
- const ym=()=>monthEl()?.value||new Date().toISOString().slice(0,7);
+ const ym=()=>monthEl()?.value||ndLocalMonthISO();
 
  function quarterMonths(v){
    const [y,m]=String(v||"").split("-").map(Number);
@@ -24404,7 +24594,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
  function resetForm(date=""){
    $("socialPostId").value="";$("socialPostModalTitle").textContent="New Post";
    $("socialBrand").value="Nature's Dao";$("socialTitle").value="";$("socialCaption").value="";
-   $("socialPublishDate").value=date||new Date().toISOString().slice(0,10);
+   $("socialPublishDate").value=date||ndLocalDateISO();
    $("socialPublishTime").value="20:00";$("socialPostStatus").value="draft";
    document.querySelectorAll(".social-platform-checks input").forEach(x=>x.checked=false);
    $("socialMediaFiles").value="";editingMedia=[];renderMediaPreview();
@@ -24436,7 +24626,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    for(const f of files){
      if(f.size>250*1024*1024)throw new Error(`${f.name}: maximum 250MB.`);
      const ext=(f.name.split(".").pop()||"bin").replace(/[^a-z0-9]/gi,"").toLowerCase();
-     const path=`${new Date().toISOString().slice(0,10)}/${crypto.randomUUID()}.${ext}`;
+     const path=`${ndLocalDateISO()}/${crypto.randomUUID()}.${ext}`;
      const {error}=await db().storage.from("social-media").upload(path,f,{contentType:f.type,upsert:false});
      if(error)throw error;
      const {data}=db().storage.from("social-media").getPublicUrl(path);
@@ -24668,13 +24858,27 @@ window.addEventListener("resize",()=>{
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",bind,{once:true}); else bind();
   setTimeout(bind,0);
 })();
-</script>
 
-</body>
-</html>
+// Birthday NA option
+function syncBirthdayNA(prefix){
+  const isEdit=prefix==="edit";
+  const cb=byId(isEdit?"editEmpBirthdayNA":"empBirthdayNA");
+  const date=byId(isEdit?"editEmpBirthday":"empBirthday");
+  if(!cb||!date)return;
+  if(cb.checked){ date.value=""; date.disabled=true; }
+  else { date.disabled=false; }
+}
+document.addEventListener("change",function(ev){
+  if(ev.target?.id==="empBirthdayNA") syncBirthdayNA("add");
+  if(ev.target?.id==="editEmpBirthdayNA") syncBirthdayNA("edit");
+});
+</script>
 
 <style id="nd-orders-new-product-final">
 #ordersPage .orders-new-product-bar{display:flex;justify-content:flex-end;margin:12px 0 14px}
 #ordersPage .orders-new-product-bar #orderNewProductBtn{width:auto!important;min-width:150px!important;flex:none!important}
 @media(max-width:600px){#ordersPage .orders-new-product-bar #orderNewProductBtn{width:100%!important}}
 </style>
+
+</body>
+</html>
