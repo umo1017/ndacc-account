@@ -7656,7 +7656,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="outlet-title no-print">
 <h3 style="margin:0">Payslip</h3>
 <div>
-<button class="btn" id="downloadPayslipBtn" type="button">Download PDF</button> <button class="btn" id="shareWhatsAppBtn" type="button">Share PDF to WhatsApp</button>
+<button class="btn" id="downloadPayslipBtn" type="button">Download PDF</button> <button class="btn" id="shareWhatsAppBtn" type="button">Send WhatsApp</button>
 <button class="btn main-page-close" id="closePayslipModal" type="button">×</button>
 </div>
 </div>
@@ -10969,7 +10969,10 @@ function payslipTransferDetailsHtml(e){
     </div>`;
 }
 
+let currentPayslipEmployeeId=null;
+
 async function openPayslip(empId,type){
+  currentPayslipEmployeeId=Number(empId)||null;
   if(!salaryPayslipIsReleased(type)){
     alert(`${Number(type)===7?"7th":"14th"} payslip will be available on ${salaryPayslipReleaseLabel(type)}.`);
     return false;
@@ -10980,7 +10983,7 @@ async function openPayslip(empId,type){
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div><div class="payslip-line"><span>Overtime</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div><div style="height:116px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(s.gross_pay||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">${Number(s.total_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>Overtime</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}<div style="height:116px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(s.gross_pay||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">${Number(s.total_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
 <div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${Number(s.net_pay||0).toFixed(2)}</span></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;----------CURRENT MONTH----------&gt;</div><div class="payslip-mini-table"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Income Tax PCB</div><div>EMPLOYEE</div><div class="v">${Number(s.employee_epf||0).toFixed(2)}</div><div class="v">${Number(s.employee_socso||0).toFixed(2)}</div><div class="v">${Number(s.employee_eis||0).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div><div>EMPLOYER</div><div class="v">${Number(s.employer_epf||0).toFixed(2)}</div><div class="v">${Number(s.employer_socso||0).toFixed(2)}</div><div class="v">${Number(s.employer_eis||0).toFixed(2)}</div><div class="v"></div><div>TOTAL</div><div class="v">${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_socso||0)+Number(s.employer_socso||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;---------------YEAR-TO-DATE---------------&gt;</div><div class="payslip-mini-table ytd"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Income Tax PCB</div><div class="h">GROSS PAY</div><div class="h">NET PAY</div><div></div><div class="v">${(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis")).toFixed(2)}</div><div class="v">${ytdSum(empId,"tax").toFixed(2)}</div><div class="v">${ytdSum(empId,"gross_pay").toFixed(2)}</div><div class="v">${ytdSum(empId,"net_pay").toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
@@ -11898,30 +11901,43 @@ async function buildPayslipPdfFile(){
   return new File([blob],filename,{type:"application/pdf"});
 }
 
+function normalizeStaffWhatsAppNumber(raw){
+  let digits=String(raw||"").replace(/\D/g,"");
+  if(!digits) return "";
+
+  // Malaysia local mobile format: 01xxxxxxxx -> 601xxxxxxxx
+  if(digits.startsWith("0")){
+    digits="60"+digits.slice(1);
+  }
+
+  // If Staff already stores +60 / 60..., keep it.
+  return digits;
+}
+
 async function sharePayslipWhatsApp(){
   try{
-    const file=await buildPayslipPdfFile();
+    const empId=Number(currentPayslipEmployeeId||0);
+    const employee=salaryEmployees.find(x=>Number(x.id)===empId);
 
-    if(navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({
-        files:[file],
-        title:"Nature's Dao Payslip"
-      });
+    if(!employee){
+      alert("Staff record not found.");
       return;
     }
 
-    const url=URL.createObjectURL(file);
-    const a=document.createElement("a");
-    a.href=url;
-    a.download=file.name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const phone=normalizeStaffWhatsAppNumber(employee.phone);
+    if(!phone){
+      alert(`No WhatsApp / Phone number found for ${employee.name||"this staff"}. Please update Staff > Phone first.`);
+      return;
+    }
 
-    alert("PDF downloaded. Please attach the PDF in WhatsApp.");
+    // No preset message. Open the WhatsApp chat that matches this Staff record.
+    const waUrl=`https://wa.me/${phone}`;
+    const win=window.open(waUrl,"_blank","noopener,noreferrer");
+    if(!win){
+      window.location.href=waUrl;
+    }
   }catch(err){
-    alert("Unable to share PDF: "+err.message);
+    alert("Unable to open staff WhatsApp: "+(err?.message||err));
   }
 }
 
