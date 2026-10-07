@@ -8005,6 +8005,20 @@ let salaryManager = true;
 let staffEditManager = false;
 let isGlobalAdmin = false;
 let isPayrollManager = false;
+
+function canToggleSalaryPayment(employee){
+  const email=String(currentSalaryUserEmail||"").trim().toLowerCase();
+
+  // Existing managers + Sam can toggle Payment DONE for their allowed salary view.
+  if(isPayrollManager || email==="samchin6006@gmail.com") return true;
+
+  // Kwong: Nusa Bestari only.
+  if(email==="kwongweicheng6608@gmail.com"){
+    return String(employee?.outlet||"").trim()==="Nusa Bestari";
+  }
+
+  return false;
+}
 let currentSalaryUserEmail = "";
 let salaryBranches = [];
 let accessibleSalaryOutlets = [];
@@ -9940,7 +9954,7 @@ function renderFourteenTable(emps){
         <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
         <td><span class="pay-method-pill">${e.payment_method||"Cash"}</span></td>
         <td>${cs
-          ? (isPayrollManager
+          ? (canToggleSalaryPayment(e)
               ? `<button class="btn payment-done-btn ${cs.payment_done?"done":"pending"}" data-payment14="${e.id}">${cs.payment_done?"Payment — DONE ✓":"Payment — DONE"}</button>`
               : `<span class="${cs.payment_done?"confirmed-pill":"helper"}">${cs.payment_done?"Payment — DONE":"Pending"}</span>`)
           : `<span class="helper">Confirm first</span>`}</td>
@@ -10558,7 +10572,11 @@ function assertRecordEditable(dateValue){
 }
 
 async function toggleSalaryPayment(type,empId){
-  if(!isPayrollManager){alert("Manager only.");return;}
+  const employee=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!canToggleSalaryPayment(employee)){
+    alert("No Payment DONE permission for this branch.");
+    return;
+  }
   if(!assertRecordEditable(monthDate())) return;
 
   const isSeven=Number(type)===7;
@@ -12397,23 +12415,10 @@ async function sharePayslipWhatsApp(){
       btn.textContent="Preparing PDF...";
     }
 
+    // Generate the payslip PDF.
     const file=await buildPayslipPdfFile();
 
-    // Best free/mobile method:
-    // share the actual PDF through the iPhone/Android native share sheet.
-    // No preset message is included.
-    if(navigator.share){
-      const shareData={files:[file]};
-      const canFileShare=!navigator.canShare || navigator.canShare(shareData);
-
-      if(canFileShare){
-        await navigator.share(shareData);
-        return;
-      }
-    }
-
-    // Fallback for browsers that cannot share files:
-    // download the payslip PDF first, then open the employee's WhatsApp chat.
+    // Download the PDF first, so it is available to attach in WhatsApp.
     const url=URL.createObjectURL(file);
     const a=document.createElement("a");
     a.href=url;
@@ -12421,18 +12426,18 @@ async function sharePayslipWhatsApp(){
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
 
+    // Open the exact Staff WhatsApp number, with no preset text.
     const waUrl=`https://wa.me/${phone}`;
     setTimeout(()=>{
       const win=window.open(waUrl,"_blank","noopener,noreferrer");
       if(!win) window.location.href=waUrl;
-    },300);
+    },350);
 
-    alert("Payslip PDF has been downloaded. WhatsApp will open next; attach the downloaded PDF to the staff chat.");
+    alert(`Payslip PDF downloaded. Opening ${employee.name||"staff"} WhatsApp now. Please attach the downloaded PDF.`);
   }catch(err){
-    if(err?.name==="AbortError") return;
-    alert("Unable to share payslip: "+(err?.message||err));
+    alert("Unable to prepare payslip: "+(err?.message||err));
   }finally{
     if(btn){
       btn.disabled=false;
