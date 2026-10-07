@@ -3157,6 +3157,91 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="salary-branch-total-bar-final">
+.salary-branch-total-bar{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  margin-top:10px;
+  padding:12px;
+  border:1px solid #e2dfd6;
+  border-radius:14px;
+  background:#fff;
+}
+.salary-branch-total-bar>div{
+  min-width:0;
+  padding:10px 12px;
+  border:1px solid #ece8df;
+  border-radius:12px;
+  background:#faf9f6;
+}
+.salary-branch-total-bar span{
+  display:block;
+  font-size:12px;
+  font-weight:800;
+  color:#666;
+  margin-bottom:4px;
+}
+.salary-branch-total-bar strong{
+  display:block;
+  font-size:18px;
+  line-height:1.2;
+  white-space:nowrap;
+}
+.salary-branch-total-bar .all-total{
+  border-color:#2f7d46;
+  background:#edf8f0;
+}
+@media(max-width:700px){
+  .salary-branch-total-bar{
+    grid-template-columns:1fr 1fr;
+  }
+  .salary-branch-total-bar strong{
+    font-size:16px;
+  }
+}
+</style>
+
+
+<style id="salary-button-clickability-final">
+#salaryPage button,
+#salaryPage .btn,
+#salaryPage [role="button"]{
+  position:relative!important;
+  z-index:5!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+}
+
+#salaryPage .salary-tabs,
+#salaryPage .actions,
+#salaryPage .outlet-title,
+#salaryPage .salary-card{
+  position:relative!important;
+  z-index:2!important;
+}
+
+#salaryPage .salary-table-wrap{
+  position:relative!important;
+  z-index:1!important;
+}
+
+/* Disabled really means disabled; everything else remains clickable. */
+#salaryPage button:not(:disabled){
+  pointer-events:auto!important;
+}
+
+/* Avoid sticky first column covering controls above/beside the table. */
+#salaryPage .salary-table th:first-child,
+#salaryPage .salary-table td:first-child{
+  z-index:3!important;
+}
+#salaryPage .salary-table th:first-child{
+  z-index:4!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -10340,11 +10425,71 @@ function renderSevenTable(emps){
         <td colspan="4"></td>
       </tr>
     </tbody>
-  </table></div>`;
+  </table></div>
+  <div class="salary-branch-total-bar">
+    <div><span>Cash Total</span><strong>${money(cashTotal)}</strong></div>
+    <div><span>Bank Transfer Total</span><strong>${money(transferTotal)}</strong></div>
+    <div><span>TNG Total</span><strong>${money(tngTotal)}</strong></div>
+    <div class="all-total"><span>All Net Pay</span><strong>${money(grandTotal)}</strong></div>
+  </div>`;
 }
 
 function renderFourteenTable(emps){
   if(!emps.length) return '';
+
+  let cashTotal=0, transferTotal=0, tngTotal=0;
+
+  const rows=emps.map(e=>{
+    const m=monthlyFor(e.id), cs=commissionSnapshotFor(e.id);
+    const threeBonus=cs
+      ? Number(cs.three_month_bonus ?? salaryQuarter3BonusFor(e.id))
+      : salaryQuarter3BonusFor(e.id);
+    const c=cs||calculate14th(m,snapshotFor(e.id),threeBonus);
+    const fld=(field,val)=>cs?money(val):editInput(e.id,field,val);
+    const a=cs?legacyCommissionA(cs):legacyCommissionA(m);
+    const b=cs?Number(cs.commission_b||0):Number(m.commission_b||0);
+    const customer=cs?Number(cs.customer_referral||0):Number(m.customer_referral||0);
+    const staff=cs?Number(cs.staff_referral||0):Number(m.staff_referral||0);
+    const bonus=cs?Number(cs.bonus||0):Number(m.reward||0);
+    const total=Number(c.total_commission||0);
+    const canPayslip=Number(c.commission||0)>0;
+    const net=Number(c.net_pay||0);
+    const pm=String(e.payment_method||"Cash");
+
+    if(pm==="Cash") cashTotal+=net;
+    else if(pm==="Bank Transfer") transferTotal+=net;
+    else if(pm==="TNG") tngTotal+=net;
+
+    return `<tr>
+      <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e.name)}</td>
+      <td>${fld("commission_a",a)}</td>
+      <td>${fld("commission_b",b)}</td>
+      <td>${fld("customer_referral",customer)}</td>
+      <td>${fld("staff_referral",staff)}</td>
+      <td>${fld("reward",bonus)}</td>
+      <td data-live-3bonus="${e.id}"><strong>${money(threeBonus)}</strong></td>
+      <td data-live-totalcommission14="${e.id}"><strong>${money(total)}</strong></td>
+      <td>${money(c.seventh_basic_pay||0)}</td>
+      <td>${money(c.seventh_allowance||0)}</td>
+      <td>${money(c.employer_epf||0)}</td>
+      <td>${money(c.employer_socso||0)}</td>
+      <td>${money(c.lindung24||0)}</td>
+      <td>${money(c.employer_eis||0)}</td>
+      <td data-live-commission="${e.id}"><strong>${money(c.commission)}</strong></td>
+      <td data-live-netpay14="${e.id}">${money(c.net_pay)}</td>
+      <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
+      <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
+      <td><span class="pay-method-pill">${pm}</span></td>
+      <td>${cs
+        ? (cs.payment_done
+            ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>`
+            : `<button class="btn payment-done-btn pending" type="button" data-payment14="${e.id}">Payment — DONE</button>`)
+        : `<span class="helper">Confirm first</span>`}</td>
+    </tr>`;
+  }).join("");
+
+  const grandTotal=cashTotal+transferTotal+tngTotal;
+
   return `<div class="salary-table-wrap"><table class="salary-table">
     <thead><tr>
       <th>Name</th>
@@ -10364,49 +10509,14 @@ function renderFourteenTable(emps){
       <th>Commission</th>
       <th>Nett Pay</th><th>Confirm</th><th>14th Commission Payslip</th><th>Pay By</th><th>Payment</th>
     </tr></thead><tbody>
-    ${emps.map(e=>{
-      const m=monthlyFor(e.id), cs=commissionSnapshotFor(e.id);
-      const threeBonus=cs
-        ? Number(cs.three_month_bonus ?? salaryQuarter3BonusFor(e.id))
-        : salaryQuarter3BonusFor(e.id);
-      const c=cs||calculate14th(m,snapshotFor(e.id),threeBonus);
-      const fld=(field,val)=>cs?money(val):editInput(e.id,field,val);
-      const a=cs?legacyCommissionA(cs):legacyCommissionA(m);
-      const b=cs?Number(cs.commission_b||0):Number(m.commission_b||0);
-      const customer=cs?Number(cs.customer_referral||0):Number(m.customer_referral||0);
-      const staff=cs?Number(cs.staff_referral||0):Number(m.staff_referral||0);
-      const bonus=cs?Number(cs.bonus||0):Number(m.reward||0);
-      const total=Number(c.total_commission||0);
-      const canPayslip=Number(c.commission||0)>0;
-
-      return `<tr>
-        <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e.name)}</td>
-        <td>${fld("commission_a",a)}</td>
-        <td>${fld("commission_b",b)}</td>
-        <td>${fld("customer_referral",customer)}</td>
-        <td>${fld("staff_referral",staff)}</td>
-        <td>${fld("reward",bonus)}</td>
-        <td data-live-3bonus="${e.id}"><strong>${money(threeBonus)}</strong></td>
-        <td data-live-totalcommission14="${e.id}"><strong>${money(total)}</strong></td>
-        <td>${money(c.seventh_basic_pay||0)}</td>
-        <td>${money(c.seventh_allowance||0)}</td>
-        <td>${money(c.employer_epf||0)}</td>
-        <td>${money(c.employer_socso||0)}</td>
-        <td>${money(c.lindung24||0)}</td>
-        <td>${money(c.employer_eis||0)}</td>
-        <td data-live-commission="${e.id}"><strong>${money(c.commission)}</strong></td>
-        <td data-live-netpay14="${e.id}">${money(c.net_pay)}</td>
-        <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
-        <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
-        <td><span class="pay-method-pill">${e.payment_method||"Cash"}</span></td>
-        <td>${cs
-          ? (cs.payment_done
-              ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>`
-              : `<button class="btn payment-done-btn pending" type="button" data-payment14="${e.id}">Payment — DONE</button>`)
-          : `<span class="helper">Confirm first</span>`}</td>
-      </tr>`;
-    }).join("")}
-    </tbody></table></div>`;
+      ${rows}
+    </tbody></table></div>
+    <div class="salary-branch-total-bar">
+      <div><span>Cash Total</span><strong>${money(cashTotal)}</strong></div>
+      <div><span>Bank Transfer Total</span><strong>${money(transferTotal)}</strong></div>
+      <div><span>TNG Total</span><strong>${money(tngTotal)}</strong></div>
+      <div class="all-total"><span>All Net Pay</span><strong>${money(grandTotal)}</strong></div>
+    </div>`;
 }
 
 let salaryQuarter3BonusMap=new Map();
@@ -26368,6 +26478,49 @@ document.addEventListener("DOMContentLoaded",function(){
 });
 </script>
 
+
+<script id="salary-button-reliability-fallback">
+(function(){
+  function clickMatch(e, sel){ return e.target && e.target.closest ? e.target.closest(sel) : null; }
+
+  document.addEventListener("click", async function(e){
+    const btn14 = clickMatch(e,'#salary14Btn,[data-salary-tab="14"],[data-tab="14th"],[data-tab="14"]');
+    if(btn14){
+      e.preventDefault();
+      e.stopPropagation();
+      try{
+        if(typeof window.setSalaryTab==="function"){
+          await window.setSalaryTab(14);
+        }else{
+          const direct=document.getElementById("salary14Btn");
+          if(direct && direct!==btn14) direct.click();
+        }
+      }catch(err){
+        console.error("14th button error",err);
+      }
+      return;
+    }
+
+    const btn7 = clickMatch(e,'#salary7Btn,[data-salary-tab="7"],[data-tab="7th"],[data-tab="7"]');
+    if(btn7){
+      e.preventDefault();
+      e.stopPropagation();
+      try{
+        if(typeof window.setSalaryTab==="function"){
+          await window.setSalaryTab(7);
+        }else{
+          const direct=document.getElementById("salary7Btn");
+          if(direct && direct!==btn7) direct.click();
+        }
+      }catch(err){
+        console.error("7th button error",err);
+      }
+      return;
+    }
+  }, true);
+})();
+</script>
+
 </body>
 </html>
 
@@ -26475,3 +26628,5 @@ document.addEventListener("DOMContentLoaded",function(){
   }
 }
 </style>
+
+<!-- BUTTON_AUDIT {'buttons_total': 188, 'buttons_enabled': 187, 'buttons_disabled_static': 1, 'buttons_without_detected_handler': [{'text': 'Settlement Administrators ⌄', 'id': None, 'data': {}}, {'text': 'Daily Settlement Outlets ⌄', 'id': None, 'data': {}}, {'text': 'Bed Fee Merchants ⌄', 'id': None, 'data': {}}, {'text': 'Monthly Roster Settings ⌄', 'id': None, 'data': {}}, {'text': 'Daily History Access ⌄', 'id': None, 'data': {}}, {'text': 'Order View Access ⌄', 'id': None, 'data': {}}, {'text': 'Salary Managers ⌄', 'id': None, 'data': {}}, {'text': 'Salary Branches ⌄', 'id': None, 'data': {}}, {'text': 'Salary Employee Report Access ⌄', 'id': None, 'data': {}}, {'text': 'Tax PCB Rules ⌄', 'id': None, 'data': {}}], 'js_errors': 0, 'duplicate_ids': 0} -->
