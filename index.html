@@ -10969,10 +10969,15 @@ function payslipTransferDetailsHtml(e){
     </div>`;
 }
 
-let currentPayslipEmployeeId=null;
+window.currentPayslipStaff=null;
 
 async function openPayslip(empId,type){
-  currentPayslipEmployeeId=Number(empId)||null;
+  const selectedEmp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  window.currentPayslipStaff=selectedEmp ? {
+    id:Number(selectedEmp.id),
+    name:String(selectedEmp.name||""),
+    phone:String(selectedEmp.phone||"")
+  } : null;
   if(!salaryPayslipIsReleased(type)){
     alert(`${Number(type)===7?"7th":"14th"} payslip will be available on ${salaryPayslipReleaseLabel(type)}.`);
     return false;
@@ -11916,11 +11921,10 @@ function normalizeStaffWhatsAppNumber(raw){
 
 async function sharePayslipWhatsApp(){
   try{
-    const empId=Number(currentPayslipEmployeeId||0);
-    const employee=salaryEmployees.find(x=>Number(x.id)===empId);
+    const employee=window.currentPayslipStaff;
 
     if(!employee){
-      alert("Staff record not found.");
+      alert("Staff record not found. Please close and reopen this payslip.");
       return;
     }
 
