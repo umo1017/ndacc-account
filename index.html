@@ -2772,6 +2772,29 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 })();
 </script>
 
+
+<style id="branch-whatsapp-payslip-style">
+.branch-whatsapp-payslips-btn{
+  white-space:nowrap;
+}
+@media(max-width:700px){
+  .branch-whatsapp-payslips-btn{
+    width:100%;
+  }
+}
+</style>
+
+
+<style id="branch-whatsapp-all-style">
+.branch-whatsapp-all-btn{white-space:nowrap}
+@media(max-width:700px){
+  .branch-whatsapp-all-btn,
+  .branch-whatsapp-payslips-btn{
+    width:100%;
+  }
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -7981,6 +8004,45 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 </div>
 </div>
+
+
+<div class="salary-modal" id="branchWhatsAppAllModal">
+  <div class="salary-dialog" style="max-width:620px">
+    <div class="outlet-title">
+      <div>
+        <h3 id="branchWhatsAppAllTitle" style="margin:0">Send All Payslips</h3>
+        <div class="helper">All confirmed staff payslips stay as separate PDF files.</div>
+      </div>
+      <button class="main-page-close" id="closeBranchWhatsAppAllModal" type="button">×</button>
+    </div>
+
+    <div class="field" style="margin-top:14px">
+      <label>Destination WhatsApp Number</label>
+      <input id="branchWhatsAppAllNumber" type="tel" placeholder="60123456789"/>
+      <div class="helper" style="margin-top:5px">This number is saved separately for each branch on this device.</div>
+    </div>
+
+    <div id="branchWhatsAppAllSummary" class="helper" style="margin-top:12px"></div>
+
+    <div class="actions" style="margin-top:16px">
+      <button class="btn" id="branchWhatsAppAllSendBtn" type="button">Prepare & Send All</button>
+    </div>
+  </div>
+</div>
+
+<div class="salary-modal" id="branchWhatsAppPayslipModal">
+  <div class="salary-dialog" style="max-width:760px">
+    <div class="outlet-title">
+      <div>
+        <h3 id="branchWhatsAppPayslipTitle" style="margin:0">Branch Payslips</h3>
+        <div class="helper">Each staff gets an independent PDF named with the employee name.</div>
+      </div>
+      <button class="main-page-close" id="closeBranchWhatsAppPayslipModal" type="button">×</button>
+    </div>
+    <div id="branchWhatsAppPayslipList"></div>
+  </div>
+</div>
+
 <div class="salary-modal" id="payslipModal">
 <div class="salary-dialog" style="width:min(920px,100%)">
 <div class="outlet-title no-print">
@@ -10142,6 +10204,205 @@ function renderSalaryViewButtons(){
   });
 }
 
+
+
+let branchWhatsAppAllState={outlet:"",type:7};
+
+function branchWhatsAppAllStorageKey(outlet){
+  return "nd_branch_whatsapp_all_"+String(outlet||"").toLowerCase().replace(/[^a-z0-9]+/g,"_");
+}
+
+function openBranchWhatsAppAllModal(outlet,type){
+  branchWhatsAppAllState={outlet:String(outlet||""),type:Number(type)||7};
+
+  const jobs=branchWhatsAppConfirmedJobs(outlet,type);
+  const modal=byId("branchWhatsAppAllModal");
+  if(!modal) return;
+
+  byId("branchWhatsAppAllTitle").textContent=
+    `${outlet} · ${Number(type)===7?"7th":"14th"} · Send All`;
+
+  const saved=localStorage.getItem(branchWhatsAppAllStorageKey(outlet))||"";
+  byId("branchWhatsAppAllNumber").value=saved;
+
+  byId("branchWhatsAppAllSummary").textContent=
+    `${jobs.length} confirmed payslip(s) will be prepared as ${jobs.length} separate PDF file(s).`;
+
+  modal.classList.add("open");
+}
+
+async function prepareBranchIndividualPdfFiles(outlet,type,progressBtn){
+  const jobs=branchWhatsAppConfirmedJobs(outlet,type);
+  if(!jobs.length) throw new Error("No confirmed payslips for this branch.");
+
+  const files=[];
+  const payslipModal=byId("payslipModal");
+  const wasOpen=payslipModal?.classList.contains("open");
+
+  for(let i=0;i<jobs.length;i++){
+    const job=jobs[i];
+
+    if(progressBtn){
+      progressBtn.disabled=true;
+      progressBtn.textContent=`Preparing ${i+1} / ${jobs.length}...`;
+    }
+
+    await openPayslip(job.empId,job.type);
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+
+    const file=await renderCurrentPayslipToA4PdfFile(job.name);
+    files.push(file);
+  }
+
+  if(!wasOpen) payslipModal?.classList.remove("open");
+  return {jobs,files};
+}
+
+async function sendAllBranchPayslipsSameNumber(){
+  const btn=byId("branchWhatsAppAllSendBtn");
+  const oldText=btn?.textContent||"Prepare & Send All";
+
+  try{
+    const outlet=branchWhatsAppAllState.outlet;
+    const type=branchWhatsAppAllState.type;
+    let phone=normalizeStaffWhatsAppNumber(byId("branchWhatsAppAllNumber")?.value||"");
+
+    if(!phone){
+      alert("Please enter the destination WhatsApp number.");
+      return;
+    }
+
+    localStorage.setItem(branchWhatsAppAllStorageKey(outlet),phone);
+
+    const {files}=await prepareBranchIndividualPdfFiles(outlet,type,btn);
+
+    // Preferred on iPhone/Android: one share sheet containing all separate PDFs.
+    // WhatsApp will receive the files as separate attachments.
+    if(navigator.share){
+      const shareData={files};
+      const canShareFiles=!navigator.canShare || navigator.canShare(shareData);
+      if(canShareFiles){
+        if(btn) btn.textContent="Opening Share...";
+        await navigator.share(shareData);
+        return;
+      }
+    }
+
+    // Browser fallback: download every independent PDF, then open the saved
+    // WhatsApp number. The browser cannot auto-attach downloaded files to a chat.
+    if(btn) btn.textContent="Downloading...";
+    files.forEach((file,i)=>{
+      setTimeout(()=>downloadPdfFile(file),i*220);
+    });
+
+    setTimeout(()=>{
+      window.location.href=`https://wa.me/${phone}`;
+    },Math.max(500,files.length*240));
+
+  }catch(err){
+    if(err?.name!=="AbortError"){
+      alert("Unable to prepare branch payslips: "+(err?.message||err));
+    }
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent=oldText;
+    }
+  }
+}
+
+function branchWhatsAppConfirmedJobs(outlet,type){
+  const selectedMonth=monthKey();
+  const all=salaryEmployees
+    .filter(e=>activeInMonth(e,selectedMonth) && String(e.outlet||"")===String(outlet||""))
+    .sort(salaryStaffSort);
+
+  return all.filter(e=>{
+    if(Number(type)===7){
+      if((e.employment_type||"full_time")==="part_time") return false;
+      return !!snapshotFor(e.id);
+    }
+    return !!commissionSnapshotFor(e.id);
+  }).map(e=>({
+    empId:Number(e.id),
+    type:Number(type),
+    name:e.name||"Staff",
+    phone:e.phone||"",
+    outlet:e.outlet||""
+  }));
+}
+
+function openBranchWhatsAppPayslipQueue(outlet,type){
+  const jobs=branchWhatsAppConfirmedJobs(outlet,type);
+  const modal=byId("branchWhatsAppPayslipModal");
+  const title=byId("branchWhatsAppPayslipTitle");
+  const list=byId("branchWhatsAppPayslipList");
+
+  if(title) title.textContent=`${outlet} · ${Number(type)===7?"7th":"14th"} Payslips`;
+  if(!list || !modal) return;
+
+  if(!jobs.length){
+    list.innerHTML=`<div class="helper">No confirmed payslips for this branch.</div>`;
+  }else{
+    list.innerHTML=jobs.map(j=>{
+      const phone=normalizeStaffWhatsAppNumber(j.phone);
+      return `<div class="salary-card" style="margin:10px 0;padding:12px">
+        <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:800">${j.name}</div>
+            <div class="helper">${phone?phone:"No Staff Phone"}</div>
+          </div>
+          <button class="btn" type="button"
+            data-branch-wa-send="${j.empId}"
+            data-branch-wa-type="${j.type}"
+            ${phone?"":"disabled"}>
+            Send WhatsApp
+          </button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  modal.classList.add("open");
+}
+
+async function sendOneBranchPayslipWhatsApp(empId,type,button){
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!e) return;
+
+  const phone=normalizeStaffWhatsAppNumber(e.phone);
+  if(!phone){
+    alert("No Staff Phone / WhatsApp number.");
+    return;
+  }
+
+  const old=button?.textContent||"Send WhatsApp";
+  try{
+    if(button){
+      button.disabled=true;
+      button.textContent="Preparing...";
+    }
+
+    await openPayslip(Number(empId),Number(type));
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+
+    const file=await renderCurrentPayslipToA4PdfFile(e.name||"Staff");
+    downloadPdfFile(file);
+
+    // Open the exact staff chat. The PDF remains an independent downloaded file.
+    setTimeout(()=>{
+      window.location.href=`https://wa.me/${phone}`;
+    },220);
+  }catch(err){
+    alert("Unable to prepare payslip: "+(err?.message||err));
+  }finally{
+    if(button){
+      button.disabled=false;
+      button.textContent=old;
+    }
+  }
+}
+
 function renderSalary(){
   renderSalaryViewButtons();
 
@@ -10179,7 +10440,17 @@ function renderSalary(){
 
     if(salaryViewMode==="7th"){
       return `<div class="salary-card" style="margin-top:14px">
-        <div class="outlet-title"><h3>${outlet.toUpperCase()}</h3></div>
+        <div class="outlet-title">
+  <h3>${outlet.toUpperCase()}</h3>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+  <button class="btn branch-whatsapp-payslips-btn" type="button"
+    data-branch-whatsapp="${outlet.replace(/"/g,"&quot;")}"
+    data-branch-pay-type="7">Send Individually</button>
+  <button class="btn branch-whatsapp-all-btn" type="button"
+    data-branch-wa-all="${outlet.replace(/"/g,"&quot;")}"
+    data-branch-wa-all-type="7">Send All to Same Number</button>
+</div>
+</div>
         <div class="salary-table-wrap">
           <table class="salary-table compact">
             <thead><tr><th>Pay Day</th><th>Cash</th><th>Bank Transfer</th><th>TNG</th><th>Total</th></tr></thead>
@@ -10194,7 +10465,17 @@ function renderSalary(){
 
     if(salaryViewMode==="14th"){
       return `<div class="salary-card" style="margin-top:14px">
-        <div class="outlet-title"><h3>${outlet.toUpperCase()}</h3></div>
+        <div class="outlet-title">
+  <h3>${outlet.toUpperCase()}</h3>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+  <button class="btn branch-whatsapp-payslips-btn" type="button"
+    data-branch-whatsapp="${outlet.replace(/"/g,"&quot;")}"
+    data-branch-pay-type="14">Send Individually</button>
+  <button class="btn branch-whatsapp-all-btn" type="button"
+    data-branch-wa-all="${outlet.replace(/"/g,"&quot;")}"
+    data-branch-wa-all-type="14">Send All to Same Number</button>
+</div>
+</div>
         <div class="salary-table-wrap">
           <table class="salary-table compact">
             <thead><tr><th>Pay Day</th><th>Cash</th><th>Bank Transfer</th><th>TNG</th><th>Total</th></tr></thead>
@@ -11797,7 +12078,53 @@ byId("closeStaffListModal").onclick=()=>byId("staffListModal").classList.remove(
 
   
 document.addEventListener("click",(ev)=>{
-  const b7cash=ev.target.closest("#export7CashBtn");
+  
+
+  const branchWaAllBtn=ev.target.closest("[data-branch-wa-all]");
+  if(branchWaAllBtn){
+    openBranchWhatsAppAllModal(
+      branchWaAllBtn.dataset.branchWaAll,
+      Number(branchWaAllBtn.dataset.branchWaAllType||7)
+    );
+    return;
+  }
+
+  if(ev.target.closest("#closeBranchWhatsAppAllModal")){
+    byId("branchWhatsAppAllModal")?.classList.remove("open");
+    return;
+  }
+
+  const branchWaBtn=ev.target.closest("[data-branch-whatsapp]");
+  if(branchWaBtn){
+    openBranchWhatsAppPayslipQueue(
+      branchWaBtn.dataset.branchWhatsapp,
+      Number(branchWaBtn.dataset.branchPayType||7)
+    );
+    return;
+  }
+
+  const branchWaSend=ev.target.closest("[data-branch-wa-send]");
+  if(branchWaSend){
+    await sendOneBranchPayslipWhatsApp(
+      Number(branchWaSend.dataset.branchWaSend),
+      Number(branchWaSend.dataset.branchWaType||7),
+      branchWaSend
+    );
+    return;
+  }
+
+  if(ev.target.closest("#closeBranchWhatsAppPayslipModal")){
+    byId("branchWhatsAppPayslipModal")?.classList.remove("open");
+    return;
+  }
+
+
+  if(ev.target.closest("#branchWhatsAppAllSendBtn")){
+    await sendAllBranchPayslipsSameNumber();
+    return;
+  }
+
+const b7cash=ev.target.closest("#export7CashBtn");
   const b7transfer=ev.target.closest("#export7TransferBtn");
   const b14cash=ev.target.closest("#export14CashBtn");
   const b14transfer=ev.target.closest("#export14TransferBtn");
@@ -12147,6 +12474,45 @@ function salaryExportMonthParts(){
   };
 }
 
+
+function safeEmployeePdfFilename(name){
+  const cleaned=String(name||"Staff")
+    .replace(/[\\/:*?"<>|]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+  return `${cleaned||"Staff"}.pdf`;
+}
+
+async function renderCurrentPayslipToA4PdfFile(employeeName){
+  const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
+  if(!slip) throw new Error("Payslip not found");
+  if(typeof html2canvas!=="function") throw new Error("PDF renderer not loaded");
+  if(!window.jspdf?.jsPDF) throw new Error("PDF library not loaded");
+
+  const captured=await window.capturePayslipForPdf(slip,1.25,0.88);
+  const {img}=captured;
+
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+  const margin=6, pageW=297, pageH=210;
+  pdf.addImage(img,"JPEG",margin,margin,pageW-margin*2,pageH-margin*2);
+
+  const blob=pdf.output("blob");
+  return new File([blob],safeEmployeePdfFilename(employeeName),{type:"application/pdf"});
+}
+
+function downloadPdfFile(file){
+  const url=URL.createObjectURL(file);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=file.name;
+  a.style.display="none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+
 function salaryExportJobs(mode){
   const selectedMonth=(byId("salaryMonth")?.value||"").trim();
   const active=salaryEmployees
@@ -12232,6 +12598,7 @@ async function exportSalaryPayslipCategory(mode){
     alert("No permission.");
     return;
   }
+
   const releaseType=String(mode||"").startsWith("7_")?7:14;
   if(!salaryPayslipIsReleased(releaseType)){
     alert(`${releaseType===7?"7th":"14th"} payslips will be available on ${salaryPayslipReleaseLabel(releaseType)}.`);
@@ -12248,7 +12615,6 @@ async function exportSalaryPayslipCategory(mode){
     "14_cash":"export14CashBtn",
     "14_transfer":"export14TransferBtn"
   };
-
   const labelMap={
     "7_cash":"7th Cash",
     "7_transfer":"7th Transfer + TNG",
@@ -12257,14 +12623,10 @@ async function exportSalaryPayslipCategory(mode){
   };
 
   const btn=byId(buttonMap[mode]);
-  const originalText=btn?.textContent||"Export";
+  const originalText=btn?.textContent||"Download";
 
   try{
-    if(typeof html2canvas!=="function") throw new Error("PDF renderer not loaded");
-    if(!window.jspdf?.jsPDF) throw new Error("PDF library not loaded");
-
     await loadSalaryData();
-
     const jobs=salaryExportJobs(mode);
     if(!jobs.length){
       alert(`No confirmed ${labelMap[mode]} payslips found for this month.`);
@@ -12276,64 +12638,39 @@ async function exportSalaryPayslipCategory(mode){
       btn.textContent=`Preparing 0 / ${jobs.length}...`;
     }
 
-    const {jsPDF}=window.jspdf;
-    let pdf=null;
     const modal=byId("payslipModal");
     const wasOpen=modal?.classList.contains("open");
+    const completed=[];
 
+    // Important: every staff member is rendered as an independent one-page PDF.
+    // Jobs are already sorted by outlet then name, so branch files stay grouped
+    // in the browser download list without being merged into one PDF.
     for(let i=0;i<jobs.length;i++){
       const job=jobs[i];
-      if(btn) btn.textContent=`Preparing ${i+1} / ${jobs.length}...`;
+      if(btn) btn.textContent=`Downloading ${i+1} / ${jobs.length}...`;
 
       await openPayslip(job.empId,job.type);
       await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
-      const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
-      if(!slip) continue;
+      const file=await renderCurrentPayslipToA4PdfFile(job.name);
+      downloadPdfFile(file);
+      completed.push(job);
 
-      const captured=await window.capturePayslipForPdf(slip,1.8,0.94);
-    const {widthMm,heightMm,img}=captured;
-    const orientation=widthMm>heightMm?"landscape":"portrait";
-
-      if(!pdf){
-        pdf=new jsPDF({orientation,unit:"mm",format:[widthMm,heightMm]});
-      }else{
-        pdf.addPage([widthMm,heightMm],orientation);
-      }
-
-      pdf.addImage(img,"JPEG",0,0,widthMm,heightMm);
+      // Give iPhone/Safari a short gap between separate downloads.
+      await new Promise(r=>setTimeout(r,220));
     }
 
     if(!wasOpen) modal?.classList.remove("open");
-    if(!pdf) throw new Error("No payslips could be rendered.");
 
-    const {year,month}=salaryExportMonthParts();
+    // Only successfully generated/downloaded payslips are marked DONE.
+    if(completed.length){
+      await markExportedSalaryJobsDone(completed);
+      await refreshSalaryStayHere();
+    }
 
-    const filenameMap={
-      "7_cash":`Salary 7th Cash ${month} ${year}.pdf`,
-      "7_transfer":`Salary 7th Transfer TNG ${month} ${year}.pdf`,
-      "14_cash":`Salary 14th Cash ${month} ${year}.pdf`,
-      "14_transfer":`Salary 14th Transfer TNG ${month} ${year}.pdf`
-    };
-
-    const blob=pdf.output("blob");
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;
-    a.download=filenameMap[mode];
-    a.style.display="none";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),10000);
-
-    // Only the exported payslips are marked DONE.
-    await markExportedSalaryJobsDone(jobs);
-    await refreshSalaryStayHere();
-
-    alert(`${labelMap[mode]} payslips exported. Payment status updated to DONE.`);
+    alert(`${completed.length} individual payslip PDF file(s) downloaded. Each file is named with the employee name.`);
   }catch(err){
-    alert(`Unable to export ${labelMap[mode]} payslips: `+(err?.message||err));
+    alert(`Unable to download ${labelMap[mode]} payslips: `+(err?.message||err));
   }finally{
     if(btn){
       btn.disabled=false;
@@ -12343,46 +12680,28 @@ async function exportSalaryPayslipCategory(mode){
 }
 
 
-
 })();
 
+
+let payslipPdfCache={key:"",file:null};
 
 async function buildPayslipPdfFile(){
   const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
   if(!slip) throw new Error("Payslip not found");
-  if(typeof html2canvas!=="function") throw new Error("PDF renderer not loaded");
-  if(!window.jspdf?.jsPDF) throw new Error("PDF library not loaded");
 
-  const captured=await window.capturePayslipForPdf(slip,2,0.96);
-  const {img}=captured;
-
-  const {jsPDF}=window.jspdf;
-  const pdf=new jsPDF({
-    orientation:"landscape",
-    unit:"mm",
-    format:"a4"
-  });
-
-  const pageW=297;
-  const pageH=210;
-  const margin=6;
-  const drawW=pageW-(margin*2);
-  const drawH=pageH-(margin*2);
-
-  pdf.addImage(img,"JPEG",margin,margin,drawW,drawH);
-
-  const blob=pdf.output("blob");
-  const type=slip.dataset.payslipType||"Payslip";
+  const employee=window.currentPayslipStaff||{};
+  const empId=String(employee.id||"");
   const monthInput=document.getElementById("salaryMonth")?.value || "";
-  let monthLabel="Payslip";
-  if(monthInput){
-    const parts=monthInput.split("-").map(Number);
-    if(parts.length===2 && parts[0] && parts[1]){
-      monthLabel=new Date(parts[0],parts[1]-1,1).toLocaleString("en-US",{month:"short"});
-    }
+  const payslipType=slip.dataset.payslipType||"Payslip";
+  const cacheKey=[empId,monthInput,payslipType,slip.textContent].join("|");
+
+  if(payslipPdfCache.key===cacheKey && payslipPdfCache.file){
+    return payslipPdfCache.file;
   }
-  const filename=`Natures_Dao_${type}_${monthLabel}.pdf`;
-  return new File([blob],filename,{type:"application/pdf"});
+
+  const file=await renderCurrentPayslipToA4PdfFile(employee.name||"Staff");
+  payslipPdfCache={key:cacheKey,file};
+  return file;
 }
 
 function normalizeStaffWhatsAppNumber(raw){
@@ -12417,8 +12736,11 @@ async function sharePayslipWhatsApp(){
 
     if(btn){
       btn.disabled=true;
-      btn.textContent="Preparing PDF...";
+      btn.textContent="Preparing...";
     }
+
+    // Give Safari one frame to update the button before PDF rendering starts.
+    await new Promise(r=>requestAnimationFrame(r));
 
     // Generate the payslip PDF.
     const file=await buildPayslipPdfFile();
