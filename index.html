@@ -2442,6 +2442,52 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="salary-payment-grouping-style">
+.salary-table .salary-payment-group td{
+  border-top:2px solid #d9d9d9!important;
+  border-bottom:1px solid #e5e5e5!important;
+}
+.salary-table .salary-payment-subtotal td{
+  border-top:1px solid #dcdcdc!important;
+  border-bottom:2px solid #cfcfcf!important;
+  background:#fafafa;
+}
+.salary-table .salary-payment-grandtotal td{
+  border-top:3px double #b8c9bb!important;
+}
+</style>
+
+
+<style id="salary-netpay-three-columns-style">
+.salary-table .netpay-group-head{
+  text-align:center!important;
+  font-weight:900!important;
+  background:#f4f6f8!important;
+}
+.salary-table .netpay-method-head{
+  text-align:center!important;
+  white-space:nowrap!important;
+  font-weight:800!important;
+  background:#fafafa!important;
+  min-width:125px!important;
+}
+.salary-table .netpay-method-cell,
+.salary-table .netpay-method-total{
+  text-align:center!important;
+  white-space:nowrap!important;
+  min-width:125px!important;
+}
+.salary-table .netpay-summary-row td{
+  border-top:2px solid #cfcfcf!important;
+  background:#fafafa!important;
+}
+.salary-table .netpay-grand-row td{
+  border-top:3px double #b8c9bb!important;
+  background:#eef7ef!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -9461,56 +9507,90 @@ function normalizedSevenSnapshot(e,snap){
 
 function renderSevenTable(emps){
   if(!emps.length) return '';
+
+  const rowHtml=e=>{
+    const m=monthlyFor(e.id), snap=snapshotFor(e.id);
+    const s=snap
+      ? (typeof normalizedSevenSnapshot==="function" ? normalizedSevenSnapshot(e,snap) : snap)
+      : calculate7th(e,m);
+    const pm=String(e.payment_method||"Cash");
+    const net=Number(s.net_pay||0);
+
+    return `<tr data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
+      <td>${e.name||"-"}</td>
+      <td>${offDayInput(e.id, snap?Number(s.off_days_taken||0):Number(m.off_days_taken||0), !!snap)}</td>
+      <td>${money(s.guaranteed_pay)}</td><td>${money(s.allowance)}</td>
+      <td>${money(s.employee_epf)}</td><td>${money(s.employer_epf)}</td>
+      <td>${money(s.employee_socso)}</td><td>${money(s.employer_socso)}</td>
+      <td>${money(s.employee_eis)}</td><td>${money(s.employer_eis)}</td>
+      <td>${money(s.off_day_deduction||0)}</td>
+      <td>${taxCellHtml(e,s,snap)}</td>
+      <td>${snap?money(s.ot||0):editInput(e.id,"ot",m.ot)}</td>
+      <td>${money(s.gross_pay)}</td><td>${money(s.total_deduction)}</td>
+
+      <td class="netpay-method-cell">${pm==="Cash"?money(net):"—"}</td>
+      <td class="netpay-method-cell">${pm==="Bank Transfer"?money(net):"—"}</td>
+      <td class="netpay-method-cell">${pm==="TNG"?money(net):"—"}</td>
+
+      <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
+      <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
+      <td><span class="pay-method-pill">${pm}</span></td>
+      <td>${snap
+        ? (isPayrollManager
+            ? `<button class="btn payment-done-btn ${snap.payment_done?"done":"pending"}" data-payment7="${e.id}">${snap.payment_done?"Payment — DONE ✓":"Payment — DONE"}</button>`
+            : `<span class="${snap.payment_done?"confirmed-pill":"helper"}">${snap.payment_done?"Payment — DONE":"Pending"}</span>`)
+        : `<span class="helper">Confirm first</span>`}</td>
+    </tr>`;
+  };
+
+  let cashTotal=0, transferTotal=0, tngTotal=0;
+  emps.forEach(e=>{
+    const m=monthlyFor(e.id), snap=snapshotFor(e.id);
+    const s=snap
+      ? (typeof normalizedSevenSnapshot==="function" ? normalizedSevenSnapshot(e,snap) : snap)
+      : calculate7th(e,m);
+    const net=Number(s.net_pay||0);
+    const pm=String(e.payment_method||"Cash");
+    if(pm==="Cash") cashTotal+=net;
+    else if(pm==="Bank Transfer") transferTotal+=net;
+    else if(pm==="TNG") tngTotal+=net;
+  });
+  const grandTotal=cashTotal+transferTotal+tngTotal;
+
   return `<div class="salary-table-wrap"><table class="salary-table">
-    <thead><tr>
-      <th>Name</th><th>Off Days Taken</th><th>Off-Day OT</th><th>OT Hours</th><th>Total OT Hours</th><th>Overtime (RM)</th><th>Basic Pay</th><th>Allowance</th>
-      <th>Employee EPF</th><th>Employer EPF</th>
-      <th>Employee SOCSO</th><th>Employer SOCSO</th>
-      <th>Lindung 24 Jam</th>
-      <th>Employee EIS</th><th>Employer EIS</th>
-      <th>Unpaid</th>
-      <th>PCB / Tax</th><th>Gross Pay</th><th>Total Deduction</th><th>Net Pay</th>
-      <th>Confirm</th><th>7th Monthly Payslip</th><th>Pay By</th><th>Payment</th>
-    </tr></thead><tbody>
-    ${emps.map(e=>{
-      const m=monthlyFor(e.id), snap=snapshotFor(e.id), s=snap?normalizedSevenSnapshot(e,snap):calculate7th(e,m);
-      return `<tr data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
-        <td>${e.name||"-"}</td>
-        <td>${offDayInput(e.id, snap?Number(s.off_days_taken||0):Number(m.off_days_taken||0), !!snap)}</td>
-        <td>${snap
-          ? `<div class="offday-box"><input type="number" value="${Number(s.ot_day_qty||0)}" disabled><span class="days-suffix">Days</span></div>`
-          : `<div class="offday-box"><input type="number" min="0" step="0.5" value="${Number(m.ot_day_qty||0)}" data-month-edit="${e.id}" data-field="ot_day_qty"><span class="days-suffix">Days</span></div>`}</td>
-        <td data-live-othours="${e.id}">
-          ${snap
-            ? `<div class="offday-box"><input type="number" value="${Number(s.ot_hour_qty||0)}" disabled><span class="days-suffix">Hours</span></div>`
-            : `<div class="offday-box"><input type="number" min="0" step="0.01" value="${Number(m.ot_hour_qty||0)}" data-month-edit="${e.id}" data-field="ot_hour_qty"><span class="days-suffix">Hours</span></div>`}
-        </td>
-        <td data-live-ottotalhrs="${e.id}"><strong>${Number(s.ot_total_hours ?? calculateOtTotalHours(m)).toFixed(2)}</strong></td>
-        <td data-live-otamount="${e.id}">
-          <strong>${money(s.ot||0)}</strong>
-          <div class="helper">Rate ${Number(s.ot_hourly_rate ?? otHourlyRate(e)).toFixed(4)}</div>
-        </td>
-        <td>${money(s.guaranteed_pay)}</td><td>${money(s.allowance)}</td>
-        <td>${money(s.employee_epf)}</td><td>${money(s.employer_epf)}</td>
-        <td>${money(s.employee_socso)}</td><td>${money(s.employer_socso)}</td>
-        <td>${money((s.employee_lindung24 ?? statutory(s.gross_pay).employee_lindung24)||0)}</td>
-        <td>${money(s.employee_eis)}</td><td>${money(s.employer_eis)}</td>
-        <td>${money(s.off_day_deduction||0)}</td>
-        <td>${taxCellHtml(e,s,snap)}</td>
-        <td data-live-gross7="${e.id}">${money(s.gross_pay)}</td>
-        <td data-live-deduction7="${e.id}">${money(s.total_deduction)}</td>
-        <td data-live-netpay7="${e.id}">${money(s.net_pay)}</td>
-        <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
-        <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
-        <td><span class="pay-method-pill">${e.payment_method||"Cash"}</span></td>
-        <td>${snap
-          ? (isPayrollManager
-              ? `<button class="btn payment-done-btn ${snap.payment_done?"done":"pending"}" data-payment7="${e.id}">${snap.payment_done?"Payment — DONE ✓":"Payment — DONE"}</button>`
-              : `<span class="${snap.payment_done?"confirmed-pill":"helper"}">${snap.payment_done?"Payment — DONE":"Pending"}</span>`)
-          : `<span class="helper">Confirm first</span>`}</td>
-      </tr>`;
-    }).join("")}
-    </tbody></table></div>`;
+    <thead>
+      <tr>
+        <th rowspan="2">Name</th><th rowspan="2">Off Day</th><th rowspan="2">Basic Pay</th><th rowspan="2">Allowance</th>
+        <th rowspan="2">Employee EPF</th><th rowspan="2">Employer EPF</th>
+        <th rowspan="2">Employee SOCSO</th><th rowspan="2">Employer SOCSO</th>
+        <th rowspan="2">Employee EIS</th><th rowspan="2">Employer EIS</th>
+        <th rowspan="2">Unpaid</th>
+        <th rowspan="2">PCB / Tax</th><th rowspan="2">OT</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
+        <th colspan="3" class="netpay-group-head">Net Pay</th>
+        <th rowspan="2">Confirm</th><th rowspan="2">7th Monthly Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
+      </tr>
+      <tr>
+        <th class="netpay-method-head">Cash</th>
+        <th class="netpay-method-head">Bank Transfer</th>
+        <th class="netpay-method-head">TNG</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${emps.map(rowHtml).join("")}
+      <tr class="netpay-summary-row">
+        <td colspan="15" style="text-align:right;font-weight:900">TOTAL</td>
+        <td class="netpay-method-total">${money(cashTotal)}</td>
+        <td class="netpay-method-total">${money(transferTotal)}</td>
+        <td class="netpay-method-total">${money(tngTotal)}</td>
+        <td colspan="4"></td>
+      </tr>
+      <tr class="netpay-grand-row">
+        <td colspan="15" style="text-align:right;font-weight:900">ALL NET PAY</td>
+        <td colspan="3" style="text-align:center;font-weight:900">${money(grandTotal)}</td>
+        <td colspan="4"></td>
+      </tr>
+    </tbody>
+  </table></div>`;
 }
 
 function renderFourteenTable(emps){
