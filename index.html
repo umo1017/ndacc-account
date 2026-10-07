@@ -2320,6 +2320,128 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 <style id="myinvois-submit-ui">
 </style>
 
+
+<style id="report-mobile-horizontal-scroll-final">
+/* Final mobile report layout: never squeeze financial tables into phone width. */
+#settlementTotalMonthTable,
+#settlementDetailedExpenseTable,
+#settlementYearTable{
+  display:block !important;
+  width:100% !important;
+  max-width:calc(100vw - 28px) !important;
+  overflow-x:auto !important;
+  overflow-y:visible !important;
+  -webkit-overflow-scrolling:touch !important;
+  touch-action:pan-x pan-y;
+}
+#settlementTotalMonthTable table{
+  width:max-content !important;
+  min-width:1120px !important;
+  table-layout:auto !important;
+}
+#settlementDetailedExpenseTable table{
+  width:max-content !important;
+  min-width:900px !important;
+  table-layout:auto !important;
+}
+#settlementYearTable table{
+  width:max-content !important;
+  min-width:1120px !important;
+  table-layout:auto !important;
+}
+#settlementTotalMonthTable th,
+#settlementTotalMonthTable td,
+#settlementDetailedExpenseTable th,
+#settlementDetailedExpenseTable td,
+#settlementYearTable th,
+#settlementYearTable td{
+  white-space:nowrap !important;
+  word-break:keep-all !important;
+  overflow-wrap:normal !important;
+  min-width:130px !important;
+  width:auto !important;
+}
+#settlementTotalMonthTable th:first-child,
+#settlementTotalMonthTable td:first-child,
+#settlementDetailedExpenseTable th:first-child,
+#settlementDetailedExpenseTable td:first-child,
+#settlementYearTable th:first-child,
+#settlementYearTable td:first-child{
+  min-width:170px !important;
+}
+@media(max-width:700px){
+  #settlementTotalMonthTable,
+  #settlementDetailedExpenseTable,
+  #settlementYearTable{
+    max-width:calc(100vw - 24px) !important;
+  }
+  #settlementTotalMonthTable table{min-width:1120px !important;}
+  #settlementDetailedExpenseTable table{min-width:900px !important;}
+  #settlementYearTable table{min-width:1120px !important;}
+  #settlementTotalMonthTable th,
+  #settlementTotalMonthTable td,
+  #settlementDetailedExpenseTable th,
+  #settlementDetailedExpenseTable td,
+  #settlementYearTable th,
+  #settlementYearTable td{
+    font-size:14px !important;
+    line-height:1.25 !important;
+    padding:11px 14px !important;
+  }
+}
+</style>
+
+<style id="payslip-bottom-safe-spacing-fix">
+/* ===== Payslip bottom safe spacing =====
+   Keep footer / YTD text away from the physical bottom edge while
+   preserving the current wide payslip layout. */
+#salaryPayslipPrint .payslip-sheet,
+#salaryPayslipPrint .payslip-sheet.payslip-14-reference{
+  padding-bottom:12mm!important;
+  box-sizing:border-box!important;
+}
+
+/* Recover vertical room from the middle area instead of pushing the footer down. */
+#salaryPayslipPrint .payslip-sheet .payslip-col{
+  min-height:190px!important;
+}
+#salaryPayslipPrint .payslip-sheet .payslip-bottom{
+  margin-top:8px!important;
+}
+#salaryPayslipPrint .payslip-sheet .payslip-bottom-section{
+  min-height:82px!important;
+  padding-top:5px!important;
+  padding-bottom:5px!important;
+}
+#salaryPayslipPrint .payslip-sheet .payslip-bottom-title{
+  margin-bottom:4px!important;
+}
+#salaryPayslipPrint .payslip-sheet .payslip-bottom-note{
+  margin-top:6px!important;
+  margin-bottom:4mm!important;
+  line-height:1.35!important;
+}
+
+/* Bank/TNG details also keep a safe gap from the last edge. */
+#salaryPayslipPrint .payslip-sheet .payslip-transfer-details{
+  margin-top:6px!important;
+  padding-top:5px!important;
+  margin-bottom:2mm!important;
+}
+
+/* 14th slip has fewer footer rows, but keep the same safe bottom area. */
+#salaryPayslipPrint .payslip-sheet.payslip-14-reference .payslip-col{
+  min-height:185px!important;
+}
+
+@media print{
+  body.salary-print #salaryPayslipPrint .payslip-sheet,
+  body.salary-print #salaryPayslipPrint .payslip-sheet.payslip-14-reference{
+    padding-bottom:12mm!important;
+  }
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -9264,28 +9386,53 @@ function normalizedSevenSnapshot(e,snap){
   if(!snap) return null;
   const s={...snap};
 
-  // IMPORTANT:
-  // Old confirmed snapshots may contain OT calculated from Basic Pay only.
-  // Always normalize the displayed / payslip OT using:
-  // (Basic Pay + Allowance) ÷ calendar days ÷ 8 × Total OT Hours.
+  // Normalize every confirmed 7th payslip from its components so Gross / Net
+  // never depend on an old stored total.
   const basic=Math.max(0,Number(s.guaranteed_pay ?? e?.guaranteed_pay ?? 0));
   const allowance=Math.max(0,Number(s.allowance ?? e?.allowance ?? 0));
-  const otDayQty=Math.max(0,Number(s.ot_day_qty||0));
-  const otHourQty=Math.max(0,Number(s.ot_hour_qty||0));
-  const totalOtHours=+(otDayQty*8+otHourQty).toFixed(2);
   const otRate=otHourlyRateFromPay(basic,allowance);
-  const otAmount=+(totalOtHours*otRate).toFixed(2);
+
+  // New snapshots store OT quantities. Older snapshots may only have an OT
+  // amount, so preserve that amount instead of accidentally turning OT into 0.
+  const hasOtQty =
+    s.ot_day_qty !== undefined && s.ot_day_qty !== null ||
+    s.ot_hour_qty !== undefined && s.ot_hour_qty !== null ||
+    s.ot_total_hours !== undefined && s.ot_total_hours !== null;
+
+  let otDayQty=Math.max(0,Number(s.ot_day_qty||0));
+  let otHourQty=Math.max(0,Number(s.ot_hour_qty||0));
+  let totalOtHours=0;
+  let otAmount=0;
+
+  if(hasOtQty){
+    totalOtHours=Math.max(
+      0,
+      Number(
+        s.ot_total_hours !== undefined && s.ot_total_hours !== null
+          ? s.ot_total_hours
+          : (otDayQty*8+otHourQty)
+      ) || 0
+    );
+    otAmount=+(totalOtHours*otRate).toFixed(2);
+  }else{
+    otAmount=Math.max(0,Number(s.ot ?? s.ot_hours ?? s.ot_days ?? 0));
+    totalOtHours=otRate>0 ? +(otAmount/otRate).toFixed(2) : 0;
+    otHourQty=totalOtHours;
+    otDayQty=0;
+  }
 
   s.guaranteed_pay=basic;
   s.allowance=allowance;
   s.ot_day_qty=otDayQty;
   s.ot_hour_qty=otHourQty;
-  s.ot_total_hours=totalOtHours;
+  s.ot_total_hours=+totalOtHours.toFixed(2);
   s.ot_hourly_rate=+otRate.toFixed(4);
   s.ot_days=+(otDayQty*8*otRate).toFixed(2);
-  s.ot_hours=otAmount;
-  s.ot=otAmount;
-  s.gross_pay=+(basic+allowance+otAmount).toFixed(2);
+  s.ot_hours=+otAmount.toFixed(2);
+  s.ot=+otAmount.toFixed(2);
+
+  // Gross Pay = Basic + Allowance + OT
+  s.gross_pay=+(basic+allowance+s.ot).toFixed(2);
 
   const hasSocso=!!String(e?.socso_no||"").trim();
   const st=hasSocso ? statutory(Number(s.gross_pay||0)) : {
@@ -9298,6 +9445,7 @@ function normalizedSevenSnapshot(e,snap){
   s.employee_eis=st.employee_eis;
   s.employer_eis=st.employer_eis;
 
+  // Total Deduction = employee statutory deductions + PCB + unpaid deduction.
   s.total_deduction=+(
     Number(s.employee_epf||0)+
     Number(s.employee_socso||0)+
@@ -9306,7 +9454,8 @@ function normalizedSevenSnapshot(e,snap){
     Number(s.off_day_deduction||0)
   ).toFixed(2);
 
-  s.net_pay=+(Number(s.gross_pay||0)-Number(s.total_deduction||0)).toFixed(2);
+  // Net Pay = Gross Pay - Total Deduction.
+  s.net_pay=+(s.gross_pay-s.total_deduction).toFixed(2);
   return s;
 }
 
@@ -10756,9 +10905,35 @@ document.addEventListener("click",async ev=>{
 });
 
 function ytdSum(empId,key){
-  return salaryYtdSnapshots
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  const selectedMonth=monthDate();
+
+  // One payroll snapshot per employee per month.
+  // If duplicate/older rows exist, keep only the last row seen for that month.
+  const byMonth=new Map();
+  salaryYtdSnapshots
     .filter(x=>Number(x.employee_id)===Number(empId))
-    .reduce((a,x)=>a+Number(x[key]||0),0);
+    .forEach(x=>{
+      const k=String(x.salary_month||"").slice(0,10);
+      if(k) byMonth.set(k,x);
+    });
+
+  // Force the selected month's YTD value to use exactly the same normalized
+  // snapshot that the current payslip is displaying. This prevents YTD Gross /
+  // Net from showing an older OT calculation than the current-month payslip.
+  const current=snapshotFor(empId);
+  if(current) byMonth.set(selectedMonth,current);
+
+  let total=0;
+  byMonth.forEach(x=>{
+    if((key==="gross_pay" || key==="net_pay") && e){
+      const n=normalizedSevenSnapshot(e,x);
+      total+=Number(n?.[key]||0);
+    }else{
+      total+=Number(x?.[key]||0);
+    }
+  });
+  return +total.toFixed(2);
 }
 
 function metaRows(e,type){
@@ -10805,7 +10980,7 @@ async function openPayslip(empId,type){
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div><div style="height:140px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(s.gross_pay||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">${Number(s.total_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div><div class="payslip-line"><span>Overtime</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div><div style="height:116px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(s.gross_pay||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">${Number(s.total_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
 <div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${Number(s.net_pay||0).toFixed(2)}</span></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;----------CURRENT MONTH----------&gt;</div><div class="payslip-mini-table"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Income Tax PCB</div><div>EMPLOYEE</div><div class="v">${Number(s.employee_epf||0).toFixed(2)}</div><div class="v">${Number(s.employee_socso||0).toFixed(2)}</div><div class="v">${Number(s.employee_eis||0).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div><div>EMPLOYER</div><div class="v">${Number(s.employer_epf||0).toFixed(2)}</div><div class="v">${Number(s.employer_socso||0).toFixed(2)}</div><div class="v">${Number(s.employer_eis||0).toFixed(2)}</div><div class="v"></div><div>TOTAL</div><div class="v">${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_socso||0)+Number(s.employer_socso||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;---------------YEAR-TO-DATE---------------&gt;</div><div class="payslip-mini-table ytd"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Income Tax PCB</div><div class="h">GROSS PAY</div><div class="h">NET PAY</div><div></div><div class="v">${(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis")).toFixed(2)}</div><div class="v">${ytdSum(empId,"tax").toFixed(2)}</div><div class="v">${ytdSum(empId,"gross_pay").toFixed(2)}</div><div class="v">${ytdSum(empId,"net_pay").toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
@@ -12791,14 +12966,11 @@ async function loadSettlementMonth(){
     const [empRes,s7Res,s14Res,monthlyRes]=await Promise.all([
       db.from("employees").select("*").eq("outlet",settlementCurrentOutlet),
       db.from("payroll_snapshot").select("*")
-        .lte("salary_month",monthKey)
-        .order("salary_month",{ascending:false}),
+        .eq("salary_month",monthKey),
       db.from("payroll_commission_snapshot").select("*")
-        .lte("salary_month",monthKey)
-        .order("salary_month",{ascending:false}),
+        .eq("salary_month",monthKey),
       db.from("employee_salary_monthly").select("*")
-        .lte("salary_month",monthKey)
-        .order("salary_month",{ascending:false})
+        .eq("salary_month",monthKey)
     ]);
     if(empRes.error) throw empRes.error;
     if(s7Res.error) throw s7Res.error;
@@ -12807,9 +12979,9 @@ async function loadSettlementMonth(){
 
     const branchEmployees=(empRes.data||[]).filter(e=>activeInMonth(e,ym));
 
-    // AUTO · LIVE uses the newest payroll record available at or before
-    // the selected Report month. This prevents a new month from showing
-    // 0.00 before that month's salary page has been confirmed/saved.
+    // AUTO · LIVE is tied to the selected Report month only.
+    // Never reuse a prior month's 7th/14th payroll in another month.
+    // If the selected month is not yet confirmed, calculate live from that same month's inputs.
     const newestPerEmployee=(rows)=>{
       const map=new Map();
       (rows||[]).forEach(x=>{
@@ -12823,12 +12995,7 @@ async function loadSettlementMonth(){
     const commissionSnapMap=newestPerEmployee(s14Res.data||[]);
     const monthlyMap=newestPerEmployee(monthlyRes.data||[]);
 
-    const sourceMonths=[
-      ...(s7Res.data||[]),
-      ...(s14Res.data||[]),
-      ...(monthlyRes.data||[])
-    ].map(r=>String(r?.salary_month||"").slice(0,7)).filter(Boolean).sort().reverse();
-    if(sourceMonths[0]) settlementAutoPayrollSourceMonth=sourceMonths[0];
+    settlementAutoPayrollSourceMonth=String(monthKey).slice(0,7);
 
     // 7th salary = employee NET PAY.
     // Statutory remittances are shown separately below Branch Salary 14th:
@@ -12889,8 +13056,8 @@ async function loadSettlementMonth(){
 
     settlementAuto.taxpcb_employee=+taxPcb.toFixed(2);
 
-    // 14th AUTO must always use the newest available data.
-    // Confirmed snapshot wins; otherwise calculate from the newest monthly commission values.
+    // 14th AUTO uses the selected month's data only.
+    // That month's confirmed snapshot wins; otherwise calculate live from that month's Commission inputs.
     let salary14Latest=0;
 
     for(const e of branchEmployees){
@@ -13142,9 +13309,9 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
       .lt("settlement_date",next),
     settlementEffectiveExpenseRecord(outlet,monthDate),
     db.from("employees").select("*").eq("outlet",outlet),
-    db.from("payroll_snapshot").select("*").lte("salary_month",monthDate).order("salary_month",{ascending:false}),
-    db.from("payroll_commission_snapshot").select("*").lte("salary_month",monthDate).order("salary_month",{ascending:false}),
-    db.from("employee_salary_monthly").select("*").lte("salary_month",monthDate).order("salary_month",{ascending:false})
+    db.from("payroll_snapshot").select("*").eq("salary_month",monthDate),
+    db.from("payroll_commission_snapshot").select("*").eq("salary_month",monthDate),
+    db.from("employee_salary_monthly").select("*").eq("salary_month",monthDate)
   ]);
 
   if(dailyRes.error) throw dailyRes.error;
@@ -13202,10 +13369,10 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     }
   });
 
-  // 14th payroll must count each active employee exactly once.
-  // Use the newest confirmed 14th snapshot at/before the selected month; if none exists,
-  // calculate from the newest monthly Commission values. Part-time staff are included here
-  // because the 14th Commission page also includes them.
+  // 14th payroll must count each active employee exactly once for THIS selected month.
+  // Use this month's confirmed 14th snapshot; if none exists, calculate from this month's
+  // Commission inputs. Never carry a prior month's salary into the selected report month.
+  // Part-time staff are included here because the 14th Commission page also includes them.
   let salary14=0;
   for(const e of employees){
     const id=String(e.id);
@@ -24882,3 +25049,108 @@ document.addEventListener("change",function(ev){
 
 </body>
 </html>
+
+<style id="desktop-wide-salary-final-fix">
+/* Desktop payroll: use the full browser width and keep columns readable.
+   Wide payroll tables scroll inside their own card instead of shrinking text. */
+@media (min-width: 901px){
+  #salaryPage,
+  #salaryPage.active{
+    box-sizing:border-box!important;
+    width:calc(100vw - 190px)!important;
+    max-width:calc(100vw - 190px)!important;
+    min-width:0!important;
+    margin-left:190px!important;
+    margin-right:0!important;
+    padding:20px 24px 32px!important;
+    overflow-x:hidden!important;
+  }
+
+  #salaryPage .salary-shell,
+  #salaryPage #salaryContent{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+  }
+
+  #salaryPage .salary-card{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+    padding:18px!important;
+  }
+
+  #salaryPage .salary-table-wrap,
+  #salaryPage .table-wrap,
+  #salaryPage [class*="table-wrap"],
+  #salaryPage [class*="tableWrap"]{
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:visible!important;
+    -webkit-overflow-scrolling:touch!important;
+    scrollbar-gutter:stable!important;
+  }
+
+  #salaryPage .salary-table,
+  #salaryPage .salary-table-wrap table,
+  #salaryPage table{
+    width:max-content!important;
+    min-width:1500px!important;
+    max-width:none!important;
+    table-layout:auto!important;
+  }
+
+  #salaryPage .salary-table.compact{
+    min-width:900px!important;
+  }
+
+  #salaryPage th,
+  #salaryPage td{
+    white-space:nowrap!important;
+    word-break:normal!important;
+    font-size:14px!important;
+    line-height:1.35!important;
+    padding:11px 12px!important;
+    vertical-align:middle!important;
+  }
+
+  #salaryPage th{
+    font-size:13px!important;
+    font-weight:800!important;
+  }
+
+  #salaryPage .salary-table input,
+  #salaryPage .salary-table select{
+    min-width:118px!important;
+    height:42px!important;
+    font-size:14px!important;
+  }
+
+  #salaryPage .salary-title{
+    font-size:27px!important;
+  }
+
+  #salaryPage .salary-top,
+  #salaryPage .salary-toolbar{
+    width:100%!important;
+  }
+}
+
+/* Wider desktop screens: keep almost all available space. */
+@media (min-width: 1400px){
+  #salaryPage,
+  #salaryPage.active{
+    padding-left:28px!important;
+    padding-right:28px!important;
+  }
+  #salaryPage .salary-table,
+  #salaryPage .salary-table-wrap table,
+  #salaryPage table{
+    min-width:1650px!important;
+  }
+}
+</style>
