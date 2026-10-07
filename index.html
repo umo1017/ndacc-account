@@ -12579,25 +12579,7 @@ byId("closeStaffListModal").onclick=()=>byId("staffListModal").classList.remove(
   byId("closeEditStaffModal").onclick=()=>byId("editStaffModal").classList.remove("open");
   byId("updateStaffBtn").onclick=updateStaff;
   byId("closePayslipModal").onclick=()=>byId("payslipModal").classList.remove("open");
-  byId("downloadPayslipBtn").onclick=async()=>{
-    try{
-      const file=await buildPayslipPdfFile();
-      const url=URL.createObjectURL(file);
-      const a=document.createElement("a");
-      a.href=url;
-      a.download=file.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);
-    }catch(err){
-      alert("Unable to create PDF: "+err.message);
-    }
-  };
-  
-
-
-  byId("salaryView7Btn").onclick=()=>setSalaryViewMode("7th");
+byId("salaryView7Btn").onclick=()=>setSalaryViewMode("7th");
   byId("salaryView14Btn").onclick=()=>setSalaryViewMode("14th");
   byId("salaryViewTotalBtn").onclick=()=>setSalaryViewMode("total");
 
@@ -14048,7 +14030,24 @@ function settlementClearAutoMonthlyRows(){
 function settlementRecalculate(){
   const manual=settlementManualExpense();
   const projects=settlementProjectExpense();
-  const total=Number(settlementAuto.salary||0)+Number(settlementAuto.petty_cash||0)+manual+projects;
+
+  // Build payroll cost from the live component rows, not from a possibly stale
+  // cached settlementAuto.salary value.
+  const payrollTotal=
+    Number(settlementAuto.salary7||0)+
+    Number(settlementAuto.salary14||0)+
+    Number(settlementAuto.epf_total||0)+
+    Number(settlementAuto.socso_eis_total||0)+
+    Number(settlementAuto.taxpcb_employee||0);
+
+  settlementAuto.salary=+payrollTotal.toFixed(2);
+
+  const total=
+    payrollTotal+
+    Number(settlementAuto.petty_cash||0)+
+    manual+
+    projects;
+
   const profit=Number(settlementAuto.revenue||0)-total;
 
   const set=(id,val)=>{const el=document.getElementById(id); if(el) el.textContent=settlementMoney(val);};
@@ -14562,7 +14561,7 @@ async function loadSettlementMonth(){
 
   if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · AUTO LIVE ${settlementAutoPayrollSourceMonth}`;
   if(carryState){
-    carryState.textContent=`Auto Budget · ${String(monthDate||"").slice(0,7)}`;
+    carryState.textContent=`Auto Budget · Carry Forward + Live Payroll · ${String(monthDate||"").slice(0,7)}`;
   }
 }
 async function saveSettlementMonth(){
@@ -14629,14 +14628,16 @@ async function settlementEffectiveExpenseRecord(outlet,monthDate){
   // Start with current-month row if available.
   const effective={...(current||{})};
 
-  // A value saved in the selected month is authoritative, including RM 0.00.
-  // If the selected month has no saved value/row, inherit the latest prior non-zero budget.
+  // AUTO recurring expense logic:
+  // RM 0.00 in a newly-created month must NOT erase the previous recurring expense.
+  // Use this month's positive value when entered; otherwise carry the latest prior
+  // non-zero value forward. This is the intended AUTO expense behaviour.
   SETTLEMENT_EXPENSE_FIELDS.forEach(field=>{
     const currentRaw=current?.[field];
-    const currentHasValue=!!current && currentRaw!==undefined && currentRaw!==null && currentRaw!=="";
+    const currentNum=Number(currentRaw||0);
 
-    if(currentHasValue){
-      effective[field]=Number(currentRaw||0);
+    if(Number.isFinite(currentNum) && currentNum>0){
+      effective[field]=currentNum;
       return;
     }
 
@@ -14644,8 +14645,9 @@ async function settlementEffectiveExpenseRecord(outlet,monthDate){
     for(const row of rows){
       if(current && row===current) continue;
       const raw=row?.[field];
-      if(raw!==undefined && raw!==null && raw!=="" && Number(raw||0)!==0){
-        chosen=Number(raw);
+      const n=Number(raw||0);
+      if(Number.isFinite(n) && n>0){
+        chosen=n;
         break;
       }
     }
@@ -16709,7 +16711,7 @@ async function addWorkingOrder(){
  };
  const {error}=await ordersDb().from("order_working_items").insert(row); if(error)return alert(error.message);
  selectedOrderProduct=null; document.getElementById("orderProductSearch").value="";document.getElementById("orderProductSearchResults").innerHTML="";
- document.getElementById("orderAddQty").value="1";document.getElementById("orderAddSupplier").value="";document.getElementById("orderAddNote").value="";
+ document.getElementById("orderAddQty").value="1";if(document.getElementById("orderAddSupplier"))document.getElementById("orderAddSupplier").value="";document.getElementById("orderAddNote").value="";
  await renderWorkingOrders();
 }
 
@@ -26484,16 +26486,13 @@ document.addEventListener("DOMContentLoaded",function(){
   function clickMatch(e, sel){ return e.target && e.target.closest ? e.target.closest(sel) : null; }
 
   document.addEventListener("click", async function(e){
-    const btn14 = clickMatch(e,'#salary14Btn,[data-salary-tab="14"],[data-tab="14th"],[data-tab="14"]');
+    const btn14 = clickMatch(e,'#salaryView14Btn,[data-salary-tab="14"],[data-tab="14th"],[data-tab="14"]');
     if(btn14){
       e.preventDefault();
       e.stopPropagation();
       try{
-        if(typeof window.setSalaryTab==="function"){
-          await window.setSalaryTab(14);
-        }else{
-          const direct=document.getElementById("salary14Btn");
-          if(direct && direct!==btn14) direct.click();
+        if(typeof setSalaryViewMode==="function"){
+          setSalaryViewMode("14th");
         }
       }catch(err){
         console.error("14th button error",err);
@@ -26501,16 +26500,13 @@ document.addEventListener("DOMContentLoaded",function(){
       return;
     }
 
-    const btn7 = clickMatch(e,'#salary7Btn,[data-salary-tab="7"],[data-tab="7th"],[data-tab="7"]');
+    const btn7 = clickMatch(e,'#salaryView7Btn,[data-salary-tab="7"],[data-tab="7th"],[data-tab="7"]');
     if(btn7){
       e.preventDefault();
       e.stopPropagation();
       try{
-        if(typeof window.setSalaryTab==="function"){
-          await window.setSalaryTab(7);
-        }else{
-          const direct=document.getElementById("salary7Btn");
-          if(direct && direct!==btn7) direct.click();
+        if(typeof setSalaryViewMode==="function"){
+          setSalaryViewMode("7th");
         }
       }catch(err){
         console.error("7th button error",err);
@@ -26518,6 +26514,41 @@ document.addEventListener("DOMContentLoaded",function(){
       return;
     }
   }, true);
+})();
+</script>
+
+
+<script id="settlement-expense-live-recalc-final">
+document.addEventListener("input",function(e){
+  if(e.target && e.target.matches && e.target.matches("[data-finance-field],[data-project-amount]")){
+    try{
+      if(typeof settlementRecalculate==="function") settlementRecalculate();
+    }catch(err){
+      console.warn("Expense live recalc failed",err);
+    }
+  }
+},true);
+</script>
+
+
+<script id="nd-runtime-health-guard">
+(function(){
+  window.__ndRuntimeErrors = window.__ndRuntimeErrors || [];
+  window.addEventListener("error", function(e){
+    window.__ndRuntimeErrors.push({
+      type:"error",
+      message:String(e.message||"Unknown error"),
+      source:String(e.filename||""),
+      line:Number(e.lineno||0)
+    });
+  });
+  window.addEventListener("unhandledrejection", function(e){
+    const reason=e.reason;
+    window.__ndRuntimeErrors.push({
+      type:"promise",
+      message:String(reason?.message||reason||"Unhandled promise rejection")
+    });
+  });
 })();
 </script>
 
