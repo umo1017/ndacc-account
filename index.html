@@ -2488,6 +2488,163 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="payslip-reference-format-v2">
+/* Match the second reference image: squared payroll form, compact totals,
+   bottom CURRENT MONTH / YEAR-TO-DATE / RECEIVED BY in one ruled row. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"]{
+  border-radius:0!important;
+  box-shadow:none!important;
+  padding:6mm 7mm 5mm!important;
+  font-family:Arial,Helvetica,sans-serif!important;
+}
+
+/* The reference uses the main 3-column area only for item details.
+   Totals are drawn underneath as a separate aligned row. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-main-grid{
+  border-bottom:0!important;
+  margin-bottom:0!important;
+}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-col-total{
+  visibility:hidden!important;
+}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-col{
+  min-height:170px!important;
+}
+
+.ref-pay-summary{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  min-height:70px;
+}
+.ref-gross-area,
+.ref-deduction-area,
+.ref-empty-area{
+  padding:0 7px;
+  box-sizing:border-box;
+}
+.ref-deduction-area,
+.ref-empty-area{
+  border-left:1px solid #555;
+}
+.ref-total-line{
+  display:grid;
+  grid-template-columns:1fr 88px;
+  gap:8px;
+  align-items:end;
+  border-top:1px solid #555;
+  padding-top:5px;
+  margin-top:6px;
+  font-size:11px;
+  font-weight:700;
+}
+.ref-total-line span:last-child{
+  text-align:right;
+}
+.ref-pcb-monthly{
+  margin-top:16px;
+  font-size:11px;
+}
+.ref-net-box{
+  width:100%;
+  border:1px solid #444;
+  display:grid;
+  grid-template-columns:1fr 90px;
+  gap:8px;
+  padding:6px 8px;
+  box-sizing:border-box;
+  font-size:11px;
+  font-weight:700;
+  margin-top:7px;
+}
+.ref-net-box span:last-child{
+  text-align:right;
+}
+
+.ref-bottom-grid{
+  display:grid;
+  grid-template-columns:1.18fr 1.12fr .42fr;
+  border-top:1px solid #444;
+  margin-top:12px;
+  min-height:92px;
+}
+.ref-current,
+.ref-ytd,
+.ref-received{
+  padding:5px 7px 2px;
+  box-sizing:border-box;
+}
+.ref-ytd,
+.ref-received{
+  border-left:1px solid #555;
+}
+.ref-section-title{
+  text-align:center;
+  font-size:9px;
+  margin-bottom:6px;
+  white-space:nowrap;
+}
+.ref-current-table{
+  display:grid;
+  grid-template-columns:82px repeat(4,1fr);
+  gap:3px 6px;
+  font-size:9px;
+  align-items:center;
+}
+.ref-current-table>div:not(:nth-child(5n+1)){
+  text-align:right;
+}
+.ref-current-table>div:nth-child(-n+5){
+  text-align:center;
+}
+.ref-ytd-table{
+  display:grid;
+  grid-template-columns:repeat(6,1fr);
+  gap:3px 5px;
+  font-size:9px;
+  align-items:center;
+}
+.ref-ytd-table>div{
+  text-align:right;
+}
+.ref-ytd-table>div:nth-child(-n+6){
+  text-align:center;
+}
+.ref-note{
+  margin-top:5px;
+  font-size:10px;
+}
+.ref-received{
+  font-size:10px;
+  line-height:1.5;
+  white-space:nowrap;
+}
+.ref-first-half{
+  display:grid;
+  grid-template-columns:auto 12px 110px auto;
+  justify-content:center;
+  gap:8px;
+  align-items:center;
+  font-size:10px;
+  margin-top:12px;
+  padding-bottom:2mm;
+}
+
+/* Remove old bottom/transfer rows from the visual composition on 7th payslip. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-net-box,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-bottom,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-bottom-note,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-transfer-details{
+  display:none!important;
+}
+
+@media(max-width:700px){
+  #salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"]{
+    min-width:148mm!important;
+  }
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -11069,8 +11226,52 @@ async function openPayslip(empId,type){
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
 <div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>Overtime</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}<div style="height:116px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(s.gross_pay||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">${Number(s.total_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
-<div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${Number(s.net_pay||0).toFixed(2)}</span></div></div>
-<div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;----------CURRENT MONTH----------&gt;</div><div class="payslip-mini-table"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Income Tax PCB</div><div>EMPLOYEE</div><div class="v">${Number(s.employee_epf||0).toFixed(2)}</div><div class="v">${Number(s.employee_socso||0).toFixed(2)}</div><div class="v">${Number(s.employee_eis||0).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div><div>EMPLOYER</div><div class="v">${Number(s.employer_epf||0).toFixed(2)}</div><div class="v">${Number(s.employer_socso||0).toFixed(2)}</div><div class="v">${Number(s.employer_eis||0).toFixed(2)}</div><div class="v"></div><div>TOTAL</div><div class="v">${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_socso||0)+Number(s.employer_socso||0)).toFixed(2)}</div><div class="v">${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div class="v">${Number(s.tax||0).toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-bottom-title">&lt;---------------YEAR-TO-DATE---------------&gt;</div><div class="payslip-mini-table ytd"><div></div><div class="h">E.P.F</div><div class="h">SOCSO</div><div class="h">E.I.S</div><div class="h">Income Tax PCB</div><div class="h">GROSS PAY</div><div class="h">NET PAY</div><div></div><div class="v">${(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso")).toFixed(2)}</div><div class="v">${(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis")).toFixed(2)}</div><div class="v">${ytdSum(empId,"tax").toFixed(2)}</div><div class="v">${ytdSum(empId,"gross_pay").toFixed(2)}</div><div class="v">${ytdSum(empId,"net_pay").toFixed(2)}</div></div></div><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
+<div class="ref-pay-summary">
+  <div class="ref-gross-area">
+    <div class="ref-total-line"><span>GROSS PAY</span><span>${Number(s.gross_pay||0).toFixed(2)}</span></div>
+    <div class="ref-pcb-monthly">PCB: Monthly:&nbsp;&nbsp; ${Number(s.tax||0).toFixed(2)}</div>
+  </div>
+  <div class="ref-deduction-area">
+    <div class="ref-total-line"><span>TOTAL DEDUCTION</span><span>${Number(s.total_deduction||0).toFixed(2)}</span></div>
+    <div class="ref-net-box"><span>Net Pay</span><span>${Number(s.net_pay||0).toFixed(2)}</span></div>
+  </div>
+  <div class="ref-empty-area"></div>
+</div>
+
+<div class="ref-bottom-grid">
+  <div class="ref-current">
+    <div class="ref-section-title">&lt;----------CURRENT MONTH----------&gt;</div>
+    <div class="ref-current-table">
+      <div></div><div>E.P.F</div><div>SOCSO</div><div>E.I.S</div><div>Tax</div>
+      <div>EMPLOYEE :</div><div>${Number(s.employee_epf||0).toFixed(2)}</div><div>${Number(s.employee_socso||0).toFixed(2)}</div><div>${Number(s.employee_eis||0).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
+      <div>EMPLOYER :</div><div>${Number(s.employer_epf||0).toFixed(2)}</div><div>${Number(s.employer_socso||0).toFixed(2)}</div><div>${Number(s.employer_eis||0).toFixed(2)}</div><div>0.00</div>
+      <div>TOTAL :</div><div>${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div>${(Number(s.employee_socso||0)+Number(s.employer_socso||0)).toFixed(2)}</div><div>${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
+    </div>
+    <div class="ref-note">Note:</div>
+  </div>
+
+  <div class="ref-ytd">
+    <div class="ref-section-title">&lt;---------------YEAR-TO-DATE---------------&gt;</div>
+    <div class="ref-ytd-table">
+      <div>E.P.F</div><div>SOCSO</div><div>E.I.S</div><div>Tax</div><div>GROSS PAY</div><div>NET PAY</div>
+      <div>${(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf")).toFixed(2)}</div>
+      <div>${(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso")).toFixed(2)}</div>
+      <div>${(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis")).toFixed(2)}</div>
+      <div>${ytdSum(empId,"tax").toFixed(2)}</div>
+      <div>${ytdSum(empId,"gross_pay").toFixed(2)}</div>
+      <div>${ytdSum(empId,"net_pay").toFixed(2)}</div>
+    </div>
+  </div>
+
+  <div class="ref-received">
+    <div>RECEIVED BY</div>
+    <div style="margin-top:18px">PAY BY : ${e.payment_method||""}</div>
+  </div>
+</div>
+
+<div class="ref-first-half">
+  <span>First Half Date</span><span>:</span><span></span><span>To</span>
+</div>
 </div>`;
   } else {
     const sevenSnapshot=snapshotFor(empId);
