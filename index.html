@@ -3007,6 +3007,112 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 })();
 </script>
 
+
+<style id="payslip-landscape-proportion-final">
+/* ===== Final landscape proportion =====
+   Make the payroll form occupy the A4 landscape page instead of sitting in
+   the top half with a large blank area. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"]{
+  width:1123px!important;
+  min-width:1123px!important;
+  max-width:1123px!important;
+  height:794px!important;
+  min-height:794px!important;
+  max-height:794px!important;
+  padding:28px 34px 24px!important;
+  margin:0 auto!important;
+  display:flex!important;
+  flex-direction:column!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+}
+
+/* Header keeps its natural height. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-head{
+  flex:0 0 auto!important;
+}
+
+/* The reference layout has a tall earnings/deduction/other body. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-main-grid{
+  flex:1 1 auto!important;
+  min-height:355px!important;
+  height:auto!important;
+  margin-bottom:0!important;
+}
+
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-col{
+  min-height:355px!important;
+  height:100%!important;
+}
+
+/* Totals and YTD stay near the bottom of the page. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-pay-summary{
+  flex:0 0 76px!important;
+  min-height:76px!important;
+}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-bottom-grid{
+  flex:0 0 112px!important;
+  min-height:112px!important;
+  margin-top:10px!important;
+}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-first-half{
+  flex:0 0 26px!important;
+  min-height:26px!important;
+  margin-top:6px!important;
+  padding-bottom:0!important;
+}
+
+/* Keep all text at the intended payroll-form scale. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"]{
+  font-size:13px!important;
+}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-line,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-col-head{
+  font-size:12px!important;
+}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-current-table,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-ytd-table,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-section-title,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-received,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-first-half{
+  font-size:10px!important;
+}
+
+/* Mobile preview scales the complete A4 landscape sheet as one object. */
+@media screen and (max-width:700px){
+  #salaryPayslipPrint{
+    width:100%!important;
+    overflow:hidden!important;
+    text-align:center!important;
+  }
+  #salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"]{
+    transform:none!important;
+    transform-origin:top center!important;
+    zoom:var(--nd-payslip-mobile-zoom,.32)!important;
+    margin:0 auto!important;
+  }
+}
+
+/* PDF/print is always a real A4 landscape page. */
+@media print{
+  @page{size:A4 landscape;margin:0;}
+  #salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"]{
+    width:297mm!important;
+    min-width:297mm!important;
+    max-width:297mm!important;
+    height:210mm!important;
+    min-height:210mm!important;
+    max-height:210mm!important;
+    margin:0!important;
+    padding:8mm 9mm 7mm!important;
+    zoom:1!important;
+    transform:none!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -12538,18 +12644,22 @@ async function buildPayslipPdfFile(){
   if(!window.jspdf?.jsPDF) throw new Error("PDF library not loaded");
 
   const captured=await window.capturePayslipForPdf(slip,2,0.96);
-  const {widthMm,heightMm,img}=captured;
+  const {img}=captured;
 
   const {jsPDF}=window.jspdf;
-  const orientation=widthMm>heightMm ? "landscape" : "portrait";
-
   const pdf=new jsPDF({
-    orientation,
+    orientation:"landscape",
     unit:"mm",
-    format:[widthMm,heightMm]
+    format:"a4"
   });
 
-  pdf.addImage(img,"JPEG",0,0,widthMm,heightMm);
+  const pageW=297;
+  const pageH=210;
+  const margin=6;
+  const drawW=pageW-(margin*2);
+  const drawH=pageH-(margin*2);
+
+  pdf.addImage(img,"JPEG",margin,margin,drawW,drawH);
 
   const blob=pdf.output("blob");
   const type=slip.dataset.payslipType||"Payslip";
