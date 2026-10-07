@@ -3242,6 +3242,26 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="salary-view-tabs-hard-click-fix">
+#salaryPage .salary-view-tabs{
+  position:relative!important;
+  z-index:100!important;
+  pointer-events:auto!important;
+  isolation:isolate!important;
+}
+#salaryPage .salary-view-btn{
+  position:relative!important;
+  z-index:101!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  cursor:pointer!important;
+}
+#salaryPage .salary-view-btn:disabled{
+  pointer-events:none!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -10674,11 +10694,20 @@ function updateSalaryExportButtons(){
 }
 
 function setSalaryViewMode(mode){
-  updateSalaryExportButtons();
   if(!["7th","14th","total"].includes(mode)) mode="7th";
   salaryViewMode=mode;
   try{localStorage.setItem("nd_salary_view_mode_v1",mode);}catch(_){}
-  renderSalary();
+
+  // Update button state AFTER the mode changes.
+  updateSalaryExportButtons();
+  renderSalaryViewButtons();
+
+  try{
+    renderSalary();
+  }catch(err){
+    console.error("Salary view render failed:",err);
+    alert("Unable to open "+mode+" Salary: "+(err?.message||err));
+  }
 }
 
 function renderSalaryViewButtons(){
@@ -26481,41 +26510,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script>
 
 
-<script id="salary-button-reliability-fallback">
-(function(){
-  function clickMatch(e, sel){ return e.target && e.target.closest ? e.target.closest(sel) : null; }
 
-  document.addEventListener("click", async function(e){
-    const btn14 = clickMatch(e,'#salaryView14Btn,[data-salary-tab="14"],[data-tab="14th"],[data-tab="14"]');
-    if(btn14){
-      e.preventDefault();
-      e.stopPropagation();
-      try{
-        if(typeof setSalaryViewMode==="function"){
-          setSalaryViewMode("14th");
-        }
-      }catch(err){
-        console.error("14th button error",err);
-      }
-      return;
-    }
-
-    const btn7 = clickMatch(e,'#salaryView7Btn,[data-salary-tab="7"],[data-tab="7th"],[data-tab="7"]');
-    if(btn7){
-      e.preventDefault();
-      e.stopPropagation();
-      try{
-        if(typeof setSalaryViewMode==="function"){
-          setSalaryViewMode("7th");
-        }
-      }catch(err){
-        console.error("7th button error",err);
-      }
-      return;
-    }
-  }, true);
-})();
-</script>
 
 
 <script id="settlement-expense-live-recalc-final">
@@ -26548,6 +26543,56 @@ document.addEventListener("input",function(e){
       type:"promise",
       message:String(reason?.message||reason||"Unhandled promise rejection")
     });
+  });
+})();
+</script>
+
+
+<script id="salary-view-button-hard-fix">
+(function(){
+  function bindSalaryViewButtons(){
+    const b7=document.getElementById("salaryView7Btn");
+    const b14=document.getElementById("salaryView14Btn");
+    const bTotal=document.getElementById("salaryViewTotalBtn");
+
+    const bind=(btn,mode)=>{
+      if(!btn || btn.dataset.salaryBound==="1") return;
+      btn.dataset.salaryBound="1";
+
+      const run=(e)=>{
+        if(e){
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        if(typeof setSalaryViewMode==="function"){
+          setSalaryViewMode(mode);
+        }
+      };
+
+      btn.addEventListener("click",run,false);
+      btn.addEventListener("pointerup",function(e){
+        if(e.pointerType==="touch") run(e);
+      },false);
+    };
+
+    bind(b7,"7th");
+    bind(b14,"14th");
+    bind(bTotal,"total");
+  }
+
+  document.addEventListener("DOMContentLoaded",bindSalaryViewButtons);
+  document.addEventListener("click",function(e){
+    if(e.target?.closest?.('[data-nav="salary"],#salaryNavBtn,#salaryBtn')){
+      setTimeout(bindSalaryViewButtons,50);
+      setTimeout(bindSalaryViewButtons,250);
+    }
+  },true);
+
+  // Rebind if the Salary page is rebuilt.
+  const observer=new MutationObserver(bindSalaryViewButtons);
+  document.addEventListener("DOMContentLoaded",function(){
+    const page=document.getElementById("salaryPage");
+    if(page) observer.observe(page,{childList:true,subtree:true});
   });
 })();
 </script>
