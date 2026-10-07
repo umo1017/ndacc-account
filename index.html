@@ -8263,12 +8263,15 @@ function calculate7th(e,m={}){
   const adjustedAllowance=+(allowance-allowanceOffDayDeduction).toFixed(2);
   const adjustedGross=+(adjustedGuaranteed+adjustedAllowance+ot).toFixed(2);
 
+  const manualDeduction=Math.max(0,Number(m.manual_deduction||0));
+
   const totalDeduction=+(
     employee_epf+
     st.employee_socso+
     st.employee_eis+
     tax+
-    offDayDeduction
+    offDayDeduction+
+    manualDeduction
   ).toFixed(2);
 
   return {
@@ -8290,6 +8293,7 @@ function calculate7th(e,m={}){
     excess_off_days:excessOffDays,
     off_day_daily_rate:+dailyRate.toFixed(2),
     off_day_deduction:offDayDeduction,
+    manual_deduction:manualDeduction,
     gross_pay:gross,
     total_deduction:totalDeduction,
     net_pay:+(gross-totalDeduction).toFixed(2)
@@ -9780,7 +9784,8 @@ function normalizedSevenSnapshot(e,snap){
     Number(s.employee_socso||0)+
     Number(s.employee_eis||0)+
     Number(s.tax||0)+
-    Number(s.off_day_deduction||0)
+    Number(s.off_day_deduction||0)+
+    Number(s.manual_deduction||0)
   ).toFixed(2);
 
   // Net Pay = Gross Pay - Total Deduction.
@@ -9809,11 +9814,13 @@ function renderSevenTable(emps){
       <td>${money(s.off_day_deduction||0)}</td>
       <td>${taxCellHtml(e,s,snap)}</td>
       <td>${snap?money(s.ot||0):editInput(e.id,"ot",m.ot)}</td>
-      <td>${money(s.gross_pay)}</td><td>${money(s.total_deduction)}</td>
+      <td>${snap?money(s.manual_deduction||0):editInput(e.id,"manual_deduction",m.manual_deduction||0)}</td>
+      <td data-live-gross7="${e.id}">${money(s.gross_pay)}</td>
+      <td data-live-deduction7="${e.id}">${money(s.total_deduction)}</td>
 
-      <td class="netpay-method-cell">${pm==="Cash"?money(net):"—"}</td>
-      <td class="netpay-method-cell">${pm==="Bank Transfer"?money(net):"—"}</td>
-      <td class="netpay-method-cell">${pm==="TNG"?money(net):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
 
       <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
@@ -9848,7 +9855,7 @@ function renderSevenTable(emps){
         <th rowspan="2">Employee SOCSO</th><th rowspan="2">Employer SOCSO</th>
         <th rowspan="2">Employee EIS</th><th rowspan="2">Employer EIS</th>
         <th rowspan="2">Unpaid</th>
-        <th rowspan="2">PCB / Tax</th><th rowspan="2">OT</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
+        <th rowspan="2">PCB / Tax</th><th rowspan="2">OT</th><th rowspan="2">Deduction</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
         <th colspan="3" class="netpay-group-head">Net Pay</th>
         <th rowspan="2">Confirm</th><th rowspan="2">7th Monthly Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
       </tr>
@@ -9861,14 +9868,14 @@ function renderSevenTable(emps){
     <tbody>
       ${emps.map(rowHtml).join("")}
       <tr class="netpay-summary-row">
-        <td colspan="15" style="text-align:right;font-weight:900">TOTAL</td>
+        <td colspan="16" style="text-align:right;font-weight:900">TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
         <td colspan="4"></td>
       </tr>
       <tr class="netpay-grand-row">
-        <td colspan="15" style="text-align:right;font-weight:900">ALL NET PAY</td>
+        <td colspan="16" style="text-align:right;font-weight:900">ALL NET PAY</td>
         <td colspan="3" style="text-align:center;font-weight:900">${money(grandTotal)}</td>
         <td colspan="4"></td>
       </tr>
@@ -10273,6 +10280,14 @@ function recalc7thLive(empId){
   if(deductionCell) deductionCell.textContent=money(calc.total_deduction);
   const netCell=document.querySelector(`[data-live-netpay7="${empId}"]`);
   if(netCell) netCell.textContent=money(calc.net_pay);
+
+  const pm=String(e.payment_method||"Cash");
+  const cashCell=document.querySelector(`[data-live-netpay7-cash="${empId}"]`);
+  const transferCell=document.querySelector(`[data-live-netpay7-transfer="${empId}"]`);
+  const tngCell=document.querySelector(`[data-live-netpay7-tng="${empId}"]`);
+  if(cashCell) cashCell.textContent=pm==="Cash"?money(calc.net_pay):"—";
+  if(transferCell) transferCell.textContent=pm==="Bank Transfer"?money(calc.net_pay):"—";
+  if(tngCell) tngCell.textContent=pm==="TNG"?money(calc.net_pay):"—";
 }
 
 function recalc14thLive(empId){
@@ -10303,7 +10318,7 @@ function bindSalaryTableActions(){
       }
       m[field]=value;
 
-      if(field==="ot_hour_qty" || field==="ot_day_qty" || field==="off_days_taken"){
+      if(field==="ot_hour_qty" || field==="ot_day_qty" || field==="off_days_taken" || field==="manual_deduction"){
         const e=salaryEmployees.find(x=>Number(x.id)===empId);
         if(e){
           m.ot_hours=calculateOtHourAmount(e,m);
@@ -11363,7 +11378,7 @@ async function openPayslip(empId,type){
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>Overtime</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>Overtime</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div>${Number(s.manual_deduction||0)>0?`<div class="payslip-line"><span>Deduction</span><span class="amt">${Number(s.manual_deduction||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
 <div class="ref-pay-summary">
   <div class="ref-gross-area">
     <div class="ref-total-line"><span>GROSS PAY</span><span>${Number(s.gross_pay||0).toFixed(2)}</span></div>
@@ -12361,9 +12376,11 @@ function normalizeStaffWhatsAppNumber(raw){
 }
 
 async function sharePayslipWhatsApp(){
+  const btn=document.getElementById("shareWhatsAppBtn");
+  const oldText=btn?.textContent||"Send WhatsApp";
+
   try{
     const employee=window.currentPayslipStaff;
-
     if(!employee){
       alert("Staff record not found. Please close and reopen this payslip.");
       return;
@@ -12375,14 +12392,52 @@ async function sharePayslipWhatsApp(){
       return;
     }
 
-    // No preset message. Open the WhatsApp chat that matches this Staff record.
-    const waUrl=`https://wa.me/${phone}`;
-    const win=window.open(waUrl,"_blank","noopener,noreferrer");
-    if(!win){
-      window.location.href=waUrl;
+    if(btn){
+      btn.disabled=true;
+      btn.textContent="Preparing PDF...";
     }
+
+    const file=await buildPayslipPdfFile();
+
+    // Best free/mobile method:
+    // share the actual PDF through the iPhone/Android native share sheet.
+    // No preset message is included.
+    if(navigator.share){
+      const shareData={files:[file]};
+      const canFileShare=!navigator.canShare || navigator.canShare(shareData);
+
+      if(canFileShare){
+        await navigator.share(shareData);
+        return;
+      }
+    }
+
+    // Fallback for browsers that cannot share files:
+    // download the payslip PDF first, then open the employee's WhatsApp chat.
+    const url=URL.createObjectURL(file);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+
+    const waUrl=`https://wa.me/${phone}`;
+    setTimeout(()=>{
+      const win=window.open(waUrl,"_blank","noopener,noreferrer");
+      if(!win) window.location.href=waUrl;
+    },300);
+
+    alert("Payslip PDF has been downloaded. WhatsApp will open next; attach the downloaded PDF to the staff chat.");
   }catch(err){
-    alert("Unable to open staff WhatsApp: "+(err?.message||err));
+    if(err?.name==="AbortError") return;
+    alert("Unable to share payslip: "+(err?.message||err));
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent=oldText;
+    }
   }
 }
 
