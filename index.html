@@ -3120,6 +3120,43 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="payslip-header-no-download-final">
+#payslipModal .outlet-title{
+  justify-content:space-between!important;
+}
+#payslipModal #shareWhatsAppBtn{
+  margin-left:auto!important;
+}
+</style>
+
+
+<style id="fixed-excluded-save-button-final">
+#bonusFixedExcludePanel{
+  position:relative!important;
+  overflow:visible!important;
+}
+#bonusFixedExcludeSaveBtn{
+  position:sticky!important;
+  bottom:12px!important;
+  z-index:50!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  min-height:48px!important;
+  padding:12px 22px!important;
+  opacity:1!important;
+}
+#bonusFixedExcludeSaveBtn:disabled{
+  opacity:.65!important;
+  pointer-events:none!important;
+}
+@media(max-width:700px){
+  #bonusFixedExcludeSaveBtn{
+    width:100%!important;
+  }
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -7295,7 +7332,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     <div id="bonusFixedExcludeList" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-top:12px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:14px;flex-wrap:wrap">
       <span class="helper" id="bonusFixedExcludeSaveState"></span>
-      <button class="btn primary" id="bonusFixedExcludeSaveBtn" type="button">Save Again</button>
+      <button class="btn primary" id="bonusFixedExcludeSaveBtn" type="button">Save</button>
     </div>
    </div>
    <div class="bonus-table-wrap">
@@ -8354,8 +8391,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="salary-dialog" style="width:min(920px,100%)">
 <div class="outlet-title no-print">
 <h3 style="margin:0">Payslip</h3>
-<div>
-<button class="btn" id="downloadPayslipBtn" type="button">Download PDF</button> <button class="btn" id="shareWhatsAppBtn" type="button">Send WhatsApp</button>
+<div> <button class="btn" id="shareWhatsAppBtn" type="button">Send WhatsApp</button>
 <button class="btn main-page-close" id="closePayslipModal" type="button">×</button>
 </div>
 </div>
@@ -14118,6 +14154,57 @@ async function loadSettlementPaymentMethods(){
   put("settlementPaymentMethodsTotal",t.total);
 }
 
+
+async function settlementLatestPayrollRows(outlet,monthDate){
+  const db=settlementDb();
+  const cutoff=String(monthDate||"").slice(0,7)+"-01";
+
+  const [empRes,s7Res,s14Res,monthlyRes]=await Promise.all([
+    db.from("employees").select("*").eq("outlet",outlet),
+    db.from("payroll_snapshot").select("*")
+      .lte("salary_month",cutoff)
+      .order("salary_month",{ascending:false}),
+    db.from("payroll_commission_snapshot").select("*")
+      .lte("salary_month",cutoff)
+      .order("salary_month",{ascending:false}),
+    db.from("employee_salary_monthly").select("*")
+      .lte("salary_month",cutoff)
+      .order("salary_month",{ascending:false})
+  ]);
+
+  if(empRes.error) throw empRes.error;
+  if(s7Res.error) throw s7Res.error;
+  if(s14Res.error) throw s14Res.error;
+  if(monthlyRes.error) throw monthlyRes.error;
+
+  const newestPerEmployee=(rows)=>{
+    const map=new Map();
+    (rows||[]).forEach(row=>{
+      const id=String(row.employee_id);
+      if(!map.has(id)) map.set(id,row);
+    });
+    return map;
+  };
+
+  const s7Map=newestPerEmployee(s7Res.data||[]);
+  const s14Map=newestPerEmployee(s14Res.data||[]);
+  const monthlyMap=newestPerEmployee(monthlyRes.data||[]);
+
+  const sourceMonths=[
+    ...(s7Res.data||[]).map(r=>String(r.salary_month||"").slice(0,7)),
+    ...(s14Res.data||[]).map(r=>String(r.salary_month||"").slice(0,7)),
+    ...(monthlyRes.data||[]).map(r=>String(r.salary_month||"").slice(0,7))
+  ].filter(Boolean).sort().reverse();
+
+  return {
+    employees:empRes.data||[],
+    s7Map,
+    s14Map,
+    monthlyMap,
+    sourceMonth:sourceMonths[0]||String(cutoff).slice(0,7)
+  };
+}
+
 async function loadSettlementMonth(){
   if(!settlementCurrentOutlet || settlementCurrentOutlet==="__TOTAL__") return;
   const state=document.getElementById("settlementMonthState");
@@ -14187,39 +14274,19 @@ async function loadSettlementMonth(){
   };
   try{
     const monthKey=String(monthDate).slice(0,7)+"-01";
-    const [empRes,s7Res,s14Res,monthlyRes]=await Promise.all([
-      db.from("employees").select("*").eq("outlet",settlementCurrentOutlet),
-      db.from("payroll_snapshot").select("*")
-        .eq("salary_month",monthKey),
-      db.from("payroll_commission_snapshot").select("*")
-        .eq("salary_month",monthKey),
-      db.from("employee_salary_monthly").select("*")
-        .eq("salary_month",monthKey)
-    ]);
-    if(empRes.error) throw empRes.error;
-    if(s7Res.error) throw s7Res.error;
-    if(s14Res.error) throw s14Res.error;
-    if(monthlyRes.error) throw monthlyRes.error;
 
-    const branchEmployees=(empRes.data||[]).filter(e=>activeInMonth(e,ym));
+    // AUTO · LIVE:
+    // use the newest payroll data available at or before the selected Report month.
+    // This avoids showing RM 0.00 at the beginning of a new month before the new
+    // payroll has been confirmed, while never pulling data from a future month.
+    const payroll=await settlementLatestPayrollRows(settlementCurrentOutlet,monthDate);
 
-    // AUTO · LIVE is tied to the selected Report month only.
-    // Never reuse a prior month's 7th/14th payroll in another month.
-    // If the selected month is not yet confirmed, calculate live from that same month's inputs.
-    const newestPerEmployee=(rows)=>{
-      const map=new Map();
-      (rows||[]).forEach(x=>{
-        const id=String(x.employee_id);
-        if(!map.has(id)) map.set(id,x);
-      });
-      return map;
-    };
+    const branchEmployees=(payroll.employees||[]).filter(e=>activeInMonth(e,ym));
+    const confirmed7Map=payroll.s7Map;
+    const commissionSnapMap=payroll.s14Map;
+    const monthlyMap=payroll.monthlyMap;
 
-    const confirmed7Map=newestPerEmployee(s7Res.data||[]);
-    const commissionSnapMap=newestPerEmployee(s14Res.data||[]);
-    const monthlyMap=newestPerEmployee(monthlyRes.data||[]);
-
-    settlementAutoPayrollSourceMonth=String(monthKey).slice(0,7);
+    settlementAutoPayrollSourceMonth=payroll.sourceMonth||String(monthKey).slice(0,7);
 
     // 7th salary = employee NET PAY.
     // Statutory remittances are shown separately below Branch Salary 14th:
@@ -14525,24 +14592,17 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
   const start=ym+"-01";
   const next=(m===12)?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,"0")}-01`;
 
-  const [dailyRes,expenseRecord,empRes,s7Res,s14Res,monthlyRes]=await Promise.all([
+  const [dailyRes,expenseRecord,payroll]=await Promise.all([
     db.from("daily_settlements")
       .select("grand_total,petty_out,petty_in,petty_entries")
       .eq("branch",outlet)
       .gte("settlement_date",start)
       .lt("settlement_date",next),
     settlementEffectiveExpenseRecord(outlet,monthDate),
-    db.from("employees").select("*").eq("outlet",outlet),
-    db.from("payroll_snapshot").select("*").eq("salary_month",monthDate),
-    db.from("payroll_commission_snapshot").select("*").eq("salary_month",monthDate),
-    db.from("employee_salary_monthly").select("*").eq("salary_month",monthDate)
+    settlementLatestPayrollRows(outlet,monthDate)
   ]);
 
   if(dailyRes.error) throw dailyRes.error;
-  if(empRes.error) throw empRes.error;
-  if(s7Res.error) throw s7Res.error;
-  if(s14Res.error) throw s14Res.error;
-  if(monthlyRes.error) throw monthlyRes.error;
 
   const daily=dailyRes.data||[];
   const revenue=daily.reduce((sum,r)=>sum+Number(r.grand_total||0),0);
@@ -14555,19 +14615,12 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     return sum+Number(r.petty_out||0);
   },0);
 
-  // Only employees active during the selected report month may contribute to that month's payroll.
-  const employees=(empRes.data||[]).filter(e=>activeInMonth(e,ym));
-  const newestPerEmployee=(rows)=>{
-    const map=new Map();
-    (rows||[]).forEach(x=>{
-      const id=String(x.employee_id);
-      if(!map.has(id)) map.set(id,x);
-    });
-    return map;
-  };
-  const s7Map=newestPerEmployee(s7Res.data||[]);
-  const s14Map=newestPerEmployee(s14Res.data||[]);
-  const monthlyMap=newestPerEmployee(monthlyRes.data||[]);
+  // Only employees active during the selected report month contribute.
+  // Their values come from the latest payroll record at or before this month.
+  const employees=(payroll.employees||[]).filter(e=>activeInMonth(e,ym));
+  const s7Map=payroll.s7Map;
+  const s14Map=payroll.s14Map;
+  const monthlyMap=payroll.monthlyMap;
 
   let salary7=0, epfEmployee=0, epfEmployer=0;
   let socsoEmployee=0, socsoEmployer=0, eisEmployee=0, eisEmployer=0;
@@ -14593,10 +14646,10 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     }
   });
 
-  // 14th payroll must count each active employee exactly once for THIS selected month.
-  // Use this month's confirmed 14th snapshot; if none exists, calculate from this month's
-  // Commission inputs. Never carry a prior month's salary into the selected report month.
-  // Part-time staff are included here because the 14th Commission page also includes them.
+  // 14th payroll counts each active employee once.
+  // Use the newest confirmed 14th snapshot at or before the selected report month;
+  // otherwise calculate from the newest available Commission input at or before that month.
+  // Part-time staff are included because the 14th Commission page includes them.
   let salary14=0;
   for(const e of employees){
     const id=String(e.id);
@@ -23736,6 +23789,19 @@ input,select,textarea,button,a{
      if(panel) panel.style.display="none";
    });
    $("bonusFixedExcludeSaveBtn")?.addEventListener("click",saveFixedBonusExclusions);
+   document.addEventListener("click",async e=>{
+     const btn=e.target.closest("#bonusFixedExcludeSaveBtn");
+     if(!btn) return;
+     // The direct listener normally handles this. This guard only prevents dead taps
+     // after DOM refreshes; skip if the save is already running.
+     if(btn.dataset.saving==="1") return;
+     btn.dataset.saving="1";
+     try{
+       await saveFixedBonusExclusions();
+     }finally{
+       btn.dataset.saving="0";
+     }
+   });
    $("bonusFixedExcludeList")?.addEventListener("change",async e=>{
      const cb=e.target.closest("[data-fixed-bonus-exclude]");
      if(!cb)return;
