@@ -2935,6 +2935,78 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="payslip-landscape-mobile-fit-final">
+/* Mobile preview: keep the true landscape proportions but shrink the whole
+   payslip proportionally so the font/lines no longer become oversized. */
+@media screen and (max-width:700px){
+  #payslipModal .salary-dialog,
+  #payslipModal .payslip-dialog,
+  #salaryPayslipPreviewModal .salary-dialog,
+  #salaryPayslipPreviewModal .payslip-dialog{
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    height:auto!important;
+    min-height:0!important;
+  }
+
+  #payslipModal #salaryPayslipPrint,
+  #salaryPayslipPreviewModal #salaryPayslipPrint{
+    width:100%!important;
+    overflow:hidden!important;
+    display:block!important;
+    text-align:center!important;
+    padding:8px 0 14px!important;
+  }
+
+  #payslipModal #salaryPayslipPrint .payslip-sheet,
+  #payslipModal #salaryPayslipPrint .payslip-sheet.payslip-14-reference,
+  #salaryPayslipPreviewModal #salaryPayslipPrint .payslip-sheet,
+  #salaryPayslipPreviewModal #salaryPayslipPrint .payslip-sheet.payslip-14-reference{
+    width:1123px!important;
+    min-width:1123px!important;
+    max-width:1123px!important;
+    min-height:794px!important;
+    margin:0 auto!important;
+    transform:none!important;
+    transform-origin:top center!important;
+    zoom:var(--nd-payslip-mobile-zoom,.32)!important;
+  }
+}
+
+/* PDF/print must remain full-size landscape. */
+@media print{
+  #salaryPayslipPrint .payslip-sheet,
+  #salaryPayslipPrint .payslip-sheet.payslip-14-reference{
+    zoom:1!important;
+    transform:none!important;
+  }
+}
+</style>
+
+<script id="payslip-mobile-auto-zoom">
+(function(){
+  function fitPayslipMobile(){
+    if(window.innerWidth>700) return;
+    const root=document.getElementById("salaryPayslipPrint");
+    if(!root) return;
+    const dialog=root.closest(".salary-dialog,.payslip-dialog") || root.parentElement;
+    const available=Math.max(260, (dialog?.clientWidth || window.innerWidth)-24);
+    const scale=Math.min(0.42, Math.max(0.24, available/1123));
+    document.documentElement.style.setProperty("--nd-payslip-mobile-zoom", String(scale));
+  }
+
+  window.addEventListener("resize",fitPayslipMobile,{passive:true});
+  document.addEventListener("click",function(e){
+    if(e.target.closest("[data-payslip7],[data-payslip14]")){
+      setTimeout(fitPayslipMobile,50);
+      setTimeout(fitPayslipMobile,250);
+    }
+  },true);
+  document.addEventListener("DOMContentLoaded",fitPayslipMobile);
+})();
+</script>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
