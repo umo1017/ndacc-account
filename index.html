@@ -7892,6 +7892,9 @@ const STAFF_EDIT_MANAGER_EMAILS = [
   "umo1017@gmail.com",
   "mars83002566@gmail.com"
 ];
+const STAFF_BRANCH_EDITOR_EMAILS = [
+  "samchin6006@gmail.com"
+];
 let salaryEmployees = [];
 
 let salaryMonthly = [];
@@ -8285,9 +8288,10 @@ async function determineManager(){
     listedManager=!!data;
   }
   isPayrollManager=isGlobalAdmin||listedManager;
-  staffEditManager=isGlobalAdmin;
+  const isBranchStaffEditor=STAFF_BRANCH_EDITOR_EMAILS.includes(currentSalaryUserEmail);
+  staffEditManager=isGlobalAdmin||isBranchStaffEditor;
 
-  byId("staffListBtn").style.display=isGlobalAdmin?"":"none";
+  byId("staffListBtn").style.display=staffEditManager?"":"none";
   if(byId("branchManageBtn")) byId("branchManageBtn").style.display=isGlobalAdmin?"":"none";
   if(byId("salaryManagersBtn")) byId("salaryManagersBtn").style.display=isGlobalAdmin?"":"none";
   if(byId("taxRulesBtn")) byId("taxRulesBtn").style.display=isGlobalAdmin?"":"none";
@@ -10908,8 +10912,8 @@ async function toggleStaffPin(empId,currentPinned){
 }
 
 async function deleteStaff(empId){
-  if(!staffEditManager){
-    alert("Management access only.");
+  if(!isGlobalAdmin){
+    alert("Only Umo / Mars can delete staff.");
     return;
   }
 
@@ -10974,13 +10978,13 @@ const EMP_INLINE_FIELD_MAP={
 };
 
 async function inlineEditEmployeeField(empId,fieldId){
-  if(!(staffEditManager || isGlobalAdmin)){
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!e) return;
+
+  if(!canEditStaffRecord(e)){
     alert("No employee edit permission.");
     return;
   }
-
-  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
-  if(!e) return;
 
   const cfg=EMP_INLINE_FIELD_MAP[fieldId];
   if(!cfg) return;
@@ -11055,8 +11059,16 @@ async function inlineEditEmployeeField(empId,fieldId){
   }catch(_){}
 }
 
+function canEditStaffRecord(e){
+  if(isGlobalAdmin) return true;
+  if(!staffEditManager || !e) return false;
+  const outlet=String(e.outlet||"").trim();
+  return outlet==="Eco Botanic" || outlet==="Nusa Bestari";
+}
+
 function staffPencil(empId,fieldId){
-  const canEdit=Boolean(staffEditManager || isGlobalAdmin);
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  const canEdit=canEditStaffRecord(e);
   return canEdit
     ? `<button class="employee-edit-pencil" type="button" data-inline-emp="${Number(empId)}" data-inline-field="${fieldId}" title="Edit">✎</button>`
     : "";
@@ -11084,8 +11096,8 @@ function staffHasLeft(e){
 }
 function staffSafe(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 async function rehireStaff(empId){
-  if(!(staffEditManager || isGlobalAdmin)){alert("Management access only.");return;}
   const emp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(!canEditStaffRecord(emp)){alert("Management access only.");return;}
   if(!emp || !staffHasLeft(emp))return;
   if(!confirm(`Rehire ${emp.name||"this employee"}?\\nThe employee will return to Active Staff. Historical salary records will remain unchanged.`))return;
   const {error}=await salaryDb.from("employees").update({last_working_date:null}).eq("id",empId);
@@ -11096,7 +11108,11 @@ async function rehireStaff(empId){
 }
 window.rehireStaff=rehireStaff;
 function renderStaffList(){
-  byId("staffListContent").innerHTML=salaryBranches.map(b=>b.name).map(outlet=>{
+  const staffOutlets=isGlobalAdmin
+    ? salaryBranches.map(b=>b.name)
+    : [...new Set((accessibleSalaryOutlets||[]).filter(x=>x && x!=="Global"))];
+
+  byId("staffListContent").innerHTML=staffOutlets.map(outlet=>{
     const rows=salaryEmployees.filter(e=>e.outlet===outlet).sort(salaryStaffSort);
     const staffTable=(list,title)=>`<div class="staff-list-section"><h5>${title} <span>(${list.length})</span></h5><div class="salary-table-wrap"><table class="salary-table">
       <thead><tr><th>Name</th><th>Type</th><th>Birthday</th><th>Join Date</th><th>Last Working Date</th><th>Payment Method</th><th>Basic Pay</th><th>Allowance</th><th>Bank Name</th><th>Bank Account</th><th>NRIC / Passport</th><th>Phone</th><th>Employee No.</th><th>SOCSO No.</th><th>KWSP / EPF No.</th><th>Tax No.</th><th>Action</th></tr></thead>
@@ -11117,13 +11133,13 @@ function renderStaffList(){
 <td><span class="employee-edit-cell">${e.socso_no||"-"}${staffPencil(e.id,"editEmpSocso")}</span></td>
 <td><span class="employee-edit-cell">${e.epf_no||"-"}${staffPencil(e.id,"editEmpEpf")}</span></td>
 <td><span class="employee-edit-cell">${e.tax_no||"-"}${staffPencil(e.id,"editEmpTax")}</span></td>
-<td>${staffEditManager?`<div class="staff-action-wrap">
+<td>${canEditStaffRecord(e)?`<div class="staff-action-wrap">
   <button class="btn" type="button" data-move-staff-up="${e.id}" title="Move Up">↑</button>
   <button class="btn" type="button" data-move-staff-down="${e.id}" title="Move Down">↓</button>
   <button class="btn staff-pin-btn" data-pin-staff="${e.id}" data-pinned="${e.is_pinned?"1":"0"}">${e.is_pinned?"Unpin":"Pin Top"}</button>
   ${staffHasLeft(e)?`<button class="btn staff-rehire-btn" type="button" data-rehire-staff="${e.id}">↩ Rehire / 复职</button>`:""}
   <button class="btn" data-edit-staff="${e.id}">Edit</button>
-  <button class="btn staff-delete-btn" data-delete-staff="${e.id}">Delete</button>
+  ${isGlobalAdmin?`<button class="btn staff-delete-btn" data-delete-staff="${e.id}">Delete</button>`:""}
 </div>`:"—"}</td></tr>`).join("") || '<tr><td colspan="17"></td></tr>'}</tbody></table></div></div>`;
     return `<div class="staff-group"><h4>${staffSafe(outlet)}</h4>${staffTable(rows.filter(e=>!staffHasLeft(e)),"Active Staff")}${staffTable(rows.filter(staffHasLeft),"Resigned Staff")}</div>`;
   }).join("");
