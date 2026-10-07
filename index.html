@@ -2977,6 +2977,64 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
+
+<style id="salary-name-sticky-scroll-final">
+/* Keep employee name visible while the salary table scrolls left/right. */
+#salaryPage .salary-table-wrap,
+#salaryPage .table-wrap{
+  position:relative!important;
+  overflow-x:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+
+#salaryPage .salary-table th:first-child,
+#salaryPage .salary-table td:first-child{
+  position:sticky!important;
+  left:0!important;
+  z-index:8!important;
+  background:#fff!important;
+  min-width:210px!important;
+  max-width:210px!important;
+  width:210px!important;
+  box-shadow:2px 0 0 rgba(0,0,0,.08)!important;
+}
+
+#salaryPage .salary-table th:first-child{
+  z-index:10!important;
+  background:#f7f7f5!important;
+}
+
+/* Mobile also keeps the employee name pinned while swiping horizontally. */
+@media(max-width:900px){
+  #salaryPage .salary-table th:first-child,
+  #salaryPage .salary-table td:first-child{
+    min-width:185px!important;
+    max-width:185px!important;
+    width:185px!important;
+  }
+}
+</style>
+
+
+<style id="payslip-pdf-share-layout-hard-fix">
+.nd-pdf-capture-root{
+  width:1123px!important;
+  height:794px!important;
+  min-width:1123px!important;
+  max-width:1123px!important;
+  min-height:794px!important;
+  max-height:794px!important;
+  overflow:hidden!important;
+  background:#fff!important;
+}
+.nd-pdf-capture-root .payslip-sheet[data-payslip-type="7th"]{
+  transform:none!important;
+  transform-origin:top left!important;
+  zoom:1!important;
+  margin:0!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -12563,8 +12621,15 @@ function salaryMonthParts(){
 window.capturePayslipForPdf=async function(slip,scale=1.35,quality=0.90){
   if(!slip) throw new Error("Payslip not found");
 
-  // Render from an isolated clone at true A4-landscape pixel proportions.
-  // This avoids iPhone preview scale/zoom leaking into the PDF capture.
+  /*
+    IMPORTANT:
+    Almost all final Payslip CSS is scoped under:
+      #salaryPayslipPrint .payslip-sheet ...
+    The previous PDF clone copied only .payslip-sheet outside that root,
+    so iPhone share PDFs lost the grid CSS and CURRENT/YTD collapsed vertically.
+
+    This capture recreates the SAME #salaryPayslipPrint CSS context off-screen.
+  */
   const holder=document.createElement("div");
   holder.style.cssText=[
     "position:fixed",
@@ -12574,17 +12639,33 @@ window.capturePayslipForPdf=async function(slip,scale=1.35,quality=0.90){
     "height:794px",
     "overflow:hidden",
     "background:#fff",
-    "z-index:-99999"
+    "z-index:-99999",
+    "pointer-events:none"
+  ].join(";");
+
+  const captureRoot=document.createElement("div");
+  captureRoot.id="salaryPayslipPrint";
+  captureRoot.className="nd-pdf-capture-root";
+  captureRoot.style.cssText=[
+    "width:1123px",
+    "height:794px",
+    "margin:0",
+    "padding:0",
+    "overflow:hidden",
+    "background:#fff"
   ].join(";");
 
   const clone=slip.cloneNode(true);
   clone.classList.add("nd-pdf-capture-clone");
+
+  // Force the complete landscape page. Layout inside remains controlled
+  // by the audited Payslip CSS because the #salaryPayslipPrint ancestor exists.
   clone.style.setProperty("width","1123px","important");
   clone.style.setProperty("min-width","1123px","important");
   clone.style.setProperty("max-width","1123px","important");
-  clone.style.setProperty("height","794px","important");
-  clone.style.setProperty("min-height","794px","important");
-  clone.style.setProperty("max-height","794px","important");
+  clone.style.setProperty("height","700px","important");
+  clone.style.setProperty("min-height","700px","important");
+  clone.style.setProperty("max-height","700px","important");
   clone.style.setProperty("margin","0","important");
   clone.style.setProperty("transform","none","important");
   clone.style.setProperty("transform-origin","top left","important");
@@ -12592,13 +12673,14 @@ window.capturePayslipForPdf=async function(slip,scale=1.35,quality=0.90){
   clone.style.setProperty("overflow","hidden","important");
   clone.style.setProperty("box-shadow","none","important");
 
-  holder.appendChild(clone);
+  captureRoot.appendChild(clone);
+  holder.appendChild(captureRoot);
   document.body.appendChild(holder);
 
   try{
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
-    const canvas=await html2canvas(clone,{
+    const canvas=await html2canvas(captureRoot,{
       scale,
       backgroundColor:"#ffffff",
       useCORS:true,
