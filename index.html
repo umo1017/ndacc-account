@@ -8011,7 +8011,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     <div class="outlet-title">
       <div>
         <h3 id="branchWhatsAppAllTitle" style="margin:0">Send All Payslips</h3>
-        <div class="helper">All confirmed staff payslips stay as separate PDF files.</div>
+        <div class="helper">All confirmed staff payslips will be prepared as separate PDF files for sharing.</div>
       </div>
       <button class="main-page-close" id="closeBranchWhatsAppAllModal" type="button">×</button>
     </div>
@@ -8025,7 +8025,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     <div id="branchWhatsAppAllSummary" class="helper" style="margin-top:12px"></div>
 
     <div class="actions" style="margin-top:16px">
-      <button class="btn" id="branchWhatsAppAllSendBtn" type="button">Prepare & Send All</button>
+      <button class="btn" id="branchWhatsAppAllSendBtn" type="button">Prepare & Share Branch Files</button>
     </div>
   </div>
 </div>
@@ -10213,6 +10213,12 @@ function branchWhatsAppAllStorageKey(outlet){
 }
 
 function openBranchWhatsAppAllModal(outlet,type){
+  const email=String(currentSalaryUserEmail||"").trim().toLowerCase();
+  if(email!=="umo1017@gmail.com"){
+    alert("Only UMO can share branch payslip files.");
+    return;
+  }
+
   branchWhatsAppAllState={outlet:String(outlet||""),type:Number(type)||7};
 
   const jobs=branchWhatsAppConfirmedJobs(outlet,type);
@@ -10259,8 +10265,14 @@ async function prepareBranchIndividualPdfFiles(outlet,type,progressBtn){
 }
 
 async function sendAllBranchPayslipsSameNumber(){
+  const email=String(currentSalaryUserEmail||"").trim().toLowerCase();
+  if(email!=="umo1017@gmail.com"){
+    alert("Only UMO can share branch payslip files.");
+    return;
+  }
+
   const btn=byId("branchWhatsAppAllSendBtn");
-  const oldText=btn?.textContent||"Prepare & Send All";
+  const oldText=btn?.textContent||"Prepare & Share Branch Files";
 
   try{
     const outlet=branchWhatsAppAllState.outlet;
@@ -10446,9 +10458,11 @@ function renderSalary(){
   <button class="btn branch-whatsapp-payslips-btn" type="button"
     data-branch-whatsapp="${outlet.replace(/"/g,"&quot;")}"
     data-branch-pay-type="7">Send Individually</button>
+  ${String(currentSalaryUserEmail||"").toLowerCase()==="umo1017@gmail.com"?`
   <button class="btn branch-whatsapp-all-btn" type="button"
     data-branch-wa-all="${outlet.replace(/"/g,"&quot;")}"
-    data-branch-wa-all-type="7">Send All to Same Number</button>
+    data-branch-wa-all-type="7">Share Branch Individual PDFs</button>
+`:""}
 </div>
 </div>
         <div class="salary-table-wrap">
@@ -10471,9 +10485,11 @@ function renderSalary(){
   <button class="btn branch-whatsapp-payslips-btn" type="button"
     data-branch-whatsapp="${outlet.replace(/"/g,"&quot;")}"
     data-branch-pay-type="14">Send Individually</button>
+  ${String(currentSalaryUserEmail||"").toLowerCase()==="umo1017@gmail.com"?`
   <button class="btn branch-whatsapp-all-btn" type="button"
     data-branch-wa-all="${outlet.replace(/"/g,"&quot;")}"
-    data-branch-wa-all-type="14">Send All to Same Number</button>
+    data-branch-wa-all-type="14">Share Branch Individual PDFs</button>
+`:""}
 </div>
 </div>
         <div class="salary-table-wrap">
