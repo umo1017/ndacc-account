@@ -2,6 +2,10 @@
 
 <html lang="zh-CN">
 <head>
+<script id="auth-first-paint-lock">
+document.documentElement.classList.add("login-locked");
+document.addEventListener("DOMContentLoaded",function(){document.body.classList.add("login-locked");});
+</script>
 <meta charset="utf-8"/>
 
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
@@ -3419,7 +3423,24 @@ html,body{width:100%;max-width:100%;box-sizing:border-box}
 }
 </style>
 
-</head>
+<style id="login-screen-only-hard-fix">
+html.login-locked,body.login-locked{overflow:hidden!important;height:100%!important;min-height:100%!important}
+body.login-locked #appView,body.login-locked #aiReceiptPage,body.login-locked #salaryPage,
+body.login-locked #bonusPage,body.login-locked #rosterPage,body.login-locked #settlementPage,
+body.login-locked #ordersPage,body.login-locked #socialPage,body.login-locked #settingsPage,
+body.login-locked #sidebar,body.login-locked .sidebar,body.login-locked .app-shell,
+body.login-locked .main-shell{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+body.login-locked #loginView{display:flex!important;position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;overflow:auto!important;z-index:2147483647!important;background:#f7f6f1!important}
+</style><style id="auth-lock-cross-device-final">
+html.login-locked body #appView,html.login-locked body #aiReceiptPage,html.login-locked body #salaryPage,
+html.login-locked body #bonusPage,html.login-locked body #rosterPage,html.login-locked body #settlementPage,
+html.login-locked body #ordersPage,html.login-locked body #socialPage,html.login-locked body #settingsPage,
+body.login-locked #appView,body.login-locked #aiReceiptPage,body.login-locked #salaryPage,
+body.login-locked #bonusPage,body.login-locked #rosterPage,body.login-locked #settlementPage,
+body.login-locked #ordersPage,body.login-locked #socialPage,body.login-locked #settingsPage{
+ display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important
+}
+</style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
@@ -26834,6 +26855,28 @@ document.addEventListener("input",function(e){
 })();
 </script>
 
+<script id="auth-screen-exclusive-guard">
+(function(){
+ function syncAuthScreen(){
+  const login=document.getElementById("loginView"); if(!login)return;
+  const cs=getComputedStyle(login);
+  const shown=!login.hidden&&cs.display!=="none"&&cs.visibility!=="hidden";
+  document.documentElement.classList.toggle("login-locked",shown);
+  document.body.classList.toggle("login-locked",shown);
+  ["appView","aiReceiptPage","salaryPage","bonusPage","rosterPage","settlementPage","ordersPage","socialPage","settingsPage"].forEach(id=>{
+   const el=document.getElementById(id); if(!el)return;
+   if(shown){el.setAttribute("aria-hidden","true");el.style.pointerEvents="none";}
+   else{el.removeAttribute("aria-hidden");el.style.pointerEvents="";}
+  });
+ }
+ document.addEventListener("DOMContentLoaded",function(){
+  syncAuthScreen();
+  const login=document.getElementById("loginView");
+  if(login)new MutationObserver(syncAuthScreen).observe(login,{attributes:true,attributeFilter:["style","class","hidden"]});
+  setTimeout(syncAuthScreen,50);setTimeout(syncAuthScreen,250);setTimeout(syncAuthScreen,1000);
+ });
+})();
+</script>
 </body>
 </html>
 
