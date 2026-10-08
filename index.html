@@ -2,9 +2,8 @@
 
 <html lang="zh-CN">
 <head>
-<script id="auth-first-paint-lock">
-document.documentElement.classList.add("login-locked");
-document.addEventListener("DOMContentLoaded",function(){document.body.classList.add("login-locked");});
+<script id="auth-first-paint-lock-v2">
+document.documentElement.classList.add("auth-pending");
 </script>
 <meta charset="utf-8"/>
 
@@ -3282,7 +3281,7 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
 }
 </style>
 
-<style id="login-private-pages-hide-final">
+<style id="login-private-pages-hide-final-disabled" media="not all">
 body:not(.logged-in) #appView,
 body:not(.logged-in) #aiReceiptPage,
 body:not(.logged-in) #salaryPage,
@@ -3423,7 +3422,7 @@ html,body{width:100%;max-width:100%;box-sizing:border-box}
 }
 </style>
 
-<style id="login-screen-only-hard-fix">
+<style id="login-screen-only-hard-fix-disabled" media="not all">
 html.login-locked,body.login-locked{overflow:hidden!important;height:100%!important;min-height:100%!important}
 body.login-locked #appView,body.login-locked #aiReceiptPage,body.login-locked #salaryPage,
 body.login-locked #bonusPage,body.login-locked #rosterPage,body.login-locked #settlementPage,
@@ -3431,7 +3430,7 @@ body.login-locked #ordersPage,body.login-locked #socialPage,body.login-locked #s
 body.login-locked #sidebar,body.login-locked .sidebar,body.login-locked .app-shell,
 body.login-locked .main-shell{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}
 body.login-locked #loginView{display:flex!important;position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;overflow:auto!important;z-index:2147483647!important;background:#f7f6f1!important}
-</style><style id="auth-lock-cross-device-final">
+</style><style id="auth-lock-cross-device-final-disabled" media="not all">
 html.login-locked body #appView,html.login-locked body #aiReceiptPage,html.login-locked body #salaryPage,
 html.login-locked body #bonusPage,html.login-locked body #rosterPage,html.login-locked body #settlementPage,
 html.login-locked body #ordersPage,html.login-locked body #socialPage,html.login-locked body #settingsPage,
@@ -3440,7 +3439,44 @@ body.login-locked #bonusPage,body.login-locked #rosterPage,body.login-locked #se
 body.login-locked #ordersPage,body.login-locked #socialPage,body.login-locked #settingsPage{
  display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important
 }
-</style></head>
+</style><style id="auth-visibility-v2">
+/* Before auth state is known, hide internal pages but keep the real #authView available. */
+html.auth-pending body #appView,
+html.auth-pending body #aiReceiptPage,
+html.auth-pending body #salaryPage,
+html.auth-pending body #bonusPage,
+html.auth-pending body #rosterPage,
+html.auth-pending body #settlementPage,
+html.auth-pending body #ordersPage,
+html.auth-pending body #socialPage,
+html.auth-pending body #settingsPage{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+
+/* When the real login view is visible, internal pages stay hidden. */
+body.auth-login-visible #appView,
+body.auth-login-visible #aiReceiptPage,
+body.auth-login-visible #salaryPage,
+body.auth-login-visible #bonusPage,
+body.auth-login-visible #rosterPage,
+body.auth-login-visible #settlementPage,
+body.auth-login-visible #ordersPage,
+body.auth-login-visible #socialPage,
+body.auth-login-visible #settingsPage{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+
+body.auth-login-visible #authView{
+  display:flex!important;
+  visibility:visible!important;
+  min-height:100dvh!important;
+}
+</style>
+</head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
@@ -26792,23 +26828,6 @@ document.addEventListener("input",function(e){
 })();
 </script>
 
-<script id="login-private-pages-guard">
-(function(){
- function syncPrivatePageVisibility(){
-   const login=document.getElementById("loginView");
-   const visible=!!login && getComputedStyle(login).display!=="none";
-   document.body.classList.toggle("logged-in",!visible);
- }
- document.addEventListener("DOMContentLoaded",function(){
-   syncPrivatePageVisibility();
-   const login=document.getElementById("loginView");
-   if(login)new MutationObserver(syncPrivatePageVisibility).observe(login,{attributes:true,attributeFilter:["style","class","hidden"]});
-   setTimeout(syncPrivatePageVisibility,100);
-   setTimeout(syncPrivatePageVisibility,500);
- });
-})();
-</script>
-
 <script id="mobile-payslip-auto-fit-final">
 (function(){
   function fitPayslipToPhone(){
@@ -26855,26 +26874,46 @@ document.addEventListener("input",function(e){
 })();
 </script>
 
-<script id="auth-screen-exclusive-guard">
+<script id="auth-visibility-guard-v2">
 (function(){
- function syncAuthScreen(){
-  const login=document.getElementById("loginView"); if(!login)return;
-  const cs=getComputedStyle(login);
-  const shown=!login.hidden&&cs.display!=="none"&&cs.visibility!=="hidden";
-  document.documentElement.classList.toggle("login-locked",shown);
-  document.body.classList.toggle("login-locked",shown);
-  ["appView","aiReceiptPage","salaryPage","bonusPage","rosterPage","settlementPage","ordersPage","socialPage","settingsPage"].forEach(id=>{
-   const el=document.getElementById(id); if(!el)return;
-   if(shown){el.setAttribute("aria-hidden","true");el.style.pointerEvents="none";}
-   else{el.removeAttribute("aria-hidden");el.style.pointerEvents="";}
+  function syncAuthVisibility(){
+    const auth=document.getElementById("authView");
+    if(!auth){
+      document.documentElement.classList.remove("auth-pending");
+      return;
+    }
+
+    const loginVisible=!auth.classList.contains("hidden") &&
+      getComputedStyle(auth).display!=="none" &&
+      getComputedStyle(auth).visibility!=="hidden";
+
+    document.body.classList.toggle("auth-login-visible",loginVisible);
+
+    // Existing application auth code decides whether #authView or #appView is visible.
+    // Once either state is resolved, release the first-paint lock.
+    const app=document.getElementById("appView");
+    const appVisible=!!app && !app.classList.contains("hidden");
+    if(loginVisible || appVisible){
+      document.documentElement.classList.remove("auth-pending");
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded",function(){
+    syncAuthVisibility();
+    const auth=document.getElementById("authView");
+    const app=document.getElementById("appView");
+    const obs=new MutationObserver(syncAuthVisibility);
+    if(auth) obs.observe(auth,{attributes:true,attributeFilter:["class","style","hidden"]});
+    if(app) obs.observe(app,{attributes:true,attributeFilter:["class","style","hidden"]});
+    setTimeout(syncAuthVisibility,50);
+    setTimeout(syncAuthVisibility,250);
+    setTimeout(syncAuthVisibility,1000);
+    setTimeout(function(){
+      // Fail-safe: never leave a permanently blank screen.
+      document.documentElement.classList.remove("auth-pending");
+      syncAuthVisibility();
+    },2500);
   });
- }
- document.addEventListener("DOMContentLoaded",function(){
-  syncAuthScreen();
-  const login=document.getElementById("loginView");
-  if(login)new MutationObserver(syncAuthScreen).observe(login,{attributes:true,attributeFilter:["style","class","hidden"]});
-  setTimeout(syncAuthScreen,50);setTimeout(syncAuthScreen,250);setTimeout(syncAuthScreen,1000);
- });
 })();
 </script>
 </body>
