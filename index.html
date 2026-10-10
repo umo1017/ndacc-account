@@ -8900,6 +8900,9 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 
 const salaryDb = window.supabase.createClient("https://cofmjwsejcbfsgdrswku.supabase.co", "sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU");
 window.salaryDb=salaryDb;
+// Statutory contribution basis aligned to Payroll.my 2026 published tables:
+ // EPF Third Schedule, SOCSO 2026 incl. LINDUNG 24 JAM, EIS table,
+ // and LHDN 2026 computerized PCB normal-remuneration method.
 const SOCSO_THRESHOLDS = [30, 50, 70, 100, 140, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500, 3600, 3700, 3800, 3900, 4000, 4100, 4200, 4300, 4400, 4500, 4600, 4700, 4800, 4900, 5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700, 5800, 5900, 6000, 999999999];
 const SOCSO_EMPLOYER = [0.4, 0.7, 1.1, 1.5, 2.1, 2.95, 4.35, 6.15, 7.85, 9.65, 11.35, 13.15, 14.85, 16.65, 18.35, 20.15, 21.85, 23.65, 25.35, 27.15, 28.85, 30.65, 32.35, 34.15, 35.85, 37.65, 39.35, 41.15, 42.85, 44.65, 46.35, 48.15, 49.85, 51.65, 53.35, 55.15, 56.85, 58.65, 60.35, 62.15, 63.85, 65.65, 67.35, 69.15, 70.85, 72.65, 74.35, 76.15, 77.85, 79.65, 81.35, 83.15, 84.85, 86.65, 88.35, 90.15, 91.85, 93.65, 95.35, 97.15, 98.85, 100.65, 102.35, 104.15, 104.15];
 const SOCSO_EMPLOYEE = [0.1, 0.2, 0.3, 0.4, 0.6, 0.85, 1.25, 1.75, 2.25, 2.75, 3.25, 3.75, 4.25, 4.75, 5.25, 5.75, 6.25, 6.75, 7.25, 7.75, 8.25, 8.75, 9.25, 9.75, 10.25, 10.75, 11.25, 11.75, 12.25, 12.75, 13.25, 13.75, 14.25, 14.75, 15.25, 15.75, 16.25, 16.75, 17.25, 17.75, 18.25, 18.75, 19.25, 19.75, 20.25, 20.75, 21.25, 21.75, 22.25, 22.75, 23.25, 23.75, 24.25, 24.75, 25.25, 25.75, 26.25, 26.75, 27.25, 27.75, 28.25, 28.75, 29.25, 29.75, 29.75];
@@ -9508,7 +9511,10 @@ function calculate7th(e,m={}){
     employee_eis:0,
     employer_eis:0
   };
-  const kwsp=kwspContributionFromBasicPay(guaranteed, hasKwsp);
+  // Payroll.my / KWSP contribution basis:
+  // salary + contributable allowance are EPF wages; overtime is excluded.
+  const epfWage=Math.max(0,guaranteed+allowance);
+  const kwsp=kwspContributionFromBasicPay(epfWage, hasKwsp);
   const employee_epf=kwsp.employee;
   const employer_epf=kwsp.employer;
 
@@ -9561,6 +9567,8 @@ function calculate7th(e,m={}){
     ot_days:otDays,
     ot_hourly_rate:+otRate.toFixed(4),
     ot,
+    epf_wage:epfWage,
+    socso_eis_wage:gross,
     employee_epf,
     employer_epf,
     ...st,
@@ -12404,7 +12412,13 @@ async function saveTaxRuleToCloud(year,rule){
 }
 function taxYearNow(){const m=(byId("salaryMonth")?.value||monthKey()||"2026-01");return Number(String(m).slice(0,4))||2026;}
 function getTaxRule(year){const map=loadTaxRules();year=Number(year)||2026;if(map[year])return map[year];const ys=Object.keys(map).map(Number).filter(y=>y<year).sort((a,b)=>b-a);const by=ys[0]||2026,base=map[by]||DEFAULT_TAX_RULES[2026];return {...base,year,updatedAt:`Copied from ${by} - review required`,_temporary:true};}
-function roundPcb(v,step){const q=Math.max(0.01,Number(step)||0.05);return Math.round((Number(v)||0)/q)*q;}
+function roundPcb(v,step){
+  const q=Math.max(0.01,Number(step)||0.05);
+  const n=Math.max(0,Number(v)||0);
+  if(n<=0) return 0;
+  // LHDN computerized MTD: round UP to the next 5 sen.
+  return +(Math.ceil((n-1e-9)/q)*q).toFixed(2);
+}
 function malaysiaResidentTaxAnnual(taxable,rule){const x=Math.max(0,Number(taxable||0));const bands=(rule?.bands||DEFAULT_TAX_RULES[2026].bands).map(([cap,rate])=>[cap==null?Infinity:Number(cap),Number(rate)||0]);let last=0,tax=0;for(const [cap,rate] of bands){const amount=Math.min(x,cap)-last;if(amount>0)tax+=amount*rate;if(x<=cap)break;last=cap;}return tax;}
 function taxYtdBeforeCurrentMonth(e){
   const [year]=monthKey().split("-").map(Number);
@@ -12431,33 +12445,90 @@ function taxYtdBeforeCurrentMonth(e){
     pcb:opening.pcb+rows.reduce((a,x)=>a+Number(x.tax||0),0)
   };
 }
+function payrollMyPcbBand(P,category2=false){
+  const p=Math.max(0,Number(P)||0);
+  const rows=[
+    {max:5000,    M:0,       R:0.00, B13:0,      B2:0},
+    {max:20000,   M:5000,    R:0.01, B13:-400,   B2:-800},
+    {max:35000,   M:20000,   R:0.03, B13:-250,   B2:-650},
+    {max:50000,   M:35000,   R:0.06, B13:600,    B2:600},
+    {max:70000,   M:50000,   R:0.11, B13:1500,   B2:1500},
+    {max:100000,  M:70000,   R:0.19, B13:3700,   B2:3700},
+    {max:400000,  M:100000,  R:0.25, B13:9400,   B2:9400},
+    {max:600000,  M:400000,  R:0.26, B13:84400,  B2:84400},
+    {max:2000000, M:600000,  R:0.28, B13:136400, B2:136400},
+    {max:Infinity,M:2000000, R:0.30, B13:528400, B2:528400}
+  ];
+  const row=rows.find(x=>p<=x.max)||rows[rows.length-1];
+  return {M:row.M,R:row.R,B:category2?row.B2:row.B13};
+}
+
 function calculateAutoPcb(e,currentGross,currentEmployeeEpf){
   try{
     if(!String(e?.tax_no||"").trim()) return 0;
+
     const parts=String(monthKey()||"").split("-");
-    const year=Number(parts[0])||new Date().getFullYear();
+    const year=Number(parts[0])||2026;
+    const monthNo=Math.min(12,Math.max(1,Number(parts[1])||1));
+    const n=Math.max(0,12-monthNo); // remaining months after current month
     const rule=getTaxRule(year)||{};
+
     const gross=Math.max(0,Number(currentGross)||0);
     const epf=Math.max(0,Number(currentEmployeeEpf)||0);
-    const zakat=Math.max(0,Number(e?.tax_monthly_zakat)||0);
-    const resident=(e?.tax_resident_status||"resident");
+    const zakatCurrent=Math.max(0,Number(e?.tax_monthly_zakat)||0);
+    const resident=String(e?.tax_resident_status||"resident");
 
+    // Non-resident: 30% of current remuneration.
     if(resident==="nonresident"){
-      return Math.max(0,roundPcb(gross*(Number(rule.nonResidentRate)||0)-zakat,Number(rule.rounding)||0.05));
+      const raw=Math.max(0,gross*(Number(rule.nonResidentRate)||0.30)-zakatCurrent);
+      if(raw<10) return 0;
+      return roundPcb(raw,Number(rule.rounding)||0.05);
     }
 
-    const projectedGross=gross*12;
-    const projectedEpf=Math.min(Number(rule.epfReliefCap)||0,epf*12);
-    let relief=Number(rule.individualRelief)||0;
-    if((e?.tax_marital_status||"single")==="married_not_working") relief+=Number(rule.spouseNotWorkingRelief)||0;
-    if(e?.tax_disabled_individual) relief+=Number(rule.disabledIndividualRelief)||0;
-    if(e?.tax_disabled_spouse) relief+=Number(rule.disabledSpouseRelief)||0;
-    relief+=(Number(e?.tax_children_u18)||0)*(Number(rule.childU18Relief)||0);
-    relief+=(Number(e?.tax_children_study)||0)*(Number(rule.childStudyRelief)||0);
+    const ytd=taxYtdBeforeCurrentMonth(e);
+    const previousGross=Math.max(0,Number(ytd?.gross)||0);
+    const previousEpf=Math.max(0,Number(ytd?.epf)||0);
+    const previousPcb=Math.max(0,Number(ytd?.pcb)||0);
 
-    const taxable=Math.max(0,projectedGross-projectedEpf-relief);
-    const annualTax=malaysiaResidentTaxAnnual(taxable,rule);
-    return Math.max(0,roundPcb((Number(annualTax)||0)/12-zakat,Number(rule.rounding)||0.05));
+    // EPF relief is capped at RM4,000 per year.
+    const epfCap=Math.max(0,Number(rule.epfReliefCap)||4000);
+    const K=Math.min(previousEpf,epfCap);
+    const remainingAfterPrior=Math.max(0,epfCap-K);
+    const K1=Math.min(epf,remainingAfterPrior);
+    const remainingForFuture=Math.max(0,epfCap-K-K1);
+    const K2=n>0 ? Math.min(epf,remainingForFuture/n) : 0;
+
+    // Fixed deductions / reliefs used by the 2026 computerized MTD method.
+    const D=Math.max(0,Number(rule.individualRelief)||9000);
+    const category2=String(e?.tax_marital_status||"single")==="married_not_working";
+    const S=category2 ? Math.max(0,Number(rule.spouseNotWorkingRelief)||4000) : 0;
+    const DU=e?.tax_disabled_individual ? Math.max(0,Number(rule.disabledIndividualRelief)||7000) : 0;
+    const SU=e?.tax_disabled_spouse ? Math.max(0,Number(rule.disabledSpouseRelief)||6000) : 0;
+    const QC=
+      Math.max(0,Number(e?.tax_children_u18)||0)*Math.max(0,Number(rule.childU18Relief)||2000) +
+      Math.max(0,Number(e?.tax_children_study)||0)*Math.max(0,Number(rule.childStudyRelief)||8000);
+
+    // P = prior net remuneration + current net remuneration
+    //   + estimated future net remuneration - statutory deductions/reliefs.
+    const P=Math.max(0,
+      (previousGross-K) +
+      (gross-K1) +
+      ((gross-K2)*n) -
+      (D+S+DU+SU+QC)
+    );
+
+    const band=payrollMyPcbBand(P,category2);
+    const annualTax=Math.max(0,(P-band.M)*band.R+band.B);
+
+    // Current MTD = [annual tax - PCB already paid] / months remaining incl current.
+    // Current-month zakat offsets the current MTD.
+    let currentMtd=Math.max(0,(annualTax-previousPcb)/(n+1));
+    currentMtd=Math.max(0,currentMtd-zakatCurrent);
+
+    // LHDN rule: if current month's MTD is below RM10, no deduction.
+    if(currentMtd<10) return 0;
+
+    return roundPcb(currentMtd,Number(rule.rounding)||0.05);
   }catch(err){
     console.error("PCB calculation error",err);
     return 0;
