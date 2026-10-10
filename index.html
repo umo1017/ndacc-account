@@ -3739,6 +3739,15 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="ot-payroll-summary-algorithm-final">
+#salaryPage [data-live-otamount] .helper{
+  max-width:150px!important;
+  white-space:normal!important;
+  line-height:1.2!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -9194,18 +9203,19 @@ function payrollDaysInSelectedMonth(){
 }
 function otHourlyRateFromPay(basicPay,allowancePay){
   const basic=Math.max(0,Number(basicPay||0));
-  const allowance=Math.max(0,Number(allowancePay||0));
-  const otBase=basic+allowance;
   const daysInMonth=Math.max(1,payrollDaysInSelectedMonth());
-  // OT Rate = (Basic Pay + Allowance) ÷ calendar days in selected month ÷ 8
-  return otBase>0 ? otBase/daysInMonth/8 : 0;
+
+  // User-defined OT algorithm:
+  // OT Hourly Rate = Basic Pay ÷ calendar days in selected month ÷ 12.
+  // Allowance is NOT included.
+  return basic>0 ? basic/daysInMonth/12 : 0;
 }
 function otHourlyRate(e){
   let basic=Number(e?.guaranteed_pay||0);
   let allowance=Number(e?.allowance||0);
 
-  // Salary is editable before Confirm. If Basic Pay / Allowance has a manual
-  // override for this month, OT must use the edited values too.
+  // Salary is editable before Confirm. OT follows the edited Basic Pay.
+  // Allowance is deliberately excluded from the OT rate.
   try{
     if(typeof salaryOverrideValue==="function" && e?.id){
       basic=salaryOverrideValue(e.id,"7","guaranteed_pay",basic);
@@ -9595,7 +9605,7 @@ function calculate7th(e,m={}){
   const otHourQty=Math.max(0,Number(m.ot_hour_qty||0));
   const otDayQty=Math.max(0,Number(m.ot_day_qty||0));
   const otTotalHours=calculateOtTotalHours(m);
-  const otRate=otHourlyRateFromPay(guaranteed,allowance);
+  const otRate=otHourlyRateFromPay(guaranteed,0);
   const ot=+(otTotalHours*otRate).toFixed(2);
   const otHours=ot;
   const otDays=+(otDayQty*8*otRate).toFixed(2);
@@ -11276,10 +11286,10 @@ function renderSevenTable(emps){
       <td>${snap?money(s.employer_eis):salaryOverrideInput(e.id,"7","employer_eis",s.employer_eis)}</td>
       <td>${snap?money(s.off_day_deduction||0):salaryOverrideInput(e.id,"7","off_day_deduction",s.off_day_deduction||0)}</td>
       <td>${snap?money(s.tax||0):salaryOverrideInput(e.id,"7","tax",s.tax||0)}</td>
-      <td>${otHoursInput(e.id,Number(s.ot_hour_qty||m.ot_hour_qty||0),!!snap)}</td>
-      <td>${otDaysInput(e.id,Number(s.ot_day_qty||m.ot_day_qty||0),!!snap)}</td>
+      <td title="Clocked overtime hours">${otHoursInput(e.id,Number(s.ot_hour_qty||m.ot_hour_qty||0),!!snap)}</td>
+      <td title="Each Off-Day adds 8 hours">${otDaysInput(e.id,Number(s.ot_day_qty||m.ot_day_qty||0),!!snap)}</td>
       <td data-live-ottotalhrs="${e.id}"><strong>${Number(s.ot_total_hours||calculateOtTotalHours(snap?s:m)).toFixed(2)}</strong></td>
-      <td data-live-otamount="${e.id}"><strong>${money(s.ot||0)}</strong><div class="helper">Rate ${Number(s.ot_hourly_rate||otHourlyRate(e)).toFixed(4)}</div></td>
+      <td data-live-otamount="${e.id}"><strong>${money(s.ot||0)}</strong><div class="helper">Basic ÷ Days ÷ 12 · Rate ${Number(s.ot_hourly_rate||otHourlyRate(e)).toFixed(4)}</div></td>
       <td>${snap?money(s.manual_deduction||0):salaryOverrideInput(e.id,"7","manual_deduction",s.manual_deduction||0)}</td>
       <td data-live-gross7="${e.id}">${snap?money(s.gross_pay):salaryOverrideInput(e.id,"7","gross_pay",s.gross_pay)}</td>
       <td data-live-deduction7="${e.id}">${snap?money(s.total_deduction):salaryOverrideInput(e.id,"7","total_deduction",s.total_deduction)}</td>
@@ -11323,7 +11333,7 @@ function renderSevenTable(emps){
         <th rowspan="2">Employee EIS</th><th rowspan="2">Employer EIS</th>
         <th rowspan="2">Unpaid</th>
         <th rowspan="2">PCB / Tax</th>
-        <th rowspan="2">OT Hours</th><th rowspan="2">OT Days</th><th rowspan="2">OT Total Hrs</th><th rowspan="2">OT</th>
+        <th rowspan="2">Clocked Hrs</th><th rowspan="2">Off-Days</th><th rowspan="2">Total Hrs</th><th rowspan="2">Overtime (RM)</th>
         <th rowspan="2">Deduction</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
         <th colspan="3" class="netpay-group-head">Net Pay</th>
         <th rowspan="2">Confirm</th><th rowspan="2">7th Monthly Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
@@ -12052,7 +12062,7 @@ function recalc7thLive(empId){
 
   const otAmountCell=document.querySelector(`[data-live-otamount="${empId}"]`);
   if(otAmountCell){
-    otAmountCell.innerHTML=`<strong>${money(calc.ot||0)}</strong><div class="helper">Rate ${otHourlyRate(e).toFixed(4)}</div>`;
+    otAmountCell.innerHTML=`<strong>${money(calc.ot||0)}</strong><div class="helper">Basic ÷ Days ÷ 12 · Rate ${otHourlyRate(e).toFixed(4)}</div>`;
   }
 
   const updateEditableMoneyCell=(selector,field,value)=>{
@@ -15572,7 +15582,11 @@ function settlementCalculate7thBudget(e,m={},ym,snapshot=null){
   const totalOtHours=otHourQty+(otDayQty*8);
 
   const daysInMonth=Math.max(1,settlementPayrollMonthDays(ym));
-  const otRate=(guaranteed+allowance)/daysInMonth/8;
+
+  // Same OT algorithm as Salary:
+  // Basic Pay ÷ calendar days ÷ 12 × Total Hrs.
+  // Allowance is excluded.
+  const otRate=guaranteed>0 ? guaranteed/daysInMonth/12 : 0;
   const ot=+(totalOtHours*otRate).toFixed(2);
 
   const allowedOffDays=Math.max(0,Number(e?.monthly_off_days||0));
