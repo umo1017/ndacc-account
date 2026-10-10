@@ -3856,6 +3856,31 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="social-brand-publish-status-v1">
+.meta-brand-editor{
+  display:grid;
+  grid-template-columns:auto minmax(150px,1fr) auto;
+  gap:8px;
+  align-items:center;
+  margin-top:10px;
+}
+.meta-brand-editor label{font-size:12px;font-weight:900}
+.meta-brand-editor input{min-width:0}
+.meta-brand-badge{
+  display:inline-flex;
+  border:1px solid #d8d4ca;
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:12px;
+  font-weight:900;
+  background:#faf9f6;
+}
+@media(max-width:700px){
+  .meta-brand-editor{grid-template-columns:1fr}
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -8704,8 +8729,18 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     </div>
     <input id="socialPostId" type="hidden">
     <div class="social-form-grid">
-      <div class="field"><label>Brand / Account Group</label><input id="socialBrand" placeholder="Nature's Dao"></div>
+      <div class="field">
+        <label>Brand</label>
+        <select id="socialBrand"><option value="">Select Brand</option></select>
+      </div>
       <div class="field"><label>Title</label><input id="socialTitle" placeholder="Internal title"></div>
+      <div class="field social-span-2" id="socialFacebookTargetWrap">
+        <label>Facebook Page</label>
+        <select id="socialFacebookPage">
+          <option value="">Select connected Facebook Page</option>
+        </select>
+        <div class="helper" id="socialFacebookPageHint">Connect Facebook first, then assign each Page to a Brand.</div>
+      </div>
       <div class="field social-span-2">
         <label>Platforms</label>
         <div class="social-platform-checks">
@@ -8719,8 +8754,14 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <div class="field social-span-2"><label>Caption</label><textarea id="socialCaption" rows="6" placeholder="Post caption..."></textarea></div>
       <div class="field"><label>Publish Date</label><input id="socialPublishDate" type="date"></div>
       <div class="field"><label>Publish Time</label><input id="socialPublishTime" type="time"></div>
-      <div class="field"><label>Status</label>
-        <select id="socialPostStatus"><option value="draft">Draft</option><option value="scheduled">Scheduled</option></select>
+      <div class="field"><label>Publish Status</label>
+        <select id="socialPostStatus">
+          <option value="draft">Draft</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="publishing" disabled>Publishing</option>
+          <option value="published" disabled>Published</option>
+          <option value="failed" disabled>Failed</option>
+        </select>
       </div>
       <div class="field"><label>Timezone</label><input id="socialTimezone" value="Asia/Kuala_Lumpur" readonly></div>
       <div class="field social-span-2">
@@ -8734,7 +8775,8 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <button class="btn bad" id="socialDeletePostBtn" type="button" style="display:none">Delete</button>
       <span style="flex:1"></span>
       <button class="btn" id="socialSaveDraftBtn" type="button">Save Draft</button>
-      <button class="btn primary" id="socialScheduleBtn" type="button">Schedule</button>
+      <button class="btn" id="socialScheduleBtn" type="button">Schedule</button>
+      <button class="btn primary" id="socialPublishNowBtn" type="button">Publish Now</button>
     </div>
     <div class="helper" id="socialPostMsg"></div>
   </div>
@@ -27887,7 +27929,9 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
  }
  function resetForm(date=""){
    $("socialPostId").value="";$("socialPostModalTitle").textContent="New Post";
-   $("socialBrand").value="Nature's Dao";$("socialTitle").value="";$("socialCaption").value="";
+   syncSocialBrandAndPageOptions();
+   $("socialBrand").value="";$("socialFacebookPage").value="";
+   $("socialTitle").value="";$("socialCaption").value="";
    $("socialPublishDate").value=date||ndLocalDateISO();
    $("socialPublishTime").value="20:00";$("socialPostStatus").value="draft";
    document.querySelectorAll(".social-platform-checks input").forEach(x=>x.checked=false);
@@ -27899,8 +27943,13 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    const x=posts.find(p=>String(p.id)===String(id));if(!x)return;
    const lp=localParts(x.scheduled_at);
    $("socialPostId").value=x.id;$("socialPostModalTitle").textContent="Edit Post";
-   $("socialBrand").value=x.brand||"";$("socialTitle").value=x.title||"";$("socialCaption").value=x.caption||"";
-   $("socialPublishDate").value=lp.date;$("socialPublishTime").value=lp.time;$("socialPostStatus").value=x.status==="draft"?"draft":"scheduled";
+   syncSocialBrandAndPageOptions();
+   $("socialBrand").value=x.brand||"";
+   syncSocialBrandAndPageOptions();
+   $("socialFacebookPage").value=x.target_page_id||"";
+   $("socialTitle").value=x.title||"";$("socialCaption").value=x.caption||"";
+   $("socialPublishDate").value=lp.date;$("socialPublishTime").value=lp.time;
+   $("socialPostStatus").value=["draft","scheduled","publishing","published","failed"].includes(x.status)?x.status:"draft";
    document.querySelectorAll(".social-platform-checks input").forEach(c=>c.checked=(x.platforms||[]).includes(c.value));
    editingMedia=Array.isArray(x.media)?JSON.parse(JSON.stringify(x.media)):[];
    $("socialMediaFiles").value="";renderMediaPreview();
@@ -27935,11 +27984,14 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      if(status==="scheduled"&&(!$("socialPublishDate").value||!$("socialPublishTime").value))return setMsg("Choose publish date and time.",true);
      await uploadFiles();
      if(!editingMedia.length)return setMsg("Upload at least one poster image or video.",true);
+     const page=selectedConnectedPage();
      const row={
        brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),
        caption:$("socialCaption").value,platforms,media:editingMedia,
+       target_page_id:page?.page_id||null,target_page_name:page?.page_name||null,
        scheduled_at:isoLocal($("socialPublishDate").value,$("socialPublishTime").value),
        timezone:"Asia/Kuala_Lumpur",status,
+       publish_error:null,
        updated_at:new Date().toISOString(),created_by:String(window.currentUserEmail||"").toLowerCase()
      };
      const id=$("socialPostId").value;
@@ -27949,6 +28001,92 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      closeModals();await loadPosts();
    }catch(e){console.error(e);setMsg(e.message||String(e),true)}
  }
+
+ async function publishNow(){
+   const page=selectedConnectedPage();
+   if(!page)return setMsg("Select a connected Facebook Page.",true);
+
+   const facebookChecked=[...document.querySelectorAll(".social-platform-checks input:checked")]
+     .some(x=>x.value==="Facebook");
+   if(!facebookChecked)return setMsg("Select Facebook in Platforms.",true);
+
+   try{
+     await uploadFiles();
+
+     const firstMedia=editingMedia[0]||null;
+     const row={
+       brand:$("socialBrand").value.trim(),
+       title:$("socialTitle").value.trim(),
+       caption:$("socialCaption").value,
+       platforms:["Facebook"],
+       media:editingMedia,
+       target_page_id:page.page_id,
+       target_page_name:page.page_name,
+       scheduled_at:new Date().toISOString(),
+       timezone:"Asia/Kuala_Lumpur",
+       status:"publishing",
+       publish_error:null,
+       updated_at:new Date().toISOString(),
+       created_by:String(window.currentUserEmail||"").toLowerCase()
+     };
+
+     setMsg("Publishing to Facebook...");
+     $("socialPostStatus").value="publishing";
+
+     const id=$("socialPostId").value;
+     let postId=id;
+
+     if(id){
+       const {error}=await db().from("social_media_posts").update(row).eq("id",id);
+       if(error)throw error;
+     }else{
+       const {data,error}=await db().from("social_media_posts").insert(row).select("id").single();
+       if(error)throw error;
+       postId=data.id;
+       $("socialPostId").value=postId;
+     }
+
+     try{
+       const result=await invokeMetaOauth("publish",{
+         page_id:page.page_id,
+         message:$("socialCaption").value,
+         media_url:firstMedia?.url||"",
+         media_type:firstMedia?.type||""
+       });
+
+       const publishedAt=new Date().toISOString();
+       const {error:updateError}=await db().from("social_media_posts").update({
+         status:"published",
+         external_post_id:result.post_id||null,
+         published_at:publishedAt,
+         publish_error:null,
+         updated_at:publishedAt
+       }).eq("id",postId);
+
+       if(updateError)throw updateError;
+
+       $("socialPostStatus").value="published";
+       setMsg("Published ✓");
+       await loadPosts();
+       setTimeout(closeModals,700);
+
+     }catch(pubErr){
+       const msg=String(pubErr?.message||pubErr);
+       await db().from("social_media_posts").update({
+         status:"failed",
+         publish_error:msg,
+         updated_at:new Date().toISOString()
+       }).eq("id",postId);
+
+       $("socialPostStatus").value="failed";
+       setMsg("Publish failed: "+msg,true);
+     }
+
+   }catch(err){
+     setMsg(String(err?.message||err),true);
+   }
+ }
+
  async function del(){
    const id=$("socialPostId").value;if(!id||!confirm("Delete this scheduled post?"))return;
    const {error}=await db().from("social_media_posts").delete().eq("id",id);if(error)return setMsg(error.message,true);
@@ -27982,16 +28120,48 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
 
    box.innerHTML=metaConnectedPages.map(p=>`
      <div class="meta-page-row">
-       <div>
+       <div class="meta-page-info">
          <strong>${esc(p.page_name||"Facebook Page")}</strong>
          <div class="helper">Page ID: ${esc(p.page_id||"")}</div>
+         <div class="meta-brand-editor">
+           <label>Brand</label>
+           <input type="text" value="${esc(p.brand||"")}" placeholder="e.g. Nature's Dao"
+             data-meta-brand-input="${esc(p.page_id||"")}">
+           <button class="btn" type="button" data-meta-brand-save="${esc(p.page_id||"")}">Save Brand</button>
+         </div>
        </div>
        <div class="meta-page-actions">
+         <span class="meta-brand-badge">${esc(p.brand||"Unassigned")}</span>
          <button class="btn" type="button" data-meta-business-suite="${esc(p.page_id||"")}">Business Suite · 管理贴文</button>
          <button class="btn" type="button" data-meta-page-open="${esc(p.page_id||"")}">Facebook Page</button>
        </div>
      </div>
    `).join("");
+
+   document.querySelectorAll("[data-meta-brand-save]").forEach(btn=>{
+     btn.onclick=async()=>{
+       const pageId=String(btn.dataset.metaBrandSave||"");
+       const input=box.querySelector(`[data-meta-brand-input="${CSS.escape(pageId)}"]`);
+       const brand=String(input?.value||"").trim();
+       if(!brand)return alert("Please enter a Brand.");
+
+       const oldText=btn.textContent;
+       btn.disabled=true;
+       btn.textContent="Saving...";
+       try{
+         await invokeMetaOauth("set_brand",{page_id:pageId,brand});
+         const page=metaConnectedPages.find(x=>String(x.page_id)===pageId);
+         if(page)page.brand=brand;
+         renderMetaConnectedPages();
+         syncSocialBrandAndPageOptions();
+       }catch(err){
+         alert("Unable to save Brand:\n"+String(err?.message||err));
+       }finally{
+         btn.disabled=false;
+         btn.textContent=oldText;
+       }
+     };
+   });
 
    document.querySelectorAll("[data-meta-business-suite]").forEach(btn=>{
      btn.onclick=()=>{
@@ -28023,6 +28193,54 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    return data||{};
  }
 
+
+ function connectedBrands(){
+   return [...new Set(
+     metaConnectedPages.map(p=>String(p.brand||"").trim()).filter(Boolean)
+   )].sort((a,b)=>a.localeCompare(b));
+ }
+
+ function syncSocialBrandAndPageOptions(){
+   const brandSel=$("socialBrand");
+   const pageSel=$("socialFacebookPage");
+   if(!brandSel||!pageSel)return;
+
+   const previousBrand=brandSel.value;
+   const previousPage=pageSel.value;
+   const brands=connectedBrands();
+
+   brandSel.innerHTML=
+     '<option value="">Select Brand</option>'+
+     brands.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join("");
+
+   if(brands.includes(previousBrand))brandSel.value=previousBrand;
+
+   const brand=brandSel.value;
+   const pages=brand
+     ? metaConnectedPages.filter(p=>String(p.brand||"").trim()===brand)
+     : metaConnectedPages;
+
+   pageSel.innerHTML=
+     '<option value="">Select connected Facebook Page</option>'+
+     pages.map(p=>`<option value="${esc(p.page_id||"")}">${esc(p.page_name||"Facebook Page")} · ${esc(p.brand||"Unassigned")}</option>`).join("");
+
+   if(pages.some(p=>String(p.page_id)===String(previousPage)))pageSel.value=previousPage;
+
+   const hint=$("socialFacebookPageHint");
+   if(hint){
+     hint.textContent=metaConnectedPages.length
+       ? (brands.length
+           ? "Brand filters the connected Facebook Pages."
+           : "Connected Pages found. Assign a Brand in Accounts first.")
+       : "Connect Facebook first, then assign each Page to a Brand.";
+   }
+ }
+
+ function selectedConnectedPage(){
+   const pageId=String($("socialFacebookPage")?.value||"");
+   return metaConnectedPages.find(p=>String(p.page_id)===pageId)||null;
+ }
+
  async function refreshMetaConnectionStatus(){
    setMetaConnectionUi("loading","Checking Facebook connection...");
    try{
@@ -28034,6 +28252,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
        setMetaConnectionUi("not-connected","Facebook is not connected. Tap Connect Facebook to authorize Meta.");
      }
      renderMetaConnectedPages();
+     syncSocialBrandAndPageOptions();
    }catch(err){
      metaConnectedPages=[];
      renderMetaConnectedPages();
@@ -28211,8 +28430,11 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    const nav=$("sidebarSocial");if(nav){nav.style.display=window.isGlobalAdmin?"":"none";nav.onclick=showSocial}
    $("socialNewPostBtn").onclick=()=>openNew();
    $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
-   $("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>save("scheduled");
+   $("socialSaveDraftBtn").onclick=()=>save("draft");
+   $("socialScheduleBtn").onclick=()=>save("scheduled");
+   $("socialPublishNowBtn").onclick=publishNow;
    $("socialDeletePostBtn").onclick=del;
+   $("socialBrand").onchange=()=>syncSocialBrandAndPageOptions();
    $("socialAccountsBtn").onclick=async()=>{
      $("socialAccountsModal").classList.add("open");
      updateFacebookEntryFields();
