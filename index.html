@@ -8694,11 +8694,8 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     </div>
     <input id="socialPostId" type="hidden">
     <div class="studio-editor-notice">Publishing is not connected yet. Save Draft and Schedule save records only; they do not publish to Meta.</div>
-    <div class="social-form-grid">
-      <div class="field"><label>Brand / Account Group</label><input id="socialBrand" placeholder="Nature's Dao"></div>
-      <div class="field"><label>Title</label><input id="socialTitle" placeholder="Internal title"></div>
-      <div class="field social-span-2">
-        <label>Platforms</label>
+    <div class="social-form-grid social-compose-v4">
+      <div class="field social-span-2"><label>发布平台 / Platforms</label>
         <div class="social-platform-checks">
           <label><input type="checkbox" value="Facebook"> Facebook</label>
           <label><input type="checkbox" value="Instagram"> Instagram</label>
@@ -8707,37 +8704,42 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
           <label><input type="checkbox" value="微信视频号"> 微信视频号</label>
         </div>
       </div>
-
       <div class="field social-span-2" id="socialFacebookPageField" style="display:none">
-        <label>Facebook Page / 发布主页</label>
-        <div class="social-page-select-row">
-          <select id="socialFacebookPageSelect">
-            <option value="">Select Facebook Page</option>
-          </select>
-          <button class="btn" id="socialFacebookPagesRefreshBtn" type="button">Refresh Pages</button>
-        </div>
+        <label>发布到哪个 Facebook Page</label>
+        <div class="social-page-select-row"><select id="socialFacebookPageSelect"><option value="">Select Facebook Page</option></select>
+          <button class="btn" id="socialFacebookPagesRefreshBtn" type="button">Refresh Pages</button></div>
         <div class="helper" id="socialFacebookPageHelp"></div>
       </div>
-
-      <div class="field social-span-2"><label>Caption</label><textarea id="socialCaption" rows="6" placeholder="Post caption..."></textarea></div>
-      <div class="field"><label>Publish Date</label><input id="socialPublishDate" type="date"></div>
-      <div class="field"><label>Publish Time</label><input id="socialPublishTime" type="time"></div>
-      <div class="field studio-secondary-field"><label>Status</label>
-        <select id="socialPostStatus"><option value="draft">Draft</option><option value="scheduled">Scheduled</option></select>
-      </div>
-      <div class="field studio-secondary-field"><label>Timezone</label><input id="socialTimezone" value="Asia/Kuala_Lumpur" readonly></div>
-      <div class="field social-span-2">
-        <label>Poster Images / Video</label>
+      <div class="field social-span-2 studio-upload-first"><label>图片 / 视频 · Images / Video</label>
         <input id="socialMediaFiles" type="file" accept="image/*,video/*" multiple>
-        
         <div class="social-media-preview" id="socialMediaPreview"></div>
       </div>
+      <div class="field social-span-2"><label>贴文文案 · Caption</label><textarea id="socialCaption" rows="3" placeholder="输入要发布的贴文文案..."></textarea></div>
+      <div class="field social-span-2"><label>发布方式 · Publishing mode</label>
+        <div class="studio-mode-options" role="radiogroup" aria-label="Publishing mode">
+          <label><input type="radio" name="socialPublishMode" value="draft" checked> 保存草稿</label>
+          <label><input type="radio" name="socialPublishMode" value="scheduled"> 预约发布</label>
+          <label><input type="radio" name="socialPublishMode" value="now"> 立即发布</label>
+        </div>
+        <div class="helper" id="socialModeHelp">保存草稿不会发布到社交平台。</div>
+      </div>
+      <div class="field social-span-2 studio-schedule-fields" id="socialScheduleFields">
+        <div class="studio-date-row">
+          <div class="field"><label>发布日期</label><input id="socialPublishDate" type="date"></div>
+          <div class="field"><label>发布时间</label><input id="socialPublishTime" type="time"></div>
+        </div>
+        <div class="helper">Malaysia Time · Asia/Kuala_Lumpur</div>
+      </div>
+      <div class="field studio-advanced-field"><label>Brand / Account Group</label><input id="socialBrand" placeholder="Nature's Dao"></div>
+      <div class="field studio-advanced-field"><label>内部标题 · Title</label><input id="socialTitle" placeholder="Internal title"></div>
+      <div class="field studio-advanced-field" style="display:none"><label>Status</label><select id="socialPostStatus"><option value="draft">Draft</option><option value="scheduled">Scheduled</option></select></div>
+      <div class="field studio-advanced-field" style="display:none"><label>Timezone</label><input id="socialTimezone" value="Asia/Kuala_Lumpur" readonly></div>
     </div>
     <div class="social-modal-actions">
       <button class="btn bad" id="socialDeletePostBtn" type="button" style="display:none">Delete</button>
-      <span style="flex:1"></span>
       <button class="btn studio-save-draft" id="socialSaveDraftBtn" type="button">Save Draft</button>
-      <button class="btn primary studio-schedule" id="socialScheduleBtn" type="button">Save Schedule</button>
+      <button class="btn primary studio-schedule" id="socialScheduleBtn" type="button" style="display:none">Save Schedule</button>
+      <button class="btn studio-publish-disabled" id="socialPublishNowBtn" type="button" style="display:none" disabled title="Publishing backend is not connected">Publish Now · 未接通</button>
     </div>
     <div class="helper" id="socialPostMsg"></div>
   </div>
@@ -27921,6 +27923,31 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
 }
 </style>
 
+<style id="social-compose-mobile-v4">
+#socialPostModal .social-compose-v4{gap:14px!important;padding-top:16px!important}
+#socialPostModal .studio-mode-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+#socialPostModal .studio-mode-options label{display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 5px;border:1px solid #dce8e0;border-radius:12px;background:#f8fbf9;font-size:12px;font-weight:700;cursor:pointer;text-align:center}
+#socialPostModal .studio-mode-options input{width:15px;height:15px;accent-color:#276d56;flex:none}
+#socialPostModal .studio-schedule-fields{display:none;padding:13px;background:#f7faf8;border:1px solid #e2ece5;border-radius:12px}
+#socialPostModal .studio-date-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#socialPostModal .studio-advanced-field{display:none!important}
+#socialPostModal #socialCaption{min-height:94px!important;height:94px;max-height:220px;resize:vertical}
+#socialPostModal #socialMediaFiles{min-height:58px;padding:12px!important}
+#socialPostModal .studio-publish-disabled{background:#dce6df!important;color:#66796e!important;border:1px solid #dce6df!important;cursor:not-allowed;opacity:1}
+#socialPostModal .studio-editor-notice{font-size:11px;padding:8px 11px}
+@media(max-width:650px){
+ #socialPostModal .social-modal-card{height:100dvh;max-height:100dvh;min-height:0;overflow-y:auto;padding-bottom:0!important}
+ #socialPostModal .social-modal-head{padding:12px 16px!important}
+ #socialPostModal .studio-editor-heading strong{font-size:19px}
+ #socialPostModal .studio-editor-heading small{display:none}
+ #socialPostModal .studio-editor-notice{margin:9px 16px 0}
+ #socialPostModal .social-compose-v4{padding:12px 16px 8px!important;gap:13px!important}
+ #socialPostModal .studio-mode-options label{font-size:11px;padding:11px 3px}
+ #socialPostModal .studio-date-row{grid-template-columns:1fr 1fr}
+ #socialPostModal .social-modal-actions{padding:10px 16px calc(10px + env(safe-area-inset-bottom))!important}
+ #socialPostModal .social-modal-actions .btn{font-size:13px;min-height:44px}
+}
+</style>
 <script id="social-media-module-v1">
 (function(){
  const $=id=>document.getElementById(id);
@@ -28053,14 +28080,30 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    }).join(""):'<div class="helper">No posts in this period.</div>';
    document.querySelectorAll("[data-social-post]").forEach(b=>b.onclick=()=>openEdit(b.dataset.socialPost));
  }
- function resetForm(date=""){
+ function updatePublishMode(mode){
+   const chosen=mode||document.querySelector('input[name="socialPublishMode"]:checked')?.value||"draft";
+   const schedule=$('socialScheduleFields'), draft=$('socialSaveDraftBtn'), later=$('socialScheduleBtn'), now=$('socialPublishNowBtn'), help=$('socialModeHelp');
+   if(schedule)schedule.style.display=chosen==='scheduled'?'block':'none';
+   if(draft)draft.style.display=chosen==='draft'?'':'none';
+   if(later)later.style.display=chosen==='scheduled'?'':'none';
+   if(now)now.style.display=chosen==='now'?'':'none';
+   if(help)help.textContent=chosen==='now'?'尚未连接发布服务器。此按钮暂不可用，避免误以为已发布。':chosen==='scheduled'?'只保存预约记录，尚未连接服务器自动发布。':'保存草稿不会发布到社交平台。';
+   if($('socialPostStatus'))$('socialPostStatus').value=chosen==='scheduled'?'scheduled':'draft';
+ }
+ function setPublishMode(mode){
+   const radio=document.querySelector('input[name="socialPublishMode"][value="'+mode+'"]');
+   if(radio)radio.checked=true;
+   updatePublishMode(mode);
+ }
+ document.querySelectorAll('input[name="socialPublishMode"]').forEach(r=>r.addEventListener('change',()=>updatePublishMode()));
+  function resetForm(date=""){
    $("socialPostId").value="";$("socialPostModalTitle").textContent="New Post";
    $("socialBrand").value="Nature's Dao";$("socialTitle").value="";$("socialCaption").value="";
    $("socialPublishDate").value=date||ndLocalDateISO();
    $("socialPublishTime").value="20:00";$("socialPostStatus").value="draft";
    document.querySelectorAll(".social-platform-checks input").forEach(x=>x.checked=false);
    $("socialMediaFiles").value="";editingMedia=[];renderMediaPreview();
-   $("socialDeletePostBtn").style.display="none";setMsg("");
+   $("socialDeletePostBtn").style.display="none";setPublishMode("draft");setMsg("");
  }
  function openNew(date=""){resetForm(date);$("socialPostModal").classList.add("open")}
  function openEdit(id){
@@ -28072,7 +28115,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    document.querySelectorAll(".social-platform-checks input").forEach(c=>c.checked=(x.platforms||[]).includes(c.value));
    editingMedia=Array.isArray(x.media)?JSON.parse(JSON.stringify(x.media)):[];
    $("socialMediaFiles").value="";renderMediaPreview();
-   $("socialDeletePostBtn").style.display="";
+   $("socialDeletePostBtn").style.display="";setPublishMode(x.status==="scheduled"?"scheduled":"draft");
    if($("socialFacebookPageSelect"))$("socialFacebookPageSelect").value="";
    populateFacebookPageSelect("");
    populateFacebookPageSelect(x.facebook_page_id||"");
