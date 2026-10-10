@@ -9338,11 +9338,10 @@ async function saveSalaryPaymentMethod(empId,value){
 }
 
 function salaryPaymentMethodSelect(e){
-  const current=String(e?.payment_method||"Cash");
-  if(!salaryCanEditAmounts()) return `<span class="pay-method-pill">${current}</span>`;
-  return `<select class="salary-pay-method-edit" data-salary-pay-method="${e.id}">
-    ${["Cash","Bank Transfer","TNG"].map(v=>`<option value="${v}" ${v===current?"selected":""}>${v}</option>`).join("")}
-  </select>`;
+  const current=String(e?.payment_method||"").trim();
+  return current
+    ? `<span class="pay-method-pill">${current}</span>`
+    : `<span class="helper">—</span>`;
 }
 
 function applySevenManualOverrides(e,base,salaryMonth=monthDate()){
@@ -11136,7 +11135,7 @@ function renderSevenTable(emps){
       ? (typeof normalizedSevenSnapshot==="function" ? normalizedSevenSnapshot(e,snap) : snap)
       : calculate7th(e,m);
     const s=applySevenManualOverrides(e,baseSeven);
-    const pm=String(e.payment_method||"Cash");
+    const pm=String(e.payment_method||"").trim();
     const net=Number(s.net_pay||0);
 
     return `<tr data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
@@ -11185,7 +11184,7 @@ function renderSevenTable(emps){
       : calculate7th(e,m);
     const s=applySevenManualOverrides(e,baseSeven);
     const net=Number(s.net_pay||0);
-    const pm=String(e.payment_method||"Cash");
+    const pm=String(e.payment_method||"").trim();
     if(pm==="Cash") cashTotal+=net;
     else if(pm==="Bank Transfer") transferTotal+=net;
     else if(pm==="TNG") tngTotal+=net;
@@ -11264,7 +11263,7 @@ function renderFourteenTable(emps){
     const total=Number(c.total_commission||0);
     const canPayslip=Number(c.commission||0)>0;
     const net=Number(c.net_pay||0);
-    const pm=String(e.payment_method||"Cash");
+    const pm=String(e.payment_method||"").trim();
 
     if(pm==="Cash") cashTotal+=net;
     else if(pm==="Bank Transfer") transferTotal+=net;
@@ -11549,7 +11548,7 @@ async function downloadBranchIndividualPayslips(outlet,type,button){
       await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
       const file=await window.renderCurrentPayslipToA4PdfFile(job.name);
-      downloadPdfFile(file);
+      window.downloadPdfFile(file);
 
       // Small gap prevents iPhone/Safari from freezing on multiple downloads.
       await new Promise(r=>setTimeout(r,320));
@@ -11640,7 +11639,7 @@ async function sendAllBranchPayslipsSameNumber(){
     // Fallback: download every independent PDF if file-sharing is unsupported.
     if(btn) btn.textContent="Downloading...";
     files.forEach((file,i)=>{
-      setTimeout(()=>downloadPdfFile(file),i*320);
+      setTimeout(()=>window.downloadPdfFile(file),i*320);
     });
 
     alert("This browser cannot share multiple PDF files directly. The individual files have been downloaded.");
@@ -11732,7 +11731,7 @@ async function sendOneBranchPayslipWhatsApp(empId,type,button){
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
     const file=await window.renderCurrentPayslipToA4PdfFile(e.name||"Staff");
-    downloadPdfFile(file);
+    window.downloadPdfFile(file);
 
     // Open the exact staff chat. The PDF remains an independent downloaded file.
     setTimeout(()=>{
@@ -11947,7 +11946,7 @@ function recalc7thLive(empId){
   updateEditableMoneyCell(`[data-live-gross7="${empId}"]`,"gross_pay",calc.gross_pay);
   updateEditableMoneyCell(`[data-live-deduction7="${empId}"]`,"total_deduction",calc.total_deduction);
 
-  const pm=String(e.payment_method||"Cash");
+  const pm=String(e.payment_method||"").trim();
   const updateNet=(selector,active)=>{
     const cell=document.querySelector(selector);
     if(!cell) return;
@@ -13122,9 +13121,9 @@ async function openPayslip(empId,type){
     <div class="ref-section-title">&lt;----------CURRENT MONTH----------&gt;</div>
     <div class="ref-current-table">
       <div></div><div>E.P.F</div><div>SOCSO</div><div>E.I.S</div><div>Tax</div>
-      <div>EMPLOYEE :</div><div>${payslipAmount(s.employee_epf)}</div><div>${payslipAmount(employeeSocsoWithLindung(s))}</div><div>${payslipAmount(s.employee_eis)}</div><div>${payslipAmount(s.tax)}</div>
-      <div>EMPLOYER :</div><div>${payslipAmount(s.employer_epf)}</div><div>${payslipAmount(s.employer_socso)}</div><div>${payslipAmount(s.employer_eis)}</div><div></div>
-      <div>TOTAL :</div><div>${payslipAmount(Number(s.employee_epf||0)+Number(s.employer_epf||0))}</div><div>${payslipAmount(employeeSocsoWithLindung(s)+Number(s.employer_socso||0))}</div><div>${payslipAmount(Number(s.employee_eis||0)+Number(s.employer_eis||0))}</div><div>${payslipAmount(s.tax)}</div>
+      <div>EMPLOYEE :</div><div>${Number(s.employee_epf||0).toFixed(2)}</div><div>${Number(employeeSocsoWithLindung(s)||0).toFixed(2)}</div><div>${Number(s.employee_eis||0).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
+      <div>EMPLOYER :</div><div>${Number(s.employer_epf||0).toFixed(2)}</div><div>${Number(s.employer_socso||0).toFixed(2)}</div><div>${Number(s.employer_eis||0).toFixed(2)}</div><div>0.00</div>
+      <div>TOTAL :</div><div>${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div>${(Number(employeeSocsoWithLindung(s)||0)+Number(s.employer_socso||0)).toFixed(2)}</div><div>${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
     </div>
     <div class="ref-note">Note:</div>
   </div>
@@ -13135,28 +13134,28 @@ async function openPayslip(empId,type){
       <div></div><div>E.P.F</div><div>SOCSO</div><div>E.I.S</div><div>Tax</div><div>GROSS PAY</div><div>NET PAY</div>
 
       <div>EMPLOYEE :</div>
-      <div>${payslipAmount(ytdSum(empId,"employee_epf"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"employee_socso"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"employee_eis"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"tax"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"gross_pay"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"net_pay"))}</div>
+      <div>${Number(ytdSum(empId,"employee_epf")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"employee_socso")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"employee_eis")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"tax")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"gross_pay")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"net_pay")||0).toFixed(2)}</div>
 
       <div>EMPLOYER :</div>
-      <div>${payslipAmount(ytdSum(empId,"employer_epf"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"employer_socso"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"employer_eis"))}</div>
-      <div></div>
-      <div></div>
-      <div></div>
+      <div>${Number(ytdSum(empId,"employer_epf")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"employer_socso")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"employer_eis")||0).toFixed(2)}</div>
+      <div>0.00</div>
+      <div>0.00</div>
+      <div>0.00</div>
 
       <div>TOTAL :</div>
-      <div>${payslipAmount(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"tax"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"gross_pay"))}</div>
-      <div>${payslipAmount(ytdSum(empId,"net_pay"))}</div>
+      <div>${Number(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"tax")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"gross_pay")||0).toFixed(2)}</div>
+      <div>${Number(ytdSum(empId,"net_pay")||0).toFixed(2)}</div>
     </div>
   </div>
 
@@ -13945,17 +13944,23 @@ window.renderCurrentPayslipToA4PdfFile=async function(employeeName){
 };
 
 
-function downloadPdfFile(file){
+window.downloadPdfFile=function(file){
+  if(!file) throw new Error("PDF file was not created");
+
   const url=URL.createObjectURL(file);
   const a=document.createElement("a");
   a.href=url;
-  a.download=file.name;
+  a.download=file.name||"Payslip.pdf";
+  a.rel="noopener";
   a.style.display="none";
+
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),5000);
-}
+
+  // Keep the Blob URL alive longer for iPhone/Safari.
+  setTimeout(()=>URL.revokeObjectURL(url),15000);
+};
 
 function salaryExportJobs(mode){
   const selectedMonth=(byId("salaryMonth")?.value||"").trim();
@@ -14097,7 +14102,7 @@ async function exportSalaryPayslipCategory(mode){
       await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
       const file=await window.renderCurrentPayslipToA4PdfFile(job.name);
-      downloadPdfFile(file);
+      window.downloadPdfFile(file);
       completed.push(job);
 
       // Give iPhone/Safari a short gap between separate downloads.
@@ -14173,7 +14178,7 @@ async function downloadCurrentPayslipPdf(){
     }
 
     const file=await buildPayslipPdfFile();
-    downloadPdfFile(file);
+    window.downloadPdfFile(file);
   }catch(err){
     alert("Unable to download payslip PDF: "+(err?.message||err));
   }finally{
@@ -27619,6 +27624,15 @@ document.addEventListener("input",function(e){
   });
 })();
 </script>
+
+<script id="payslip-download-helper-selfcheck">
+document.addEventListener("DOMContentLoaded",function(){
+  if(typeof window.downloadPdfFile!=="function"){
+    console.error("Payslip download helper failed to load.");
+  }
+});
+</script>
+
 </body>
 </html>
 
