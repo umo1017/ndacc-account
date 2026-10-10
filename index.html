@@ -14582,160 +14582,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   // Delay slightly so Salary / Settlement / Orders permissions finish loading first.
  
 
- async function saveFixedBonusExclusions(){
-   if(!canEditStaffBonus()){
-     alert("No permission to edit Fixed Excluded Staff.");
-     return;
-   }
 
-   const state=$("bonusFixedExcludeSaveState");
-   const btn=$("bonusFixedExcludeSaveBtn");
-
-   if(btn){
-     if(btn.dataset.saving==="1") return;
-     btn.dataset.saving="1";
-     btn.disabled=true;
-     btn.textContent="Saving...";
-   }
-   if(state) state.textContent="Saving...";
-
-   try{
-     const branch=String(bonusBranch||"").trim();
-     if(!branch) throw new Error("Please select a branch.");
-
-     const wanted=[...bonusFixedExcludedDraft]
-       .map(Number)
-       .filter(id=>Number.isFinite(id) && id>0);
-
-     // Read current DB rows first.
-     const currentRes=await salaryDb
-       .from("branch_bonus_fixed_exclusions")
-       .select("id,branch,employee_id")
-       .eq("branch",branch);
-
-     if(currentRes.error) throw currentRes.error;
-
-     const currentRows=currentRes.data||[];
-     const currentIds=new Set(
-       currentRows.map(r=>Number(r.employee_id)).filter(Number.isFinite)
-     );
-     const wantedIds=new Set(wanted);
-
-     // IMPORTANT:
-     // Do NOT upsert every selected employee.
-     // Upsert can require UPDATE permission for rows that already exist.
-     // Fixed Excluded only needs INSERT for newly checked staff and DELETE
-     // for unchecked staff.
-     const addIds=wanted.filter(id=>!currentIds.has(id));
-
-     if(addIds.length){
-       // Use only the two essential columns so old DB schemas do not fail
-       // because employee_name / updated_by / updated_at are missing.
-       const insertRows=addIds.map(empId=>({
-         branch,
-         employee_id:empId
-       }));
-
-       const addRes=await salaryDb
-         .from("branch_bonus_fixed_exclusions")
-         .insert(insertRows);
-
-       if(addRes.error) throw addRes.error;
-     }
-
-     // Delete by primary row id instead of relying on UPDATE/upsert.
-     const removeRows=currentRows.filter(
-       r=>!wantedIds.has(Number(r.employee_id))
-     );
-
-     if(removeRows.length){
-       const rowIds=removeRows
-         .map(r=>Number(r.id))
-         .filter(id=>Number.isFinite(id));
-
-       if(rowIds.length){
-         const delRes=await salaryDb
-           .from("branch_bonus_fixed_exclusions")
-           .delete()
-           .in("id",rowIds);
-
-         if(delRes.error) throw delRes.error;
-       }
-     }
-
-     // Read back and verify exactly what the DB retained.
-     const verifyRes=await salaryDb
-       .from("branch_bonus_fixed_exclusions")
-       .select("id,branch,employee_id")
-       .eq("branch",branch);
-
-     if(verifyRes.error) throw verifyRes.error;
-
-     const savedIds=[...new Set(
-       (verifyRes.data||[])
-         .map(r=>Number(r.employee_id))
-         .filter(id=>Number.isFinite(id))
-     )].sort((a,b)=>a-b);
-
-     const expectedIds=[...wantedIds].sort((a,b)=>a-b);
-
-     const matches=
-       savedIds.length===expectedIds.length &&
-       savedIds.every((id,i)=>id===expectedIds[i]);
-
-     if(!matches){
-       throw new Error(
-         "Database verification failed. Selected: "+
-         expectedIds.join(", ")+" | Saved: "+savedIds.join(", ")
-       );
-     }
-
-     bonusFixedExclusionRows=verifyRes.data||[];
-     bonusFixedExcludedIds=new Set(savedIds);
-     bonusFixedExcludedDraft=new Set(savedIds);
-
-     if(state) state.textContent="Saved ✓";
-     if(btn) btn.textContent="Saved ✓";
-
-     renderBonus();
-
-     const panel=$("bonusFixedExcludePanel");
-     if(panel) panel.style.display="block";
-
-     const state2=$("bonusFixedExcludeSaveState");
-     if(state2) state2.textContent="Saved ✓";
-
-   }catch(err){
-     console.error("Fixed Excluded Staff save failed:",err);
-
-     const msg=String(err?.message||err||"Unknown error");
-     const code=String(err?.code||"");
-     const details=String(err?.details||"");
-     const hint=String(err?.hint||"");
-
-     if(state) state.textContent="Save failed";
-
-     alert(
-       "Fixed Excluded Staff save failed:\n\n"+
-       msg+
-       (code?`\nCode: ${code}`:"")+
-       (details?`\nDetails: ${details}`:"")+
-       (hint?`\nHint: ${hint}`:"")
-     );
-   }finally{
-     if(btn){
-       btn.dataset.saving="0";
-       btn.disabled=false;
-       if(btn.textContent==="Saving...") btn.textContent="Save Changes";
-     }
-   }
- }
- async function setFixedBonusExclusion(empId,excluded){
-   empId=Number(empId||0);
-   if(!empId) return;
-   if(excluded) bonusFixedExcludedDraft.add(empId);
-   else bonusFixedExcludedDraft.delete(empId);
- }
  async function addBonusDeduction(){
    if(!canEditStaffBonus()) return;
    const reason=String($("bonusDeductionReason")?.value||"").trim();
@@ -25021,6 +24868,146 @@ input,select,textarea,button,a{
  }
  function canOpenBonus(){return !!(window.canViewSalary || window.isGlobalAdmin || window.isPayrollManager);}
  function canEditStaffBonus(){return !!(window.isGlobalAdmin || window.isPayrollManager);}
+
+ async function saveFixedBonusExclusions(){
+   if(!canEditStaffBonus()){
+     alert("No permission to edit Fixed Excluded Staff.");
+     return;
+   }
+
+   const state=$("bonusFixedExcludeSaveState");
+   const btn=$("bonusFixedExcludeSaveBtn");
+
+   if(btn){
+     if(btn.dataset.saving==="1") return;
+     btn.dataset.saving="1";
+     btn.disabled=true;
+     btn.textContent="Saving...";
+   }
+   if(state) state.textContent="Saving...";
+
+   try{
+     const branch=String(bonusBranch||"").trim();
+     if(!branch) throw new Error("Please select a branch.");
+
+     const wanted=[...bonusFixedExcludedDraft]
+       .map(Number)
+       .filter(id=>Number.isFinite(id) && id>0);
+
+     const currentRes=await salaryDb
+       .from("branch_bonus_fixed_exclusions")
+       .select("id,branch,employee_id")
+       .eq("branch",branch);
+
+     if(currentRes.error) throw currentRes.error;
+
+     const currentRows=currentRes.data||[];
+     const currentIds=new Set(
+       currentRows
+         .map(r=>Number(r.employee_id))
+         .filter(id=>Number.isFinite(id))
+     );
+     const wantedIds=new Set(wanted);
+
+     // Add only newly selected staff.
+     const addIds=wanted.filter(id=>!currentIds.has(id));
+     if(addIds.length){
+       const insertRows=addIds.map(employee_id=>({
+         branch,
+         employee_id
+       }));
+
+       const addRes=await salaryDb
+         .from("branch_bonus_fixed_exclusions")
+         .insert(insertRows);
+
+       if(addRes.error) throw addRes.error;
+     }
+
+     // Remove only staff that were unchecked.
+     const removeRowIds=currentRows
+       .filter(r=>!wantedIds.has(Number(r.employee_id)))
+       .map(r=>Number(r.id))
+       .filter(id=>Number.isFinite(id));
+
+     if(removeRowIds.length){
+       const delRes=await salaryDb
+         .from("branch_bonus_fixed_exclusions")
+         .delete()
+         .in("id",removeRowIds);
+
+       if(delRes.error) throw delRes.error;
+     }
+
+     // Verify the database result.
+     const verifyRes=await salaryDb
+       .from("branch_bonus_fixed_exclusions")
+       .select("id,branch,employee_id")
+       .eq("branch",branch);
+
+     if(verifyRes.error) throw verifyRes.error;
+
+     const savedRows=verifyRes.data||[];
+     const savedIds=[...new Set(
+       savedRows
+         .map(r=>Number(r.employee_id))
+         .filter(id=>Number.isFinite(id))
+     )].sort((a,b)=>a-b);
+
+     const expectedIds=[...wantedIds].sort((a,b)=>a-b);
+
+     const same=
+       savedIds.length===expectedIds.length &&
+       savedIds.every((id,i)=>id===expectedIds[i]);
+
+     if(!same){
+       throw new Error(
+         "Database verification failed. Selected: "+
+         expectedIds.join(", ")+" | Saved: "+savedIds.join(", ")
+       );
+     }
+
+     // Update the SAME local state that renderBonus() reads.
+     bonusFixedExclusionRows=savedRows;
+     bonusFixedExcludedIds=new Set(savedIds);
+     bonusFixedExcludedDraft=new Set(savedIds);
+
+     if(state) state.textContent="Saved ✓";
+     if(btn) btn.textContent="Saved ✓";
+
+     renderBonus();
+
+     const panel=$("bonusFixedExcludePanel");
+     if(panel) panel.style.display="block";
+
+     const stateAfter=$("bonusFixedExcludeSaveState");
+     if(stateAfter) stateAfter.textContent="Saved ✓";
+
+   }catch(err){
+     console.error("Fixed Excluded Staff save failed:",err);
+
+     const msg=String(err?.message||err||"Unknown error");
+     const code=String(err?.code||"");
+     const details=String(err?.details||"");
+     const hint=String(err?.hint||"");
+
+     if(state) state.textContent="Save failed";
+
+     alert(
+       "Fixed Excluded Staff save failed:\n\n"+
+       msg+
+       (code?`\nCode: ${code}`:"")+
+       (details?`\nDetails: ${details}`:"")+
+       (hint?`\nHint: ${hint}`:"")
+     );
+   }finally{
+     if(btn){
+       btn.dataset.saving="0";
+       btn.disabled=false;
+       if(btn.textContent==="Saving...") btn.textContent="Save Changes";
+     }
+   }
+ }
 
  function showBonus(){
    if(!canOpenBonus()){if(typeof showDaily==="function")showDaily();return;}
