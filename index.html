@@ -3651,6 +3651,81 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="payslip-mobile-all-types-final-fix">
+@media screen and (max-width:700px){
+  #payslipModal{
+    align-items:flex-start!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    padding:8px!important;
+  }
+
+  #payslipModal .salary-dialog{
+    width:calc(100vw - 16px)!important;
+    max-width:calc(100vw - 16px)!important;
+    min-width:0!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    margin:8px auto 24px!important;
+    padding:10px 8px 16px!important;
+    overflow:visible!important;
+  }
+
+  /* Never force the preview root to the 7th-payslip 1123px width.
+     JS below sets the root to the scaled visual size of the actual sheet. */
+  #payslipModal #salaryPayslipPrint{
+    position:relative!important;
+    display:block!important;
+    width:auto!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    margin:0 auto!important;
+    padding:0!important;
+    overflow:visible!important;
+    background:transparent!important;
+    transform:none!important;
+  }
+
+  #payslipModal #salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"]{
+    margin:0!important;
+    transform-origin:top left!important;
+    zoom:1!important;
+  }
+}
+</style>
+
+
+<style id="cash-transfer-tng-auto-only">
+#salaryPage .auto-payby-cell{
+  font-weight:800!important;
+  white-space:nowrap!important;
+}
+#salaryPage .auto-payby-cell input{
+  display:none!important;
+}
+</style>
+
+
+<style id="fixed-excluded-save-verified-final">
+#bonusFixedExcludeSaveBtn{
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  min-height:52px!important;
+  width:100%!important;
+  position:relative!important;
+  z-index:200!important;
+  font-weight:800!important;
+}
+#bonusFixedExcludeSaveBtn:disabled{
+  opacity:.7!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -9076,9 +9151,10 @@ function kwspContributionFromBasicPay(basicPay, hasEpfNo){
 function taxOverrideKey(empId){ return `nd_tax_override_${monthKey()}_${empId}`; }
 function getTaxOverride(empId){
   const m=salaryMonthly.find(x=>Number(x.employee_id)===Number(empId));
+  // Only an explicit current-month manual override stored in payroll data
+  // may stop AUTO PCB. Legacy browser localStorage must not freeze the value.
   if(m && m.tax_is_manual) return Number(m.tax_manual ?? m.tax_final ?? m.tax ?? 0);
-  const v=localStorage.getItem(taxOverrideKey(empId));
-  return v===null?null:Number(v);
+  return null;
 }
 function setTaxOverride(empId,value){
   const n=Math.max(0,Number(value||0));
@@ -9096,7 +9172,7 @@ function taxCellHtml(e,s,snap){
   if(!String(e.tax_no||"").trim()) return "";
   const ov=getTaxOverride(e.id), manual=ov!==null;
   const pencil=(!snap||isPayrollManager)?` <button type="button" data-tax-pencil="${e.id}" title="Edit Tax" aria-label="Edit Tax" style="border:0;background:transparent;cursor:pointer;font-size:13px;padding:2px 3px;pointer-events:auto">✏️</button>`:"";
-  return `<span style="white-space:nowrap">${money(s.tax)}${pencil}${manual?`<span title="Manual Tax" style="font-size:10px;color:#777">Manual</span>`:""}</span>`;
+  return `<span style="white-space:nowrap">${money(s.tax)}${pencil}<span title="${manual?"Manual PCB":"AUTO LHDN 2026 PCB"}" style="font-size:10px;color:#777;margin-left:3px">${manual?"Manual":"AUTO 2026"}</span></span>`;
 }
 
 function payrollDaysInSelectedMonth(){
@@ -9356,7 +9432,7 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate()){
   const simpleFields=[
     "guaranteed_pay","allowance","employee_epf","employer_epf",
     "employer_socso","employee_eis","employer_eis","off_day_deduction",
-    "tax","ot","manual_deduction","gross_pay","total_deduction","net_pay"
+    "tax","ot","manual_deduction","gross_pay","total_deduction"
   ];
   simpleFields.forEach(field=>{
     if(salaryOverrideHas(empId,t,field,salaryMonth)){
@@ -9400,10 +9476,9 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate()){
   }
 
   if(
-    (grossComponentChanged || deductionComponentChanged ||
-     salaryOverrideHas(empId,t,"gross_pay",salaryMonth) ||
-     salaryOverrideHas(empId,t,"total_deduction",salaryMonth)) &&
-    !salaryOverrideHas(empId,t,"net_pay",salaryMonth)
+    grossComponentChanged || deductionComponentChanged ||
+    salaryOverrideHas(empId,t,"gross_pay",salaryMonth) ||
+    salaryOverrideHas(empId,t,"total_deduction",salaryMonth)
   ){
     s.net_pay=+(Number(s.gross_pay||0)-Number(s.total_deduction||0)).toFixed(2);
   }
@@ -9490,45 +9565,29 @@ function employeeSocsoWithLindung(s={}){
 }
 
 function calculate7th(e,m={}){
-  const guaranteed=Number(e.guaranteed_pay||0);
-  const allowance=Number(e.allowance||0);
+  // Use current-month edited Basic / Allowance when present.
+  // This makes PCB, EPF, SOCSO/EIS and OT recalculate from the latest values.
+  let guaranteed=Number(e.guaranteed_pay||0);
+  let allowance=Number(e.allowance||0);
+  try{
+    if(typeof salaryOverrideValue==="function" && e?.id){
+      guaranteed=salaryOverrideValue(e.id,"7","guaranteed_pay",guaranteed);
+      allowance=salaryOverrideValue(e.id,"7","allowance",allowance);
+    }
+  }catch(_){}
+
+  guaranteed=Math.max(0,Number(guaranteed||0));
+  allowance=Math.max(0,Number(allowance||0));
+
   const otHourQty=Math.max(0,Number(m.ot_hour_qty||0));
   const otDayQty=Math.max(0,Number(m.ot_day_qty||0));
   const otTotalHours=calculateOtTotalHours(m);
-  const otRate=otHourlyRate(e);
-  const ot=calculateOtAmount(e,m);
-  const otHours=ot;       // legacy stored field keeps total OT amount
-  const otDays=calculateOtDayAmount(e,m);
+  const otRate=otHourlyRateFromPay(guaranteed,allowance);
+  const ot=+(otTotalHours*otRate).toFixed(2);
+  const otHours=ot;
+  const otDays=+(otDayQty*8*otRate).toFixed(2);
 
-  const gross=+(guaranteed+allowance+ot).toFixed(2);
-  const hasKwsp=!!String(e.epf_no||"").trim();
-  const hasSocso=!!String(e.socso_no||"").trim();
-  const statutoryRaw=statutory(gross);
-  const st=hasSocso ? statutoryRaw : {
-    employee_socso:0,
-    employer_socso:0,
-    employee_lindung24:0,
-    employee_eis:0,
-    employer_eis:0
-  };
-  // Payroll.my / KWSP contribution basis:
-  // salary + contributable allowance are EPF wages; overtime is excluded.
-  const epfWage=Math.max(0,guaranteed+allowance);
-  const kwsp=kwspContributionFromBasicPay(epfWage, hasKwsp);
-  const employee_epf=kwsp.employee;
-  const employer_epf=kwsp.employer;
-
-  const hasTaxCode=!!String(e.tax_no||"").trim();
-  const manualTax=getTaxOverride(e.id);
-  let tax=0;
-  if(hasTaxCode){
-    if(manualTax!==null) tax=Number(manualTax)||0;
-    else{
-      try{ tax=Number(calculateAutoPcb(e,gross,employee_epf))||0; }
-      catch(err){ console.error("Employee PCB failed",e?.id,err); tax=0; }
-    }
-  }
-
+  // Unpaid / excess off-day adjustment must be resolved BEFORE PCB.
   const allowedOffDays=Math.max(0,Number(e.monthly_off_days||0));
   const offDaysTaken=Math.max(0,Number(m.off_days_taken||0));
   const excessOffDays=Math.max(0,offDaysTaken-allowedOffDays);
@@ -9538,12 +9597,57 @@ function calculate7th(e,m={}){
   const scheduledWorkingDays=Math.max(1,daysInMonth-allowedOffDays);
   const dailyRate=guaranteed/scheduledWorkingDays;
   const allowanceDailyRate=allowance/scheduledWorkingDays;
+
   const basicOffDayDeduction=+(dailyRate*excessOffDays).toFixed(2);
   const allowanceOffDayDeduction=+(allowanceDailyRate*excessOffDays).toFixed(2);
   const offDayDeduction=+(basicOffDayDeduction+allowanceOffDayDeduction).toFixed(2);
-  const adjustedGuaranteed=+(guaranteed-basicOffDayDeduction).toFixed(2);
-  const adjustedAllowance=+(allowance-allowanceOffDayDeduction).toFixed(2);
-  const adjustedGross=+(adjustedGuaranteed+adjustedAllowance+ot).toFixed(2);
+
+  const adjustedGuaranteed=Math.max(0,+(guaranteed-basicOffDayDeduction).toFixed(2));
+  const adjustedAllowance=Math.max(0,+(allowance-allowanceOffDayDeduction).toFixed(2));
+
+  // Payslip Gross remains contractual Basic + Allowance + OT because Unpaid is
+  // shown as a deduction. For statutory PCB, Y1 is the remuneration actually paid.
+  const gross=+(guaranteed+allowance+ot).toFixed(2);
+  const pcbRemuneration=+(adjustedGuaranteed+adjustedAllowance+ot).toFixed(2);
+
+  const hasKwsp=!!String(e.epf_no||"").trim();
+  const hasSocso=!!String(e.socso_no||"").trim();
+
+  // Payroll.my / KWSP basis: salary + contributable allowance; OT excluded.
+  // Unpaid leave reduces the salary/allowance actually paid in the month.
+  const epfWage=Math.max(0,adjustedGuaranteed+adjustedAllowance);
+  const kwsp=kwspContributionFromBasicPay(epfWage,hasKwsp);
+  const employee_epf=kwsp.employee;
+  const employer_epf=kwsp.employer;
+
+  // SOCSO/EIS wages include overtime and use the actual remuneration paid.
+  const statutoryRaw=statutory(pcbRemuneration);
+  const st=hasSocso ? statutoryRaw : {
+    employee_socso:0,
+    employer_socso:0,
+    employee_lindung24:0,
+    employee_eis:0,
+    employer_eis:0
+  };
+
+  // PCB 2026 LHDN computerized calculation.
+  // AUTO is recalculated from current remuneration unless this month is
+  // explicitly marked as a manual PCB override.
+  const hasTaxCode=!!String(e.tax_no||"").trim();
+  const manualTax=getTaxOverride(e.id);
+  let tax=0;
+  if(hasTaxCode){
+    if(manualTax!==null){
+      tax=Number(manualTax)||0;
+    }else{
+      try{
+        tax=Number(calculateAutoPcb(e,pcbRemuneration,employee_epf))||0;
+      }catch(err){
+        console.error("Employee PCB failed",e?.id,err);
+        tax=0;
+      }
+    }
+  }
 
   const manualDeduction=Math.max(0,Number(m.manual_deduction||0));
 
@@ -9567,8 +9671,6 @@ function calculate7th(e,m={}){
     ot_days:otDays,
     ot_hourly_rate:+otRate.toFixed(4),
     ot,
-    epf_wage:epfWage,
-    socso_eis_wage:gross,
     employee_epf,
     employer_epf,
     ...st,
@@ -11169,9 +11271,9 @@ function renderSevenTable(emps){
       <td data-live-gross7="${e.id}">${snap?money(s.gross_pay):salaryOverrideInput(e.id,"7","gross_pay",s.gross_pay)}</td>
       <td data-live-deduction7="${e.id}">${snap?money(s.total_deduction):salaryOverrideInput(e.id,"7","total_deduction",s.total_deduction)}</td>
 
-      <td class="netpay-method-cell" data-live-netpay7-cash="${e.id}">${pm==="Cash"?(snap?money(net):salaryOverrideInput(e.id,"7","net_pay",net)):"—"}</td>
-      <td class="netpay-method-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?(snap?money(net):salaryOverrideInput(e.id,"7","net_pay",net)):"—"}</td>
-      <td class="netpay-method-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?(snap?money(net):salaryOverrideInput(e.id,"7","net_pay",net)):"—"}</td>
+      <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
+      <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
+      <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
 
       <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
@@ -11958,13 +12060,7 @@ function recalc7thLive(empId){
   const updateNet=(selector,active)=>{
     const cell=document.querySelector(selector);
     if(!cell) return;
-    if(!active){ cell.textContent="—"; return; }
-    const input=cell.querySelector(`[data-override-field="net_pay"]`);
-    if(input){
-      if(!salaryOverrideHas(empId,"7","net_pay")) input.value=Number(calc.net_pay||0).toFixed(2);
-    }else{
-      cell.textContent=money(calc.net_pay);
-    }
+    cell.textContent=active ? money(calc.net_pay) : "—";
   };
 
   updateNet(`[data-live-netpay7-cash="${empId}"]`,pm==="Cash");
@@ -12439,8 +12535,22 @@ function taxYtdBeforeCurrentMonth(e){
     String(x.salary_month||"").startsWith(prefix) &&
     String(x.salary_month||"")<monthDate()
   );
+  const priorAdditional=(salaryCommissionSnapshots||[]).filter(x=>
+    Number(x.employee_id)===Number(e.id) &&
+    String(x.salary_month||"").startsWith(prefix) &&
+    String(x.salary_month||"")<monthDate()
+  );
+
+  // LHDN Σ(Y-K) includes remuneration already paid in earlier months,
+  // including additional remuneration such as commission/bonus.
+  const priorAdditionalGross=priorAdditional.reduce((a,x)=>
+    a+Number(x.commission ?? x.net_pay ?? x.total_income ?? 0),0
+  );
+
   return {
-    gross:opening.gross+rows.reduce((a,x)=>a+Number(x.gross_pay||0),0),
+    gross:opening.gross+
+      rows.reduce((a,x)=>a+Number(x.gross_pay||0),0)+
+      priorAdditionalGross,
     epf:opening.epf+rows.reduce((a,x)=>a+Number(x.employee_epf||0),0),
     pcb:opening.pcb+rows.reduce((a,x)=>a+Number(x.tax||0),0)
   };
@@ -12508,13 +12618,19 @@ function calculateAutoPcb(e,currentGross,currentEmployeeEpf){
       Math.max(0,Number(e?.tax_children_u18)||0)*Math.max(0,Number(rule.childU18Relief)||2000) +
       Math.max(0,Number(e?.tax_children_study)||0)*Math.max(0,Number(rule.childStudyRelief)||8000);
 
-    // P = prior net remuneration + current net remuneration
-    //   + estimated future net remuneration - statutory deductions/reliefs.
+    // LHDN 2026 computerized formula also deducts accumulated/current
+    // allowable deductions (ΣLP + LP1). These fields are optional and
+    // safely remain zero when they are not used in Staff.
+    const accumulatedLP=Math.max(0,Number(e?.tax_previous_ytd_relief||0));
+    const currentLP=Math.max(0,Number(e?.tax_allowable_deduction||0));
+
+    // P = Σ(Y-K) + (Y1-K1) + [(Y2-K2)n]
+    //     - [D+S+Du+Su+QC+ΣLP+LP1]
     const P=Math.max(0,
       (previousGross-K) +
       (gross-K1) +
       ((gross-K2)*n) -
-      (D+S+DU+SU+QC)
+      (D+S+DU+SU+QC+accumulatedLP+currentLP)
     );
 
     const band=payrollMyPcbBand(P,category2);
@@ -14453,85 +14569,135 @@ document.addEventListener("DOMContentLoaded",()=>{
        .map(Number)
        .filter(id=>Number.isFinite(id) && id>0);
 
-     const {error:deleteErr}=await salaryDb
+     // Read current DB rows first.
+     const currentRes=await salaryDb
        .from("branch_bonus_fixed_exclusions")
-       .delete()
+       .select("id,branch,employee_id")
        .eq("branch",branch);
-     if(deleteErr) throw deleteErr;
 
-     if(wanted.length){
-       const rows=wanted.map(empId=>{
-         const emp=bonusEmployees.find(e=>Number(e.id)===empId);
-         return {
-           branch,
-           employee_id:empId,
-           employee_name:emp?.name||"",
-           updated_by:currentBonusEmail(),
-           updated_at:new Date().toISOString()
-         };
-       });
+     if(currentRes.error) throw currentRes.error;
 
-       const {error:insertErr}=await salaryDb
+     const currentRows=currentRes.data||[];
+     const currentIds=new Set(
+       currentRows.map(r=>Number(r.employee_id)).filter(Number.isFinite)
+     );
+     const wantedIds=new Set(wanted);
+
+     // IMPORTANT:
+     // Do NOT upsert every selected employee.
+     // Upsert can require UPDATE permission for rows that already exist.
+     // Fixed Excluded only needs INSERT for newly checked staff and DELETE
+     // for unchecked staff.
+     const addIds=wanted.filter(id=>!currentIds.has(id));
+
+     if(addIds.length){
+       // Use only the two essential columns so old DB schemas do not fail
+       // because employee_name / updated_by / updated_at are missing.
+       const insertRows=addIds.map(empId=>({
+         branch,
+         employee_id:empId
+       }));
+
+       const addRes=await salaryDb
          .from("branch_bonus_fixed_exclusions")
-         .insert(rows);
-       if(insertErr) throw insertErr;
+         .insert(insertRows);
+
+       if(addRes.error) throw addRes.error;
      }
 
-     bonusFixedExcludedIds=new Set(wanted);
-     bonusFixedExcludedDraft=new Set(wanted);
+     // Delete by primary row id instead of relying on UPDATE/upsert.
+     const removeRows=currentRows.filter(
+       r=>!wantedIds.has(Number(r.employee_id))
+     );
 
-     await loadBonus();
+     if(removeRows.length){
+       const rowIds=removeRows
+         .map(r=>Number(r.id))
+         .filter(id=>Number.isFinite(id));
+
+       if(rowIds.length){
+         const delRes=await salaryDb
+           .from("branch_bonus_fixed_exclusions")
+           .delete()
+           .in("id",rowIds);
+
+         if(delRes.error) throw delRes.error;
+       }
+     }
+
+     // Read back and verify exactly what the DB retained.
+     const verifyRes=await salaryDb
+       .from("branch_bonus_fixed_exclusions")
+       .select("id,branch,employee_id")
+       .eq("branch",branch);
+
+     if(verifyRes.error) throw verifyRes.error;
+
+     const savedIds=[...new Set(
+       (verifyRes.data||[])
+         .map(r=>Number(r.employee_id))
+         .filter(id=>Number.isFinite(id))
+     )].sort((a,b)=>a-b);
+
+     const expectedIds=[...wantedIds].sort((a,b)=>a-b);
+
+     const matches=
+       savedIds.length===expectedIds.length &&
+       savedIds.every((id,i)=>id===expectedIds[i]);
+
+     if(!matches){
+       throw new Error(
+         "Database verification failed. Selected: "+
+         expectedIds.join(", ")+" | Saved: "+savedIds.join(", ")
+       );
+     }
+
+     bonusFixedExclusionRows=verifyRes.data||[];
+     bonusFixedExcludedIds=new Set(savedIds);
+     bonusFixedExcludedDraft=new Set(savedIds);
+
+     if(state) state.textContent="Saved ✓";
+     if(btn) btn.textContent="Saved ✓";
+
+     renderBonus();
 
      const panel=$("bonusFixedExcludePanel");
      if(panel) panel.style.display="block";
 
-     renderBonus();
-
-     const panel2=$("bonusFixedExcludePanel");
-     if(panel2) panel2.style.display="block";
      const state2=$("bonusFixedExcludeSaveState");
      if(state2) state2.textContent="Saved ✓";
+
    }catch(err){
+     console.error("Fixed Excluded Staff save failed:",err);
+
+     const msg=String(err?.message||err||"Unknown error");
+     const code=String(err?.code||"");
+     const details=String(err?.details||"");
+     const hint=String(err?.hint||"");
+
      if(state) state.textContent="Save failed";
-     alert("Fixed Excluded Staff save failed: "+(err?.message||err));
+
+     alert(
+       "Fixed Excluded Staff save failed:\n\n"+
+       msg+
+       (code?`\nCode: ${code}`:"")+
+       (details?`\nDetails: ${details}`:"")+
+       (hint?`\nHint: ${hint}`:"")
+     );
    }finally{
      if(btn){
        btn.dataset.saving="0";
        btn.disabled=false;
-       btn.textContent="Save";
+       if(btn.textContent==="Saving...") btn.textContent="Save Changes";
      }
    }
  }
-
  async function setFixedBonusExclusion(empId,excluded){
-   if(!canEditStaffBonus()) return;
    empId=Number(empId||0);
-   const emp=bonusEmployees.find(e=>Number(e.id)===empId);
-   if(!emp) return;
-
-   const state=$("bonusSyncState");
-   if(excluded){
-     const payload={
-       branch:bonusBranch,
-       employee_id:empId,
-       employee_name:emp.name||"",
-       updated_by:currentBonusEmail(),
-       updated_at:new Date().toISOString()
-     };
-     const {error}=await salaryDb.from("branch_bonus_fixed_exclusions")
-       .upsert(payload,{onConflict:"branch,employee_id"});
-     if(error){alert("Fixed exclusion save failed: "+error.message);return;}
-   }else{
-     const {error}=await salaryDb.from("branch_bonus_fixed_exclusions")
-       .delete()
-       .eq("branch",bonusBranch)
-       .eq("employee_id",empId);
-     if(error){alert("Fixed exclusion remove failed: "+error.message);return;}
-   }
-   if(state)state.textContent="Fixed excluded staff saved ✓";
-   await loadBonus();
+   if(!empId) return;
+   if(excluded) bonusFixedExcludedDraft.add(empId);
+   else bonusFixedExcludedDraft.delete(empId);
  }
-
  async function addBonusDeduction(){
    if(!canEditStaffBonus()) return;
    const reason=String($("bonusDeductionReason")?.value||"").trim();
@@ -15313,7 +15479,121 @@ async function loadSettlementPaymentMethods(){
 
 
 function settlementNormalizeOutletName(v){
-  return String(v||"").trim().replace(/\s+/g," ").toLowerCase();
+  return String(v||"")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g,"and")
+    .replace(/[^a-z0-9]+/g," ")
+    .replace(/\b(branch|outlet|centre|center)\b/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+
+function settlementPayrollMonthDays(ym){
+  const m=/^(\d{4})-(\d{2})$/.exec(String(ym||""));
+  if(!m) return 30;
+  return new Date(Number(m[1]),Number(m[2]),0).getDate();
+}
+
+function settlementCalculate7thBudget(e,m={},ym,snapshot=null){
+  if(snapshot){
+    try{
+      const normalized=normalizedSevenSnapshot(e,snapshot);
+      if(normalized && Number.isFinite(Number(normalized.net_pay))) return normalized;
+    }catch(err){
+      console.warn("Report snapshot normalize failed",e?.id,err);
+    }
+  }
+
+  const guaranteed=Math.max(0,Number(e?.guaranteed_pay||0));
+  const allowance=Math.max(0,Number(e?.allowance||0));
+  const otHourQty=Math.max(0,Number(m?.ot_hour_qty||0));
+  const otDayQty=Math.max(0,Number(m?.ot_day_qty||0));
+  const totalOtHours=otHourQty+(otDayQty*8);
+
+  const daysInMonth=Math.max(1,settlementPayrollMonthDays(ym));
+  const otRate=(guaranteed+allowance)/daysInMonth/8;
+  const ot=+(totalOtHours*otRate).toFixed(2);
+
+  const allowedOffDays=Math.max(0,Number(e?.monthly_off_days||0));
+  const offDaysTaken=Math.max(0,Number(m?.off_days_taken||0));
+  const excessOffDays=Math.max(0,offDaysTaken-allowedOffDays);
+  const scheduledWorkingDays=Math.max(1,daysInMonth-allowedOffDays);
+
+  const basicUnpaid=(guaranteed/scheduledWorkingDays)*excessOffDays;
+  const allowanceUnpaid=(allowance/scheduledWorkingDays)*excessOffDays;
+  const unpaid=+(basicUnpaid+allowanceUnpaid).toFixed(2);
+
+  const adjustedBasic=Math.max(0,guaranteed-basicUnpaid);
+  const adjustedAllowance=Math.max(0,allowance-allowanceUnpaid);
+  const gross=+(guaranteed+allowance+ot).toFixed(2);
+  const statutoryWage=+(adjustedBasic+adjustedAllowance+ot).toFixed(2);
+
+  let employee_epf=0, employer_epf=0;
+  if(String(e?.epf_no||"").trim()){
+    try{
+      const k=kwspContributionFromBasicPay(adjustedBasic+adjustedAllowance,true);
+      employee_epf=Number(k?.employee||0);
+      employer_epf=Number(k?.employer||0);
+    }catch(err){
+      console.warn("Report EPF budget failed",e?.id,err);
+    }
+  }
+
+  let st={
+    employee_socso:0,
+    employer_socso:0,
+    employee_lindung24:0,
+    employee_eis:0,
+    employer_eis:0
+  };
+  if(String(e?.socso_no||"").trim()){
+    try{
+      st={...st,...statutory(statutoryWage)};
+    }catch(err){
+      console.warn("Report SOCSO/EIS budget failed",e?.id,err);
+    }
+  }
+
+  let tax=Math.max(0,Number(m?.tax_final ?? m?.tax_manual ?? m?.tax ?? 0));
+  const manualDeduction=Math.max(0,Number(m?.manual_deduction||0));
+
+  const totalDeduction=+(
+    employee_epf+
+    Number(st.employee_socso||0)+
+    Number(st.employee_lindung24||0)+
+    Number(st.employee_eis||0)+
+    tax+
+    unpaid+
+    manualDeduction
+  ).toFixed(2);
+
+  return {
+    guaranteed_pay:guaranteed,
+    allowance,
+    ot,
+    employee_epf,
+    employer_epf,
+    ...st,
+    tax,
+    off_day_deduction:unpaid,
+    manual_deduction:manualDeduction,
+    gross_pay:gross,
+    total_deduction:totalDeduction,
+    net_pay:+Math.max(0,gross-totalDeduction).toFixed(2)
+  };
+}
+
+function settlementEmployeeWorkedInMonth(e,ym,payroll){
+  if(activeInMonth(e,ym)) return true;
+
+  const id=String(e?.id||"");
+  return !!(
+    payroll?.s7Map?.get(id) ||
+    payroll?.s14Map?.get(id) ||
+    payroll?.monthlyMap?.get(id)
+  );
 }
 
 async function settlementLatestPayrollRows(outlet,monthDate){
@@ -15477,7 +15757,7 @@ async function loadSettlementMonth(){
     // payroll has been confirmed, while never pulling data from a future month.
     const payroll=await settlementLatestPayrollRows(settlementCurrentOutlet,monthDate);
 
-    const branchEmployees=(payroll.employees||[]).filter(e=>activeInMonth(e,ym));
+    const branchEmployees=(payroll.employees||[]).filter(e=>settlementEmployeeWorkedInMonth(e,ym,payroll));
     const confirmed7Map=payroll.s7Map;
     const commissionSnapMap=payroll.s14Map;
     const monthlyMap=payroll.monthlyMap;
@@ -15502,9 +15782,15 @@ async function loadSettlementMonth(){
 
       try{
         const snap=confirmed7Map.get(id);
-        calc=snap ? normalizedSevenSnapshot(e,snap) : calculate7th(e,monthlyMap.get(id)||{});
+        calc=settlementCalculate7thBudget(
+          e,
+          monthlyMap.get(id)||{},
+          ym,
+          snap||null
+        );
       }catch(err){
         console.warn("Settlement statutory calculation failed",e?.id,err);
+        calc=null;
       }
 
       if(calc){
@@ -15518,13 +15804,11 @@ async function loadSettlementMonth(){
         lindung24+=Number(calc.employee_lindung24||0);
         taxPcb+=Number(calc.tax||0);
       }else{
-        const guaranteed=Number(e.guaranteed_pay||0);
-        const allowance=Number(e.allowance||0);
+        const guaranteed=Math.max(0,Number(e.guaranteed_pay||0));
+        const allowance=Math.max(0,Number(e.allowance||0));
         const monthlyRow=monthlyMap.get(id)||{};
-        const ot=Number(monthlyRow.ot||0);
-        const deduction=Number(monthlyRow.manual_deduction||0);
-
-        // Minimum salary budget when statutory calculation is unavailable.
+        const ot=Math.max(0,Number(monthlyRow.ot||0));
+        const deduction=Math.max(0,Number(monthlyRow.manual_deduction||0));
         salary7+=Math.max(0,guaranteed+allowance+ot-deduction);
       }
     });
@@ -15569,9 +15853,9 @@ async function loadSettlementMonth(){
       let sevenCalc=null;
 
       try{
-        sevenCalc=confirmed7Row
-          ? normalizedSevenSnapshot(e,confirmed7Row)
-          : (String(e.employment_type||"full_time")==="part_time" ? null : calculate7th(e,monthlyRow));
+        sevenCalc=String(e.employment_type||"full_time")==="part_time"
+          ? null
+          : settlementCalculate7thBudget(e,monthlyRow,ym,confirmed7Row||null);
       }catch(_){
         sevenCalc=null;
       }
@@ -15654,7 +15938,7 @@ async function loadSettlementMonth(){
   settlementRenderPaymentMeta();
   settlementRecalculate();
 
-  if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · AUTO LIVE ${settlementAutoPayrollSourceMonth}`;
+  if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · AUTO LIVE · ${branchEmployees.length} Staff · Source ${settlementAutoPayrollSourceMonth}`;
   if(carryState){
     carryState.textContent=`AUTO Budget · Salary + Statutory + Carry Forward · ${String(monthDate||"").slice(0,7)}`;
   }
@@ -15824,7 +16108,7 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
 
   // Only employees active during the selected report month contribute.
   // Their values come from the latest payroll record at or before this month.
-  const employees=(payroll.employees||[]).filter(e=>activeInMonth(e,ym));
+  const employees=(payroll.employees||[]).filter(e=>settlementEmployeeWorkedInMonth(e,ym,payroll));
   const s7Map=payroll.s7Map;
   const s14Map=payroll.s14Map;
   const monthlyMap=payroll.monthlyMap;
@@ -15838,7 +16122,7 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     const id=String(e.id);
     try{
       const snap=s7Map.get(id);
-      const calc=snap ? normalizedSevenSnapshot(e,snap) : calculate7th(e,monthlyMap.get(id)||{});
+      const calc=settlementCalculate7thBudget(e,monthlyMap.get(id)||{},ym,snap||null);
       salary7+=Number(calc.net_pay||0);
       epfEmployee+=Number(calc.employee_epf||0);
       epfEmployer+=Number(calc.employer_epf||0);
@@ -15870,8 +16154,11 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     const sevenSnap=s7Map.get(id);
     let sevenCalc=null;
     if(String(e.employment_type||"full_time")!=="part_time"){
-      try{ sevenCalc=sevenSnap ? normalizedSevenSnapshot(e,sevenSnap) : calculate7th(e,monthlyRow); }
-      catch(err){ console.warn("Report 7th basis failed:",outlet,e?.id,err); }
+      try{
+        sevenCalc=settlementCalculate7thBudget(e,monthlyRow,ym,sevenSnap||null);
+      }catch(err){
+        console.warn("Report 7th basis failed:",outlet,e?.id,err);
+      }
     }
 
     let threeBonus=0;
@@ -25007,12 +25294,13 @@ $("bonusFixedExcludeList")?.addEventListener("change",e=>{
      else bonusFixedExcludedDraft.delete(id);
 
      const state=$("bonusFixedExcludeSaveState");
-     if(state) state.textContent="Unsaved changes";
+     if(state) state.textContent="Unsaved changes — press Save Changes";
 
      const saveBtn=$("bonusFixedExcludeSaveBtn");
      if(saveBtn){
        saveBtn.disabled=false;
-       saveBtn.textContent="Save";
+       saveBtn.dataset.saving="0";
+       saveBtn.textContent="Save Changes";
      }
    });
    $("bonusDeductionAddBtn")?.addEventListener("click",addBonusDeduction);
@@ -27702,6 +27990,102 @@ document.addEventListener("DOMContentLoaded",function(){
     console.error("Payslip download helper failed to load.");
   }
 });
+</script>
+
+
+<script id="payslip-mobile-all-types-fit-final">
+(function(){
+  function fitCurrentPayslipMobile(){
+    const modal=document.getElementById("payslipModal");
+    const root=document.getElementById("salaryPayslipPrint");
+    const sheet=root?.querySelector(".payslip-sheet");
+    if(!modal || !root || !sheet) return;
+
+    if(window.innerWidth>700){
+      sheet.style.removeProperty("transform");
+      sheet.style.removeProperty("transform-origin");
+      root.style.removeProperty("width");
+      root.style.removeProperty("min-width");
+      root.style.removeProperty("max-width");
+      root.style.removeProperty("height");
+      root.style.removeProperty("min-height");
+      root.style.removeProperty("max-height");
+      return;
+    }
+
+    // Measure the real natural size of whichever payslip is open (7th or 14th).
+    sheet.style.setProperty("transform","none","important");
+    sheet.style.setProperty("transform-origin","top left","important");
+    sheet.style.setProperty("margin","0","important");
+    sheet.style.setProperty("zoom","1","important");
+
+    const naturalWidth=Math.max(
+      1,
+      sheet.scrollWidth||0,
+      sheet.offsetWidth||0,
+      sheet.getBoundingClientRect().width||0
+    );
+    const naturalHeight=Math.max(
+      1,
+      sheet.scrollHeight||0,
+      sheet.offsetHeight||0,
+      sheet.getBoundingClientRect().height||0
+    );
+
+    const dialog=modal.querySelector(".salary-dialog");
+    const available=Math.max(
+      260,
+      Math.min(window.innerWidth-32,(dialog?.clientWidth||window.innerWidth)-16)
+    );
+    const scale=Math.min(1,available/naturalWidth);
+
+    sheet.style.setProperty("transform",`scale(${scale})`,"important");
+    sheet.style.setProperty("transform-origin","top left","important");
+
+    // Root matches the scaled visual dimensions, so the sheet is centered correctly
+    // and there is no huge blank area on the left/bottom.
+    const visualWidth=Math.ceil(naturalWidth*scale);
+    const visualHeight=Math.ceil(naturalHeight*scale);
+
+    root.style.setProperty("width",visualWidth+"px","important");
+    root.style.setProperty("min-width",visualWidth+"px","important");
+    root.style.setProperty("max-width",visualWidth+"px","important");
+    root.style.setProperty("height",visualHeight+"px","important");
+    root.style.setProperty("min-height",visualHeight+"px","important");
+    root.style.setProperty("max-height",visualHeight+"px","important");
+    root.style.setProperty("margin-left","auto","important");
+    root.style.setProperty("margin-right","auto","important");
+    root.style.setProperty("overflow","visible","important");
+  }
+
+  function queueFit(){
+    requestAnimationFrame(()=>{
+      fitCurrentPayslipMobile();
+      setTimeout(fitCurrentPayslipMobile,50);
+      setTimeout(fitCurrentPayslipMobile,180);
+      setTimeout(fitCurrentPayslipMobile,400);
+    });
+  }
+
+  // Replace the older generic fitting helper with the corrected all-types version.
+  window.fitPayslipToMobileWidth=fitCurrentPayslipMobile;
+
+  document.addEventListener("click",function(e){
+    if(e.target?.closest?.("[data-payslip7],[data-payslip14]")){
+      queueFit();
+    }
+  },true);
+
+  window.addEventListener("resize",queueFit,{passive:true});
+  window.addEventListener("orientationchange",queueFit,{passive:true});
+
+  document.addEventListener("DOMContentLoaded",function(){
+    const root=document.getElementById("salaryPayslipPrint");
+    if(root){
+      new MutationObserver(queueFit).observe(root,{childList:true,subtree:true});
+    }
+  });
+})();
 </script>
 
 </body>
