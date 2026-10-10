@@ -3726,6 +3726,19 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="salary-expense-payment-controls-final">
+#settlementExpenseForm [data-expense-payment-key="salary7"] [data-payment-details],
+#settlementExpenseForm [data-expense-payment-key="salary14"] [data-payment-details],
+#settlementExpenseForm [data-expense-payment-key="salary_epf"] [data-payment-details],
+#settlementExpenseForm [data-expense-payment-key="salary_socso_eis"] [data-payment-details],
+#settlementExpenseForm [data-expense-payment-key="salary_taxpcb"] [data-payment-details]{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -13800,11 +13813,26 @@ function setupSalaryCloudSync(){
 document.addEventListener("click",e=>{
   const btn=e.target.closest?.("[data-payment-details]");
   if(!btn) return;
-  const key=btn.dataset.paymentDetails;
+
+  const key=String(btn.dataset.paymentDetails||"");
+
+  if(settlementIsPayrollSalaryKey(key)){
+    document.getElementById("sidebarSalary")?.click();
+    setTimeout(()=>{
+      if(typeof setSalaryViewMode==="function"){
+        setSalaryViewMode(
+          key==="salary14"||key==="branch_salary_14th" ? "14th" : "7th"
+        );
+      }
+    },180);
+    return;
+  }
+
   if(settlementIsRentKey(key)){
     openSettlementTransferDetails(key);
     return;
   }
+
   const website=settlementGetWebsite(key);
   if(website){
     window.open(website,"_blank","noopener,noreferrer");
@@ -14884,8 +14912,27 @@ function settlementNumber(field){
 
 function settlementIsSalaryPaymentKey(key){
   return [
+    "salary7",
+    "salary14",
     "branch_salary_7th",
     "branch_salary_14th",
+    "salary_epf",
+    "salary_socso_eis",
+    "salary_taxpcb"
+  ].includes(String(key||""));
+}
+
+function settlementIsPayrollSalaryKey(key){
+  return [
+    "salary7",
+    "salary14",
+    "branch_salary_7th",
+    "branch_salary_14th"
+  ].includes(String(key||""));
+}
+
+function settlementIsStatutoryPaymentKey(key){
+  return [
     "salary_epf",
     "salary_socso_eis",
     "salary_taxpcb"
@@ -15096,18 +15143,30 @@ function settlementRenderPaymentMeta(){
     const meta=settlementPaymentMeta?.[key]||{};
     const detailsBtn=row.querySelector("[data-payment-details]");
     if(detailsBtn){
-      const isSalary=settlementIsSalaryPaymentKey(key);
-      detailsBtn.style.display=isSalary?"none":"";
-      if(!isSalary && settlementIsRentKey(key)){
-        const fixed=settlementGetFixedTransfer(key);
-        detailsBtn.textContent=(fixed.name&&fixed.bank&&fixed.account)
-          ? `${fixed.name} · ${fixed.bank} · ${fixed.account}`
-          : "Transfer Details";
-        detailsBtn.title=`${settlementCurrentOutlet||""} Rent`;
-      }else if(!isSalary){
+      const isPayroll=settlementIsPayrollSalaryKey(key);
+      const isStatutory=settlementIsStatutoryPaymentKey(key);
+
+      detailsBtn.style.display="";
+
+      if(isPayroll){
+        detailsBtn.textContent="View";
+        detailsBtn.title=(key==="salary14"||key==="branch_salary_14th")
+          ? "View Salary 14th"
+          : "View Salary 7th";
+      }else if(isStatutory){
+        detailsBtn.textContent="View";
         const website=settlementGetWebsite(key);
-        detailsBtn.textContent=website?"Open Website":"Add Website";
-        detailsBtn.title=website||"Add Website Address";
+        detailsBtn.title=website||"View / Add Website";
+      }else if(settlementIsRentKey(key)){
+        detailsBtn.textContent="View";
+        const fixed=settlementGetFixedTransfer(key);
+        detailsBtn.title=(fixed.name&&fixed.bank&&fixed.account)
+          ? `${fixed.name} · ${fixed.bank} · ${fixed.account}`
+          : `${settlementCurrentOutlet||""} Rent Transfer Details`;
+      }else{
+        detailsBtn.textContent="View";
+        const website=settlementGetWebsite(key);
+        detailsBtn.title=website||"View / Add Payment Details";
       }
     }
     if(!settlementIsSalaryPaymentKey(key)){
