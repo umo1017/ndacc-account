@@ -3498,6 +3498,91 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="salary-desktop-left-gap-final">
+/* Desktop / laptop: do not reserve a permanent 190px sidebar lane.
+   The menu is floating, so Salary should use the full browser width. */
+@media (min-width:901px){
+  #salaryPage,
+  #salaryPage.active,
+  #salaryPage.sidebar-offset{
+    display:block!important;
+    position:relative!important;
+    width:100vw!important;
+    max-width:100vw!important;
+    min-width:0!important;
+    margin-left:0!important;
+    margin-right:0!important;
+    padding:20px 18px 32px!important;
+    overflow-x:hidden!important;
+    box-sizing:border-box!important;
+  }
+
+  #salaryPage .salary-shell,
+  #salaryPage #salaryContent,
+  #salaryPage .salary-top,
+  #salaryPage .salary-card{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    margin-left:0!important;
+    margin-right:0!important;
+    box-sizing:border-box!important;
+  }
+
+  /* Wide payroll data scrolls inside the card, not by shifting the whole page right. */
+  #salaryPage .salary-table-wrap,
+  #salaryPage .table-wrap,
+  #salaryPage [class*="table-wrap"],
+  #salaryPage [class*="tableWrap"]{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    overflow-x:auto!important;
+    overflow-y:visible!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+
+  #salaryPage .salary-table,
+  #salaryPage .salary-table-wrap table,
+  #salaryPage table{
+    width:max-content!important;
+    min-width:1650px!important;
+    max-width:none!important;
+    table-layout:auto!important;
+  }
+
+  /* Keep a small visual clearance for the floating menu only at the very top. */
+  #salaryPage .salary-title{
+    margin-left:0!important;
+    padding-left:0!important;
+  }
+}
+</style>
+
+
+<style id="payslip-pdf-capture-context-final">
+.nd-pdf-capture-root{
+  width:1123px!important;
+  min-width:1123px!important;
+  max-width:1123px!important;
+  height:794px!important;
+  min-height:794px!important;
+  max-height:794px!important;
+  transform:none!important;
+  zoom:1!important;
+  overflow:hidden!important;
+  background:#fff!important;
+}
+.nd-pdf-capture-root .payslip-sheet{
+  transform:none!important;
+  zoom:1!important;
+  margin:0!important;
+  box-shadow:none!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -8965,21 +9050,66 @@ function otDaysInput(empId,value,locked=false){
   return `<div class="offday-box"><input type="number" min="0" step="0.5" value="${n}" data-month-edit="${empId}" data-field="ot_days"></div>`;
 }
 
+function payslipOtLabel(s){
+  const dayQty=Math.max(0,Number(s?.ot_day_qty||0));
+  const hourQty=Math.max(0,Number(s?.ot_hour_qty||0));
+  if(dayQty>0 && hourQty>0) return "Overtime (Days + Hours)";
+  if(dayQty>0) return "Overtime (Days)";
+  return "Overtime (Hours)";
+}
+
 function payslipOvertimeDetailHtml(s){
   const amount=Math.max(0,Number(s?.ot||0));
+  const dayQty=Math.max(0,Number(s?.ot_day_qty||0));
+  const hourQty=Math.max(0,Number(s?.ot_hour_qty||0));
   const totalHrs=Math.max(0,Number(s?.ot_total_hours||0));
-  const rate=Math.max(0,Number(s?.ot_hourly_rate||0));
+  const hourRate=Math.max(0,Number(s?.ot_hourly_rate||0));
 
-  if(amount<=0 && totalHrs<=0) return "";
+  if(amount<=0 && dayQty<=0 && hourQty<=0 && totalHrs<=0) return "";
+
+  const rows=[];
+
+  if(dayQty>0){
+    const dayRate=hourRate*8;
+    const dayAmount=dayQty*dayRate;
+    rows.push(`<div class="payslip-ot-row">
+      <span>Overtime (Days)</span>
+      <span>Day</span>
+      <span>${dayRate.toFixed(4)}</span>
+      <span>${dayQty.toFixed(2)}</span>
+      <span>${dayAmount.toFixed(2)}</span>
+    </div>`);
+  }
+
+  if(hourQty>0){
+    const hourAmount=hourQty*hourRate;
+    rows.push(`<div class="payslip-ot-row">
+      <span>Overtime (Hours)</span>
+      <span>Hour</span>
+      <span>${hourRate.toFixed(4)}</span>
+      <span>${hourQty.toFixed(2)}</span>
+      <span>${hourAmount.toFixed(2)}</span>
+    </div>`);
+  }
+
+  // Legacy confirmed snapshots may only contain total hours / OT amount.
+  if(!rows.length && (totalHrs>0 || amount>0)){
+    const qty=totalHrs>0 ? totalHrs : (hourRate>0 ? amount/hourRate : 0);
+    rows.push(`<div class="payslip-ot-row">
+      <span>Overtime (Hours)</span>
+      <span>Hour</span>
+      <span>${hourRate.toFixed(4)}</span>
+      <span>${qty.toFixed(2)}</span>
+      <span>${amount.toFixed(2)}</span>
+    </div>`);
+  }
 
   return `<div class="payslip-ot-detail">
     <div class="payslip-ot-title">---OVERTIME---</div>
     <div class="payslip-ot-head">
       <span></span><span>Unit</span><span>Rate</span><span>Qty</span><span>Amt</span>
     </div>
-    <div class="payslip-ot-row">
-      <span>Overtime</span><span>Hour</span><span>${rate.toFixed(4)}</span><span>${totalHrs.toFixed(2)}</span><span>${amount.toFixed(2)}</span>
-    </div>
+    ${rows.join("")}
   </div>`;
 }
 
@@ -12473,7 +12603,7 @@ async function openPayslip(empId,type){
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>Overtime</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div>${Number(s.manual_deduction||0)>0?`<div class="payslip-line"><span>Deduction</span><span class="amt">${Number(s.manual_deduction||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>${payslipOtLabel(s)}</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div>${Number(s.manual_deduction||0)>0?`<div class="payslip-line"><span>Deduction</span><span class="amt">${Number(s.manual_deduction||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
 <div class="ref-pay-summary">
   <div class="ref-gross-area">
     <div class="ref-total-line"><span>GROSS PAY</span><span>${Number(s.gross_pay||0).toFixed(2)}</span></div>
@@ -13029,8 +13159,11 @@ function salaryMonthParts(){
 window.capturePayslipForPdf=async function(slip,scale=1.35,quality=0.90){
   if(!slip) throw new Error("Payslip not found");
 
-  // Render from an isolated clone at true A4-landscape pixel proportions.
-  // This avoids iPhone preview scale/zoom leaking into the PDF capture.
+  // IMPORTANT:
+  // Most payslip layout CSS is scoped under #salaryPayslipPrint.
+  // Capturing .payslip-sheet by itself loses those grid rules and causes the
+  // CURRENT MONTH / YEAR-TO-DATE section to collapse vertically in the PDF.
+  // Re-create the same DOM context off-screen before html2canvas renders it.
   const holder=document.createElement("div");
   holder.style.cssText=[
     "position:fixed",
@@ -13040,11 +13173,31 @@ window.capturePayslipForPdf=async function(slip,scale=1.35,quality=0.90){
     "height:794px",
     "overflow:hidden",
     "background:#fff",
-    "z-index:-99999"
+    "z-index:-99999",
+    "pointer-events:none"
   ].join(";");
+
+  const captureRoot=document.createElement("div");
+  captureRoot.id="salaryPayslipPrint";
+  captureRoot.className="nd-pdf-capture-root";
+  captureRoot.style.setProperty("display","block","important");
+  captureRoot.style.setProperty("position","relative","important");
+  captureRoot.style.setProperty("width","1123px","important");
+  captureRoot.style.setProperty("min-width","1123px","important");
+  captureRoot.style.setProperty("max-width","1123px","important");
+  captureRoot.style.setProperty("height","794px","important");
+  captureRoot.style.setProperty("min-height","794px","important");
+  captureRoot.style.setProperty("max-height","794px","important");
+  captureRoot.style.setProperty("margin","0","important");
+  captureRoot.style.setProperty("padding","0","important");
+  captureRoot.style.setProperty("transform","none","important");
+  captureRoot.style.setProperty("zoom","1","important");
+  captureRoot.style.setProperty("overflow","hidden","important");
+  captureRoot.style.setProperty("background","#fff","important");
 
   const clone=slip.cloneNode(true);
   clone.classList.add("nd-pdf-capture-clone");
+  clone.style.setProperty("display","block","important");
   clone.style.setProperty("width","1123px","important");
   clone.style.setProperty("min-width","1123px","important");
   clone.style.setProperty("max-width","1123px","important");
@@ -13058,13 +13211,14 @@ window.capturePayslipForPdf=async function(slip,scale=1.35,quality=0.90){
   clone.style.setProperty("overflow","hidden","important");
   clone.style.setProperty("box-shadow","none","important");
 
-  holder.appendChild(clone);
+  captureRoot.appendChild(clone);
+  holder.appendChild(captureRoot);
   document.body.appendChild(holder);
 
   try{
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
-    const canvas=await html2canvas(clone,{
+    const canvas=await html2canvas(captureRoot,{
       scale,
       backgroundColor:"#ffffff",
       useCORS:true,
