@@ -3778,6 +3778,84 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="branch-bonus-manager-save-final">
+#bonusManagerSaveBtn{
+  min-height:44px!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  white-space:nowrap!important;
+}
+</style>
+
+
+<style id="social-facebook-entry-links-v1">
+.social-facebook-entry-wrap{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+.social-facebook-entry-wrap select,
+.social-facebook-entry-wrap input{
+  width:100%;
+}
+.social-account-row{
+  grid-template-columns:minmax(90px,.8fr) minmax(90px,1fr) minmax(130px,1.3fr) minmax(100px,1fr) auto auto!important;
+}
+.social-account-entry{
+  font-size:12px;
+  font-weight:800;
+  opacity:.72;
+}
+@media(max-width:700px){
+  .social-account-row{
+    grid-template-columns:1fr!important;
+    gap:8px!important;
+  }
+  .social-account-row .btn{
+    width:100%!important;
+  }
+}
+</style>
+
+
+<style id="meta-facebook-real-connect-v1">
+.meta-connect-panel{
+  border:1px solid #e4e0d7;
+  border-radius:18px;
+  padding:16px;
+  margin-bottom:18px;
+  background:#fff;
+}
+.meta-connect-top{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  justify-content:space-between;
+}
+.meta-connect-title{font-weight:900;font-size:18px}
+.meta-status{
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:999px;padding:7px 11px;font-size:12px;font-weight:900;white-space:nowrap;
+}
+.meta-status.connected{background:#eaf7ee;color:#176f3a;border:1px solid #bfe0c9}
+.meta-status.not-connected{background:#f6f4ef;color:#6b6b6b;border:1px solid #ddd8cd}
+.meta-connect-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.meta-page-list{display:grid;gap:10px;margin-top:14px}
+.meta-page-row{
+  display:flex;gap:12px;justify-content:space-between;align-items:center;
+  padding:12px;border:1px solid #e7e2d9;border-radius:14px;
+}
+.meta-page-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.social-manual-divider{
+  display:grid;gap:3px;margin:10px 0 12px;padding-top:14px;border-top:1px solid #e7e2d9;
+}
+@media(max-width:700px){
+  .meta-connect-top,.meta-page-row{align-items:stretch;flex-direction:column}
+  .meta-connect-actions .btn,.meta-page-actions .btn{width:100%}
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -7939,6 +8017,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
    <div class="helper" style="margin-bottom:10px"></div>
    <div id="bonusManagerSetting" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:10px 0 14px"><div class="field"><label>Manager</label><select id="bonusManagerEmployee" style="min-width:180px"></select></div>
     <div class="field"><label>Manager %</label><input id="bonusManagerPct" type="number" min="0" step="0.01" value="0" style="width:100px"/></div>
+    <button class="btn primary" id="bonusManagerSaveBtn" type="button">Save Manager</button>
     <button class="btn" id="bonusFixedExcludeBtn" type="button">Fixed Excluded Staff</button>
     <div class="helper"></div>
    </div>
@@ -8668,11 +8747,48 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <button class="social-x" id="socialAccountsClose" type="button">×</button>
     </div>
     
+    <div class="meta-connect-panel">
+      <div class="meta-connect-top">
+        <div>
+          <div class="meta-connect-title">Facebook / Meta</div>
+          <div class="helper">真实授权连接，用于读取你可管理的 Facebook Pages。</div>
+        </div>
+        <span class="meta-status not-connected" id="metaConnectionStatus">Not Connected</span>
+      </div>
+
+      <div class="meta-connect-actions">
+        <button class="btn primary" id="metaConnectBtn" type="button">Connect Facebook</button>
+        <button class="btn" id="metaRefreshBtn" type="button">Refresh</button>
+        <button class="btn bad" id="metaDisconnectBtn" type="button" style="display:none">Disconnect</button>
+      </div>
+
+      <div class="helper" id="metaConnectionMessage"></div>
+      <div class="meta-page-list" id="metaConnectedPages"></div>
+    </div>
+
+    <div class="social-manual-divider">
+      <strong>Manual Shortcuts</strong>
+      <span class="helper">这些只是快捷入口，不代表 Facebook 已连接。</span>
+    </div>
+
     <div class="social-account-add">
       <select id="socialAccountPlatform"><option>Facebook</option><option>Instagram</option><option>TikTok</option><option>小红书</option><option>微信视频号</option></select>
       <input id="socialAccountBrand" placeholder="Brand">
       <input id="socialAccountName" placeholder="@account / Page name">
-      <button class="btn" id="socialAccountAddBtn" type="button">+ Add</button>
+
+      <div id="socialFacebookEntryWrap" class="social-facebook-entry-wrap">
+        <select id="socialFacebookEntryType" aria-label="Facebook entry">
+          <option value="Page">Facebook Page</option>
+          <option value="Business Suite">Business Suite · 管理贴文</option>
+          <option value="Ads Manager">Ads Manager</option>
+          <option value="Business Settings">Business Settings</option>
+          <option value="Messenger Inbox">Messenger Inbox</option>
+          <option value="Custom">Custom Link</option>
+        </select>
+        <input id="socialAccountUrl" type="url" inputmode="url" placeholder="Facebook link / URL">
+      </div>
+
+      <button class="btn" id="socialAccountAddBtn" type="button">+ Add Shortcut</button>
     </div>
     <div id="socialAccountList" class="social-account-list"></div>
   </div>
@@ -9831,6 +9947,13 @@ function updateSalaryNavVisibility(){
     !!isGlobalAdmin ||
     !!isPayrollManager ||
     Array.isArray(accessibleSalaryOutlets) && accessibleSalaryOutlets.length>0;
+
+  // Mirror Salary permission state for modules in separate script/IIFE scopes.
+  window.isGlobalAdmin=!!isGlobalAdmin;
+  window.isPayrollManager=!!isPayrollManager;
+  window.accessibleSalaryOutlets=Array.isArray(accessibleSalaryOutlets)
+    ? [...accessibleSalaryOutlets]
+    : [];
 
   const salaryNav=byId("sidebarSalary");
   if(salaryNav) salaryNav.style.display=canViewSalary?"":"none";
@@ -24899,8 +25022,33 @@ input,select,textarea,button,a{
    // Existing records with no employment-type field keep current behavior.
    return true;
  }
- function canOpenBonus(){return !!(window.canViewSalary || window.isGlobalAdmin || window.isPayrollManager);}
- function canEditStaffBonus(){return !!(window.isGlobalAdmin || window.isPayrollManager);}
+ function bonusIsGlobalAdmin(){
+   return !!(
+     window.isGlobalAdmin ||
+     (typeof isGlobalAdmin!=="undefined" && isGlobalAdmin) ||
+     isUmoBonus()
+   );
+ }
+ function bonusIsPayrollManager(){
+   return !!(
+     window.isPayrollManager ||
+     (typeof isPayrollManager!=="undefined" && isPayrollManager) ||
+     bonusIsGlobalAdmin()
+   );
+ }
+ function bonusAccessibleOutlets(){
+   if(Array.isArray(window.accessibleSalaryOutlets)) return window.accessibleSalaryOutlets;
+   if(typeof accessibleSalaryOutlets!=="undefined" && Array.isArray(accessibleSalaryOutlets)){
+     return accessibleSalaryOutlets;
+   }
+   return [];
+ }
+ function canOpenBonus(){
+   return !!(window.canViewSalary || bonusIsGlobalAdmin() || bonusIsPayrollManager());
+ }
+ function canEditStaffBonus(){
+   return !!(bonusIsGlobalAdmin() || bonusIsPayrollManager());
+ }
 
  function selectBonusBranch(nextBranch){
    nextBranch=String(nextBranch||"").trim();
@@ -25146,8 +25294,11 @@ input,select,textarea,button,a{
    (salaryOutletData||[]).forEach(x=>addBranch(x.name));
    (saveData||[]).forEach(x=>addBranch(x.branch));
 
-   if(!window.isGlobalAdmin && !window.isPayrollManager && Array.isArray(window.accessibleSalaryOutlets)){
-     branches=branches.filter(b=>window.accessibleSalaryOutlets.includes(b));
+   if(!bonusIsGlobalAdmin() && !bonusIsPayrollManager()){
+     const allowed=bonusAccessibleOutlets();
+     if(Array.isArray(allowed) && allowed.length){
+       branches=branches.filter(b=>allowed.includes(b));
+     }
    }
 
    if(!bonusBranch || !branches.includes(bonusBranch)){
@@ -25231,7 +25382,7 @@ input,select,textarea,button,a{
    if(mgrSel){
      const managerChoices=[...bonusEmployees];
      mgrSel.innerHTML='<option value="">Select Manager</option>'+managerChoices.map(e=>`<option value="${e.id}" ${Number(e.id)===managerId?"selected":""}>${e.name||"-"}</option>`).join("");
-     mgrSel.disabled=!isUmoBonus();
+     mgrSel.disabled=!canEditStaffBonus();
    }
    const rows=emps.map(e=>{
      const r=bonusSaved[Number(e.id)]||{};
@@ -25265,7 +25416,13 @@ input,select,textarea,button,a{
    $("bonusEligibleCount").textContent=String(count);
    if($("bonusManagerAmount"))$("bonusManagerAmount").textContent=moneyBonus(managerAmount);
    if($("bonusMonthlyPayable"))$("bonusMonthlyPayable").textContent=moneyBonus(monthlyBonusPayable);
-   if($("bonusManagerPct")){$("bonusManagerPct").value=managerPct;$("bonusManagerPct").disabled=!isUmoBonus();}
+   if($("bonusManagerPct")){
+     $("bonusManagerPct").value=managerPct;
+     $("bonusManagerPct").disabled=!canEditStaffBonus();
+   }
+   if($("bonusManagerSaveBtn")){
+     $("bonusManagerSaveBtn").style.display=canEditStaffBonus()?"":"none";
+   }
 
    if($("bonusDeductionTotal")) $("bonusDeductionTotal").textContent=moneyBonus(deductionTotal);
    if($("bonusDeductionBody")){
@@ -25323,10 +25480,133 @@ input,select,textarea,button,a{
    return {target,mc,fixedExcluded,eligible:target&&!mc&&!fixedExcluded};
  }
 
+ async function saveBonusManagerSetting({reload=true,quiet=false}={}){
+   const state=$("bonusSyncState");
+   const btn=$("bonusManagerSaveBtn");
+
+   if(!canEditStaffBonus()){
+     if(!quiet) alert("No permission to save Manager settings.");
+     return false;
+   }
+
+   const branch=String(bonusBranch||"").trim();
+   if(!branch){
+     if(!quiet) alert("Please select a branch.");
+     return false;
+   }
+
+   if(btn){
+     if(btn.dataset.saving==="1") return false;
+     btn.dataset.saving="1";
+     btn.disabled=true;
+     btn.textContent="Saving...";
+   }
+
+   try{
+     const pct=Math.max(0,Number($("bonusManagerPct")?.value||0));
+     const managerId=Number($("bonusManagerEmployee")?.value||0);
+     const manager=bonusEmployees.find(e=>Number(e.id)===managerId);
+
+     const payload={
+       branch,
+       manager_employee_id:managerId||null,
+       manager_name:manager?.name||"",
+       manager_percent:pct,
+       updated_by:currentBonusEmail(),
+       updated_at:new Date().toISOString()
+     };
+
+     const lookup=await salaryDb
+       .from("branch_bonus_fixed_settings")
+       .select("id,branch")
+       .eq("branch",branch)
+       .limit(1);
+
+     if(lookup.error) throw lookup.error;
+
+     const existing=lookup.data?.[0]||null;
+     let write;
+
+     if(existing?.id){
+       write=await salaryDb
+         .from("branch_bonus_fixed_settings")
+         .update(payload)
+         .eq("id",existing.id);
+     }else{
+       write=await salaryDb
+         .from("branch_bonus_fixed_settings")
+         .insert(payload);
+     }
+
+     if(write.error) throw write.error;
+
+     const verify=await salaryDb
+       .from("branch_bonus_fixed_settings")
+       .select("id,branch,manager_employee_id,manager_name,manager_percent")
+       .eq("branch",branch)
+       .limit(1);
+
+     if(verify.error) throw verify.error;
+
+     const saved=verify.data?.[0];
+     if(!saved) throw new Error("Manager setting was not found after save.");
+
+     const savedManagerId=Number(saved.manager_employee_id||0);
+     const savedPct=Number(saved.manager_percent||0);
+
+     if(savedManagerId!==managerId || Math.abs(savedPct-pct)>0.000001){
+       throw new Error(
+         `Database verification failed. Manager ${savedManagerId||"None"} / ${savedPct}% was saved instead.`
+       );
+     }
+
+     fixedManagerSetting={
+       ...saved,
+       manager_employee_id:savedManagerId||null,
+       manager_percent:savedPct
+     };
+     managerSetting={manager_percent:savedPct};
+
+     if(state) state.textContent="Manager saved ✓";
+     if(btn) btn.textContent="Saved ✓";
+
+     if(reload) await loadBonus();
+     return true;
+   }catch(err){
+     console.error("Manager setting save failed:",err);
+     const msg=String(err?.message||err||"Unknown error");
+     const code=String(err?.code||"");
+     const details=String(err?.details||"");
+     const hint=String(err?.hint||"");
+
+     if(state) state.textContent="Manager setting save failed";
+
+     if(!quiet){
+       alert(
+         "Manager setting save failed:\n\n"+
+         msg+
+         (code?`\nCode: ${code}`:"")+
+         (details?`\nDetails: ${details}`:"")+
+         (hint?`\nHint: ${hint}`:"")
+       );
+     }
+     return false;
+   }finally{
+     if(btn){
+       btn.dataset.saving="0";
+       btn.disabled=false;
+       if(btn.textContent==="Saving...") btn.textContent="Save Manager";
+     }
+   }
+ }
+
  async function saveBonus(){
    const state=$("bonusSyncState");
-   const editStaff=canEditStaffBonus(), umo=isUmoBonus();
-   if(!editStaff&&!umo)return;
+   const editStaff=canEditStaffBonus();
+   if(!editStaff)return;
+
+   const managerSaved=await saveBonusManagerSetting({reload:false,quiet:false});
+   if(!managerSaved)return;
 
    // Save employee eligibility/results.
    if(editStaff){
@@ -25370,18 +25650,6 @@ input,select,textarea,button,a{
      }
    }
 
-   // Only Umo may save manager percentage.
-   if(umo){
-     const pct=Math.max(0,Number($("bonusManagerPct")?.value||0));
-     const managerId=Number($("bonusManagerEmployee")?.value||0);
-     const manager=bonusEmployees.find(e=>Number(e.id)===managerId);
-     const payload={
-       branch:bonusBranch,manager_employee_id:managerId||null,manager_name:manager?.name||"",
-       manager_percent:pct,updated_by:UMO,updated_at:new Date().toISOString()
-     };
-     const {error}=await salaryDb.from("branch_bonus_fixed_settings").upsert(payload,{onConflict:"branch"});
-     if(error){if(state)state.textContent="Manager setting save failed: "+error.message;return;}
-   }
    if(state)state.textContent="Saved ✓";
    await loadBonus();
  }
@@ -25392,6 +25660,7 @@ input,select,textarea,button,a{
    $("closeBonusPage")?.addEventListener("click",()=>{if(typeof showDaily==="function")showDaily();});
    $("bonusRefreshBtn")?.addEventListener("click",loadBonus);
    $("bonusSaveBtn")?.addEventListener("click",saveBonus);
+   $("bonusManagerSaveBtn")?.addEventListener("click",()=>saveBonusManagerSetting({reload:true,quiet:false}));
    $("bonusFixedExcludeBtn")?.addEventListener("click",()=>{
      const panel=$("bonusFixedExcludePanel");
      if(!panel)return;
@@ -25477,12 +25746,12 @@ $("bonusFixedExcludeList")?.addEventListener("change",e=>{
      renderBonus();
    });
    $("bonusManagerEmployee")?.addEventListener("change",()=>{
-     if(!isUmoBonus())return;
+     if(!canEditStaffBonus())return;
      fixedManagerSetting={...(fixedManagerSetting||{}),manager_employee_id:Number($("bonusManagerEmployee").value||0)};
      renderBonus();
    });
    $("bonusManagerPct")?.addEventListener("input",()=>{
-     if(!isUmoBonus())return;
+     if(!canEditStaffBonus())return;
      fixedManagerSetting={...(fixedManagerSetting||{}),manager_percent:Number($("bonusManagerPct").value||0)};
      renderBonus();
    });
@@ -27685,6 +27954,187 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    const {error}=await db().from("social_media_posts").delete().eq("id",id);if(error)return setMsg(error.message,true);
    closeModals();await loadPosts();
  }
+ let metaConnectedPages=[];
+
+ function setMetaConnectionUi(status,message=""){
+   const badge=$("metaConnectionStatus");
+   const msg=$("metaConnectionMessage");
+   const connected=status==="connected";
+   const loading=status==="loading";
+
+   if(badge){
+     badge.className="meta-status "+(connected?"connected":"not-connected");
+     badge.textContent=loading?"Checking...":(connected?"Connected":"Not Connected");
+   }
+   if(msg)msg.textContent=message||"";
+   if($("metaConnectBtn"))$("metaConnectBtn").style.display=connected?"none":"";
+   if($("metaDisconnectBtn"))$("metaDisconnectBtn").style.display=connected?"":"none";
+ }
+
+ function renderMetaConnectedPages(){
+   const box=$("metaConnectedPages");
+   if(!box)return;
+
+   if(!metaConnectedPages.length){
+     box.innerHTML="";
+     return;
+   }
+
+   box.innerHTML=metaConnectedPages.map(p=>`
+     <div class="meta-page-row">
+       <div>
+         <strong>${esc(p.page_name||"Facebook Page")}</strong>
+         <div class="helper">Page ID: ${esc(p.page_id||"")}</div>
+       </div>
+       <div class="meta-page-actions">
+         <button class="btn" type="button" data-meta-business-suite="${esc(p.page_id||"")}">Business Suite · 管理贴文</button>
+         <button class="btn" type="button" data-meta-page-open="${esc(p.page_id||"")}">Facebook Page</button>
+       </div>
+     </div>
+   `).join("");
+
+   document.querySelectorAll("[data-meta-business-suite]").forEach(btn=>{
+     btn.onclick=()=>{
+       const pageId=encodeURIComponent(btn.dataset.metaBusinessSuite||"");
+       if(!pageId)return;
+       window.open(`https://business.facebook.com/latest/home?asset_id=${pageId}`,"_blank","noopener,noreferrer");
+     };
+   });
+
+   document.querySelectorAll("[data-meta-page-open]").forEach(btn=>{
+     btn.onclick=()=>{
+       const pageId=encodeURIComponent(btn.dataset.metaPageOpen||"");
+       if(!pageId)return;
+       window.open(`https://www.facebook.com/${pageId}`,"_blank","noopener,noreferrer");
+     };
+   });
+ }
+
+ async function invokeMetaOauth(action,extra={}){
+   const client=db();
+   if(!client?.functions?.invoke)throw new Error("Supabase Functions is not available.");
+
+   const {data,error}=await client.functions.invoke("meta-facebook-oauth",{
+     body:{action,...extra}
+   });
+
+   if(error)throw new Error(String(error?.message||error||"Meta request failed"));
+   if(data?.error)throw new Error(String(data.error));
+   return data||{};
+ }
+
+ async function refreshMetaConnectionStatus(){
+   setMetaConnectionUi("loading","Checking Facebook connection...");
+   try{
+     const data=await invokeMetaOauth("status");
+     metaConnectedPages=Array.isArray(data.pages)?data.pages:[];
+     if(metaConnectedPages.length){
+       setMetaConnectionUi("connected",`${metaConnectedPages.length} Facebook Page${metaConnectedPages.length===1?"":"s"} connected.`);
+     }else{
+       setMetaConnectionUi("not-connected","Facebook is not connected. Tap Connect Facebook to authorize Meta.");
+     }
+     renderMetaConnectedPages();
+   }catch(err){
+     metaConnectedPages=[];
+     renderMetaConnectedPages();
+     setMetaConnectionUi("not-connected","OAuth backend is not ready yet. Deploy the Meta OAuth Edge Function first.");
+     console.warn("Meta connection status failed:",err);
+   }
+ }
+
+ async function connectFacebookMeta(){
+   const btn=$("metaConnectBtn");
+   if(btn){btn.disabled=true;btn.textContent="Connecting...";}
+   try{
+     const data=await invokeMetaOauth("start",{return_to:location.origin+location.pathname});
+     if(!data.auth_url)throw new Error("Meta authorization URL was not returned.");
+     location.href=data.auth_url;
+   }catch(err){
+     alert(
+       "Facebook connection is not ready yet.\n\n"+
+       String(err?.message||err)+
+       "\n\nDeploy the Meta OAuth Edge Function and configure META_APP_ID / META_APP_SECRET."
+     );
+   }finally{
+     if(btn){btn.disabled=false;btn.textContent="Connect Facebook";}
+   }
+ }
+
+ async function disconnectFacebookMeta(){
+   if(!confirm("Disconnect Facebook / Meta from this system?"))return;
+   const btn=$("metaDisconnectBtn");
+   if(btn){btn.disabled=true;btn.textContent="Disconnecting...";}
+   try{
+     await invokeMetaOauth("disconnect");
+     metaConnectedPages=[];
+     renderMetaConnectedPages();
+     setMetaConnectionUi("not-connected","Facebook disconnected.");
+   }catch(err){
+     alert("Unable to disconnect Facebook:\n"+String(err?.message||err));
+   }finally{
+     if(btn){btn.disabled=false;btn.textContent="Disconnect";}
+   }
+ }
+
+ function handleMetaOauthReturn(){
+   const u=new URL(location.href);
+   const connected=u.searchParams.get("meta_connected");
+   const error=u.searchParams.get("meta_error");
+   if(!connected&&!error)return;
+
+   u.searchParams.delete("meta_connected");
+   u.searchParams.delete("meta_error");
+   history.replaceState({},document.title,u.pathname+u.search+u.hash);
+
+   if(error){
+     alert("Facebook connection failed:\n"+decodeURIComponent(error));
+     return;
+   }
+
+   setTimeout(()=>{
+     $("socialAccountsModal")?.classList.add("open");
+     refreshMetaConnectionStatus();
+   },250);
+ }
+
+ const FACEBOOK_ENTRY_PRESETS={
+   "Page":"https://www.facebook.com/",
+   "Business Suite":"https://business.facebook.com/latest/home",
+   "Ads Manager":"https://adsmanager.facebook.com/adsmanager/",
+   "Business Settings":"https://business.facebook.com/settings",
+   "Messenger Inbox":"https://business.facebook.com/latest/inbox"
+ };
+
+ function socialNormalizeUrl(v){
+   v=String(v||"").trim();
+   if(!v)return "";
+   if(!/^https?:\/\//i.test(v))v="https://"+v;
+   try{return new URL(v).href}catch(_){return ""}
+ }
+
+ function updateFacebookEntryFields(){
+   const isFacebook=$("socialAccountPlatform")?.value==="Facebook";
+   const wrap=$("socialFacebookEntryWrap");
+   if(wrap)wrap.style.display=isFacebook?"grid":"none";
+ }
+
+ function applyFacebookEntryPreset(force=false){
+   if($("socialAccountPlatform")?.value!=="Facebook")return;
+   const type=$("socialFacebookEntryType")?.value||"Page";
+   const input=$("socialAccountUrl");
+   if(!input)return;
+   const preset=FACEBOOK_ENTRY_PRESETS[type]||"";
+   if(force || !input.value.trim() || Object.values(FACEBOOK_ENTRY_PRESETS).includes(input.value.trim())){
+     input.value=preset;
+   }
+ }
+
+ function socialOpenAccountUrl(raw){
+   const url=socialNormalizeUrl(raw);
+   if(!url)return alert("No link saved for this account.");
+   window.open(url,"_blank","noopener,noreferrer");
+ }
+
  async function loadAccounts(){
    try{
      const {data,error}=await db().from("social_media_accounts").select("*").order("platform").order("brand");
@@ -27692,10 +28142,23 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    }catch(e){$("socialAccountList").innerHTML=`<div class="bad">${esc(e.message||e)}</div>`}
  }
  function renderAccounts(){
-   $("socialAccountList").innerHTML=accounts.length?accounts.map(a=>`<div class="social-account-row">
-     <strong>${esc(a.platform)}</strong><span>${esc(a.brand||"")}</span><span>${esc(a.account_name||"")}</span>
-     <button class="btn bad" type="button" data-social-account-delete="${a.id}">Delete</button>
-   </div>`).join(""):'<div class="helper">No accounts added.</div>';
+   $("socialAccountList").innerHTML=accounts.length?accounts.map(a=>{
+     const entry=a.entry_type||"";
+     const url=a.account_url||"";
+     return `<div class="social-account-row">
+       <strong>${esc(a.platform)}</strong>
+       <span>${esc(a.brand||"")}</span>
+       <span>${esc(a.account_name||"")}</span>
+       <span class="social-account-entry">${esc(entry)}</span>
+       ${url?`<button class="btn" type="button" data-social-account-open="${esc(url)}">Open</button>`:""}
+       <button class="btn bad" type="button" data-social-account-delete="${a.id}">Delete</button>
+     </div>`;
+   }).join(""):'<div class="helper">No accounts added.</div>';
+
+   document.querySelectorAll("[data-social-account-open]").forEach(b=>{
+     b.onclick=()=>socialOpenAccountUrl(b.dataset.socialAccountOpen);
+   });
+
    document.querySelectorAll("[data-social-account-delete]").forEach(b=>b.onclick=async()=>{
      if(!confirm("Delete this account record?"))return;
      const {error}=await db().from("social_media_accounts").delete().eq("id",b.dataset.socialAccountDelete);
@@ -27703,10 +28166,32 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    });
  }
  async function addAccount(){
-   const row={platform:$("socialAccountPlatform").value,brand:$("socialAccountBrand").value.trim(),account_name:$("socialAccountName").value.trim(),created_by:String(window.currentUserEmail||"").toLowerCase()};
+   const platform=$("socialAccountPlatform").value;
+   const isFacebook=platform==="Facebook";
+   const accountUrl=isFacebook?socialNormalizeUrl($("socialAccountUrl")?.value||""):"";
+
+   const row={
+     platform,
+     brand:$("socialAccountBrand").value.trim(),
+     account_name:$("socialAccountName").value.trim(),
+     entry_type:isFacebook?($("socialFacebookEntryType")?.value||"Page"):"",
+     account_url:accountUrl,
+     created_by:String(window.currentUserEmail||"").toLowerCase()
+   };
+
    if(!row.account_name)return alert("Enter account / page name.");
-   const {error}=await db().from("social_media_accounts").insert(row);if(error)return alert(error.message);
-   $("socialAccountBrand").value="";$("socialAccountName").value="";await loadAccounts();
+   if(isFacebook && !accountUrl)return alert("Enter a valid Facebook link / URL.");
+
+   const {error}=await db().from("social_media_accounts").insert(row);
+   if(error)return alert(error.message);
+
+   $("socialAccountBrand").value="";
+   $("socialAccountName").value="";
+   if($("socialAccountUrl"))$("socialAccountUrl").value="";
+   if($("socialFacebookEntryType"))$("socialFacebookEntryType").value="Page";
+   updateFacebookEntryFields();
+   applyFacebookEntryPreset(true);
+   await loadAccounts();
  }
  async function showSocial(){
    if(!window.isGlobalAdmin){try{showDaily()}catch(_){}return}
@@ -27728,7 +28213,22 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
    $("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>save("scheduled");
    $("socialDeletePostBtn").onclick=del;
-   $("socialAccountsBtn").onclick=async()=>{$("socialAccountsModal").classList.add("open");await loadAccounts()};
+   $("socialAccountsBtn").onclick=async()=>{
+     $("socialAccountsModal").classList.add("open");
+     updateFacebookEntryFields();
+     applyFacebookEntryPreset(false);
+     await Promise.allSettled([loadAccounts(),refreshMetaConnectionStatus()]);
+   };
+
+   $("metaConnectBtn").onclick=connectFacebookMeta;
+   $("metaRefreshBtn").onclick=refreshMetaConnectionStatus;
+   $("metaDisconnectBtn").onclick=disconnectFacebookMeta;
+
+   $("socialAccountPlatform").onchange=()=>{
+     updateFacebookEntryFields();
+     applyFacebookEntryPreset(true);
+   };
+   $("socialFacebookEntryType").onchange=()=>applyFacebookEntryPreset(true);
    $("socialAccountAddBtn").onclick=addAccount;
    $("socialPrevMonth").onclick=()=>{viewMonth.setMonth(viewMonth.getMonth()-1);loadPosts()};
    $("socialNextMonth").onclick=()=>{viewMonth.setMonth(viewMonth.getMonth()+1);loadPosts()};
@@ -27736,6 +28236,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialRefreshBtn").onclick=loadPosts;$("socialPlatformFilter").onchange=render;$("socialStatusFilter").onchange=render;
    $("socialCalendar").addEventListener("dblclick",e=>{const d=e.target.closest(".social-day")?.dataset.socialDate;if(d)openNew(d)});
    ["socialPostModal","socialAccountsModal"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))closeModals()}));
+   handleMetaOauthReturn();
  });
 })();
 </script>
