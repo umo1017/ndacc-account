@@ -15680,6 +15680,7 @@ async function loadSettlementMonth(){
   },0);
 
   let settlementAutoPayrollSourceMonth=String(monthDate).slice(0,7);
+  let settlementAutoStaffCount=0;
 
   settlementAuto={
     revenue:+latestRevenue.toFixed(2),
@@ -15708,6 +15709,8 @@ async function loadSettlementMonth(){
     const payroll=await settlementLatestPayrollRows(settlementCurrentOutlet,monthDate);
 
     const branchEmployees=(payroll.employees||[]).filter(e=>settlementEmployeeWorkedInMonth(e,ym,payroll));
+    settlementAutoStaffCount=branchEmployees.length;
+
     const confirmed7Map=payroll.s7Map;
     const commissionSnapMap=payroll.s14Map;
     const monthlyMap=payroll.monthlyMap;
@@ -15888,7 +15891,7 @@ async function loadSettlementMonth(){
   settlementRenderPaymentMeta();
   settlementRecalculate();
 
-  if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · AUTO LIVE · ${branchEmployees.length} Staff · Source ${settlementAutoPayrollSourceMonth}`;
+  if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · AUTO LIVE · ${settlementAutoStaffCount} Staff · Source ${settlementAutoPayrollSourceMonth}`;
   if(carryState){
     carryState.textContent=`AUTO Budget · Salary + Statutory + Carry Forward · ${String(monthDate||"").slice(0,7)}`;
   }
