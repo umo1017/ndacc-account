@@ -3627,6 +3627,30 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="confirmed-readonly-payroll-final">
+#salaryPage .confirmed-readonly{
+  min-height:38px!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:5px!important;
+  font-weight:700!important;
+}
+</style>
+
+
+<style id="salary-ot-hours-days-history-final">
+@media(min-width:901px){
+  #salaryPage .salary-table{
+    min-width:2050px!important;
+  }
+}
+#salaryPage [data-live-ottotalhrs],
+#salaryPage [data-live-otamount]{
+  white-space:nowrap!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -8978,6 +9002,30 @@ function activeInMonth(e,month){
   if(last && last<start) return false;
   return true;
 }
+
+function salaryEmployeeHasPayrollInMonth(e,month){
+  const empId=Number(e?.id||0);
+  if(!empId || !/^\d{4}-\d{2}$/.test(String(month||""))) return false;
+  const key=String(month)+"-01";
+  const same=(row)=>
+    Number(row?.employee_id)===empId &&
+    String(row?.salary_month||"").slice(0,10)===key;
+
+  return (salaryMonthly||[]).some(same) ||
+         (salarySnapshots||[]).some(same) ||
+         (salaryCommissionSnapshots||[]).some(same);
+}
+
+function salaryEmployeeVisibleInMonth(e,month){
+  // Normal employment dates decide visibility first.
+  if(activeInMonth(e,month)) return true;
+
+  // Important for resigned staff:
+  // if there is actual payroll/monthly activity for this historical month,
+  // keep the employee visible even after the Last Working Date is set.
+  return salaryEmployeeHasPayrollInMonth(e,month);
+}
+
 function bracketIndex(wage){
   const w=Math.max(0,Number(wage||0));
   return SOCSO_THRESHOLDS.findIndex(t=>w<=t);
@@ -9061,7 +9109,19 @@ function otHourlyRateFromPay(basicPay,allowancePay){
   return otBase>0 ? otBase/daysInMonth/8 : 0;
 }
 function otHourlyRate(e){
-  return otHourlyRateFromPay(e?.guaranteed_pay,e?.allowance);
+  let basic=Number(e?.guaranteed_pay||0);
+  let allowance=Number(e?.allowance||0);
+
+  // Salary is editable before Confirm. If Basic Pay / Allowance has a manual
+  // override for this month, OT must use the edited values too.
+  try{
+    if(typeof salaryOverrideValue==="function" && e?.id){
+      basic=salaryOverrideValue(e.id,"7","guaranteed_pay",basic);
+      allowance=salaryOverrideValue(e.id,"7","allowance",allowance);
+    }
+  }catch(_){}
+
+  return otHourlyRateFromPay(basic,allowance);
 }
 function calculateOtTotalHours(m={}){
   const offDays=Math.max(0,Number(m?.ot_day_qty||0));
@@ -9085,16 +9145,16 @@ function calculateOtAmount(e,m={}){
 function otHoursInput(empId,value,locked=false){
   const n=value===null||value===undefined||value==="" ? 0 : Number(value||0);
   if(locked){
-    return `<div class="offday-box"><input type="number" value="${n}" disabled><span class="days-suffix">Hours</span></div>`;
+    return `<div class="offday-box confirmed-readonly"><span>${n}</span><span class="days-suffix">Hours</span></div>`;
   }
-  return `<div class="offday-box"><input type="number" min="0" step="0.5" value="${n}" data-month-edit="${empId}" data-field="ot_hours"></div>`;
+  return `<div class="offday-box"><input type="number" min="0" step="0.5" value="${n}" data-month-edit="${empId}" data-field="ot_hour_qty"><span class="days-suffix">Hours</span></div>`;
 }
 function otDaysInput(empId,value,locked=false){
   const n=value===null||value===undefined||value==="" ? 0 : Number(value||0);
   if(locked){
-    return `<div class="offday-box"><input type="number" value="${n}" disabled><span class="days-suffix">Days</span></div>`;
+    return `<div class="offday-box confirmed-readonly"><span>${n}</span><span class="days-suffix">Days</span></div>`;
   }
-  return `<div class="offday-box"><input type="number" min="0" step="0.5" value="${n}" data-month-edit="${empId}" data-field="ot_days"></div>`;
+  return `<div class="offday-box"><input type="number" min="0" step="0.5" value="${n}" data-month-edit="${empId}" data-field="ot_day_qty"><span class="days-suffix">Days</span></div>`;
 }
 
 function payslipOtLabel(s){
@@ -11081,25 +11141,30 @@ function renderSevenTable(emps){
 
     return `<tr data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e.name)}</td>
-      <td>${offDayInput(e.id, snap?Number(s.off_days_taken||0):Number(m.off_days_taken||0), false)}</td>
-      <td>${salaryOverrideInput(e.id,"7","guaranteed_pay",s.guaranteed_pay)}</td>
-      <td>${salaryOverrideInput(e.id,"7","allowance",s.allowance)}</td>
-      <td>${salaryOverrideInput(e.id,"7","employee_epf",s.employee_epf)}</td>
-      <td>${salaryOverrideInput(e.id,"7","employer_epf",s.employer_epf)}</td>
-      <td title="Includes Lindung 24 Jam">${salaryOverrideInput(e.id,"7","employee_socso_l24",employeeSocsoWithLindung(s))}</td>
-      <td>${salaryOverrideInput(e.id,"7","employer_socso",s.employer_socso)}</td>
-      <td>${salaryOverrideInput(e.id,"7","employee_eis",s.employee_eis)}</td>
-      <td>${salaryOverrideInput(e.id,"7","employer_eis",s.employer_eis)}</td>
-      <td>${salaryOverrideInput(e.id,"7","off_day_deduction",s.off_day_deduction||0)}</td>
-      <td>${salaryOverrideInput(e.id,"7","tax",s.tax||0)}</td>
-      <td>${salaryOverrideInput(e.id,"7","ot",s.ot||0)}</td>
-      <td>${salaryOverrideInput(e.id,"7","manual_deduction",s.manual_deduction||0)}</td>
-      <td data-live-gross7="${e.id}">${salaryOverrideInput(e.id,"7","gross_pay",s.gross_pay)}</td>
-      <td data-live-deduction7="${e.id}">${salaryOverrideInput(e.id,"7","total_deduction",s.total_deduction)}</td>
+      <td>${snap
+        ? `<div class="offday-box confirmed-readonly"><span>${Number(s.off_days_taken||0)}</span><span class="days-suffix">Days</span></div>`
+        : offDayInput(e.id,Number(m.off_days_taken||0),false)}</td>
+      <td>${snap?money(s.guaranteed_pay):salaryOverrideInput(e.id,"7","guaranteed_pay",s.guaranteed_pay)}</td>
+      <td>${snap?money(s.allowance):salaryOverrideInput(e.id,"7","allowance",s.allowance)}</td>
+      <td>${snap?money(s.employee_epf):salaryOverrideInput(e.id,"7","employee_epf",s.employee_epf)}</td>
+      <td>${snap?money(s.employer_epf):salaryOverrideInput(e.id,"7","employer_epf",s.employer_epf)}</td>
+      <td title="Includes Lindung 24 Jam">${snap?money(employeeSocsoWithLindung(s)):salaryOverrideInput(e.id,"7","employee_socso_l24",employeeSocsoWithLindung(s))}</td>
+      <td>${snap?money(s.employer_socso):salaryOverrideInput(e.id,"7","employer_socso",s.employer_socso)}</td>
+      <td>${snap?money(s.employee_eis):salaryOverrideInput(e.id,"7","employee_eis",s.employee_eis)}</td>
+      <td>${snap?money(s.employer_eis):salaryOverrideInput(e.id,"7","employer_eis",s.employer_eis)}</td>
+      <td>${snap?money(s.off_day_deduction||0):salaryOverrideInput(e.id,"7","off_day_deduction",s.off_day_deduction||0)}</td>
+      <td>${snap?money(s.tax||0):salaryOverrideInput(e.id,"7","tax",s.tax||0)}</td>
+      <td>${otHoursInput(e.id,Number(s.ot_hour_qty||m.ot_hour_qty||0),!!snap)}</td>
+      <td>${otDaysInput(e.id,Number(s.ot_day_qty||m.ot_day_qty||0),!!snap)}</td>
+      <td data-live-ottotalhrs="${e.id}"><strong>${Number(s.ot_total_hours||calculateOtTotalHours(snap?s:m)).toFixed(2)}</strong></td>
+      <td data-live-otamount="${e.id}"><strong>${money(s.ot||0)}</strong><div class="helper">Rate ${Number(s.ot_hourly_rate||otHourlyRate(e)).toFixed(4)}</div></td>
+      <td>${snap?money(s.manual_deduction||0):salaryOverrideInput(e.id,"7","manual_deduction",s.manual_deduction||0)}</td>
+      <td data-live-gross7="${e.id}">${snap?money(s.gross_pay):salaryOverrideInput(e.id,"7","gross_pay",s.gross_pay)}</td>
+      <td data-live-deduction7="${e.id}">${snap?money(s.total_deduction):salaryOverrideInput(e.id,"7","total_deduction",s.total_deduction)}</td>
 
-      <td class="netpay-method-cell" data-live-netpay7-cash="${e.id}">${pm==="Cash"?salaryOverrideInput(e.id,"7","net_pay",net):"—"}</td>
-      <td class="netpay-method-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?salaryOverrideInput(e.id,"7","net_pay",net):"—"}</td>
-      <td class="netpay-method-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?salaryOverrideInput(e.id,"7","net_pay",net):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-cash="${e.id}">${pm==="Cash"?(snap?money(net):salaryOverrideInput(e.id,"7","net_pay",net)):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?(snap?money(net):salaryOverrideInput(e.id,"7","net_pay",net)):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?(snap?money(net):salaryOverrideInput(e.id,"7","net_pay",net)):"—"}</td>
 
       <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
@@ -11135,7 +11200,9 @@ function renderSevenTable(emps){
         <th rowspan="2" title="Includes Lindung 24 Jam">Employee SOCSO + L24</th><th rowspan="2">Employer SOCSO</th>
         <th rowspan="2">Employee EIS</th><th rowspan="2">Employer EIS</th>
         <th rowspan="2">Unpaid</th>
-        <th rowspan="2">PCB / Tax</th><th rowspan="2">OT</th><th rowspan="2">Deduction</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
+        <th rowspan="2">PCB / Tax</th>
+        <th rowspan="2">OT Hours</th><th rowspan="2">OT Days</th><th rowspan="2">OT Total Hrs</th><th rowspan="2">OT</th>
+        <th rowspan="2">Deduction</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
         <th colspan="3" class="netpay-group-head">Net Pay</th>
         <th rowspan="2">Confirm</th><th rowspan="2">7th Monthly Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
       </tr>
@@ -11205,21 +11272,21 @@ function renderFourteenTable(emps){
 
     return `<tr>
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e.name)}</td>
-      <td>${salaryOverrideInput(e.id,"14","commission_a",a)}</td>
-      <td>${salaryOverrideInput(e.id,"14","commission_b",b)}</td>
-      <td>${salaryOverrideInput(e.id,"14","customer_referral",customer)}</td>
-      <td>${salaryOverrideInput(e.id,"14","staff_referral",staff)}</td>
-      <td>${salaryOverrideInput(e.id,"14","bonus",bonus)}</td>
-      <td data-live-3bonus="${e.id}">${salaryOverrideInput(e.id,"14","three_month_bonus",c.three_month_bonus||0)}</td>
-      <td data-live-totalcommission14="${e.id}">${salaryOverrideInput(e.id,"14","total_commission",total)}</td>
-      <td>${salaryOverrideInput(e.id,"14","seventh_basic_pay",c.seventh_basic_pay||0)}</td>
-      <td>${salaryOverrideInput(e.id,"14","seventh_allowance",c.seventh_allowance||0)}</td>
-      <td>${salaryOverrideInput(e.id,"14","employer_epf",c.employer_epf||0)}</td>
-      <td>${salaryOverrideInput(e.id,"14","employer_socso",c.employer_socso||0)}</td>
-      <td>${salaryOverrideInput(e.id,"14","lindung24",c.lindung24||0)}</td>
-      <td>${salaryOverrideInput(e.id,"14","employer_eis",c.employer_eis||0)}</td>
-      <td data-live-commission="${e.id}">${salaryOverrideInput(e.id,"14","commission",c.commission||0)}</td>
-      <td data-live-netpay14="${e.id}">${salaryOverrideInput(e.id,"14","net_pay",c.net_pay||0)}</td>
+      <td>${cs?money(a):salaryOverrideInput(e.id,"14","commission_a",a)}</td>
+      <td>${cs?money(b):salaryOverrideInput(e.id,"14","commission_b",b)}</td>
+      <td>${cs?money(customer):salaryOverrideInput(e.id,"14","customer_referral",customer)}</td>
+      <td>${cs?money(staff):salaryOverrideInput(e.id,"14","staff_referral",staff)}</td>
+      <td>${cs?money(bonus):salaryOverrideInput(e.id,"14","bonus",bonus)}</td>
+      <td data-live-3bonus="${e.id}">${cs?money(c.three_month_bonus||0):salaryOverrideInput(e.id,"14","three_month_bonus",c.three_month_bonus||0)}</td>
+      <td data-live-totalcommission14="${e.id}">${cs?money(total):salaryOverrideInput(e.id,"14","total_commission",total)}</td>
+      <td>${cs?money(c.seventh_basic_pay||0):salaryOverrideInput(e.id,"14","seventh_basic_pay",c.seventh_basic_pay||0)}</td>
+      <td>${cs?money(c.seventh_allowance||0):salaryOverrideInput(e.id,"14","seventh_allowance",c.seventh_allowance||0)}</td>
+      <td>${cs?money(c.employer_epf||0):salaryOverrideInput(e.id,"14","employer_epf",c.employer_epf||0)}</td>
+      <td>${cs?money(c.employer_socso||0):salaryOverrideInput(e.id,"14","employer_socso",c.employer_socso||0)}</td>
+      <td>${cs?money(c.lindung24||0):salaryOverrideInput(e.id,"14","lindung24",c.lindung24||0)}</td>
+      <td>${cs?money(c.employer_eis||0):salaryOverrideInput(e.id,"14","employer_eis",c.employer_eis||0)}</td>
+      <td data-live-commission="${e.id}">${cs?money(c.commission||0):salaryOverrideInput(e.id,"14","commission",c.commission||0)}</td>
+      <td data-live-netpay14="${e.id}">${cs?money(c.net_pay||0):salaryOverrideInput(e.id,"14","net_pay",c.net_pay||0)}</td>
       <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
       <td>${salaryPaymentMethodSelect(e)}</td>
@@ -11592,7 +11659,7 @@ async function sendAllBranchPayslipsSameNumber(){
 function branchWhatsAppConfirmedJobs(outlet,type){
   const selectedMonth=monthKey();
   const all=salaryEmployees
-    .filter(e=>activeInMonth(e,selectedMonth) && String(e.outlet||"")===String(outlet||""))
+    .filter(e=>salaryEmployeeVisibleInMonth(e,selectedMonth) && String(e.outlet||"")===String(outlet||""))
     .sort(salaryStaffSort);
 
   return all.filter(e=>{
@@ -11685,7 +11752,7 @@ function renderSalary(){
   renderSalaryViewButtons();
 
   const selectedMonth=monthKey();
-  const active=salaryEmployees.filter(e=>activeInMonth(e,selectedMonth));
+  const active=salaryEmployees.filter(e=>salaryEmployeeVisibleInMonth(e,selectedMonth));
 
   const visibleOutlets=isGlobalAdmin
     ? [...new Set([
@@ -11849,9 +11916,14 @@ function recalc7thLive(empId){
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e) return;
   const m=monthlyFor(empId);
-  // Keep the legacy OT amount field synchronized for other parts of the app.
+
+  // Hours + Days are quantity inputs. OT RM is always calculated automatically.
+  m.ot_total_hours=calculateOtTotalHours(m);
+  m.ot_hours=calculateOtAmount(e,m);
+  m.ot_days=calculateOtDayAmount(e,m);
   m.ot=calculateOtAmount(e,m);
-  const calc=calculate7th(e,m);
+
+  const calc=applySevenManualOverrides(e,calculate7th(e,m));
 
   const totalHrsCell=document.querySelector(`[data-live-ottotalhrs="${empId}"]`);
   if(totalHrsCell) totalHrsCell.innerHTML=`<strong>${calculateOtTotalHours(m).toFixed(2)}</strong>`;
@@ -11861,20 +11933,36 @@ function recalc7thLive(empId){
     otAmountCell.innerHTML=`<strong>${money(calc.ot||0)}</strong><div class="helper">Rate ${otHourlyRate(e).toFixed(4)}</div>`;
   }
 
-  const grossCell=document.querySelector(`[data-live-gross7="${empId}"]`);
-  if(grossCell) grossCell.textContent=money(calc.gross_pay);
-  const deductionCell=document.querySelector(`[data-live-deduction7="${empId}"]`);
-  if(deductionCell) deductionCell.textContent=money(calc.total_deduction);
-  const netCell=document.querySelector(`[data-live-netpay7="${empId}"]`);
-  if(netCell) netCell.textContent=money(calc.net_pay);
+  const updateEditableMoneyCell=(selector,field,value)=>{
+    const cell=document.querySelector(selector);
+    if(!cell) return;
+    const input=cell.querySelector(`[data-override-field="${field}"]`);
+    if(input){
+      if(!salaryOverrideHas(empId,"7",field)) input.value=Number(value||0).toFixed(2);
+    }else{
+      cell.textContent=money(value);
+    }
+  };
+
+  updateEditableMoneyCell(`[data-live-gross7="${empId}"]`,"gross_pay",calc.gross_pay);
+  updateEditableMoneyCell(`[data-live-deduction7="${empId}"]`,"total_deduction",calc.total_deduction);
 
   const pm=String(e.payment_method||"Cash");
-  const cashCell=document.querySelector(`[data-live-netpay7-cash="${empId}"]`);
-  const transferCell=document.querySelector(`[data-live-netpay7-transfer="${empId}"]`);
-  const tngCell=document.querySelector(`[data-live-netpay7-tng="${empId}"]`);
-  if(cashCell) cashCell.textContent=pm==="Cash"?money(calc.net_pay):"—";
-  if(transferCell) transferCell.textContent=pm==="Bank Transfer"?money(calc.net_pay):"—";
-  if(tngCell) tngCell.textContent=pm==="TNG"?money(calc.net_pay):"—";
+  const updateNet=(selector,active)=>{
+    const cell=document.querySelector(selector);
+    if(!cell) return;
+    if(!active){ cell.textContent="—"; return; }
+    const input=cell.querySelector(`[data-override-field="net_pay"]`);
+    if(input){
+      if(!salaryOverrideHas(empId,"7","net_pay")) input.value=Number(calc.net_pay||0).toFixed(2);
+    }else{
+      cell.textContent=money(calc.net_pay);
+    }
+  };
+
+  updateNet(`[data-live-netpay7-cash="${empId}"]`,pm==="Cash");
+  updateNet(`[data-live-netpay7-transfer="${empId}"]`,pm==="Bank Transfer");
+  updateNet(`[data-live-netpay7-tng="${empId}"]`,pm==="TNG");
 }
 
 function recalc14thLive(empId){
@@ -12662,6 +12750,26 @@ async function deleteStaff(empId){
     return;
   }
 
+  // Preserve historical salary records.
+  // A staff member who has ever had payroll/monthly salary activity must not be
+  // permanently deleted. Set Last Working Date instead; historical worked months
+  // will continue to show in Salary.
+  const historyChecks=await Promise.all([
+    salaryDb.from("employee_salary_monthly").select("employee_id",{count:"exact",head:true}).eq("employee_id",empId),
+    salaryDb.from("payroll_snapshot").select("employee_id",{count:"exact",head:true}).eq("employee_id",empId),
+    salaryDb.from("payroll_commission_snapshot").select("employee_id",{count:"exact",head:true}).eq("employee_id",empId)
+  ]);
+  const historyError=historyChecks.find(r=>r.error)?.error;
+  if(historyError){
+    alert("Unable to check payroll history: "+historyError.message);
+    return;
+  }
+  const hasPayrollHistory=historyChecks.some(r=>Number(r.count||0)>0);
+  if(hasPayrollHistory){
+    alert("This staff has salary history and cannot be permanently deleted. Please set Last Working Date instead. Their salary will remain visible in the months they worked.");
+    return;
+  }
+
   if(!confirm(`Delete staff ${e.name||""}?`)) return;
   if(!confirm(`Second confirmation: Delete ${e.name||""} permanently?`)) return;
 
@@ -12965,6 +13073,18 @@ function payslipTransferDetailsHtml(e){
     </div>`;
 }
 
+
+function payslipAmount(value){
+  const n=Number(value||0);
+  return Math.abs(n)<0.005 ? "" : n.toFixed(2);
+}
+
+function payslipLine(label,value){
+  const n=Number(value||0);
+  if(Math.abs(n)<0.005) return "";
+  return `<div class="payslip-line"><span>${label}</span><span class="amt">${n.toFixed(2)}</span></div>`;
+}
+
 window.currentPayslipStaff=null;
 
 async function openPayslip(empId,type){
@@ -12984,14 +13104,14 @@ async function openPayslip(empId,type){
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>${payslipOtLabel(s)}</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO + L24</span><span class="amt">${employeeSocsoWithLindung(s).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div>${Number(s.manual_deduction||0)>0?`<div class="payslip-line"><span>Deduction</span><span class="amt">${Number(s.manual_deduction||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Basic Pay",s.guaranteed_pay)}${payslipLine("Allowance",s.allowance)}${Number(s.ot||0)>0?payslipLine(payslipOtLabel(s),s.ot):""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div>${payslipLine("Employee EPF",s.employee_epf)}${payslipLine("Employee SOCSO",employeeSocsoWithLindung(s))}${payslipLine("Employee EIS",s.employee_eis)}${String(e.tax_no||"").trim()?payslipLine("Income Tax PCB",s.tax):""}${payslipLine("Unpaid",s.off_day_deduction)}${payslipLine("Deduction",s.manual_deduction)}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
 <div class="ref-pay-summary">
   <div class="ref-gross-area">
     <div class="ref-total-line"><span>GROSS PAY</span><span>${Number(s.gross_pay||0).toFixed(2)}</span></div>
-    <div class="ref-pcb-monthly">PCB: Monthly:&nbsp;&nbsp; ${Number(s.tax||0).toFixed(2)}</div>
+    ${Number(s.tax||0)!==0?`<div class="ref-pcb-monthly">PCB: Monthly:&nbsp;&nbsp; ${payslipAmount(s.tax)}</div>`:""}
   </div>
   <div class="ref-deduction-area">
-    <div class="ref-total-line"><span>TOTAL DEDUCTION</span><span>${Number(s.total_deduction||0).toFixed(2)}</span></div>
+    <div class="ref-total-line"><span>TOTAL DEDUCTION</span><span>${payslipAmount(s.total_deduction)}</span></div>
     <div class="ref-net-box"><span>Net Pay</span><span>${Number(s.net_pay||0).toFixed(2)}</span></div>
   </div>
   <div class="ref-empty-area"></div>
@@ -13001,10 +13121,10 @@ async function openPayslip(empId,type){
   <div class="ref-current">
     <div class="ref-section-title">&lt;----------CURRENT MONTH----------&gt;</div>
     <div class="ref-current-table">
-      <div></div><div>E.P.F</div><div>SOCSO + L24</div><div>E.I.S</div><div>Tax</div>
-      <div>EMPLOYEE :</div><div>${Number(s.employee_epf||0).toFixed(2)}</div><div>${employeeSocsoWithLindung(s).toFixed(2)}</div><div>${Number(s.employee_eis||0).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
-      <div>EMPLOYER :</div><div>${Number(s.employer_epf||0).toFixed(2)}</div><div>${Number(s.employer_socso||0).toFixed(2)}</div><div>${Number(s.employer_eis||0).toFixed(2)}</div><div>0.00</div>
-      <div>TOTAL :</div><div>${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div>${(employeeSocsoWithLindung(s)+Number(s.employer_socso||0)).toFixed(2)}</div><div>${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
+      <div></div><div>E.P.F</div><div>SOCSO</div><div>E.I.S</div><div>Tax</div>
+      <div>EMPLOYEE :</div><div>${payslipAmount(s.employee_epf)}</div><div>${payslipAmount(employeeSocsoWithLindung(s))}</div><div>${payslipAmount(s.employee_eis)}</div><div>${payslipAmount(s.tax)}</div>
+      <div>EMPLOYER :</div><div>${payslipAmount(s.employer_epf)}</div><div>${payslipAmount(s.employer_socso)}</div><div>${payslipAmount(s.employer_eis)}</div><div></div>
+      <div>TOTAL :</div><div>${payslipAmount(Number(s.employee_epf||0)+Number(s.employer_epf||0))}</div><div>${payslipAmount(employeeSocsoWithLindung(s)+Number(s.employer_socso||0))}</div><div>${payslipAmount(Number(s.employee_eis||0)+Number(s.employer_eis||0))}</div><div>${payslipAmount(s.tax)}</div>
     </div>
     <div class="ref-note">Note:</div>
   </div>
@@ -13012,31 +13132,31 @@ async function openPayslip(empId,type){
   <div class="ref-ytd">
     <div class="ref-section-title">&lt;---------------YEAR-TO-DATE---------------&gt;</div>
     <div class="ref-ytd-table">
-      <div></div><div>E.P.F</div><div>SOCSO + L24</div><div>E.I.S</div><div>Tax</div><div>GROSS PAY</div><div>NET PAY</div>
+      <div></div><div>E.P.F</div><div>SOCSO</div><div>E.I.S</div><div>Tax</div><div>GROSS PAY</div><div>NET PAY</div>
 
       <div>EMPLOYEE :</div>
-      <div>${ytdSum(empId,"employee_epf").toFixed(2)}</div>
-      <div>${ytdSum(empId,"employee_socso").toFixed(2)}</div>
-      <div>${ytdSum(empId,"employee_eis").toFixed(2)}</div>
-      <div>${ytdSum(empId,"tax").toFixed(2)}</div>
-      <div>${ytdSum(empId,"gross_pay").toFixed(2)}</div>
-      <div>${ytdSum(empId,"net_pay").toFixed(2)}</div>
+      <div>${payslipAmount(ytdSum(empId,"employee_epf"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"employee_socso"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"employee_eis"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"tax"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"gross_pay"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"net_pay"))}</div>
 
       <div>EMPLOYER :</div>
-      <div>${ytdSum(empId,"employer_epf").toFixed(2)}</div>
-      <div>${ytdSum(empId,"employer_socso").toFixed(2)}</div>
-      <div>${ytdSum(empId,"employer_eis").toFixed(2)}</div>
-      <div>0.00</div>
-      <div>0.00</div>
-      <div>0.00</div>
+      <div>${payslipAmount(ytdSum(empId,"employer_epf"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"employer_socso"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"employer_eis"))}</div>
+      <div></div>
+      <div></div>
+      <div></div>
 
       <div>TOTAL :</div>
-      <div>${(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf")).toFixed(2)}</div>
-      <div>${(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso")).toFixed(2)}</div>
-      <div>${(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis")).toFixed(2)}</div>
-      <div>${ytdSum(empId,"tax").toFixed(2)}</div>
-      <div>${ytdSum(empId,"gross_pay").toFixed(2)}</div>
-      <div>${ytdSum(empId,"net_pay").toFixed(2)}</div>
+      <div>${payslipAmount(ytdSum(empId,"employee_epf")+ytdSum(empId,"employer_epf"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"employee_socso")+ytdSum(empId,"employer_socso"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"employee_eis")+ytdSum(empId,"employer_eis"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"tax"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"gross_pay"))}</div>
+      <div>${payslipAmount(ytdSum(empId,"net_pay"))}</div>
     </div>
   </div>
 
@@ -13080,8 +13200,8 @@ async function openPayslip(empId,type){
     }
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Commission</span><span class="amt">${Number(c.commission||0).toFixed(2)}</span></div><div style="height:198px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${Number(c.total_income||0).toFixed(2)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">0.00</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">0.00</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">0.00</span></div><div style="height:112px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt">0.00</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
-<div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${Number(c.net_pay||0).toFixed(2)}</span></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}<div style="height:198px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div style="height:190px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
+<div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
   }
@@ -13692,7 +13812,7 @@ async function exportPayslipsByBranch(type){
     await loadSalaryData();
 
     const selectedMonth=(byId("salaryMonth")?.value||"").trim();
-    const active=salaryEmployees.filter(e=>activeInMonth(e,selectedMonth));
+    const active=salaryEmployees.filter(e=>salaryEmployeeVisibleInMonth(e,selectedMonth));
 
     const grouped={};
     active.forEach(e=>{
@@ -13747,7 +13867,7 @@ async function exportPayslipsByBranch(type){
 
 function getVisibleSalaryBranchPaymentRows(){
   const selectedMonth=(byId("salaryMonth")?.value||"").trim();
-  const active=salaryEmployees.filter(e=>activeInMonth(e,selectedMonth));
+  const active=salaryEmployees.filter(e=>salaryEmployeeVisibleInMonth(e,selectedMonth));
 
   const visibleOutlets=isGlobalAdmin
     ? [...new Set([
@@ -13840,7 +13960,7 @@ function downloadPdfFile(file){
 function salaryExportJobs(mode){
   const selectedMonth=(byId("salaryMonth")?.value||"").trim();
   const active=salaryEmployees
-    .filter(e=>activeInMonth(e,selectedMonth))
+    .filter(e=>salaryEmployeeVisibleInMonth(e,selectedMonth))
     .sort((a,b)=>{
       const oa=String(a.outlet||"");
       const ob=String(b.outlet||"");
