@@ -3748,6 +3748,36 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="branch-bonus-tabs-click-hard-fix">
+#bonusPage .bonus-card:first-of-type{
+  position:relative!important;
+  z-index:20!important;
+  overflow:visible!important;
+}
+#bonusBranchTabs{
+  position:relative!important;
+  z-index:220!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  isolation:isolate!important;
+}
+#bonusBranchTabs .bonus-branch-btn,
+#bonusBranchTabs [data-bonus-branch]{
+  position:relative!important;
+  z-index:221!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  cursor:pointer!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+  -webkit-tap-highlight-color:rgba(0,0,0,.08)!important;
+}
+#bonusBranchTabs .bonus-branch-btn:not(:disabled){
+  pointer-events:auto!important;
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -24869,6 +24899,27 @@ input,select,textarea,button,a{
  function canOpenBonus(){return !!(window.canViewSalary || window.isGlobalAdmin || window.isPayrollManager);}
  function canEditStaffBonus(){return !!(window.isGlobalAdmin || window.isPayrollManager);}
 
+ function selectBonusBranch(nextBranch){
+   nextBranch=String(nextBranch||"").trim();
+   if(!nextBranch || nextBranch===bonusBranch) return;
+
+   bonusBranch=nextBranch;
+
+   const panel=$("bonusFixedExcludePanel");
+   if(panel) panel.style.display="none";
+
+   // Give instant visual feedback before the cloud reload finishes.
+   $("bonusBranchTabs")?.querySelectorAll("[data-bonus-branch]").forEach(btn=>{
+     btn.classList.toggle(
+       "active",
+       String(btn.dataset.bonusBranch||"").trim()===bonusBranch
+     );
+   });
+
+   loadBonus();
+ }
+ window.ndSelectBonusBranch=selectBonusBranch;
+
  async function saveFixedBonusExclusions(){
    if(!canEditStaffBonus()){
      alert("No permission to edit Fixed Excluded Staff.");
@@ -25116,6 +25167,21 @@ input,select,textarea,button,a{
          class="bonus-branch-btn ${b===bonusBranch?"active":""}"
          data-bonus-branch="${String(b).replace(/"/g,"&quot;")}">${b} (${bonusEmployees.filter(e=>String(e.outlet||"").trim()===String(b).trim()).length})</button>
      `).join("");
+
+     // Attach directly every time tabs are rebuilt.
+     // This avoids the old problem where the delegated listener could be missing
+     // or blocked after the Branch Bonus section was re-rendered.
+     tabs.querySelectorAll("[data-bonus-branch]").forEach(btn=>{
+       btn.onclick=ev=>{
+         ev.preventDefault();
+         ev.stopPropagation();
+         selectBonusBranch(btn.dataset.bonusBranch);
+       };
+       btn.onpointerup=ev=>{
+         // iOS/mobile fallback: onclick still remains the primary action.
+         btn.style.pointerEvents="auto";
+       };
+     });
    }
 
    bonusBranchTotal=(settData||[])
@@ -25369,7 +25435,7 @@ $("bonusFixedExcludeList")?.addEventListener("change",e=>{
      if(btn) deleteBonusDeduction(btn.dataset.bonusDeductionDelete);
    });
    $("bonusMonth")?.addEventListener("change",loadBonus);
-   $("bonusBranchTabs")?.addEventListener("click",e=>{const b=e.target.closest("[data-bonus-branch]");if(!b)return;bonusBranch=b.dataset.bonusBranch||"";if($("bonusFixedExcludePanel"))$("bonusFixedExcludePanel").style.display="none";loadBonus();});
+   // Branch buttons bind directly inside loadBonus() after every render.
    $("bonusStaffBody")?.addEventListener("click",async e=>{
      const btn=e.target.closest("[data-bonus-edit-amount]");
      if(!btn||!canEditStaffBonus())return;
