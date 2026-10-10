@@ -3583,6 +3583,50 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="salary-all-amounts-editable-final">
+#salaryPage .salary-all-edit-box{
+  min-width:105px!important;
+}
+#salaryPage .salary-all-edit-box input{
+  width:86px!important;
+  min-width:86px!important;
+  font-weight:700!important;
+}
+#salaryPage .salary-pay-method-edit{
+  min-width:125px!important;
+  min-height:38px!important;
+  font-weight:700!important;
+}
+#salaryPage [data-salary-override]:focus,
+#salaryPage [data-salary-pay-method]:focus{
+  outline:2px solid #2f6fed!important;
+  outline-offset:1px!important;
+}
+</style>
+
+
+<style id="payslip-download-button-layout-final">
+.payslip-header-actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:10px!important;
+  flex-wrap:wrap!important;
+}
+@media(max-width:700px){
+  .payslip-header-actions{
+    gap:6px!important;
+  }
+  #downloadPayslipPdfBtn,
+  #shareWhatsAppBtn{
+    min-height:42px!important;
+    padding:9px 12px!important;
+    font-size:14px!important;
+  }
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -8817,7 +8861,9 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="salary-dialog" style="width:min(920px,100%)">
 <div class="outlet-title no-print">
 <h3 style="margin:0">Payslip</h3>
-<div> <button class="btn" id="shareWhatsAppBtn" type="button">Send WhatsApp</button>
+<div class="payslip-header-actions">
+<button class="btn" id="downloadPayslipPdfBtn" type="button">Download PDF</button>
+<button class="btn" id="shareWhatsAppBtn" type="button">Send WhatsApp</button>
 <button class="btn main-page-close" id="closePayslipModal" type="button">×</button>
 </div>
 </div>
@@ -8863,6 +8909,7 @@ let salaryMonthly = [];
 let salarySnapshots = [];
 let salaryCommissionSnapshots = [];
 let salaryYtdSnapshots = [];
+let salaryManualOverrides = [];
 
 const byId=id=>document.getElementById(id);
 const money=v=>"RM "+Number(v||0).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -9114,6 +9161,272 @@ function payslipOvertimeDetailHtml(s){
 }
 
 
+
+
+function salaryCanEditAmounts(){
+  return !!isGlobalAdmin || !!isPayrollManager;
+}
+
+function salaryOverrideFind(empId,payrollType,field,salaryMonth=monthDate()){
+  return (salaryManualOverrides||[]).find(x=>
+    Number(x.employee_id)===Number(empId) &&
+    String(x.payroll_type||"")===String(payrollType) &&
+    String(x.field||"")===String(field) &&
+    String(x.salary_month||"").slice(0,10)===String(salaryMonth||"").slice(0,10)
+  ) || null;
+}
+
+function salaryOverrideHas(empId,payrollType,field,salaryMonth=monthDate()){
+  return !!salaryOverrideFind(empId,payrollType,field,salaryMonth);
+}
+
+function salaryOverrideValue(empId,payrollType,field,autoValue,salaryMonth=monthDate()){
+  const row=salaryOverrideFind(empId,payrollType,field,salaryMonth);
+  return row ? Number(row.value||0) : Number(autoValue||0);
+}
+
+function salaryOverrideInput(empId,payrollType,field,value,opts={}){
+  const n=Number(value||0);
+  if(!salaryCanEditAmounts()) return money(n);
+  const step=opts.step ?? "0.01";
+  const min=opts.min ?? "0";
+  return `<div class="money-input-box salary-all-edit-box">
+    <span class="money-input-prefix">RM</span>
+    <input type="number" min="${min}" step="${step}" value="${n}"
+      data-salary-override="${empId}"
+      data-payroll-type="${payrollType}"
+      data-override-field="${field}">
+  </div>`;
+}
+
+function salaryPlainOverrideInput(empId,payrollType,field,value,opts={}){
+  const n=Number(value||0);
+  if(!salaryCanEditAmounts()) return String(n);
+  const step=opts.step ?? "0.01";
+  const min=opts.min ?? "0";
+  const suffix=opts.suffix||"";
+  return `<div class="offday-box salary-all-edit-box">
+    <input type="number" min="${min}" step="${step}" value="${n}"
+      data-salary-override="${empId}"
+      data-payroll-type="${payrollType}"
+      data-override-field="${field}">
+    ${suffix?`<span class="days-suffix">${suffix}</span>`:""}
+  </div>`;
+}
+
+async function saveSalaryManualOverride(empId,payrollType,field,value){
+  if(!salaryCanEditAmounts()){
+    alert("No permission to edit Salary.");
+    return false;
+  }
+
+  const row={
+    employee_id:Number(empId),
+    salary_month:monthDate(),
+    payroll_type:String(payrollType),
+    field:String(field),
+    value:Number(value||0),
+    updated_at:new Date().toISOString(),
+    updated_by:String(currentSalaryUserEmail||currentUserEmail||"").toLowerCase()
+  };
+
+  const {data,error}=await salaryDb
+    .from("salary_manual_overrides")
+    .upsert(row,{onConflict:"employee_id,salary_month,payroll_type,field"})
+    .select()
+    .single();
+
+  if(error){
+    alert(
+      "Salary edit save failed: "+error.message+
+      "\n\nPlease make sure the salary_manual_overrides SQL has been created."
+    );
+    return false;
+  }
+
+  const idx=(salaryManualOverrides||[]).findIndex(x=>
+    Number(x.employee_id)===Number(empId) &&
+    String(x.salary_month||"").slice(0,10)===monthDate() &&
+    String(x.payroll_type||"")===String(payrollType) &&
+    String(x.field||"")===String(field)
+  );
+
+  if(idx>=0) salaryManualOverrides[idx]=data||row;
+  else salaryManualOverrides.push(data||row);
+
+  await refreshSalaryStayHere();
+  return true;
+}
+
+async function saveSalaryPaymentMethod(empId,value){
+  if(!salaryCanEditAmounts()){
+    alert("No permission to edit Salary.");
+    return false;
+  }
+  const payment_method=String(value||"Cash");
+  const {error}=await salaryDb.from("employees")
+    .update({payment_method})
+    .eq("id",Number(empId));
+  if(error){
+    alert("Pay By save failed: "+error.message);
+    return false;
+  }
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  if(e) e.payment_method=payment_method;
+  await refreshSalaryStayHere();
+  return true;
+}
+
+function salaryPaymentMethodSelect(e){
+  const current=String(e?.payment_method||"Cash");
+  if(!salaryCanEditAmounts()) return `<span class="pay-method-pill">${current}</span>`;
+  return `<select class="salary-pay-method-edit" data-salary-pay-method="${e.id}">
+    ${["Cash","Bank Transfer","TNG"].map(v=>`<option value="${v}" ${v===current?"selected":""}>${v}</option>`).join("")}
+  </select>`;
+}
+
+function applySevenManualOverrides(e,base,salaryMonth=monthDate()){
+  if(!base) return base;
+  const s={...base};
+  const empId=Number(e?.id||base?.employee_id||0);
+  const t="7";
+
+  const simpleFields=[
+    "guaranteed_pay","allowance","employee_epf","employer_epf",
+    "employer_socso","employee_eis","employer_eis","off_day_deduction",
+    "tax","ot","manual_deduction","gross_pay","total_deduction","net_pay"
+  ];
+  simpleFields.forEach(field=>{
+    if(salaryOverrideHas(empId,t,field,salaryMonth)){
+      s[field]=salaryOverrideValue(empId,t,field,s[field],salaryMonth);
+    }
+  });
+
+  if(salaryOverrideHas(empId,t,"employee_socso_l24",salaryMonth)){
+    s.employee_socso_l24=salaryOverrideValue(
+      empId,t,"employee_socso_l24",employeeSocsoWithLindung(s),salaryMonth
+    );
+  }
+
+  const grossComponentChanged=
+    salaryOverrideHas(empId,t,"guaranteed_pay",salaryMonth) ||
+    salaryOverrideHas(empId,t,"allowance",salaryMonth) ||
+    salaryOverrideHas(empId,t,"ot",salaryMonth);
+
+  if(grossComponentChanged && !salaryOverrideHas(empId,t,"gross_pay",salaryMonth)){
+    s.gross_pay=+(
+      Number(s.guaranteed_pay||0)+
+      Number(s.allowance||0)+
+      Number(s.ot||0)
+    ).toFixed(2);
+  }
+
+  const deductionComponentChanged=[
+    "employee_epf","employee_socso_l24","employee_eis",
+    "off_day_deduction","tax","manual_deduction"
+  ].some(field=>salaryOverrideHas(empId,t,field,salaryMonth));
+
+  if(deductionComponentChanged && !salaryOverrideHas(empId,t,"total_deduction",salaryMonth)){
+    s.total_deduction=+(
+      Number(s.employee_epf||0)+
+      Number(employeeSocsoWithLindung(s)||0)+
+      Number(s.employee_eis||0)+
+      Number(s.off_day_deduction||0)+
+      Number(s.tax||0)+
+      Number(s.manual_deduction||0)
+    ).toFixed(2);
+  }
+
+  if(
+    (grossComponentChanged || deductionComponentChanged ||
+     salaryOverrideHas(empId,t,"gross_pay",salaryMonth) ||
+     salaryOverrideHas(empId,t,"total_deduction",salaryMonth)) &&
+    !salaryOverrideHas(empId,t,"net_pay",salaryMonth)
+  ){
+    s.net_pay=+(Number(s.gross_pay||0)-Number(s.total_deduction||0)).toFixed(2);
+  }
+
+  return s;
+}
+
+function applyFourteenManualOverrides(e,base,salaryMonth=monthDate()){
+  if(!base) return base;
+  const c={...base};
+  const empId=Number(e?.id||base?.employee_id||0);
+  const t="14";
+
+  const fields=[
+    "commission_a","commission_b","customer_referral","staff_referral",
+    "bonus","three_month_bonus","total_commission",
+    "seventh_basic_pay","seventh_allowance","employer_epf",
+    "employer_socso","lindung24","employer_eis","commission","net_pay"
+  ];
+  fields.forEach(field=>{
+    if(salaryOverrideHas(empId,t,field,salaryMonth)){
+      c[field]=salaryOverrideValue(empId,t,field,c[field],salaryMonth);
+    }
+  });
+
+  const incomePartsChanged=[
+    "commission_a","commission_b","customer_referral","staff_referral",
+    "bonus","three_month_bonus"
+  ].some(field=>salaryOverrideHas(empId,t,field,salaryMonth));
+
+  if(incomePartsChanged && !salaryOverrideHas(empId,t,"total_commission",salaryMonth)){
+    c.total_commission=+(
+      Number(c.commission_a||0)+
+      Number(c.commission_b||0)+
+      Number(c.customer_referral||0)+
+      Number(c.staff_referral||0)+
+      Number(c.bonus||0)+
+      Number(c.three_month_bonus||0)
+    ).toFixed(2);
+  }
+
+  const costChanged=[
+    "seventh_basic_pay","seventh_allowance","employer_epf",
+    "employer_socso","lindung24","employer_eis"
+  ].some(field=>salaryOverrideHas(empId,t,field,salaryMonth));
+
+  if(
+    (incomePartsChanged || costChanged ||
+     salaryOverrideHas(empId,t,"total_commission",salaryMonth)) &&
+    !salaryOverrideHas(empId,t,"commission",salaryMonth)
+  ){
+    c.commission=Math.max(0,+(
+      Number(c.total_commission||0)-
+      Number(c.seventh_basic_pay||0)-
+      Number(c.seventh_allowance||0)-
+      Number(c.employer_epf||0)-
+      Number(c.employer_socso||0)-
+      Number(c.lindung24||0)-
+      Number(c.employer_eis||0)
+    ).toFixed(2));
+  }
+
+  if(
+    (salaryOverrideHas(empId,t,"commission",salaryMonth) ||
+     incomePartsChanged || costChanged ||
+     salaryOverrideHas(empId,t,"total_commission",salaryMonth)) &&
+    !salaryOverrideHas(empId,t,"net_pay",salaryMonth)
+  ){
+    c.net_pay=+Number(c.commission||0).toFixed(2);
+  }
+  c.total_income=Number(c.net_pay||c.commission||0);
+  c.has_payslip=Number(c.commission||0)>0;
+  return c;
+}
+
+function employeeSocsoWithLindung(s={}){
+  if(s?.employee_socso_l24!==undefined && s?.employee_socso_l24!==null){
+    return +Number(s.employee_socso_l24||0).toFixed(2);
+  }
+  return +(
+    Number(s?.employee_socso||0) +
+    Number(s?.employee_lindung24||0)
+  ).toFixed(2);
+}
+
 function calculate7th(e,m={}){
   const guaranteed=Number(e.guaranteed_pay||0);
   const allowance=Number(e.allowance||0);
@@ -9172,6 +9485,7 @@ function calculate7th(e,m={}){
   const totalDeduction=+(
     employee_epf+
     st.employee_socso+
+    st.employee_lindung24+
     st.employee_eis+
     tax+
     offDayDeduction+
@@ -10493,6 +10807,23 @@ async function loadSalaryData(){
   salarySnapshots=snapRes.data||[];
   salaryCommissionSnapshots=commissionRes.data||[];
   salaryYtdSnapshots=ytdRes.data||[];
+
+  // Manual Salary edits are stored separately so auto formulas remain available.
+  // Load the whole selected year so current-month and YTD views stay consistent.
+  salaryManualOverrides=[];
+  try{
+    const ovRes=await salaryDb.from("salary_manual_overrides").select("*")
+      .gte("salary_month",year+"-01-01")
+      .lte("salary_month",month+"-01");
+    if(ovRes.error){
+      console.warn("Salary manual overrides unavailable:",ovRes.error);
+    }else{
+      salaryManualOverrides=ovRes.data||[];
+    }
+  }catch(err){
+    console.warn("Salary manual overrides unavailable:",err);
+  }
+
   salaryLastLoadedMonth=month;
 
   // If a live refresh happens while the user is editing 14th Commission,
@@ -10581,8 +10912,22 @@ function summaryForOutlet(emps){
     const snap=snapshotFor(e.id);
     const cSnap=commissionSnapshotFor(e.id);
     const pm=e.payment_method||"Cash";
-    if(!isPartTime && snap) out.seven[pm]=(out.seven[pm]||0)+Number(snap.net_pay||0);
-    if(cSnap) out.fourteen[pm]=(out.fourteen[pm]||0)+Number(cSnap.net_pay||0);
+    if(!isPartTime && snap){
+      const seven=applySevenManualOverrides(e,normalizedSevenSnapshot(e,snap));
+      out.seven[pm]=(out.seven[pm]||0)+Number(seven?.net_pay||0);
+    }
+    if(cSnap){
+      const three=Number(cSnap.three_month_bonus ?? salaryQuarter3BonusFor(e.id));
+      const base=calculate14th({
+        commission_a:Number(cSnap.commission_a||0),
+        commission_b:Number(cSnap.commission_b||0),
+        customer_referral:Number(cSnap.customer_referral||0),
+        staff_referral:Number(cSnap.staff_referral||0),
+        reward:Number(cSnap.bonus||0)
+      },snap,three);
+      const fourteen=applyFourteenManualOverrides(e,{...cSnap,...base,three_month_bonus:three});
+      out.fourteen[pm]=(out.fourteen[pm]||0)+Number(fourteen?.net_pay||0);
+    }
   });
   return out;
 }
@@ -10595,9 +10940,6 @@ function editInput(empId,field,value,disabled=false){
 
 function offDayInput(empId,value,locked=false){
   const n=Number(value||0);
-  if(locked){
-    return `<div class="offday-box"><input type="number" value="${n}" disabled><span class="days-suffix">Days</span></div>`;
-  }
   return `<div class="offday-box"><input type="number" min="0" step="1" value="${n}" data-month-edit="${empId}" data-field="off_days_taken"><span class="days-suffix">Days</span></div>`;
 }
 
@@ -10696,6 +11038,7 @@ function normalizedSevenSnapshot(e,snap){
   s.total_deduction=+(
     Number(s.employee_epf||0)+
     Number(s.employee_socso||0)+
+    Number(s.employee_lindung24||0)+
     Number(s.employee_eis||0)+
     Number(s.tax||0)+
     Number(s.off_day_deduction||0)+
@@ -10729,33 +11072,38 @@ function renderSevenTable(emps){
 
   const rowHtml=e=>{
     const m=monthlyFor(e.id), snap=snapshotFor(e.id);
-    const s=snap
+    const baseSeven=snap
       ? (typeof normalizedSevenSnapshot==="function" ? normalizedSevenSnapshot(e,snap) : snap)
       : calculate7th(e,m);
+    const s=applySevenManualOverrides(e,baseSeven);
     const pm=String(e.payment_method||"Cash");
     const net=Number(s.net_pay||0);
 
     return `<tr data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e.name)}</td>
-      <td>${offDayInput(e.id, snap?Number(s.off_days_taken||0):Number(m.off_days_taken||0), !!snap)}</td>
-      <td>${money(s.guaranteed_pay)}</td><td>${money(s.allowance)}</td>
-      <td>${money(s.employee_epf)}</td><td>${money(s.employer_epf)}</td>
-      <td>${money(s.employee_socso)}</td><td>${money(s.employer_socso)}</td>
-      <td>${money(s.employee_eis)}</td><td>${money(s.employer_eis)}</td>
-      <td>${money(s.off_day_deduction||0)}</td>
-      <td>${taxCellHtml(e,s,snap)}</td>
-      <td>${snap?money(s.ot||0):editInput(e.id,"ot",m.ot)}</td>
-      <td>${snap?money(s.manual_deduction||0):editInput(e.id,"manual_deduction",m.manual_deduction||0)}</td>
-      <td data-live-gross7="${e.id}">${money(s.gross_pay)}</td>
-      <td data-live-deduction7="${e.id}">${money(s.total_deduction)}</td>
+      <td>${offDayInput(e.id, snap?Number(s.off_days_taken||0):Number(m.off_days_taken||0), false)}</td>
+      <td>${salaryOverrideInput(e.id,"7","guaranteed_pay",s.guaranteed_pay)}</td>
+      <td>${salaryOverrideInput(e.id,"7","allowance",s.allowance)}</td>
+      <td>${salaryOverrideInput(e.id,"7","employee_epf",s.employee_epf)}</td>
+      <td>${salaryOverrideInput(e.id,"7","employer_epf",s.employer_epf)}</td>
+      <td title="Includes Lindung 24 Jam">${salaryOverrideInput(e.id,"7","employee_socso_l24",employeeSocsoWithLindung(s))}</td>
+      <td>${salaryOverrideInput(e.id,"7","employer_socso",s.employer_socso)}</td>
+      <td>${salaryOverrideInput(e.id,"7","employee_eis",s.employee_eis)}</td>
+      <td>${salaryOverrideInput(e.id,"7","employer_eis",s.employer_eis)}</td>
+      <td>${salaryOverrideInput(e.id,"7","off_day_deduction",s.off_day_deduction||0)}</td>
+      <td>${salaryOverrideInput(e.id,"7","tax",s.tax||0)}</td>
+      <td>${salaryOverrideInput(e.id,"7","ot",s.ot||0)}</td>
+      <td>${salaryOverrideInput(e.id,"7","manual_deduction",s.manual_deduction||0)}</td>
+      <td data-live-gross7="${e.id}">${salaryOverrideInput(e.id,"7","gross_pay",s.gross_pay)}</td>
+      <td data-live-deduction7="${e.id}">${salaryOverrideInput(e.id,"7","total_deduction",s.total_deduction)}</td>
 
-      <td class="netpay-method-cell" data-live-netpay7-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
-      <td class="netpay-method-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
-      <td class="netpay-method-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-cash="${e.id}">${pm==="Cash"?salaryOverrideInput(e.id,"7","net_pay",net):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?salaryOverrideInput(e.id,"7","net_pay",net):"—"}</td>
+      <td class="netpay-method-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?salaryOverrideInput(e.id,"7","net_pay",net):"—"}</td>
 
       <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
-      <td><span class="pay-method-pill">${pm}</span></td>
+      <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${snap
         ? (snap.payment_done
             ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>`
@@ -10767,9 +11115,10 @@ function renderSevenTable(emps){
   let cashTotal=0, transferTotal=0, tngTotal=0;
   emps.forEach(e=>{
     const m=monthlyFor(e.id), snap=snapshotFor(e.id);
-    const s=snap
+    const baseSeven=snap
       ? (typeof normalizedSevenSnapshot==="function" ? normalizedSevenSnapshot(e,snap) : snap)
       : calculate7th(e,m);
+    const s=applySevenManualOverrides(e,baseSeven);
     const net=Number(s.net_pay||0);
     const pm=String(e.payment_method||"Cash");
     if(pm==="Cash") cashTotal+=net;
@@ -10783,7 +11132,7 @@ function renderSevenTable(emps){
       <tr>
         <th rowspan="2">Name</th><th rowspan="2">Off Day</th><th rowspan="2">Basic Pay</th><th rowspan="2">Allowance</th>
         <th rowspan="2">Employee EPF</th><th rowspan="2">Employer EPF</th>
-        <th rowspan="2">Employee SOCSO</th><th rowspan="2">Employer SOCSO</th>
+        <th rowspan="2" title="Includes Lindung 24 Jam">Employee SOCSO + L24</th><th rowspan="2">Employer SOCSO</th>
         <th rowspan="2">Employee EIS</th><th rowspan="2">Employer EIS</th>
         <th rowspan="2">Unpaid</th>
         <th rowspan="2">PCB / Tax</th><th rowspan="2">OT</th><th rowspan="2">Deduction</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
@@ -10830,13 +11179,21 @@ function renderFourteenTable(emps){
     const threeBonus=cs
       ? Number(cs.three_month_bonus ?? salaryQuarter3BonusFor(e.id))
       : salaryQuarter3BonusFor(e.id);
-    const c=cs||calculate14th(m,snapshotFor(e.id),threeBonus);
-    const fld=(field,val)=>cs?money(val):editInput(e.id,field,val);
-    const a=cs?legacyCommissionA(cs):legacyCommissionA(m);
-    const b=cs?Number(cs.commission_b||0):Number(m.commission_b||0);
-    const customer=cs?Number(cs.customer_referral||0):Number(m.customer_referral||0);
-    const staff=cs?Number(cs.staff_referral||0):Number(m.staff_referral||0);
-    const bonus=cs?Number(cs.bonus||0):Number(m.reward||0);
+    const base14=cs
+      ? calculate14th({
+          commission_a:Number(cs.commission_a||0),
+          commission_b:Number(cs.commission_b||0),
+          customer_referral:Number(cs.customer_referral||0),
+          staff_referral:Number(cs.staff_referral||0),
+          reward:Number(cs.bonus||0)
+        },snapshotFor(e.id),threeBonus)
+      : calculate14th(m,snapshotFor(e.id),threeBonus);
+    const c=applyFourteenManualOverrides(e,{...(cs||{}),...base14,three_month_bonus:threeBonus});
+    const a=Number(c.commission_a||0);
+    const b=Number(c.commission_b||0);
+    const customer=Number(c.customer_referral||0);
+    const staff=Number(c.staff_referral||0);
+    const bonus=Number(c.bonus||0);
     const total=Number(c.total_commission||0);
     const canPayslip=Number(c.commission||0)>0;
     const net=Number(c.net_pay||0);
@@ -10848,24 +11205,24 @@ function renderFourteenTable(emps){
 
     return `<tr>
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e.name)}</td>
-      <td>${fld("commission_a",a)}</td>
-      <td>${fld("commission_b",b)}</td>
-      <td>${fld("customer_referral",customer)}</td>
-      <td>${fld("staff_referral",staff)}</td>
-      <td>${fld("reward",bonus)}</td>
-      <td data-live-3bonus="${e.id}"><strong>${money(threeBonus)}</strong></td>
-      <td data-live-totalcommission14="${e.id}"><strong>${money(total)}</strong></td>
-      <td>${money(c.seventh_basic_pay||0)}</td>
-      <td>${money(c.seventh_allowance||0)}</td>
-      <td>${money(c.employer_epf||0)}</td>
-      <td>${money(c.employer_socso||0)}</td>
-      <td>${money(c.lindung24||0)}</td>
-      <td>${money(c.employer_eis||0)}</td>
-      <td data-live-commission="${e.id}"><strong>${money(c.commission)}</strong></td>
-      <td data-live-netpay14="${e.id}">${money(c.net_pay)}</td>
+      <td>${salaryOverrideInput(e.id,"14","commission_a",a)}</td>
+      <td>${salaryOverrideInput(e.id,"14","commission_b",b)}</td>
+      <td>${salaryOverrideInput(e.id,"14","customer_referral",customer)}</td>
+      <td>${salaryOverrideInput(e.id,"14","staff_referral",staff)}</td>
+      <td>${salaryOverrideInput(e.id,"14","bonus",bonus)}</td>
+      <td data-live-3bonus="${e.id}">${salaryOverrideInput(e.id,"14","three_month_bonus",c.three_month_bonus||0)}</td>
+      <td data-live-totalcommission14="${e.id}">${salaryOverrideInput(e.id,"14","total_commission",total)}</td>
+      <td>${salaryOverrideInput(e.id,"14","seventh_basic_pay",c.seventh_basic_pay||0)}</td>
+      <td>${salaryOverrideInput(e.id,"14","seventh_allowance",c.seventh_allowance||0)}</td>
+      <td>${salaryOverrideInput(e.id,"14","employer_epf",c.employer_epf||0)}</td>
+      <td>${salaryOverrideInput(e.id,"14","employer_socso",c.employer_socso||0)}</td>
+      <td>${salaryOverrideInput(e.id,"14","lindung24",c.lindung24||0)}</td>
+      <td>${salaryOverrideInput(e.id,"14","employer_eis",c.employer_eis||0)}</td>
+      <td data-live-commission="${e.id}">${salaryOverrideInput(e.id,"14","commission",c.commission||0)}</td>
+      <td data-live-netpay14="${e.id}">${salaryOverrideInput(e.id,"14","net_pay",c.net_pay||0)}</td>
       <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
-      <td><span class="pay-method-pill">${pm}</span></td>
+      <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${cs
         ? (cs.payment_done
             ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>`
@@ -11535,6 +11892,26 @@ function recalc14thLive(empId){
 }
 
 function bindSalaryTableActions(){
+  document.querySelectorAll("[data-salary-override]").forEach(inp=>{
+    inp.addEventListener("change",async()=>{
+      const empId=Number(inp.dataset.salaryOverride);
+      const payrollType=String(inp.dataset.payrollType||"");
+      const field=String(inp.dataset.overrideField||"");
+      const value=Number(inp.value||0);
+      inp.disabled=true;
+      const ok=await saveSalaryManualOverride(empId,payrollType,field,value);
+      if(!ok) inp.disabled=false;
+    });
+  });
+
+  document.querySelectorAll("[data-salary-pay-method]").forEach(sel=>{
+    sel.addEventListener("change",async()=>{
+      sel.disabled=true;
+      const ok=await saveSalaryPaymentMethod(Number(sel.dataset.salaryPayMethod),sel.value);
+      if(!ok) sel.disabled=false;
+    });
+  });
+
   document.querySelectorAll("[data-month-edit]").forEach(inp=>{
     const syncLocalAndRecalc=()=>{
       const empId=Number(inp.dataset.monthEdit);
@@ -11849,7 +12226,7 @@ async function confirm7th(empId){
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || snapshotFor(empId)) return;
   if((e.employment_type||"full_time")==="part_time") return;
-  const calc=calculate7th(e,monthlyFor(empId));
+  const calc=applySevenManualOverrides(e,calculate7th(e,monthlyFor(empId)));
   // Lindung 24 Jam is display-only. The existing payroll_snapshot table
   // does not have an employee_lindung24 column, so never send it to Supabase.
   const {employee_lindung24,...snapshotCalc}=calc;
@@ -11871,7 +12248,7 @@ async function confirm14th(empId){
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || commissionSnapshotFor(empId)) return;
   const m=monthlyFor(empId);
-  const c=calculate14th(m,snapshotFor(empId),salaryQuarter3BonusFor(empId));
+  const c=applyFourteenManualOverrides(e,calculate14th(m,snapshotFor(empId),salaryQuarter3BonusFor(empId)));
   const row={
     employee_id:e.id,
     salary_month:monthDate(),
@@ -12541,9 +12918,13 @@ function ytdSum(empId,key){
 
   let total=0;
   byMonth.forEach(x=>{
-    if((key==="gross_pay" || key==="net_pay") && e){
+    if((key==="gross_pay" || key==="net_pay" || key==="employee_socso") && e){
       const n=normalizedSevenSnapshot(e,x);
-      total+=Number(n?.[key]||0);
+      if(key==="employee_socso"){
+        total+=employeeSocsoWithLindung(n);
+      }else{
+        total+=Number(n?.[key]||0);
+      }
     }else{
       total+=Number(x?.[key]||0);
     }
@@ -12599,11 +12980,11 @@ async function openPayslip(empId,type){
   }
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId)); if(!e) return;
   if(type===7){
-    const rawS=snapshotFor(empId); const s=rawS?normalizedSevenSnapshot(e,rawS):rawS;
+    const rawS=snapshotFor(empId); const s=rawS?applySevenManualOverrides(e,normalizedSevenSnapshot(e,rawS)):rawS;
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>${payslipOtLabel(s)}</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO</span><span class="amt">${Number(s.employee_socso||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div>${Number(s.manual_deduction||0)>0?`<div class="payslip-line"><span>Deduction</span><span class="amt">${Number(s.manual_deduction||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Basic Pay</span><span class="amt">${Number(s.guaranteed_pay||0).toFixed(2)}</span></div><div class="payslip-line"><span>Allowance</span><span class="amt">${Number(s.allowance||0).toFixed(2)}</span></div>${Number(s.ot||0)>0?`<div class="payslip-line"><span>${payslipOtLabel(s)}</span><span class="amt">${Number(s.ot||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-line"><span>Employee EPF</span><span class="amt">${Number(s.employee_epf||0).toFixed(2)}</span></div><div class="payslip-line"><span>Employee SOCSO + L24</span><span class="amt">${employeeSocsoWithLindung(s).toFixed(2)}</span></div><div class="payslip-line"><span>Employee EIS</span><span class="amt">${Number(s.employee_eis||0).toFixed(2)}</span></div>${String(e.tax_no||"").trim()?`<div class="payslip-line"><span>Income Tax PCB</span><span class="amt">${Number(s.tax||0).toFixed(2)}</span></div>`:""}<div class="payslip-line"><span>Unpaid</span><span class="amt">${Number(s.off_day_deduction||0).toFixed(2)}</span></div>${Number(s.manual_deduction||0)>0?`<div class="payslip-line"><span>Deduction</span><span class="amt">${Number(s.manual_deduction||0).toFixed(2)}</span></div>`:""}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
 <div class="ref-pay-summary">
   <div class="ref-gross-area">
     <div class="ref-total-line"><span>GROSS PAY</span><span>${Number(s.gross_pay||0).toFixed(2)}</span></div>
@@ -12620,10 +13001,10 @@ async function openPayslip(empId,type){
   <div class="ref-current">
     <div class="ref-section-title">&lt;----------CURRENT MONTH----------&gt;</div>
     <div class="ref-current-table">
-      <div></div><div>E.P.F</div><div>SOCSO</div><div>E.I.S</div><div>Tax</div>
-      <div>EMPLOYEE :</div><div>${Number(s.employee_epf||0).toFixed(2)}</div><div>${Number(s.employee_socso||0).toFixed(2)}</div><div>${Number(s.employee_eis||0).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
+      <div></div><div>E.P.F</div><div>SOCSO + L24</div><div>E.I.S</div><div>Tax</div>
+      <div>EMPLOYEE :</div><div>${Number(s.employee_epf||0).toFixed(2)}</div><div>${employeeSocsoWithLindung(s).toFixed(2)}</div><div>${Number(s.employee_eis||0).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
       <div>EMPLOYER :</div><div>${Number(s.employer_epf||0).toFixed(2)}</div><div>${Number(s.employer_socso||0).toFixed(2)}</div><div>${Number(s.employer_eis||0).toFixed(2)}</div><div>0.00</div>
-      <div>TOTAL :</div><div>${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div>${(Number(s.employee_socso||0)+Number(s.employer_socso||0)).toFixed(2)}</div><div>${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
+      <div>TOTAL :</div><div>${(Number(s.employee_epf||0)+Number(s.employer_epf||0)).toFixed(2)}</div><div>${(employeeSocsoWithLindung(s)+Number(s.employer_socso||0)).toFixed(2)}</div><div>${(Number(s.employee_eis||0)+Number(s.employer_eis||0)).toFixed(2)}</div><div>${Number(s.tax||0).toFixed(2)}</div>
     </div>
     <div class="ref-note">Note:</div>
   </div>
@@ -12631,7 +13012,7 @@ async function openPayslip(empId,type){
   <div class="ref-ytd">
     <div class="ref-section-title">&lt;---------------YEAR-TO-DATE---------------&gt;</div>
     <div class="ref-ytd-table">
-      <div></div><div>E.P.F</div><div>SOCSO</div><div>E.I.S</div><div>Tax</div><div>GROSS PAY</div><div>NET PAY</div>
+      <div></div><div>E.P.F</div><div>SOCSO + L24</div><div>E.I.S</div><div>Tax</div><div>GROSS PAY</div><div>NET PAY</div>
 
       <div>EMPLOYEE :</div>
       <div>${ytdSum(empId,"employee_epf").toFixed(2)}</div>
@@ -12686,7 +13067,7 @@ async function openPayslip(empId,type){
       reward:Number(rawC.bonus||0)
     },sevenSnapshot,threeBonus);
 
-    const c={...rawC,...recalculated,three_month_bonus:threeBonus};
+    const c=applyFourteenManualOverrides(e,{...rawC,...recalculated,three_month_bonus:threeBonus});
 
     // Commission already comes from Total Commission after deducting the 7th
     // employer cost. Do not add referral/bonus/3-bonus a second time.
@@ -13660,6 +14041,29 @@ function normalizeStaffWhatsAppNumber(raw){
   return digits;
 }
 
+
+async function downloadCurrentPayslipPdf(){
+  const btn=document.getElementById("downloadPayslipPdfBtn");
+  const oldText=btn?.textContent||"Download PDF";
+
+  try{
+    if(btn){
+      btn.disabled=true;
+      btn.textContent="Preparing...";
+    }
+
+    const file=await buildPayslipPdfFile();
+    downloadPdfFile(file);
+  }catch(err){
+    alert("Unable to download payslip PDF: "+(err?.message||err));
+  }finally{
+    if(btn){
+      btn.disabled=false;
+      btn.textContent=oldText;
+    }
+  }
+}
+
 async function sharePayslipWhatsApp(){
   const btn=document.getElementById("shareWhatsAppBtn");
   const oldText=btn?.textContent||"Send WhatsApp";
@@ -13716,6 +14120,9 @@ async function sharePayslipWhatsApp(){
 </script>
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
+  const downloadBtn=document.getElementById("downloadPayslipPdfBtn");
+  if(downloadBtn) downloadBtn.onclick=downloadCurrentPayslipPdf;
+
   const b=document.getElementById("shareWhatsAppBtn");
   if(b) b.onclick=sharePayslipWhatsApp;
 });
