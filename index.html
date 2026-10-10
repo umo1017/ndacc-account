@@ -3856,6 +3856,16 @@ html.auth-pending body .main-page-close{
 }
 </style>
 
+
+<style id="social-facebook-page-selector-v1">
+.social-page-select-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+#socialFacebookPageSelect{width:100%}
+@media(max-width:700px){
+  .social-page-select-row{grid-template-columns:1fr}
+  #socialFacebookPagesRefreshBtn{width:100%}
+}
+</style>
+
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -8716,6 +8726,18 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
           <label><input type="checkbox" value="微信视频号"> 微信视频号</label>
         </div>
       </div>
+
+      <div class="field social-span-2" id="socialFacebookPageField" style="display:none">
+        <label>Facebook Page / 发布主页</label>
+        <div class="social-page-select-row">
+          <select id="socialFacebookPageSelect">
+            <option value="">Select Facebook Page</option>
+          </select>
+          <button class="btn" id="socialFacebookPagesRefreshBtn" type="button">Refresh Pages</button>
+        </div>
+        <div class="helper" id="socialFacebookPageHelp"></div>
+      </div>
+
       <div class="field social-span-2"><label>Caption</label><textarea id="socialCaption" rows="6" placeholder="Post caption..."></textarea></div>
       <div class="field"><label>Publish Date</label><input id="socialPublishDate" type="date"></div>
       <div class="field"><label>Publish Time</label><input id="socialPublishTime" type="time"></div>
@@ -27807,10 +27829,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
  let viewMonth=new Date(); viewMonth.setDate(1);
  let posts=[],accounts=[],editingMedia=[],loading=false;
 
- function db(){
-   if(window.salaryDb) return window.salaryDb;
-   throw new Error("Supabase client is not ready.");
- }
+ function db(){return window.salaryDb||salaryDb}
  function isoLocal(date,time){
    if(!date)return null;
    const t=time||"00:00";
@@ -27830,6 +27849,50 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    return `<img class="social-list-thumb" src="${esc(m.url)}" alt="">`;
  }
  function platformText(a){return Array.isArray(a)?a.join(" · "):""}
+ function facebookChecked(){
+   return !!document.querySelector('.social-platform-checks input[value="Facebook"]')?.checked;
+ }
+
+ function populateFacebookPageSelect(selectedId=""){
+   const field=$("socialFacebookPageField");
+   const sel=$("socialFacebookPageSelect");
+   const help=$("socialFacebookPageHelp");
+   const show=facebookChecked();
+
+   if(field)field.style.display=show?"":"none";
+   if(!show)return;
+   if(!sel)return;
+
+   const pages=Array.isArray(metaConnectedPages)?metaConnectedPages:[];
+   sel.innerHTML='<option value="">Select Facebook Page</option>'+
+     pages.map(p=>`<option value="${esc(p.page_id||"")}">${esc(p.page_name||"Facebook Page")}</option>`).join("");
+
+   if(selectedId && pages.some(p=>String(p.page_id)===String(selectedId))){
+     sel.value=String(selectedId);
+   }
+
+   if(help){
+     help.textContent=pages.length
+       ? `${pages.length} connected Facebook Page${pages.length===1?"":"s"} available.`
+       : "No connected Facebook Pages. Go to Accounts → Connect Facebook first.";
+   }
+ }
+
+ async function ensureFacebookPages(selectedId=""){
+   if(!facebookChecked()){
+     populateFacebookPageSelect("");
+     return;
+   }
+   try{
+     const data=await invokeMetaOauth("status");
+     metaConnectedPages=Array.isArray(data.pages)?data.pages:[];
+   }catch(err){
+     console.warn("Unable to load Facebook Pages:",err);
+     metaConnectedPages=[];
+   }
+   populateFacebookPageSelect(selectedId);
+ }
+
  function closeModals(){["socialPostModal","socialAccountsModal"].forEach(id=>$(id)?.classList.remove("open"))}
  function setMsg(t,bad=false){const e=$("socialPostMsg");if(e){e.textContent=t||"";e.style.color=bad?"#a00":""}}
 
@@ -27881,7 +27944,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      return `<button type="button" class="social-list-row" data-social-post="${x.id}" style="background:#fff;text-align:left">
        <div>${mediaThumb(x.media)||'<div class="social-list-thumb"></div>'}</div>
        <div><strong>${esc(x.title||"Untitled")}</strong><br><span class="helper">${esc(x.brand||"")}</span></div>
-       <div class="social-list-platforms">${esc(platformText(x.platforms))}</div>
+       <div class="social-list-platforms">${esc(platformText(x.platforms))}${x.facebook_page_name?` · ${esc(x.facebook_page_name)}`:""}</div>
        <div class="social-list-date">${esc(lp.date)}<br>${esc(lp.time)}</div>
        <div><span class="social-status">${esc(x.status)}</span></div>
      </button>`;
@@ -27908,6 +27971,9 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    editingMedia=Array.isArray(x.media)?JSON.parse(JSON.stringify(x.media)):[];
    $("socialMediaFiles").value="";renderMediaPreview();
    $("socialDeletePostBtn").style.display="";
+   if($("socialFacebookPageSelect"))$("socialFacebookPageSelect").value="";
+   populateFacebookPageSelect("");
+   populateFacebookPageSelect(x.facebook_page_id||"");
    $("socialPostModal").classList.add("open");setMsg("");
  }
  function renderMediaPreview(){
@@ -27938,12 +28004,23 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      if(status==="scheduled"&&(!$("socialPublishDate").value||!$("socialPublishTime").value))return setMsg("Choose publish date and time.",true);
      await uploadFiles();
      if(!editingMedia.length)return setMsg("Upload at least one poster image or video.",true);
-     const row={
+     const facebookPageId=facebookChecked()?String($("socialFacebookPageSelect")?.value||"").trim():"";
+   const facebookPage=metaConnectedPages.find(p=>String(p.page_id)===facebookPageId);
+   const facebookPageName=facebookPage?.page_name||"";
+
+   if(facebookChecked() && !facebookPageId){
+     setMsg("Select a Facebook Page / 请选择要发布的主页。",true);
+     return;
+   }
+
+   const row={
        brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),
        caption:$("socialCaption").value,platforms,media:editingMedia,
        scheduled_at:isoLocal($("socialPublishDate").value,$("socialPublishTime").value),
        timezone:"Asia/Kuala_Lumpur",status,
-       updated_at:new Date().toISOString(),created_by:String(window.currentUserEmail||"").toLowerCase()
+       updated_at:new Date().toISOString(),facebook_page_id:facebookPageId||null,
+     facebook_page_name:facebookPageName||null,
+     created_by:String(window.currentUserEmail||"").toLowerCase()
      };
      const id=$("socialPostId").value;
      setMsg("Saving...");
@@ -28094,8 +28171,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      return;
    }
 
-   setTimeout(async()=>{
-     try{ await showSocial(); }catch(_){}
+   setTimeout(()=>{
      $("socialAccountsModal")?.classList.add("open");
      refreshMetaConnectionStatus();
    },250);
@@ -28143,10 +28219,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    try{
      const {data,error}=await db().from("social_media_accounts").select("*").order("platform").order("brand");
      if(error)throw error;accounts=data||[];renderAccounts();
-   }catch(e){
-     accounts=[];
-     $("socialAccountList").innerHTML=`<div class="bad">${esc(e.message||e)}</div>`;
-   }
+   }catch(e){$("socialAccountList").innerHTML=`<div class="bad">${esc(e.message||e)}</div>`}
  }
  function renderAccounts(){
    $("socialAccountList").innerHTML=accounts.length?accounts.map(a=>{
@@ -28190,13 +28263,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    if(isFacebook && !accountUrl)return alert("Enter a valid Facebook link / URL.");
 
    const {error}=await db().from("social_media_accounts").insert(row);
-   if(error){
-     const msg=String(error.message||error);
-     if(/entry_type|account_url|schema cache|column/i.test(msg)){
-       return alert("Social Accounts database needs the latest SQL first.\n\n"+msg);
-     }
-     return alert(msg);
-   }
+   if(error)return alert(error.message);
 
    $("socialAccountBrand").value="";
    $("socialAccountName").value="";
@@ -28207,11 +28274,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    await loadAccounts();
  }
  async function showSocial(){
-   const allowed=!!(
-     window.isGlobalAdmin ||
-     (typeof isGlobalAdmin!=="undefined" && isGlobalAdmin)
-   );
-   if(!allowed){try{showDaily()}catch(_){}return}
+   if(!window.isGlobalAdmin){try{showDaily()}catch(_){}return}
    window.activeMainPage="social";
    try{localStorage.setItem("nd_last_page_v2","social")}catch(_){}
    ["appView","salaryPage","rosterPage","bonusPage","settlementPage","ordersPage","settingsPage"].forEach(id=>{
@@ -28225,19 +28288,22 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
  window.showSocial=showSocial;
 
  document.addEventListener("DOMContentLoaded",()=>{
-   const socialAdmin=!!(
-     window.isGlobalAdmin ||
-     (typeof isGlobalAdmin!=="undefined" && isGlobalAdmin)
-   );
-   const nav=$("sidebarSocial");
-   if(nav){
-     nav.style.display=socialAdmin?"":"none";
-     nav.onclick=showSocial;
-   }
+   const nav=$("sidebarSocial");if(nav){nav.style.display=window.isGlobalAdmin?"":"none";nav.onclick=showSocial}
    $("socialNewPostBtn").onclick=()=>openNew();
    $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
    $("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>save("scheduled");
    $("socialDeletePostBtn").onclick=del;
+
+   document.querySelectorAll(".social-platform-checks input").forEach(chk=>{
+     chk.addEventListener("change",()=>{
+       if(chk.value==="Facebook"){
+         if(chk.checked)ensureFacebookPages($("socialFacebookPageSelect")?.value||"");
+         else populateFacebookPageSelect("");
+       }
+     });
+   });
+
+   $("socialFacebookPagesRefreshBtn").onclick=()=>ensureFacebookPages($("socialFacebookPageSelect")?.value||"");
    $("socialAccountsBtn").onclick=async()=>{
      $("socialAccountsModal").classList.add("open");
      updateFacebookEntryFields();
