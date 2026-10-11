@@ -8791,8 +8791,8 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <p class="helper">自己填写品牌名称，再选择平台及对应账号。Facebook 可绑定已授权的主页；Instagram / TikTok 必须完成官方授权后才能连接；勾选平台不等于已连接。</p>
       <label for="ndBrandNameInput">品牌名称 · Brand Name</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input id="ndBrandNameInput" placeholder="例如 Lumi Beauty 光之美" style="flex:1 1 180px"><button type="button" class="btn primary" id="ndCreateBrandBtn">＋ 创建品牌</button></div>
-      <label for="ndBrandBindSelect">选择已创建的品牌 · Existing Brand</label>
-      <select id="ndBrandBindSelect"><option value="">加载品牌中...</option></select>
+      <select id="ndBrandBindSelect" hidden aria-hidden="true" tabindex="-1"><option value="">尚未创建品牌</option></select>
+      <div class="helper" id="ndBrandActiveName" style="margin:6px 0 10px">请输入品牌名称并点击创建品牌，随后绑定账号。</div>
       <div style="font-weight:800;margin:16px 0 9px">选择平台 · Select Platforms</div>
       <div class="nd-platform-picker" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px">
         <label class="nd-platform-option"><input type="checkbox" id="ndPlatformFacebook" checked> Facebook</label>
@@ -29178,13 +29178,17 @@ document.addEventListener("DOMContentLoaded",function(){
      const sel=$('ndBrandBindSelect'),old=preferred||sel.value;
      sel.innerHTML='<option value="">请选择或创建品牌</option>'+brands.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
      if(brands.some(x=>x.id===old))sel.value=old;
+     const typed=$('ndBrandNameInput')?.value.trim().toLowerCase();
+     const matched=typed&&brands.find(x=>x.name.toLowerCase()===typed);
+     if(matched)sel.value=matched.id;
      await render();
      if(ae)say('品牌已读取；Facebook 授权状态读取失败：'+ae.message);
    }catch(e){say('加载失败：'+(e.message||e))}finally{loading=false}
  }
  async function render(){
    platformUI();const brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
-   if(!brand){box.innerHTML='<p class="helper">先输入新品牌名称并创建，或选择已创建的品牌。</p>';say(`现有 ${brands.length} 个品牌，${pages.length} 个已授权 Facebook 主页。`);return}
+   if($('ndBrandActiveName'))$('ndBrandActiveName').textContent=brand?'当前品牌：'+(brands.find(x=>x.id===brand)?.name||'已创建品牌'):'请输入品牌名称并点击创建品牌，然后绑定账号。';
+   if(!brand){box.innerHTML='<p class="helper">请先输入品牌名称并点击「创建品牌」。</p>';say(`已读取 ${pages.length} 个授权 Facebook 主页。`);return}
    const {data,error}=await db().from('social_brand_accounts').select('platform,platform_account_id,brand_id,connection_status').eq('platform','facebook');
    if(error){say('读取绑定失败：'+error.message+'。请检查 social_brand_accounts 的读取权限。');box.innerHTML='<p class="helper">无法读取绑定状态，请检查数据库权限。</p>';return}
    bindings=data||[];
@@ -29208,7 +29212,7 @@ document.addEventListener("DOMContentLoaded",function(){
      const {data,error}=await db().rpc('nd_create_social_brand',{p_name:name});
      if(error)throw error;
      const id=typeof data==='string'?data:data?.id;
-     await load(id);$('ndBrandNameInput').value='';
+     await load(id);$('ndBrandNameInput').value=name;
      if($('ndSocialActiveBrand')){const s=$('ndSocialActiveBrand');if(id&&!Array.from(s.options).some(o=>o.value===id)){s.add(new Option(name,id))}if(id){s.value=id;s.dispatchEvent(new Event('change'))}}
      say('品牌创建成功。现在选择 Facebook Page 绑定；其他平台需分别完成授权。');
    }catch(e){say('创建失败：'+(e.message||e)+'。请先运行新版品牌创建 SQL。')}finally{btn.disabled=false}
@@ -29246,6 +29250,7 @@ document.addEventListener("DOMContentLoaded",function(){
  },true);
  document.addEventListener('DOMContentLoaded',()=>{
    $('ndBrandBindSelect')?.addEventListener('change',render);
+   $('ndBrandNameInput')?.addEventListener('input',()=>{const name=$('ndBrandNameInput').value.trim().toLowerCase();const existing=brands.find(b=>b.name.toLowerCase()===name);const sel=$('ndBrandBindSelect');if(sel){sel.value=existing?.id||'';render();}});
    ['ndPlatformFacebook','ndPlatformInstagram','ndPlatformTiktok'].forEach(id=>$(id)?.addEventListener('change',platformUI));
    $('ndCreateBrandBtn')?.addEventListener('click',create);
    $('ndBrandNameInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();create()}});
