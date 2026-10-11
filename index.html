@@ -8763,6 +8763,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 
       <div class="meta-connect-actions">
         <button class="btn primary" id="metaConnectBtn" type="button">Connect Facebook</button>
+        <button class="btn primary" id="metaReauthorizeBtn" type="button" style="display:none">Reauthorize Facebook · 更新授权</button>
         <button class="btn" id="metaRefreshBtn" type="button">Refresh</button>
         <button class="btn bad" id="metaDisconnectBtn" type="button" style="display:none">Disconnect</button>
       </div>
@@ -28284,6 +28285,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    }
    if(msg)msg.textContent=message||"";
    if($("metaConnectBtn"))$("metaConnectBtn").style.display=connected?"none":"";
+   if($("metaReauthorizeBtn"))$("metaReauthorizeBtn").style.display=connected?"":"none";
    if($("metaDisconnectBtn"))$("metaDisconnectBtn").style.display=connected?"":"none";
  }
 
@@ -28553,6 +28555,13 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    };
 
    $("metaConnectBtn").onclick=connectFacebookMeta;
+   $("metaReauthorizeBtn").onclick=async()=>{
+     const btn=$("metaReauthorizeBtn");
+     if(!confirm("重新授权 Facebook 并更新现有主页的发布权限？\n\n这不会删除已连接的主页。"))return;
+     if(btn){btn.disabled=true;btn.textContent="正在打开 Facebook 授权...";}
+     try{await connectFacebookMeta();}
+     finally{if(btn){btn.disabled=false;btn.textContent="Reauthorize Facebook · 更新授权";}}
+   };
    $("metaRefreshBtn").onclick=refreshMetaConnectionStatus;
    $("metaDisconnectBtn").onclick=()=>alert("Bulk disconnect is disabled to protect existing Facebook Page connections.");
 
