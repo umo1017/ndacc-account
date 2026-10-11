@@ -3900,7 +3900,7 @@ html.auth-pending body .main-page-close{
  #socialPage .social-stat{padding:12px!important}
 }
 </style>
-</head>
+<style id="nd-brand-create-style">#socialAccountsModal .nd-platform-option{display:flex;align-items:center;gap:9px;padding:11px 12px;background:#fff;border:1px solid #dce6e2;border-radius:11px;margin:0;cursor:pointer;font-weight:750}#socialAccountsModal .nd-platform-option input{width:19px;height:19px;flex:none;accent-color:#245f55}#ndCreateBrandBtn{white-space:nowrap}#ndBrandNameInput{min-width:0}@media(max-width:600px){#socialAccountsModal .nd-brand-account-row{align-items:flex-start!important}#socialAccountsModal .nd-brand-account-row button{flex:0 0 auto;padding:9px 10px;font-size:13px}}</style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
@@ -8786,14 +8786,23 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <button class="social-x" id="socialAccountsClose" type="button">×</button>
     </div>
     
-    <section class="nd-brand-bind" id="ndBrandBindPanel" style="border:1px solid #dbe6e0;border-radius:14px;padding:16px;margin:14px 0;background:#f9fcfa">
-  <h3 style="margin:0 0 8px">品牌账号绑定 · Brand Accounts</h3>
-  <p class="helper">选择品牌，再把你已经授权的 Facebook Page 绑定到该品牌。不会删除或更改 Facebook 授权。</p>
-  <label for="ndBrandBindSelect">选择品牌</label><select id="ndBrandBindSelect"><option value="">加载品牌中...</option></select>
-  <div id="ndBrandBindStatus" class="helper" style="margin:10px 0" aria-live="polite"></div>
-  <div id="ndBrandFacebookChoices"></div>
-  <div style="margin-top:12px;border-top:1px solid #e0e9e4;padding-top:12px" class="helper">Instagram / TikTok / 小红书 / 微信视频号：需各平台正式授权及接口支持后才能绑定；这里不会伪装成已连接。</div>
-</section>
+    <section class="nd-brand-bind" id="ndBrandBindPanel" style="border:1px solid #dbe6e0;border-radius:16px;padding:16px;margin:14px 0;background:#f9fcfa">
+      <h3 style="margin:0 0 8px">创建与绑定品牌 · Create & Connect Brand</h3>
+      <p class="helper">自己填写品牌名称，再选择平台及对应账号。Facebook 可绑定已授权的主页；Instagram / TikTok 必须完成官方授权后才能连接。</p>
+      <label for="ndBrandNameInput">品牌名称 · Brand Name</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input id="ndBrandNameInput" placeholder="例如 Lumi Beauty 光之美" style="flex:1 1 180px"><button type="button" class="btn primary" id="ndCreateBrandBtn">＋ 创建品牌</button></div>
+      <label for="ndBrandBindSelect">选择已创建的品牌 · Existing Brand</label>
+      <select id="ndBrandBindSelect"><option value="">加载品牌中...</option></select>
+      <div style="font-weight:800;margin:16px 0 9px">选择平台 · Select Platforms</div>
+      <div class="nd-platform-picker" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px">
+        <label class="nd-platform-option"><input type="checkbox" id="ndPlatformFacebook" checked> Facebook</label>
+        <label class="nd-platform-option"><input type="checkbox" id="ndPlatformInstagram"> Instagram</label>
+        <label class="nd-platform-option"><input type="checkbox" id="ndPlatformTiktok"> TikTok</label>
+      </div>
+      <div id="ndBrandFacebookPanel" style="margin-top:14px"><strong>Facebook · 选择主页</strong><div id="ndBrandFacebookChoices"></div></div>
+      <div id="ndBrandOtherPlatforms" class="helper" style="margin-top:12px"></div>
+      <div id="ndBrandBindStatus" class="helper" style="margin:12px 0" aria-live="polite"></div>
+    </section>
 <div class="meta-connect-panel">
       <div class="meta-connect-top">
         <div>
@@ -29141,63 +29150,79 @@ document.addEventListener("DOMContentLoaded",function(){
 })();
 </script>
 
-<script id="nd-brand-binding-ui-v1">
-/* Brand binding UI. All writes use authenticated, ownership-checked RPC.
-   Do not replace existing Meta OAuth or publishing functions. */
+<script id="nd-brand-binding-ui-v2">
 (function(){
- const $=id=>document.getElementById(id);
- const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- let brands=[],pages=[],bindings=[];
+ const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const db=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
- const say=(msg)=>{if($('ndBrandBindStatus'))$('ndBrandBindStatus').textContent=msg};
- async function load(){
-   const client=db();if(!client)return say('Supabase 尚未准备好。');
-   say('读取品牌及 Facebook 主页...');
+ let brands=[],pages=[],bindings=[],loading=false;
+ function say(t){if($('ndBrandBindStatus'))$('ndBrandBindStatus').textContent=t}
+ function platformUI(){
+   const fb=$('ndPlatformFacebook')?.checked;
+   $('ndBrandFacebookPanel').style.display=fb?'':'none';
+   const selected=[['ndPlatformInstagram','Instagram'],['ndPlatformTiktok','TikTok']].filter(x=>$(x[0])?.checked).map(x=>x[1]);
+   $('ndBrandOtherPlatforms').textContent=selected.length?selected.join(' / ')+'：已选择平台，但尚未完成官方账号授权，不能标记为已连接或自动发布。':'';
+ }
+ async function load(preferred=''){
+   if(loading)return;loading=true;
    try{
+     const client=db();if(!client)throw Error('Supabase 尚未准备好');
+     say('正在读取品牌与 Facebook 主页...');
      const [{data:b,error:be},{data:auth,error:ae}]=await Promise.all([
        client.from('social_brands').select('id,name,slug').eq('is_active',true).order('name'),
        client.functions.invoke('meta-facebook-oauth',{body:{action:'status'}})
      ]);
-     if(be)throw be;if(ae)throw ae;
-     brands=b||[];pages=Array.isArray(auth?.pages)?auth.pages:[];
-     const sel=$('ndBrandBindSelect'),old=sel.value;
-     sel.innerHTML='<option value="">请选择品牌</option>'+brands.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+     if(be)throw be;
+     brands=b||[];pages=ae?[]:(Array.isArray(auth?.pages)?auth.pages:[]);
+     const sel=$('ndBrandBindSelect'),old=preferred||sel.value;
+     sel.innerHTML='<option value="">请选择或创建品牌</option>'+brands.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
      if(brands.some(x=>x.id===old))sel.value=old;
      await render();
-   }catch(e){say('加载失败：'+String(e?.message||e));}
+     if(ae)say('品牌已读取；Facebook 授权状态读取失败：'+ae.message);
+   }catch(e){say('加载失败：'+(e.message||e))}finally{loading=false}
  }
  async function render(){
-   const client=db(),brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');
-   if(!box)return;
-   if(!brand){box.innerHTML='';say(`找到 ${brands.length} 个品牌、${pages.length} 个已授权主页。请选择品牌。`);return;}
-   const {data,error}=await client.from('social_brand_accounts').select('platform,platform_account_id,brand_id,connection_status').eq('platform','facebook');
-   if(error){say('无法读取绑定：'+error.message+'。请先运行配套 SQL。');box.innerHTML='';return;}
+   platformUI();const brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
+   if(!brand){box.innerHTML='<p class="helper">先输入新品牌名称并创建，或选择已创建的品牌。</p>';say(`现有 ${brands.length} 个品牌，${pages.length} 个已授权 Facebook 主页。`);return}
+   const {data,error}=await db().from('social_brand_accounts').select('platform,platform_account_id,brand_id,connection_status').eq('platform','facebook');
+   if(error){say('读取绑定失败：'+error.message);box.innerHTML='';return}
    bindings=data||[];
-   if(!pages.length){box.innerHTML='<p class="helper">没有读取到 Facebook Page，请先使用原有 Connect Facebook 授权。</p>';return;}
+   if(!pages.length){box.innerHTML='<p class="helper">未读取到 Facebook 主页，请先点击下方 Connect Facebook 完成授权。</p>';return}
    box.innerHTML=pages.map(p=>{
      const id=String(p.page_id||''),found=bindings.find(x=>x.platform_account_id===id),mine=found?.brand_id===brand,other=!!found&&!mine;
-     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #e6ece8">
-       <div style="min-width:0"><strong>${esc(p.page_name||'Facebook Page')}</strong><div class="helper">${esc(id)} · ${mine?'已绑定当前品牌':other?'已绑定其他品牌':'未绑定'}</div></div>
-       <button type="button" class="btn" data-nd-bind-page="${esc(id)}" ${other?'disabled':''}>${mine?'取消绑定':other?'其他品牌使用中':'绑定此品牌'}</button>
-     </div>`;
+     return `<div class="nd-brand-account-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #e6ece8"><div style="min-width:0;overflow-wrap:anywhere"><strong>${esc(p.page_name||'Facebook Page')}</strong><div class="helper">${esc(id)} · ${mine?'已绑定此品牌':other?'已绑定其他品牌':'未绑定'}</div></div><button type="button" class="btn" data-nd-page="${esc(id)}" ${other?'disabled':''}>${mine?'取消绑定':other?'其他品牌使用中':'绑定'}</button></div>`
    }).join('');
-   box.querySelectorAll('[data-nd-bind-page]').forEach(btn=>btn.addEventListener('click',async()=>{
-     const page=btn.dataset.ndBindPage,found=bindings.find(x=>x.platform_account_id===page),unlink=found?.brand_id===brand;
-     if(!confirm(unlink?'取消这个主页与当前品牌的绑定？不会删除 Facebook 授权。':'确认将这个 Facebook Page 绑定到所选品牌？'))return;
-     btn.disabled=true;
-     const {error}=await client.rpc(unlink?'nd_unbind_facebook_brand':'nd_bind_facebook_brand',{
-       p_brand_id:brand,p_page_id:page
-     });
-     if(error)say('绑定失败：'+error.message+'。请检查 SQL 权限。');
-     else {say(unlink?'已取消品牌绑定（Facebook 授权仍保留）。':'品牌绑定成功。');window.dispatchEvent(new Event('nd-brand-binding-updated'));}
-     await render();
+   box.querySelectorAll('[data-nd-page]').forEach(btn=>btn.addEventListener('click',async()=>{
+     const id=btn.dataset.ndPage,found=bindings.find(x=>x.platform_account_id===id),unlink=found?.brand_id===brand;
+     if(!confirm(unlink?'取消这个主页的品牌绑定？Facebook 授权仍保留。':'将此 Facebook Page 绑定到所选品牌？'))return;
+     btn.disabled=true;const {error}=await db().rpc(unlink?'nd_unbind_facebook_brand':'nd_bind_facebook_brand',{p_brand_id:brand,p_page_id:id});
+     if(error){say('操作失败：'+error.message);btn.disabled=false;return}
+     await render();say(unlink?'已取消绑定':'Facebook 主页绑定成功');window.dispatchEvent(new Event('nd-brand-binding-updated'));
    }));
-   say('仅显示当前授权账号。一个 Facebook Page 只能绑定一个品牌。');
+   say('选择主页点击绑定；同一 Facebook Page 只能绑定一个品牌。');
+ }
+ async function create(){
+   const name=$('ndBrandNameInput').value.trim().replace(/\s+/g,' ');
+   if(!name)return say('请先输入品牌名称。');
+   if(name.length>100)return say('品牌名称不能超过 100 个字符。');
+   const existing=brands.find(b=>b.name.toLowerCase()===name.toLowerCase());
+   if(existing){$('ndBrandBindSelect').value=existing.id;await render();return say('此品牌已经存在，已自动选择。')}
+   const btn=$('ndCreateBrandBtn');btn.disabled=true;
+   try{
+     const {data,error}=await db().rpc('nd_create_social_brand',{p_name:name});
+     if(error)throw error;
+     const id=typeof data==='string'?data:data?.id;
+     await load(id);$('ndBrandNameInput').value='';
+     if($('ndSocialActiveBrand')){const s=$('ndSocialActiveBrand');if(id&&!Array.from(s.options).some(o=>o.value===id)){s.add(new Option(name,id))}if(id){s.value=id;s.dispatchEvent(new Event('change'))}}
+     say('品牌创建成功。现在选择 Facebook Page 绑定；其他平台需分别完成授权。');
+   }catch(e){say('创建失败：'+(e.message||e)+'。请先运行新版品牌创建 SQL。')}finally{btn.disabled=false}
  }
  document.addEventListener('DOMContentLoaded',()=>{
    $('ndBrandBindSelect')?.addEventListener('change',render);
-   $('socialAccountsBtn')?.addEventListener('click',()=>setTimeout(load,80));
-   $('metaRefreshBtn')?.addEventListener('click',()=>setTimeout(load,350));
+   ['ndPlatformFacebook','ndPlatformInstagram','ndPlatformTiktok'].forEach(id=>$(id)?.addEventListener('change',platformUI));
+   $('ndCreateBrandBtn')?.addEventListener('click',create);
+   $('ndBrandNameInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();create()}});
+   $('socialAccountsBtn')?.addEventListener('click',()=>setTimeout(()=>load(),80));
+   $('metaRefreshBtn')?.addEventListener('click',()=>setTimeout(()=>load(),350));
  });
 })();
 </script>
