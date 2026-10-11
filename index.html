@@ -29788,6 +29788,23 @@ document.addEventListener("DOMContentLoaded",function(){
  });
 })();
 </script>
+
+<style id="nd-ai-preview-v2">
+#ndAiDetailDialog{width:min(960px,100%)}
+#ndAiDetailDialog .nd-ai-assets{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+#ndAiDetailDialog .nd-ai-assets figure{min-width:0}
+#ndAiDetailDialog .nd-ai-assets img{width:100%;height:auto;aspect-ratio:auto;object-fit:contain;display:block;cursor:zoom-in;background:#f5f4f0;border-radius:12px}
+#ndAiDetailDialog .nd-ai-preview-slot{min-height:100px;overflow-wrap:anywhere}
+#ndAiDetailDialog .nd-ai-preview-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+#ndAiDetailDialog .nd-ai-preview-actions button,#ndAiDetailDialog .nd-ai-preview-actions a{display:inline-flex;align-items:center;justify-content:center;border:1px solid #cadbd0;background:#f4faf6;border-radius:9px;padding:9px 12px;color:#245e4a;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer}
+#ndAiDetailDialog .nd-ai-review-warning{background:#fff8ec;border:1px solid #ead8b5;border-radius:10px;padding:11px;font-size:12px;line-height:1.6;color:#725324}
+#ndAiPosterZoom{position:fixed;inset:0;z-index:30000;background:rgba(10,15,13,.95);display:none;flex-direction:column;align-items:center;padding:14px;overflow:auto}
+#ndAiPosterZoom.open{display:flex}
+#ndAiPosterZoom .nd-ai-zoom-toolbar{width:min(1080px,100%);display:flex;align-items:center;justify-content:space-between;gap:12px;color:#fff;padding:4px 0 14px;font-size:13px}
+#ndAiPosterZoom .nd-ai-zoom-toolbar button{border:1px solid #fff8;background:#fff;color:#152a20;border-radius:9px;padding:10px 16px;cursor:pointer}
+#ndAiPosterZoom img{width:min(1080px,100%);height:auto;object-fit:contain}
+@media(max-width:550px){#ndAiDetailDialog .nd-ai-assets{grid-template-columns:1fr}}
+</style>
 <style id="nd-ai-calendar-v1">
 #socialPage .nd-ai-event{display:block;width:100%;text-align:left;border:1px solid #d6e7df;border-left:3px solid #488974;background:#f0f8f3;color:#234f40;border-radius:8px;padding:6px;margin-top:5px;font-size:11px;cursor:pointer;white-space:normal;overflow-wrap:anywhere}
 #socialPage .nd-ai-event small{display:block;color:#6c837a;font-size:10px;margin-top:3px}
@@ -29848,11 +29865,35 @@ function detail(id){const j=jobs.find(x=>x.id===id);if(!j)return;const a=assets.
  by('ndAiDetailBody').innerHTML='<p><b>日期：</b>'+escapeHtml(j.content_date)+'　<b>状态：</b>'+escapeHtml(states[j.status]||j.status)+'</p>'+
  '<p><b>主题：</b>'+escapeHtml(topic?.topic||'尚未生成')+(topic?.category?' · '+escapeHtml(topic.category):'')+'</p>'+ 
  '<p><b>图片检查：</b>'+escapeHtml(a?.qa_status||'尚未生成')+'</p>'+
- '<div class="nd-ai-assets">'+['cover_path','content_path'].map((k,i)=>'<figure><figcaption>'+(i?'知识页':'封面')+'</figcaption>'+(a?.[k]?'<div class="helper">储存路径：'+escapeHtml(a[k])+'</div>':'<div class="helper">尚无图片</div>')+'</figure>').join('')+'</div>'+
+ '<div class="nd-ai-assets">'+['cover_path','content_path'].map((k,i)=>'<figure><figcaption>'+(i?'知识页':'封面')+'</figcaption>'+(a?.[k]?'<div class="nd-ai-preview-slot" data-nd-ai-path="'+escapeHtml(a[k])+'"><div class="helper">正在加载海报预览…</div></div>':'<div class="helper">尚无图片</div>')+'</figure>').join('')+'</div>'+
  '<p><b>文案：</b></p><div class="nd-ai-detail-caption">'+escapeHtml(a?.caption||'尚未生成')+'</div>'+
  '<h3>平台排程 / 发布结果</h3>'+(q.length?q.map(x=>'<p>'+escapeHtml(x.platform.toUpperCase())+' · '+escapeHtml(states[x.status]||x.status)+' · '+escapeHtml(x.scheduled_at?new Date(x.scheduled_at).toLocaleString('zh-MY',{timeZone:'Asia/Kuala_Lumpur'}):'未排程')+(x.last_error?' · '+escapeHtml(x.last_error):'')+'</p>').join(''):'<p class="helper">尚未进入发布队列。不会自动发布。</p>')+
  (j.error_message?'<p style="color:#a33">'+escapeHtml(j.error_message)+'</p>':'')+
- '<div class="nd-ai-generate-actions"><button type="button" class="btn nd-ai-generate-btn" data-nd-ai-generate="'+escapeHtml(j.id)+'" '+(['generating','checking','completed'].includes(j.status)?'disabled':'')+'>✦ AI 一键生成海报 + 文案</button><div class="nd-ai-generate-message" role="status">'+(['generating','checking'].includes(j.status)?'任务正在处理中，请稍后同步日历。':'生成需要已部署的安全后端；自动发布保持关闭。')+'</div></div>';modal.classList.add('open');}
+ '<div class="nd-ai-review-warning">审核提示：请检查中文错字、Logo、尺寸及健康表述。未经审核不会自动发布。</div>'+
+ '<div class="nd-ai-generate-actions"><button type="button" class="btn nd-ai-generate-btn" data-nd-ai-generate="'+escapeHtml(j.id)+'" '+(['generating','checking','completed'].includes(j.status)?'disabled':'')+'>✦ AI 一键生成海报 + 文案</button><div class="nd-ai-generate-message" role="status">'+(['generating','checking'].includes(j.status)?'任务正在处理中，请稍后同步日历。':'生成需要已部署的安全后端；自动发布保持关闭。')+'</div></div>';modal.classList.add('open');loadAiPosterPreviews(modal);}
+async function loadAiPosterPreviews(modal){
+ const client=db();const slots=[...modal.querySelectorAll('[data-nd-ai-path]')];
+ await Promise.all(slots.map(async slot=>{
+  const path=slot.dataset.ndAiPath;
+  try{
+   if(!client?.storage)throw Error('尚未连接 Supabase Storage');
+   const {data,error}=await client.storage.from('ai-posters').createSignedUrl(path,60*30);
+   if(error)throw error;if(!data?.signedUrl)throw Error('无法取得图片访问链接');
+   const url=data.signedUrl;slot.replaceChildren();
+   const img=document.createElement('img');img.src=url;img.alt='Nature’s Dao AI 海报';img.loading='lazy';img.decoding='async';
+   img.addEventListener('click',()=>openAiPosterZoom(url));
+   img.addEventListener('error',()=>{slot.textContent='图片无法加载，请检查 Storage 权限及图片文件。';});
+   const actions=document.createElement('div');actions.className='nd-ai-preview-actions';
+   const zoom=document.createElement('button');zoom.type='button';zoom.textContent='放大检查';zoom.onclick=()=>openAiPosterZoom(url);
+   const download=document.createElement('a');download.textContent='打开原图 / 保存';download.href=url;download.target='_blank';download.rel='noopener noreferrer';
+   actions.append(zoom,download);slot.append(img,actions);
+  }catch(e){slot.textContent='预览失败：'+(e?.message||String(e));}
+ }));
+}
+function openAiPosterZoom(url){
+ let overlay=by('ndAiPosterZoom');if(!overlay){overlay=document.createElement('div');overlay.id='ndAiPosterZoom';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.innerHTML='<div class="nd-ai-zoom-toolbar"><span>海报原图检查 · 请确认中文正确</span><button type="button" id="ndAiPosterZoomClose">关闭 ×</button></div><img alt="放大海报">';document.body.appendChild(overlay);by('ndAiPosterZoomClose').onclick=()=>overlay.classList.remove('open');overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('open');});}
+ overlay.querySelector('img').src=url;overlay.classList.add('open');
+}
 async function generate(jobId,btn){
  const j=jobs.find(x=>x.id===jobId);if(!j)return;
  const status=by('ndAiDetailOverlay')?.querySelector('.nd-ai-generate-message');
