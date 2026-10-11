@@ -8786,13 +8786,13 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="social-modal" id="socialAccountsModal" aria-hidden="true">
   <div class="social-modal-card social-account-card">
     <div class="social-modal-head">
-      <div><strong>Social Accounts</strong><div class="helper">连接 Facebook 并管理各品牌主页</div></div>
+      <div><strong>Social Accounts</strong><div class="helper">管理品牌、Facebook 主页及其他社交平台账号</div></div>
       <button class="social-x" id="socialAccountsClose" type="button">×</button>
     </div>
     
     <section class="nd-brand-bind" id="ndBrandBindPanel" style="border:1px solid #dbe6e0;border-radius:16px;padding:16px;margin:14px 0;background:#f9fcfa">
       <h3 style="margin:0 0 8px">创建与绑定品牌 · Create & Connect Brand</h3>
-      <p class="helper">自己填写品牌名称，再选择平台及对应账号。Facebook 可绑定已授权的主页；Instagram / TikTok 必须完成官方授权后才能连接；勾选平台不等于已连接。</p>
+      <p class="helper">选择或创建品牌，再管理已授权的平台账号。Facebook 主页可在此绑定；Instagram 连接状态按实际可读取记录显示，其他平台须先完成官方接口接入。勾选平台不代表已连接。</p>
       <label for="ndBrandNameInput">品牌名称 · Brand Name</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input id="ndBrandNameInput" placeholder="例如 Lumi Beauty 光之美" style="flex:1 1 180px"><button type="button" class="btn primary" id="ndCreateBrandBtn">＋ 创建品牌</button></div>
       <select id="ndBrandBindSelect" hidden aria-hidden="true" tabindex="-1"><option value="">尚未创建品牌</option></select>
@@ -28659,7 +28659,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialViewCalendar").onclick=()=>setSocialView("calendar");
    $("socialViewList").onclick=()=>setSocialView("list");
    $("socialNewPostBtn").onclick=()=>{if(!ndSelectedBrand())return alert("请先选择品牌，再创建贴文。");openNew();};
-   $("ndSocialActiveBrand").onchange=()=>{ndSyncComposerBrand();populateFacebookPageSelect(null);ndRefreshOtherAccounts();render();};
+   $("ndSocialActiveBrand").onchange=()=>{ndSyncComposerBrand();populateFacebookPageSelect(null);ndRefreshOtherAccounts();render();const legacy=$('ndBrandBindSelect');if(legacy){legacy.value=$("ndSocialActiveBrand").value||'';legacy.dispatchEvent(new Event('change'));}};
    $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
    $("socialPublishNowBtn").onclick=publishNowFacebook;$("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>{save("scheduled")};
    $("socialDeletePostBtn").onclick=del;
@@ -28715,9 +28715,11 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
          const label=connected.map(x=>x.account_name&&x.account_name!=='Instagram'?x.account_name:x.platform_account_id).join(', ');
          if(info)info.textContent='Instagram 已绑定'+(brand?'当前品牌':'品牌')+'：'+label+'。可重新授权更新连接。';
        }else{
-         btn.textContent='Connect Instagram · Instagram 官方授权';
-         btn.dataset.connected='false';
-         if(info)info.textContent='当前'+(brand?'所选品牌':'登录账号')+'没有可读取的 Instagram 绑定；请核对品牌选择和 Supabase SELECT/RLS 权限。';
+         // A successful empty SELECT cannot distinguish an unbound account from an RLS-filtered row.
+         // Do not label this as disconnected or invite needless OAuth reauthorization.
+         btn.textContent='Instagram · 检查授权 / 重新连接';
+         btn.dataset.connected='unknown';
+         if(info)info.textContent='没有读取到'+(brand?'当前品牌':'当前账号')+'的 Instagram 绑定。可能是未绑定、品牌不一致或读取权限限制；不能据此判断 Instagram 已断开。';
        }
      }catch(e){
        if(seq!==ndInstagramStatusSeq)return;
@@ -29323,6 +29325,7 @@ document.addEventListener("DOMContentLoaded",function(){
      const sel=$('ndBrandBindSelect'),old=preferred||sel.value;
      sel.innerHTML='<option value="">请选择或创建品牌</option>'+brands.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
      if(brands.some(x=>x.id===old))sel.value=old;
+     else {const active=$('ndSocialActiveBrand')?.value;if(brands.some(x=>x.id===active))sel.value=active;}
      const typed=$('ndBrandNameInput')?.value.trim().toLowerCase();
      const matched=typed&&brands.find(x=>x.name.toLowerCase()===typed);
      if(matched)sel.value=matched.id;
@@ -29331,7 +29334,7 @@ document.addEventListener("DOMContentLoaded",function(){
    }catch(e){say('加载失败：'+(e.message||e))}finally{loading=false}
  }
  async function render(){
-   platformUI();const brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
+   platformUI();const brand=$('ndBrandBindSelect')?.value||$('ndSocialActiveBrand')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
    if($('ndBrandActiveName'))$('ndBrandActiveName').textContent=brand?'当前品牌：'+(brands.find(x=>x.id===brand)?.name||'已创建品牌'):'请输入品牌名称并点击创建品牌，然后绑定账号。';
    if(!brand){box.innerHTML='<p class="helper">请先输入品牌名称并点击「创建品牌」。</p>';say(`已读取 ${pages.length} 个授权 Facebook 主页。`);return}
    const {data,error}=await db().rpc('nd_list_facebook_brand_bindings');
@@ -29364,7 +29367,7 @@ document.addEventListener("DOMContentLoaded",function(){
  }
  async function bindPage(btn){
    if(bindingBusy)return;
-   const id=btn.getAttribute('data-nd-page'),brand=$('ndBrandBindSelect')?.value;
+   const id=btn.getAttribute('data-nd-page'),brand=$('ndBrandBindSelect')?.value||$('ndSocialActiveBrand')?.value;
    if(!brand){say('请先输入品牌名称并点击创建品牌。');return}
    if(!id){say('Facebook Page ID 为空，请刷新主页列表。');return}
    const unlink=bindings.some(x=>String(x.platform_account_id)===String(id)&&x.brand_id===brand);
