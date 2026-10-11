@@ -8752,7 +8752,15 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <button class="social-x" id="socialAccountsClose" type="button">×</button>
     </div>
     
-    <div class="meta-connect-panel">
+    <section class="nd-brand-bind" id="ndBrandBindPanel" style="border:1px solid #dbe6e0;border-radius:14px;padding:16px;margin:14px 0;background:#f9fcfa">
+  <h3 style="margin:0 0 8px">品牌账号绑定 · Brand Accounts</h3>
+  <p class="helper">选择品牌，再把你已经授权的 Facebook Page 绑定到该品牌。不会删除或更改 Facebook 授权。</p>
+  <label for="ndBrandBindSelect">选择品牌</label><select id="ndBrandBindSelect"><option value="">加载品牌中...</option></select>
+  <div id="ndBrandBindStatus" class="helper" style="margin:10px 0" aria-live="polite"></div>
+  <div id="ndBrandFacebookChoices"></div>
+  <div style="margin-top:12px;border-top:1px solid #e0e9e4;padding-top:12px" class="helper">Instagram / TikTok / 小红书 / 微信视频号：需各平台正式授权及接口支持后才能绑定；这里不会伪装成已连接。</div>
+</section>
+<div class="meta-connect-panel">
       <div class="meta-connect-top">
         <div>
           <div class="meta-connect-title">Facebook / Meta</div>
@@ -29059,6 +29067,66 @@ document.addEventListener("DOMContentLoaded",function(){
 })();
 </script>
 
+<script id="nd-brand-binding-ui-v1">
+/* Brand binding UI. All writes use authenticated, ownership-checked RPC.
+   Do not replace existing Meta OAuth or publishing functions. */
+(function(){
+ const $=id=>document.getElementById(id);
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ let brands=[],pages=[],bindings=[];
+ const db=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
+ const say=(msg)=>{if($('ndBrandBindStatus'))$('ndBrandBindStatus').textContent=msg};
+ async function load(){
+   const client=db();if(!client)return say('Supabase 尚未准备好。');
+   say('读取品牌及 Facebook 主页...');
+   try{
+     const [{data:b,error:be},{data:auth,error:ae}]=await Promise.all([
+       client.from('social_brands').select('id,name,slug').eq('is_active',true).order('name'),
+       client.functions.invoke('meta-facebook-oauth',{body:{action:'status'}})
+     ]);
+     if(be)throw be;if(ae)throw ae;
+     brands=b||[];pages=Array.isArray(auth?.pages)?auth.pages:[];
+     const sel=$('ndBrandBindSelect'),old=sel.value;
+     sel.innerHTML='<option value="">请选择品牌</option>'+brands.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+     if(brands.some(x=>x.id===old))sel.value=old;
+     await render();
+   }catch(e){say('加载失败：'+String(e?.message||e));}
+ }
+ async function render(){
+   const client=db(),brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');
+   if(!box)return;
+   if(!brand){box.innerHTML='';say(`找到 ${brands.length} 个品牌、${pages.length} 个已授权主页。请选择品牌。`);return;}
+   const {data,error}=await client.from('social_brand_accounts').select('platform,platform_account_id,brand_id,connection_status').eq('platform','facebook');
+   if(error){say('无法读取绑定：'+error.message+'。请先运行配套 SQL。');box.innerHTML='';return;}
+   bindings=data||[];
+   if(!pages.length){box.innerHTML='<p class="helper">没有读取到 Facebook Page，请先使用原有 Connect Facebook 授权。</p>';return;}
+   box.innerHTML=pages.map(p=>{
+     const id=String(p.page_id||''),found=bindings.find(x=>x.platform_account_id===id),mine=found?.brand_id===brand,other=!!found&&!mine;
+     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #e6ece8">
+       <div style="min-width:0"><strong>${esc(p.page_name||'Facebook Page')}</strong><div class="helper">${esc(id)} · ${mine?'已绑定当前品牌':other?'已绑定其他品牌':'未绑定'}</div></div>
+       <button type="button" class="btn" data-nd-bind-page="${esc(id)}" ${other?'disabled':''}>${mine?'取消绑定':other?'其他品牌使用中':'绑定此品牌'}</button>
+     </div>`;
+   }).join('');
+   box.querySelectorAll('[data-nd-bind-page]').forEach(btn=>btn.addEventListener('click',async()=>{
+     const page=btn.dataset.ndBindPage,found=bindings.find(x=>x.platform_account_id===page),unlink=found?.brand_id===brand;
+     if(!confirm(unlink?'取消这个主页与当前品牌的绑定？不会删除 Facebook 授权。':'确认将这个 Facebook Page 绑定到所选品牌？'))return;
+     btn.disabled=true;
+     const {error}=await client.rpc(unlink?'nd_unbind_facebook_brand':'nd_bind_facebook_brand',{
+       p_brand_id:brand,p_page_id:page
+     });
+     if(error)say('绑定失败：'+error.message+'。请检查 SQL 权限。');
+     else say(unlink?'已取消品牌绑定（Facebook 授权仍保留）。':'品牌绑定成功。');
+     await render();
+   }));
+   say('仅显示当前授权账号。一个 Facebook Page 只能绑定一个品牌。');
+ }
+ document.addEventListener('DOMContentLoaded',()=>{
+   $('ndBrandBindSelect')?.addEventListener('change',render);
+   $('socialAccountsBtn')?.addEventListener('click',()=>setTimeout(load,80));
+   $('metaRefreshBtn')?.addEventListener('click',()=>setTimeout(load,350));
+ });
+})();
+</script>
 </body>
 </html>
 
