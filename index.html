@@ -8824,9 +8824,9 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
  <div id="ndMultiAccountRows" style="display:grid;gap:12px;margin-top:12px"></div>
 </section>
 <section id="ndCompactSocialAccounts" class="nd-compact-social">
- <div class="nd-compact-heading"><strong>平台账号 · Accounts</strong><span class="helper" style="font-size:11px">v3 · 2026-10-11</span><button type="button" class="btn" id="ndCompactRefresh">↻ 刷新</button></div>
+ <div class="nd-compact-heading"><strong>平台账号 · Accounts</strong><span class="helper" style="font-size:11px">v4 · 2026-10-11</span><button type="button" class="btn" id="ndCompactRefresh">↻ 刷新</button></div>
  <label for="ndCompactBrand">当前品牌</label><div class="nd-compact-brand"><select id="ndCompactBrand"><option value="">选择品牌</option></select><button type="button" class="btn" id="ndCompactNewBrand">＋ 品牌</button></div>
- <div class="nd-compact-platform" id="ndCompactPlatformList"><div class="helper">正在读取账号…</div></div>
+ <div class="helper" style="font-weight:700">勾选平台及要使用的账号／主页（不自动全选）</div><div class="nd-compact-platform" id="ndCompactPlatformList"><div class="helper">正在读取账号…</div></div>
  <div class="nd-compact-actions"><button type="button" class="btn primary" id="ndCompactAddInstagram">＋ Instagram 账号</button><button type="button" class="btn" id="ndCompactAddFacebook">＋ Facebook 账号</button></div>
  <div class="helper" id="ndCompactMessage" aria-live="polite"></div>
  <button type="button" class="btn nd-compact-advanced-btn" id="ndCompactAdvanced">品牌绑定与高级管理 ▾</button>
@@ -8865,8 +8865,10 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <div class="helper" id="ndPlatformConnectMessage" aria-live="polite" style="margin-top:10px"></div>
     </section>
 
+    <!-- Manual Shortcuts removed from UI; legacy elements retained hidden for script compatibility. -->
+    <div id="ndLegacyManualShortcuts" style="display:none !important" hidden aria-hidden="true">
     <div class="social-manual-divider">
-      <strong>Manual Shortcuts</strong>
+      <strong>Legacy shortcuts (hidden)</strong>
       <span class="helper">这些只是快捷入口，不代表 Facebook 已连接。</span>
     </div>
 
@@ -8890,6 +8892,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <button class="btn" id="socialAccountAddBtn" type="button">+ Add Shortcut</button>
     </div>
     <div id="socialAccountList" class="social-account-list"></div>
+    </div>
   </div>
 </div>
 
@@ -28169,7 +28172,8 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    if(!show||!container)return;
    const pages=ndAllowedPages();
    // On a new post, brand change or refresh, automatically select all connected pages.
-   const ids=selectedIds===null?new Set(pages.map(p=>String(p.page_id))):new Set((Array.isArray(selectedIds)?selectedIds:[selectedIds]).map(String));
+   let chosenFb=null;try{const v=JSON.parse(sessionStorage.getItem('nd_social_selected_accounts_v2')||'{}');if(Array.isArray(v.facebook))chosenFb=v.facebook.map(String)}catch(_){}
+   const ids=selectedIds===null?new Set(chosenFb===null?[]:chosenFb):new Set((Array.isArray(selectedIds)?selectedIds:[selectedIds]).map(String));
    container.innerHTML=pages.length?'<label style="display:flex;align-items:center;gap:10px;font-weight:700"><input type="checkbox" id="socialFacebookSelectAll"> 全选 / 取消全选</label>'+pages.map(p=>`<label style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #d8e6df;border-radius:10px"><input type="checkbox" data-page-id="${esc(String(p.page_id||""))}" ${ids.has(String(p.page_id))?'checked':''}> ${esc(p.page_name||"Facebook Page")}</label>`).join(""):'<span>当前品牌没有已绑定的 Facebook Page，请到 Manage Accounts 绑定。</span>';
    const all=container.querySelector('#socialFacebookSelectAll');
    const checks=[...container.querySelectorAll('input[data-page-id]')];
@@ -28217,10 +28221,10 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    root.innerHTML=chosen.map(platform=>{
      const alias=ndPlatformAliases[platform];
      const matches=ndOtherAccounts.filter(a=>String(a.platform||'').toLowerCase()===alias);
-     let preferred=[];try{preferred=JSON.parse(sessionStorage.getItem('nd_social_selected_accounts_v2')||'{}')[alias]||[]}catch(_){}
+     let preferred=null;try{const v=JSON.parse(sessionStorage.getItem('nd_social_selected_accounts_v2')||'{}');if(Array.isArray(v[alias]))preferred=v[alias].map(String)}catch(_){}
      const heading='<strong>'+esc(platform)+'</strong>';
      if(!matches.length)return '<div style="padding:12px;border:1px solid #dce5e7;border-radius:10px">'+heading+'<div class="helper">此品牌尚无可读取的已绑定账号；请先完成官方授权及绑定。</div></div>';
-     return '<div style="padding:12px;border:1px solid #dce5e7;border-radius:10px;display:grid;gap:9px">'+heading+'<label><input type="checkbox" data-nd-all="'+esc(alias)+'" checked> 全选 / 取消全选</label>'+matches.map(a=>'<label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nd-account="1" data-platform="'+esc(alias)+'" data-account-id="'+esc(a.platform_account_id)+'" '+(!preferred.length||preferred.includes(String(a.platform_account_id))?'checked':'')+'> '+esc(a.account_name||a.platform_account_id)+'</label>').join('')+'</div>';
+     return '<div style="padding:12px;border:1px solid #dce5e7;border-radius:10px;display:grid;gap:9px">'+heading+'<label><input type="checkbox" data-nd-all="'+esc(alias)+'"> 全选 / 取消全选</label>'+matches.map(a=>'<label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nd-account="1" data-platform="'+esc(alias)+'" data-account-id="'+esc(a.platform_account_id)+'" '+(preferred!==null&&preferred.includes(String(a.platform_account_id))?'checked':'')+'> '+esc(a.account_name||a.platform_account_id)+'</label>').join('')+'</div>';
    }).join('');
    root.querySelectorAll('[data-nd-all]').forEach(all=>{
      const group=[...root.querySelectorAll('input[data-nd-account]')].filter(c=>c.dataset.platform===all.dataset.ndAll);
@@ -29529,6 +29533,9 @@ document.addEventListener("DOMContentLoaded",function(){
  const client=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
  const names={instagram:'Instagram',facebook:'Facebook',tiktok:'TikTok',xiaohongshu:'小红书',wechat_channels:'微信视频号'};
  const KEY='nd_social_selected_accounts_v2';
+ const PLATFORM_KEY='nd_social_enabled_platforms_v1';
+ const enabledPlatforms=()=>{try{const v=JSON.parse(sessionStorage.getItem(PLATFORM_KEY)||'null');return Array.isArray(v)?v:['facebook','instagram']}catch{return ['facebook','instagram']}};
+ const savePlatforms=v=>{try{sessionStorage.setItem(PLATFORM_KEY,JSON.stringify(v))}catch{}};
  const getChosen=()=>{try{const v=JSON.parse(sessionStorage.getItem(KEY)||'{}');return v&&typeof v==='object'?v:{}}catch{return {}}};
  const saveChosen=v=>{try{sessionStorage.setItem(KEY,JSON.stringify(v))}catch{}};
  const msg=v=>{const el=$('ndCompactMessage');if(el)el.textContent=v||''};
@@ -29551,7 +29558,7 @@ document.addEventListener("DOMContentLoaded",function(){
    const brandSelect=$('ndCompactBrand');
    const active=$('ndSocialActiveBrand');
    const old=$('ndBrandBindSelect');
-   const previous=active?.value||old?.value||brandSelect?.value||'';
+   const previous=brandSelect?.value||active?.value||old?.value||'';
    if(brandSelect){
     brandSelect.innerHTML='<option value="">选择品牌</option>'+brandRows.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.name||b.id)+'</option>').join('');
     if(brandNames.has(String(previous)))brandSelect.value=previous;
@@ -29581,16 +29588,28 @@ document.addEventListener("DOMContentLoaded",function(){
    }
    const all=[...accounts.values()],chosen=getChosen();
    const platforms=['instagram','facebook','tiktok','xiaohongshu','wechat_channels'];
+   const enabled=enabledPlatforms();
    box.innerHTML=platforms.map(platform=>{
     const list=all.filter(a=>a.platform===platform);
-    return '<details '+(platform==='instagram'?'open':'')+'><summary><span>'+esc(names[platform])+'</span><span class="nd-compact-count">'+list.length+' 个账号</span></summary>'+
+    return '<details '+((platform==='instagram'||platform==='facebook')?'open':'')+'><summary><span style="display:inline-flex;align-items:center;gap:8px"><input type="checkbox" data-nd-platform-toggle="'+esc(platform)+'" '+(enabled.includes(platform)?'checked':'')+' style="width:20px;height:20px;accent-color:#245f55">'+esc(names[platform])+'</span><span class="nd-compact-count">'+list.length+' 个账号</span></summary>'+
+    (list.length?'<label class="nd-compact-account" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-nd-select-all="'+esc(platform)+'" style="width:19px;height:19px"> 全选 / 取消全选</label>':'')+
     (list.length?list.map(a=>{
-     const eligible=!!current&&a.boundCurrent;
+     const eligible=!!current&&a.boundCurrent&&enabled.includes(platform);
      const checked=eligible&&Array.isArray(chosen[platform])&&chosen[platform].includes(a.id);
      const state=eligible?'已绑定当前品牌 · 可选择':a.authorized?'已授权 · 尚未绑定当前品牌':a.linked?'已绑定其他品牌或未选品牌':'授权状态待确认';
      return '<label class="nd-compact-account" style="display:flex;gap:10px;align-items:flex-start;cursor:'+(eligible?'pointer':'default')+'"><input type="checkbox" data-nd-compact-account="1" data-platform="'+esc(platform)+'" data-account-id="'+esc(a.id)+'" '+(checked?'checked ':'')+(eligible?'':'disabled ')+'style="width:20px;height:20px;flex:0 0 20px;margin-top:3px;accent-color:#245f55"><span><strong>'+esc(a.name||names[platform]+' · '+a.id)+'</strong><small>Account ID: '+esc(a.id)+'</small><small>'+esc(state)+'</small><small>绑定品牌：'+esc([...a.brands].join('、')||'未绑定')+'</small></span></label>';
     }).join(''):'<div class="nd-compact-account helper">暂无可读取的账号</div>')+'</details>';
    }).join('');
+   box.querySelectorAll('input[data-nd-platform-toggle]').forEach(input=>{
+    input.addEventListener('click',e=>e.stopPropagation());
+    input.addEventListener('change',()=>{const set=new Set(enabledPlatforms());if(input.checked)set.add(input.dataset.ndPlatformToggle);else set.delete(input.dataset.ndPlatformToggle);savePlatforms([...set]);refresh()});
+   });
+   box.querySelectorAll('input[data-nd-select-all]').forEach(all=>{
+    const group=[...box.querySelectorAll('input[data-nd-compact-account]')].filter(x=>x.dataset.platform===all.dataset.ndSelectAll&&!x.disabled);
+    const sync=()=>{all.checked=group.length>0&&group.every(x=>x.checked);all.indeterminate=group.some(x=>x.checked)&&!all.checked;all.disabled=!group.length};
+    all.addEventListener('change',()=>{const v=getChosen(),p=all.dataset.ndSelectAll,ids=new Set(Array.isArray(v[p])?v[p]:[]);for(const x of group){x.checked=all.checked;if(all.checked)ids.add(x.dataset.accountId);else ids.delete(x.dataset.accountId)}v[p]=[...ids];saveChosen(v);sync()});
+    group.forEach(x=>x.addEventListener('change',sync));sync();
+   });
    box.querySelectorAll('input[data-nd-compact-account]').forEach(input=>input.addEventListener('change',()=>{
     const v=getChosen(),p=input.dataset.platform,id=input.dataset.accountId;
     const ids=new Set(Array.isArray(v[p])?v[p]:[]);
@@ -29600,7 +29619,7 @@ document.addEventListener("DOMContentLoaded",function(){
    }));
    if(brands.error)msg('账号已读取，但品牌名称读取失败：'+brands.error.message);
    else if(igAccounts.error)msg('已显示可读取的品牌绑定账号；独立 Instagram 授权账号清单不可用。需要检查 nd_list_my_instagram_accounts 的安全 RPC。');
-   else msg(current?'只能勾选已绑定当前品牌的账号。':'请先选择品牌，才能勾选发布账号。');
+   else msg(current?'请先勾选平台，再选择已绑定当前品牌的账号或主页。':'请先选择品牌，才能勾选账号和主页。');
   }catch(e){box.textContent='账号读取失败';msg('读取失败：'+(e?.message||String(e)))}
   finally{busy=false;if(generation){generation=0;setTimeout(refresh,0)}}
  }
