@@ -8795,7 +8795,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <p class="helper">自己填写品牌名称，再选择平台及对应账号。Facebook 可绑定已授权的主页；Instagram / TikTok 必须完成官方授权后才能连接；勾选平台不等于已连接。</p>
       <label for="ndBrandNameInput">品牌名称 · Brand Name</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input id="ndBrandNameInput" placeholder="例如 Lumi Beauty 光之美" style="flex:1 1 180px"><button type="button" class="btn primary" id="ndCreateBrandBtn">＋ 创建品牌</button></div>
-      <select id="ndBrandBindSelect" hidden aria-hidden="true" tabindex="-1"><option value="">尚未创建品牌</option></select>
+      <label for="ndBrandBindSelect">选择已有品牌 · Existing Brand</label><select id="ndBrandBindSelect"><option value="">请选择品牌</option></select>
       <div class="helper" id="ndBrandActiveName" style="margin:6px 0 10px">请输入品牌名称并点击创建品牌，随后绑定账号。</div>
       <div style="font-weight:800;margin:16px 0 9px">选择平台 · Select Platforms</div>
       <div class="nd-platform-picker" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px">
@@ -8807,6 +8807,12 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <div id="ndBrandOtherPlatforms" class="helper" style="margin-top:12px"></div>
       <div id="ndBrandBindStatus" class="helper" style="margin:12px 0" aria-live="polite"></div>
     </section>
+<section id="ndMultiAccountInventory" style="margin:14px 0;padding:15px;border:1px solid #dce5e7;border-radius:14px;background:#fff">
+ <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><strong>全部平台账号 · All Connected Accounts</strong><button type="button" class="btn" id="ndMultiAccountRefresh">刷新账号列表</button></div>
+ <p class="helper">按平台显示所有当前登录用户有权限读取的账号；同一账号绑定多个品牌只计算一次。未绑定品牌的账号须由官方连接后台提供账号清单才能显示。</p>
+ <div id="ndMultiAccountSummary" class="helper" aria-live="polite">等待读取...</div>
+ <div id="ndMultiAccountRows" style="display:grid;gap:12px;margin-top:12px"></div>
+</section>
 <div class="meta-connect-panel">
       <div class="meta-connect-top">
         <div>
@@ -29324,7 +29330,7 @@ document.addEventListener("DOMContentLoaded",function(){
    const fb=$('ndPlatformFacebook')?.checked;
    $('ndBrandFacebookPanel').style.display=fb?'':'none';
    const selected=[['ndPlatformInstagram','Instagram'],['ndPlatformTiktok','TikTok']].filter(x=>$(x[0])?.checked).map(x=>x[1]);
-   $('ndBrandOtherPlatforms').textContent=selected.length?selected.join(' / ')+'：已选择平台，但尚未完成官方账号授权，不能标记为已连接或自动发布。':'';
+   $('ndBrandOtherPlatforms').textContent=selected.length?'平台勾选仅用于筛选；实际账号和连接状态请查看下方「全部平台账号」列表。':'';
  }
  async function load(preferred=''){
    if(loading)return;loading=true;
@@ -29350,7 +29356,7 @@ document.addEventListener("DOMContentLoaded",function(){
  }
  async function render(){
    platformUI();const brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
-   if($('ndBrandActiveName'))$('ndBrandActiveName').textContent=brand?'当前品牌：'+(brands.find(x=>x.id===brand)?.name||'已创建品牌'):'请输入品牌名称并点击创建品牌，然后绑定账号。';
+   if($('ndBrandActiveName'))$('ndBrandActiveName').textContent=brand?'当前品牌：'+(brands.find(x=>x.id===brand)?.name||'已创建品牌'):'请选择现有品牌，或输入名称创建新品牌。';
    if(!brand){box.innerHTML='<p class="helper">请先输入品牌名称并点击「创建品牌」。</p>';say(`已读取 ${pages.length} 个授权 Facebook 主页。`);return}
    const {data,error}=await db().rpc('nd_list_facebook_brand_bindings');
    if(error){say('读取绑定失败：'+error.message+'。请检查 social_brand_accounts 的读取权限。');box.innerHTML='<p class="helper">无法读取绑定状态，请检查数据库权限。</p>';return}
@@ -29421,6 +29427,54 @@ document.addEventListener("DOMContentLoaded",function(){
    $('ndBrandBindSelect')?.addEventListener('focus',()=>{if(!brands.length)load()});
    $('metaRefreshBtn')?.addEventListener('click',()=>setTimeout(()=>load(),350));
    if($('socialAccountsModal')?.classList.contains('open'))load();
+ });
+})();
+</script>
+<script id="nd-multi-account-inventory-v1">
+(function(){
+ const $=id=>document.getElementById(id);
+ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const db=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
+ const names={facebook:'Facebook',instagram:'Instagram',tiktok:'TikTok',xiaohongshu:'小红书',wechat_channels:'微信视频号'};
+ let busy=false;
+ async function refresh(){
+  if(busy)return;const root=$('ndMultiAccountRows'),summary=$('ndMultiAccountSummary');if(!root||!summary)return;
+  const client=db();if(!client){summary.textContent='Supabase 尚未初始化';return;}
+  busy=true;summary.textContent='正在读取当前用户有权限查看的账号...';root.innerHTML='';
+  try{
+   const [a,b]=await Promise.all([
+    client.from('social_brand_accounts').select('brand_id,platform,platform_account_id,account_name,connection_status').order('platform'),
+    client.from('social_brands').select('id,name')
+   ]);
+   if(a.error)throw a.error;
+   const brandNames=new Map((b.error?[]:b.data||[]).map(x=>[String(x.id),x.name]));
+   const map=new Map();
+   for(const r of a.data||[]){
+    if(!r.platform||!r.platform_account_id)continue;
+    const key=String(r.platform).toLowerCase()+'|'+String(r.platform_account_id);
+    if(!map.has(key))map.set(key,{platform:String(r.platform).toLowerCase(),id:String(r.platform_account_id),name:'',brands:new Set(),statuses:new Set()});
+    const item=map.get(key);
+    if(r.account_name&&r.account_name!==r.platform)item.name=String(r.account_name);
+    if(r.brand_id)item.brands.add(brandNames.get(String(r.brand_id))||'Brand ID: '+r.brand_id);
+    item.statuses.add(String(r.connection_status||'unknown').toLowerCase());
+   }
+   const accounts=[...map.values()].sort((x,y)=>x.platform.localeCompare(y.platform)||x.name.localeCompare(y.name));
+   const platforms=['instagram','facebook','tiktok','xiaohongshu','wechat_channels',...new Set(accounts.map(a=>a.platform))].filter((x,i,a)=>a.indexOf(x)===i);
+   root.innerHTML=platforms.map(platform=>{
+    const list=accounts.filter(x=>x.platform===platform),connected=list.filter(x=>x.statuses.has('connected')).length;
+    return '<section style="border:1px solid #e5e9eb;border-radius:11px;padding:12px"><div style="display:flex;justify-content:space-between;gap:8px"><strong>'+esc(names[platform]||platform)+'</strong><span class="helper">'+list.length+' 账号 · '+connected+' Connected</span></div>'+
+      (list.length?list.map(x=>'<div style="padding:10px 0;border-top:1px solid #edf0f1;margin-top:8px;overflow-wrap:anywhere"><strong>'+esc(x.name||x.id)+'</strong><div class="helper">Account ID: '+esc(x.id)+'</div><div class="helper">'+(x.statuses.has('connected')?'Connected（品牌绑定记录）':'状态：'+esc([...x.statuses].join(', ')))+'</div><div class="helper">绑定品牌：'+esc([...x.brands].join('、')||'未绑定')+'</div></div>').join(''):'<div class="helper" style="margin-top:9px">暂无可读取账号</div>')+'</section>';
+   }).join('');
+   summary.textContent='共读取 '+accounts.length+' 个不同账号，'+accounts.filter(x=>x.statuses.has('connected')).length+' 个有 Connected 品牌绑定记录。此处不验证 Token 有效期或发布权限。';
+  }catch(e){summary.textContent='读取失败：'+(e?.message||String(e));root.innerHTML='';}
+  finally{busy=false;}
+ }
+ document.addEventListener('DOMContentLoaded',()=>{
+  $('ndMultiAccountRefresh')?.addEventListener('click',refresh);
+  $('socialAccountsBtn')?.addEventListener('click',()=>setTimeout(refresh,250));
+  $('ndBrandBindSelect')?.addEventListener('change',refresh);
+  window.addEventListener('nd-brand-binding-updated',refresh);
+  if($('socialAccountsModal')?.classList.contains('open'))refresh();
  });
 })();
 </script>
