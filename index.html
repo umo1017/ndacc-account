@@ -28679,6 +28679,55 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      await Promise.allSettled([loadAccounts(),refreshMetaConnectionStatus()]);
    };
 
+   // Instagram connected state: use the current brand binding and authenticated user.
+   // Never read or expose Instagram access tokens in the browser.
+   let ndInstagramStatusSeq=0;
+   async function ndRefreshInstagramConnectedStatus(){
+     const seq=++ndInstagramStatusSeq;
+     const btn=$('ndConnectInstagramBtn');
+     const info=$('ndPlatformConnectMessage');
+     const client=window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
+     if(!btn||!client)return;
+     const brand=$('ndBrandBindSelect')?.value||$('ndSocialActiveBrand')?.value||'';
+     btn.textContent='Checking Instagram...';
+     btn.disabled=true;
+     try{
+       const {data:{user},error:authError}=await client.auth.getUser();
+       if(authError)throw authError;
+       if(!user)throw Error('请先登录 ndacc.us');
+       // Brand binding is the only connection signal shown here; never infer
+       // connection from OAuth success text or a manually-entered shortcut.
+       let q=client.from('social_brand_accounts')
+         .select('platform_account_id,account_name,connection_status')
+         .eq('platform','instagram')
+         .eq('connection_status','connected');
+       if(brand)q=q.eq('brand_id',brand);
+       const {data:accounts,error}=await q;
+       if(error)throw error;
+       if(seq!==ndInstagramStatusSeq)return;
+       const connected=(accounts||[]).filter(x=>x.platform_account_id);
+       if(connected.length){
+         btn.textContent='Instagram Connected ✓ · Reconnect';
+         btn.dataset.connected='true';
+         const label=connected.map(x=>x.account_name&&x.account_name!=='Instagram'?x.account_name:x.platform_account_id).join(', ');
+         if(info)info.textContent='Instagram 已绑定'+(brand?'当前品牌':'品牌')+'：'+label+'。可重新授权更新连接。';
+       }else{
+         btn.textContent='Connect Instagram · Instagram 官方授权';
+         btn.dataset.connected='false';
+         if(info)info.textContent='当前'+(brand?'品牌':'账号')+'没有可读取的 Instagram 绑定。';
+       }
+     }catch(e){
+       if(seq!==ndInstagramStatusSeq)return;
+       btn.textContent='Check Instagram Connection · Retry';
+       btn.dataset.connected='unknown';
+       if(info)info.textContent='Instagram 连接状态读取失败：'+(e?.message||String(e))+'。请检查账号权限/RLS。';
+     }finally{if(seq===ndInstagramStatusSeq)btn.disabled=false;}
+   }
+   $('socialAccountsBtn')?.addEventListener('click',()=>setTimeout(ndRefreshInstagramConnectedStatus,120));
+   $('ndBrandBindSelect')?.addEventListener('change',ndRefreshInstagramConnectedStatus);
+   $('ndSocialActiveBrand')?.addEventListener('change',ndRefreshInstagramConnectedStatus);
+   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$('socialAccountsModal')?.classList.contains('open'))ndRefreshInstagramConnectedStatus();});
+   window.addEventListener('nd-brand-binding-updated',ndRefreshInstagramConnectedStatus);
    const ndConnectInfo=$('ndPlatformConnectMessage');
    if($('ndConnectInstagramBtn'))$('ndConnectInstagramBtn').onclick=async()=>{
      const btn=$('ndConnectInstagramBtn');
