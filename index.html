@@ -8766,7 +8766,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div id="ndAiSettingsModal" class="nd-ai-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="ndAiSettingsTitle">
   <section class="nd-ai-dialog">
     <div class="nd-ai-head"><div><div class="social-section-kicker">CONTENT STUDIO · AI AUTO PUBLISHER</div><h2 id="ndAiSettingsTitle">AI Instructions & Automation</h2></div><button type="button" class="btn" id="ndAiClose">✕ Close</button></div>
-    <p class="helper">第一阶段：仅在当前浏览器保存配置草稿。尚未接入 AI 生成、Supabase 配置表或自动发布服务。自动发布保持关闭。</p>
+    <p class="helper">第二阶段：品牌指令安全保存至 Supabase。AI 生成与自动发布服务尚未部署，自动发布保持关闭。</p>
     <div class="nd-ai-grid">
       <div><label for="ndAiBrand">Brand / 品牌</label><select id="ndAiBrand"></select></div>
       <div><label for="ndAiLogo">Official Logo / 原版 Logo</label><input id="ndAiLogo" type="file" accept="image/png,image/jpeg,image/svg+xml"/><small id="ndAiLogoHint">Logo 仅本地预览，尚未上传服务器</small></div>
@@ -8779,7 +8779,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     </div>
     <label for="ndAiPrompt">Master Prompt / 固定指令</label>
     <textarea id="ndAiPrompt" rows="15" spellcheck="false"></textarea>
-    <div class="nd-ai-footer"><span id="ndAiSaveState" role="status">尚未保存</span><button class="btn" type="button" id="ndAiReset">恢复默认</button><button class="btn primary" type="button" id="ndAiSave">Save Draft · 保存本机草稿</button></div>
+    <div class="nd-ai-footer"><span id="ndAiSaveState" role="status">尚未保存</span><button class="btn" type="button" id="ndAiReset">恢复默认</button><button class="btn primary" type="button" id="ndAiSave">Save to Supabase · 云端保存</button></div>
   </section>
 </div>
 <style id="nd-ai-settings-v1-css">
@@ -8818,9 +8818,16 @@ const DEFAULT=`你是天之道 NATURE’S DAO 的专业品牌设计师、健康�
 
 【自动化发布】
 仅在已授权且已部署的发布系统中按智能时间发布。发布前检查Logo、中文、尺寸、内容、重复性及平台规则。未接入发布接口只生成待发布素材，不得声称已发布。`;
-function populate(){const from=$('ndSocialActiveBrand'),to=$('ndAiBrand');if(!to)return;const prev=to.value;to.replaceChildren();if(from){for(const option of from.options){if(!option.value)continue;to.add(new Option(option.textContent,option.value));}}if(!to.options.length)to.add(new Option('Nature’s Dao · 暂无品牌 ID','__local__'));to.value=[...to.options].some(o=>o.value===prev)?prev:([...to.options].some(o=>o.value===from?.value)?from.value:to.options[0].value);load();}
-function load(){const id=$('ndAiBrand')?.value;if(!id)return;let value=DEFAULT;try{value=localStorage.getItem(key(id))||DEFAULT;}catch(e){}$('ndAiPrompt').value=value;$('ndAiSaveState').textContent='本机配置草稿 · 自动发布未启用';}
-function init(){if(!$('ndAiSettingsBtn'))return;$('ndAiSettingsBtn').addEventListener('click',()=>{populate();$('ndAiSettingsModal').classList.remove('hidden');});$('ndAiClose').addEventListener('click',()=>{$('ndAiSettingsModal').classList.add('hidden');});$('ndAiBrand').addEventListener('change',load);$('ndAiSave').addEventListener('click',()=>{try{localStorage.setItem(key($('ndAiBrand').value),$('ndAiPrompt').value);$('ndAiSaveState').textContent='已保存至当前浏览器（非服务器）';}catch(e){$('ndAiSaveState').textContent='保存失败：浏览器储存不可用';}});$('ndAiReset').addEventListener('click',()=>{$('ndAiPrompt').value=DEFAULT;$('ndAiSaveState').textContent='已恢复默认，点击 Save 保存';});$('ndAiLogo').addEventListener('change',()=>{$('ndAiLogoHint').textContent=$('ndAiLogo').files[0]?.name?'已选择：'+$('ndAiLogo').files[0].name+'（尚未上传服务器）':'Logo 仅本地预览，尚未上传服务器';});$('ndAiSettingsModal').addEventListener('click',e=>{if(e.target===$('ndAiSettingsModal'))$('ndAiSettingsModal').classList.add('hidden');});}
+const CLOUD_URL='https://cofmjwsejcbfsgdrswku.supabase.co';
+const CLOUD_KEY='sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU';
+let cloud=null,loadSeq=0;
+function client(){if(!cloud){if(!window.supabase?.createClient)throw new Error('Supabase SDK 未加载');cloud=window.supabase.createClient(CLOUD_URL,CLOUD_KEY);}return cloud;}
+function status(message){$('ndAiSaveState').textContent=message;}
+function validBrand(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id||'');}
+function populate(){const from=$('ndSocialActiveBrand'),to=$('ndAiBrand');if(!to)return;const prev=to.value;to.replaceChildren();if(from){for(const option of from.options){if(!validBrand(option.value))continue;to.add(new Option(option.textContent,option.value));}}if(!to.options.length)to.add(new Option('尚未找到品牌 UUID',''));to.value=[...to.options].some(o=>o.value===prev)?prev:([...to.options].some(o=>o.value===from?.value)?from.value:to.options[0].value);load();}
+async function load(){const id=$('ndAiBrand')?.value,seq=++loadSeq;if(!validBrand(id)){$('ndAiPrompt').value=DEFAULT;status('请选择有效品牌后读取');return;}status('正在从 Supabase 读取…');$('ndAiSave').disabled=true;try{const {data,error}=await client().from('ai_brand_settings').select('master_prompt').eq('brand_id',id).maybeSingle();if(seq!==loadSeq)return;if(error)throw error;let local=null;try{local=localStorage.getItem(key(id));}catch(e){}$('ndAiPrompt').value=data?.master_prompt||local||DEFAULT;status(data?'已从 Supabase 读取 · 自动发布 OFF':local?'未找到云端设置，已载入本机旧草稿；请点击云端保存':'暂无云端设置，已载入默认指令 · 自动发布 OFF');}catch(e){if(seq!==loadSeq)return;status('云端读取失败：'+(e.message||e));}finally{if(seq===loadSeq)$('ndAiSave').disabled=false;}}
+async function save(){const id=$('ndAiBrand')?.value;if(!validBrand(id)){status('保存失败：请选择有效品牌');return;}const prompt=$('ndAiPrompt').value.trim();if(!prompt){status('请先填写 Master Prompt');return;}const btn=$('ndAiSave');btn.disabled=true;status('正在保存到 Supabase…');try{const {error}=await client().from('ai_brand_settings').upsert({brand_id:id,master_prompt:prompt,frequency:'daily',publish_format:'carousel',approval_mode:'auto',platforms:['facebook','instagram'],timezone:'Asia/Kuala_Lumpur',enabled:false},{onConflict:'brand_id'});if(error)throw error;try{localStorage.setItem(key(id),prompt);}catch(e){}status('已成功保存至 Supabase · 自动发布仍 OFF');}catch(e){status('云端保存失败：'+(e.message||e));}finally{btn.disabled=false;}}
+function init(){if(!$('ndAiSettingsBtn'))return;$('ndAiSettingsBtn').addEventListener('click',()=>{populate();$('ndAiSettingsModal').classList.remove('hidden');});$('ndAiClose').addEventListener('click',()=>{$('ndAiSettingsModal').classList.add('hidden');});$('ndAiBrand').addEventListener('change',load);$('ndAiSave').addEventListener('click',save);$('ndAiReset').addEventListener('click',()=>{$('ndAiPrompt').value=DEFAULT;status('已恢复默认，点击云端保存才会写入 Supabase');});$('ndAiLogo').addEventListener('change',()=>{$('ndAiLogoHint').textContent=$('ndAiLogo').files[0]?.name?'已选择：'+$('ndAiLogo').files[0].name+'（尚未上传服务器）':'Logo 尚未上传服务器';});$('ndAiSettingsModal').addEventListener('click',e=>{if(e.target===$('ndAiSettingsModal'))$('ndAiSettingsModal').classList.add('hidden');});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 </script>
