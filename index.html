@@ -8740,9 +8740,13 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       </div>
       <div class="field social-span-2" id="socialFacebookPageField" style="display:none">
         <label>发布到哪个 Facebook Page</label>
-        <div class="social-page-select-row"><select id="socialFacebookPageSelect"><option value="">Select Facebook Page</option></select>
-          <button class="btn" id="socialFacebookPagesRefreshBtn" type="button">Refresh Pages</button></div>
+        <div class="social-page-select-row" style="display:block"><div id="socialFacebookPageSelect" style="display:grid;gap:10px;padding:10px 0"></div><button class="btn" id="socialFacebookPagesRefreshBtn" type="button">Refresh Pages</button></div>
         <div class="helper" id="socialFacebookPageHelp"></div>
+      </div>
+      <div class="field social-span-2" id="ndOtherPlatformAccounts" style="display:none">
+        <label>已绑定账号 · Connected Accounts</label>
+        <div id="ndOtherPlatformAccountLists" style="display:grid;gap:14px"></div>
+        <div class="helper" id="ndOtherPlatformAccountHelp">仅显示当前品牌已绑定的账号；其他平台暂不支持自动发布。</div>
       </div>
       <div class="field social-span-2 studio-upload-first"><label>图片 / 视频 · Images / Video</label>
         <input id="socialMediaFiles" type="file" accept="image/*,video/*" multiple>
@@ -8822,6 +8826,17 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <div class="helper" id="metaConnectionMessage"></div>
       <div class="meta-page-list" id="metaConnectedPages"></div>
     </div>
+
+    <section id="ndPlatformConnectPanel" style="margin-top:16px;border:1px solid #dce5e7;border-radius:14px;padding:16px;background:#fff">
+      <strong>连接其他平台 · Connect Other Platforms</strong>
+      <p class="helper" style="margin:8px 0 14px">选择官方授权入口。授权完成后，还需由后台读取账号并绑定品牌；未完成接入前不会显示为 Connected。</p>
+      <div style="display:grid;gap:10px">
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>Instagram</strong><div class="helper">已关联 Facebook Page 的专业账号，可先更新 Meta 授权；还需要后台支持 IG 权限及账号读取。</div><button type="button" class="btn primary" id="ndConnectInstagramBtn" style="margin-top:9px">Connect Instagram · 更新 Meta 授权</button></div>
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>TikTok</strong><div class="helper">需要配置 TikTok Login Kit / Content Posting API。</div><button type="button" class="btn" id="ndConnectTikTokBtn" style="margin-top:9px">TikTok · 查看接入步骤</button></div>
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>小红书 / 微信视频号</strong><div class="helper">需要对应平台开放的官方授权与发布接口，当前尚未接通。</div><button type="button" class="btn" id="ndConnectChinaPlatformsBtn" style="margin-top:9px">查看连接说明</button></div>
+      </div>
+      <div class="helper" id="ndPlatformConnectMessage" aria-live="polite" style="margin-top:10px"></div>
+    </section>
 
     <div class="social-manual-divider">
       <strong>Manual Shortcuts</strong>
@@ -28117,34 +28132,28 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    const b=ndSelectedBrand();
    if($("socialBrand")){ $("socialBrand").value=b?.name||"";$("socialBrand").readOnly=true; }
  }
- function populateFacebookPageSelect(selectedId=""){
-   const field=$("socialFacebookPageField");
-   const sel=$("socialFacebookPageSelect");
-   const help=$("socialFacebookPageHelp");
+ function selectedFacebookPageIds(){
+   return [...document.querySelectorAll('#socialFacebookPageSelect input[data-page-id]:checked')].map(x=>x.dataset.pageId);
+ }
+ function populateFacebookPageSelect(selectedIds=null){
+   const field=$("socialFacebookPageField"),container=$("socialFacebookPageSelect"),help=$("socialFacebookPageHelp");
    const show=facebookChecked();
-
    if(field)field.style.display=show?"":"none";
-   if(!show)return;
-   if(!sel)return;
-
+   if(!show||!container)return;
    const pages=ndAllowedPages();
-   sel.innerHTML='<option value="">Select Facebook Page</option>'+
-     pages.map(p=>`<option value="${esc(p.page_id||"")}">${esc(p.page_name||"Facebook Page")}</option>`).join("");
-
-   if(selectedId && pages.some(p=>String(p.page_id)===String(selectedId))){
-     sel.value=String(selectedId);
-   }
-
-   if(help){
-     help.textContent=pages.length
-       ? `${pages.length} connected Facebook Page${pages.length===1?"":"s"} available.`
-       : "当前品牌没有已绑定的 Facebook Page。请到 Manage Accounts 绑定主页。";
-   }
+   // On a new post, brand change or refresh, automatically select all connected pages.
+   const ids=selectedIds===null?new Set(pages.map(p=>String(p.page_id))):new Set((Array.isArray(selectedIds)?selectedIds:[selectedIds]).map(String));
+   container.innerHTML=pages.length?'<label style="display:flex;align-items:center;gap:10px;font-weight:700"><input type="checkbox" id="socialFacebookSelectAll"> 全选 / 取消全选</label>'+pages.map(p=>`<label style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #d8e6df;border-radius:10px"><input type="checkbox" data-page-id="${esc(String(p.page_id||""))}" ${ids.has(String(p.page_id))?'checked':''}> ${esc(p.page_name||"Facebook Page")}</label>`).join(""):'<span>当前品牌没有已绑定的 Facebook Page，请到 Manage Accounts 绑定。</span>';
+   const all=container.querySelector('#socialFacebookSelectAll');
+   const checks=[...container.querySelectorAll('input[data-page-id]')];
+   const sync=()=>{if(all){all.checked=checks.length>0&&checks.every(c=>c.checked);all.indeterminate=checks.some(c=>c.checked)&&!checks.every(c=>c.checked);}if(help)help.textContent=`已选择 ${checks.filter(c=>c.checked).length} / ${checks.length} 个 Facebook Page`;};
+   if(all)all.onchange=()=>{checks.forEach(c=>c.checked=all.checked);sync();};
+   checks.forEach(c=>c.onchange=sync);sync();
  }
 
- async function ensureFacebookPages(selectedId=""){
+ async function ensureFacebookPages(selectedIds=null){
    if(!facebookChecked()){
-     populateFacebookPageSelect("");
+     populateFacebookPageSelect(null);
      return;
    }
    try{
@@ -28155,9 +28164,42 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      metaConnectedPages=[];
    }
    await ndLoadBindings();
-   populateFacebookPageSelect(selectedId);
+   populateFacebookPageSelect(selectedIds);
  }
 
+ const ndOtherPlatforms=["Instagram","TikTok","小红书","微信视频号"];
+ const ndPlatformAliases={"Instagram":"instagram","TikTok":"tiktok","小红书":"xiaohongshu","微信视频号":"wechat_channels"};
+ let ndOtherAccounts=[];
+ function ndSelectedOtherAccounts(){return [...document.querySelectorAll('#ndOtherPlatformAccountLists input[data-nd-account]:checked')].map(el=>({platform:el.dataset.platform,account_id:el.dataset.accountId}));}
+ async function ndRefreshOtherAccounts(){
+   const brand=ndSelectedBrand();
+   ndOtherAccounts=[];
+   if(brand){
+     try{
+       const {data,error}=await db().from('social_brand_accounts').select('id,brand_id,platform,platform_account_id,account_name,connection_status').eq('brand_id',brand.id);
+       if(error)throw error;
+       ndOtherAccounts=(data||[]).filter(a=>String(a.connection_status||'').toLowerCase()==='connected');
+     }catch(err){console.warn('Unable to read platform bindings',err);const help=$('ndOtherPlatformAccountHelp');if(help)help.textContent='无法读取账号绑定，请检查 Supabase RLS：'+(err.message||String(err));}
+   }
+   ndRenderOtherAccounts();
+ }
+ function ndRenderOtherAccounts(){
+   const box=$('ndOtherPlatformAccounts'),root=$('ndOtherPlatformAccountLists');if(!box||!root)return;
+   const chosen=ndOtherPlatforms.filter(p=>document.querySelector('.social-platform-checks input[value="'+p+'"]')?.checked);
+   box.style.display=chosen.length?'':'none';
+   root.innerHTML=chosen.map(platform=>{
+     const alias=ndPlatformAliases[platform];
+     const matches=ndOtherAccounts.filter(a=>String(a.platform||'').toLowerCase()===alias);
+     const heading='<strong>'+esc(platform)+'</strong>';
+     if(!matches.length)return '<div style="padding:12px;border:1px solid #dce5e7;border-radius:10px">'+heading+'<div class="helper">此品牌尚无可读取的已绑定账号；请先完成官方授权及绑定。</div></div>';
+     return '<div style="padding:12px;border:1px solid #dce5e7;border-radius:10px;display:grid;gap:9px">'+heading+'<label><input type="checkbox" data-nd-all="'+esc(alias)+'" checked> 全选 / 取消全选</label>'+matches.map(a=>'<label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-nd-account="1" data-platform="'+esc(alias)+'" data-account-id="'+esc(a.platform_account_id)+'" checked> '+esc(a.account_name||a.platform_account_id)+'</label>').join('')+'</div>';
+   }).join('');
+   root.querySelectorAll('[data-nd-all]').forEach(all=>{
+     const group=[...root.querySelectorAll('input[data-nd-account]')].filter(c=>c.dataset.platform===all.dataset.ndAll);
+     const sync=()=>{all.checked=group.every(c=>c.checked);all.indeterminate=group.some(c=>c.checked)&&!all.checked;};
+     all.onchange=()=>{group.forEach(c=>c.checked=all.checked);sync();};group.forEach(c=>c.onchange=sync);sync();
+   });
+ }
  function closeModals(){["socialPostModal","socialAccountsModal"].forEach(id=>$(id)?.classList.remove("open"))}
  function setMsg(t,bad=false){const e=$("socialPostMsg");if(e){e.textContent=t||"";e.style.color=bad?"#a00":""}}
 
@@ -28244,7 +28286,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialMediaFiles").value="";editingMedia=[];renderMediaPreview();
    $("socialDeletePostBtn").style.display="none";setPublishMode("draft");setMsg("");
  }
- function openNew(date=""){resetForm(date);$("socialPostModal").classList.add("open")}
+ function openNew(date=""){resetForm(date);$("socialPostModal").classList.add("open");document.querySelector('.social-platform-checks input[value="Facebook"]').checked=true;ensureFacebookPages(null);ndRefreshOtherAccounts();}
  function openEdit(id){
    const x=posts.find(p=>String(p.id)===String(id));if(!x)return;
    const active=ndSelectedBrand();if(!active||x.brand!==active.name)return alert("请先选择这篇贴文所属的品牌，再编辑。");
@@ -28257,9 +28299,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    editingMedia=Array.isArray(x.media)?JSON.parse(JSON.stringify(x.media)):[];
    $("socialMediaFiles").value="";renderMediaPreview();
    $("socialDeletePostBtn").style.display="";setPublishMode(x.status==="scheduled"?"scheduled":"draft");
-   if($("socialFacebookPageSelect"))$("socialFacebookPageSelect").value="";
-   populateFacebookPageSelect("");
-   populateFacebookPageSelect(x.facebook_page_id||"");
+   ensureFacebookPages(x.facebook_page_id?[String(x.facebook_page_id)]:null);ndRefreshOtherAccounts();
    $("socialPostModal").classList.add("open");setMsg("");
  }
  function renderMediaPreview(){
@@ -28289,32 +28329,24 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      if(!platforms.length)return setMsg("Choose at least one platform.",true);
      if(status==="scheduled" && (platforms.length!==1 || platforms[0]!=="Facebook"))return setMsg("预约自动发布目前只支持单独选择 Facebook。",true);
      if(!ndSelectedBrand())return setMsg("请先在 Social Media 页面选择品牌。",true);
+     if(status==="draft"&&platforms.some(p=>p!=="Facebook")&&!ndSelectedOtherAccounts().length&&!facebookChecked())return setMsg("请先选择至少一个已绑定账号，才能保存该平台的草稿。",true);
      if(status==="scheduled"&&(!$("socialPublishDate").value||!$("socialPublishTime").value))return setMsg("Choose publish date and time.",true);
      if(status==="scheduled" && new Date(isoLocal($("socialPublishDate").value,$("socialPublishTime").value)).getTime()<=Date.now())return setMsg("Schedule time must be in the future (Malaysia time).",true);
      await uploadFiles();
      if(status!=="draft"&&!editingMedia.length)return setMsg("预约发布请上传至少一张图片。",true);
-     const facebookPageId=facebookChecked()?String($("socialFacebookPageSelect")?.value||"").trim():"";
-   const facebookPage=ndAllowedPages().find(p=>String(p.page_id)===facebookPageId);
-   const facebookPageName=facebookPage?.page_name||"";
-
-   if(status!=="draft" && facebookChecked() && (!facebookPageId || !facebookPage)){
-     setMsg("Select a Facebook Page / 请选择要发布的主页。",true);
-     return;
-   }
-
-   const row={
-       brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),
-       caption:$("socialCaption").value,platforms,media:editingMedia,
-       scheduled_at:isoLocal($("socialPublishDate").value,$("socialPublishTime").value),
-       timezone:"Asia/Kuala_Lumpur",status,
-       updated_at:new Date().toISOString(),facebook_page_id:facebookPageId||null,
-     facebook_page_name:facebookPageName||null,
-     created_by:String(window.currentUserEmail||"").toLowerCase()
-     };
-     const id=$("socialPostId").value;
+     const pageIds=facebookChecked()?selectedFacebookPageIds():[];
+     if(status!=="draft"&&facebookChecked()&&!pageIds.length)return setMsg("请至少勾选一个 Facebook Page。",true);
+     const base={brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),caption:$("socialCaption").value,platforms,media:editingMedia,scheduled_at:isoLocal($("socialPublishDate").value,$("socialPublishTime").value),timezone:"Asia/Kuala_Lumpur",status,updated_at:new Date().toISOString(),created_by:String(window.currentUserEmail||"").toLowerCase()};
+     const ids=status==="draft"?[pageIds[0]||null]:pageIds;
+     const rows=ids.map(pageId=>({...base,facebook_page_id:pageId,facebook_page_name:ndAllowedPages().find(p=>String(p.page_id)===String(pageId))?.page_name||null}));
+     const editId=$("socialPostId").value;
      setMsg("Saving...");
-     const q=id?db().from("social_media_posts").update(row).eq("id",id):db().from("social_media_posts").insert(row);
-     const {error}=await q;if(error)throw error;
+     if(editId){
+       const {error}=await db().from("social_media_posts").update(rows[0]).eq("id",editId);if(error)throw error;
+       if(rows.length>1){const {error:extraError}=await db().from("social_media_posts").insert(rows.slice(1));if(extraError)throw extraError;}
+     }else{
+       const {error}=await db().from("social_media_posts").insert(rows);if(error)throw error;
+     }
      closeModals();await loadPosts();
    }catch(e){console.error(e);setMsg(e.message||String(e),true)}
  }
@@ -28325,8 +28357,8 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      if(!ndSelectedBrand())return setMsg("请先选择品牌。",true);
      const platforms=[...document.querySelectorAll(".social-platform-checks input:checked")].map(x=>x.value);
      if(platforms.length!==1||platforms[0]!=="Facebook")return setMsg("目前只支持单独发布 Facebook；请取消其他平台。",true);
-     const pageId=String($("socialFacebookPageSelect")?.value||"").trim();
-     if(!pageId||!ndAllowedPages().some(x=>String(x.page_id)===pageId))return setMsg("请先选择已连接的 Facebook Page。",true);
+     const pageIds=selectedFacebookPageIds();
+     if(!pageIds.length||pageIds.some(id=>!ndAllowedPages().some(x=>String(x.page_id)===id)))return setMsg("请至少勾选一个已连接的 Facebook Page。",true);
      const files=[...($("socialMediaFiles").files||[])];
      if(files.length+editingMedia.length>1)return setMsg("目前只支持单张图片。请移除其他图片或视频。",true);
      if(files.some(f=>!f.type.startsWith("image/"))||editingMedia.some(m=>!String(m.type||"").startsWith("image/")))return setMsg("目前不支持视频立即发布。",true);
@@ -28334,22 +28366,25 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      btn.disabled=true;btn.textContent="Publishing...";
      await uploadFiles();
      const imageUrl=editingMedia[0]?.url||"";
-     if(!confirm("确定立即发布到选中的 Facebook Page？\n\n"+($('socialFacebookPageSelect').selectedOptions[0]?.textContent||pageId)))return;
-     setMsg("正在发送至 Facebook，请勿重复点击...");
-     const {data,error}=await db().functions.invoke("facebook-publish",{body:{facebook_page_id:pageId,caption:$("socialCaption").value,image_url:imageUrl}});
-     if(error)throw new Error(error.message||String(error));
-     if(!data?.success||!data?.post_id)throw new Error(data?.error||"Facebook 未确认发布成功，请先检查主页，避免重复发布。");
-     const row={brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),caption:$("socialCaption").value,
-       platforms:["facebook"],media:editingMedia,scheduled_at:new Date().toISOString(),timezone:"Asia/Kuala_Lumpur",status:"published",
-       updated_at:new Date().toISOString(),facebook_page_id:pageId,
-       facebook_page_name:metaConnectedPages.find(x=>String(x.page_id)===pageId)?.page_name||null,
-       created_by:String(window.currentUserEmail||"").toLowerCase()};
-     const id=$("socialPostId").value;
-     const q=id?db().from("social_media_posts").update(row).eq("id",id):db().from("social_media_posts").insert(row);
-     const {error:saveError}=await q;
-     if(saveError){setMsg("Facebook 已接受发布！Post ID: "+data.post_id+"。但网站历史保存失败："+saveError.message,true);return;}
-     closeModals();await loadPosts();
-     alert("Facebook 发布成功！\nPost ID: "+data.post_id);
+     if(!confirm(`确定立即发布到 ${pageIds.length} 个 Facebook Page？\n\n`+pageIds.map(id=>ndAllowedPages().find(p=>String(p.page_id)===id)?.page_name||id).join("\n")))return;
+     const results=[];
+     for(const pageId of pageIds){
+       const name=ndAllowedPages().find(p=>String(p.page_id)===pageId)?.page_name||pageId;
+       setMsg(`正在发布 ${results.length+1}/${pageIds.length}：${name}，请勿重复点击...`);
+       try{
+         const {data,error}=await db().functions.invoke("facebook-publish",{body:{facebook_page_id:pageId,caption:$("socialCaption").value,image_url:imageUrl}});
+         if(error)throw new Error(error.message||String(error));
+         if(!data?.success||!data?.post_id)throw new Error(data?.error||"Facebook 未确认发布成功");
+         const row={brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),caption:$("socialCaption").value,platforms:["facebook"],media:editingMedia,scheduled_at:new Date().toISOString(),timezone:"Asia/Kuala_Lumpur",status:"published",updated_at:new Date().toISOString(),facebook_page_id:pageId,facebook_page_name:name,created_by:String(window.currentUserEmail||"").toLowerCase()};
+         const {error:saveError}=await db().from("social_media_posts").insert(row);
+         results.push({name,ok:true,postId:data.post_id,historyError:saveError?.message});
+       }catch(err){results.push({name,ok:false,error:err?.message||String(err)});}
+     }
+     await loadPosts();
+     const summary=results.map(r=>`${r.ok?'成功':'失败'}：${r.name}${r.historyError?'（历史保存失败：'+r.historyError+'）':''}${r.error?'（'+r.error+'）':''}`).join("\n");
+     setMsg(summary,results.some(r=>!r.ok||r.historyError));
+     alert(`Facebook 发布结果 (${results.filter(r=>r.ok).length}/${results.length})\n\n${summary}`);
+     if(results.every(r=>r.ok&&!r.historyError))closeModals();
    }catch(e){console.error(e);setMsg("发布未确认："+(e?.message||String(e))+"。请先检查 Facebook 主页再重试。",true)}
    finally{if(btn){btn.disabled=false;btn.textContent="Publish Now · Facebook";}}
  }
@@ -28622,7 +28657,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialViewCalendar").onclick=()=>setSocialView("calendar");
    $("socialViewList").onclick=()=>setSocialView("list");
    $("socialNewPostBtn").onclick=()=>{if(!ndSelectedBrand())return alert("请先选择品牌，再创建贴文。");openNew();};
-   $("ndSocialActiveBrand").onchange=()=>{ndSyncComposerBrand();populateFacebookPageSelect("");render();};
+   $("ndSocialActiveBrand").onchange=()=>{ndSyncComposerBrand();populateFacebookPageSelect(null);ndRefreshOtherAccounts();render();};
    $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
    $("socialPublishNowBtn").onclick=publishNowFacebook;$("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>{save("scheduled")};
    $("socialDeletePostBtn").onclick=del;
@@ -28630,13 +28665,13 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    document.querySelectorAll(".social-platform-checks input").forEach(chk=>{
      chk.addEventListener("change",()=>{
        if(chk.value==="Facebook"){
-         if(chk.checked)ensureFacebookPages($("socialFacebookPageSelect")?.value||"");
-         else populateFacebookPageSelect("");
-       }
+         if(chk.checked)ensureFacebookPages(null);
+         else populateFacebookPageSelect(null);
+       }else ndRenderOtherAccounts();
      });
    });
 
-   $("socialFacebookPagesRefreshBtn").onclick=()=>ensureFacebookPages($("socialFacebookPageSelect")?.value||"");
+   $("socialFacebookPagesRefreshBtn").onclick=()=>ensureFacebookPages(null);
    $("socialAccountsBtn").onclick=async()=>{
      $("socialAccountsModal").classList.add("open");
      updateFacebookEntryFields();
@@ -28644,6 +28679,19 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      await Promise.allSettled([loadAccounts(),refreshMetaConnectionStatus()]);
    };
 
+   const ndConnectInfo=$('ndPlatformConnectMessage');
+   if($('ndConnectInstagramBtn'))$('ndConnectInstagramBtn').onclick=async()=>{
+     const info='Instagram 接入第 1 步：通过现有 Meta App 更新授权。注意：当前 OAuth Edge Function 必须先配置 Instagram 权限及 IG 账号读取；仅重新授权 Facebook 不会自动完成 IG 连接。';
+     if(ndConnectInfo)ndConnectInfo.textContent=info;
+     if(!confirm(info+'\n\n是否现在打开 Meta 授权？'))return;
+     await connectFacebookMeta();
+   };
+   if($('ndConnectTikTokBtn'))$('ndConnectTikTokBtn').onclick=()=>{
+     if(ndConnectInfo)ndConnectInfo.textContent='TikTok 尚未接入 OAuth 后台。需要先在 TikTok for Developers 创建应用、配置回调和授权权限，再接入 ndacc.us；当前不会创建虚假连接。';
+   };
+   if($('ndConnectChinaPlatformsBtn'))$('ndConnectChinaPlatformsBtn').onclick=()=>{
+     if(ndConnectInfo)ndConnectInfo.textContent='小红书和微信视频号目前尚无本站可用的官方 OAuth 连接后台；需要根据平台开放权限单独开发，不能用手动填写账号冒充已授权。';
+   };
    $("metaConnectBtn").onclick=connectFacebookMeta;
    $("metaReauthorizeBtn").onclick=async()=>{
      const btn=$("metaReauthorizeBtn");
@@ -28667,7 +28715,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialRefreshBtn").onclick=loadPosts;$("socialPlatformFilter").onchange=render;$("socialStatusFilter").onchange=render;
    $("socialCalendar").addEventListener("dblclick",e=>{const d=e.target.closest(".social-day")?.dataset.socialDate;if(d)openNew(d)});
    ["socialPostModal","socialAccountsModal"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))closeModals()}));
-   window.addEventListener("nd-brand-binding-updated",()=>ndLoadBindings().then(()=>populateFacebookPageSelect("")));
+   window.addEventListener("nd-brand-binding-updated",()=>ndLoadBindings().then(()=>populateFacebookPageSelect(null)));
    handleMetaOauthReturn();
  });
 })();
