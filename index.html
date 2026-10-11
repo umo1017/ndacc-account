@@ -8786,13 +8786,13 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div class="social-modal" id="socialAccountsModal" aria-hidden="true">
   <div class="social-modal-card social-account-card">
     <div class="social-modal-head">
-      <div><strong>Social Accounts</strong><div class="helper">管理品牌、Facebook 主页及其他社交平台账号</div></div>
+      <div><strong>Social Accounts</strong><div class="helper">连接 Facebook 并管理各品牌主页</div></div>
       <button class="social-x" id="socialAccountsClose" type="button">×</button>
     </div>
     
     <section class="nd-brand-bind" id="ndBrandBindPanel" style="border:1px solid #dbe6e0;border-radius:16px;padding:16px;margin:14px 0;background:#f9fcfa">
       <h3 style="margin:0 0 8px">创建与绑定品牌 · Create & Connect Brand</h3>
-      <p class="helper">选择或创建品牌，再管理已授权的平台账号。Facebook 主页可在此绑定；Instagram 连接状态按实际可读取记录显示，其他平台须先完成官方接口接入。勾选平台不代表已连接。</p>
+      <p class="helper">自己填写品牌名称，再选择平台及对应账号。Facebook 可绑定已授权的主页；Instagram / TikTok 必须完成官方授权后才能连接；勾选平台不等于已连接。</p>
       <label for="ndBrandNameInput">品牌名称 · Brand Name</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input id="ndBrandNameInput" placeholder="例如 Lumi Beauty 光之美" style="flex:1 1 180px"><button type="button" class="btn primary" id="ndCreateBrandBtn">＋ 创建品牌</button></div>
       <select id="ndBrandBindSelect" hidden aria-hidden="true" tabindex="-1"><option value="">尚未创建品牌</option></select>
@@ -8827,15 +8827,16 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <div class="meta-page-list" id="metaConnectedPages"></div>
     </div>
 
+    <style id="nd-social-account-actions-style">.nd-social-account-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}.nd-social-account-actions .btn{flex:1 1 180px;min-height:44px;white-space:normal}@media(max-width:600px){.nd-social-account-actions .btn{flex-basis:100%}}</style>
     <section id="ndPlatformConnectPanel" style="margin-top:16px;border:1px solid #dce5e7;border-radius:14px;padding:16px;background:#fff">
       <strong>社交平台账号 · Social Media Accounts</strong>
       <p class="helper" style="margin:8px 0 14px">统一查看各平台的实际连接状态、管理官方授权及品牌绑定。只有后台确认的账号才会显示 Connected。</p>
       <div style="display:grid;gap:10px">
-        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>Facebook</strong><div class="helper">已授权的 Facebook Pages 请在上方账号列表管理；连接状态以实际页面授权为准。</div><span class="helper">Facebook Pages · 查看上方已连接账号</span></div>
-        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>Instagram</strong><div class="helper">自动检查当前登录用户可读取的 Instagram 账号及品牌绑定；可重新授权。</div><button type="button" class="btn primary" id="ndConnectInstagramBtn" style="margin-top:9px">Connect Instagram · 官方授权</button></div>
-        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>TikTok</strong><div class="helper">尚未配置 TikTok 官方 OAuth 与内容发布接口，不会显示虚假 Connected。</div><button type="button" class="btn" id="ndConnectTikTokBtn" style="margin-top:9px">TikTok · 查看接入步骤</button></div>
-        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>小红书</strong><div class="helper">官方账号授权与发布接口尚未接入。</div><button type="button" class="btn" id="ndConnectChinaPlatformsBtn" style="margin-top:9px">小红书 · 查看接入说明</button></div>
-        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>微信视频号</strong><div class="helper">官方账号授权与发布接口尚未接入。</div><button type="button" class="btn" id="ndConnectWeChatChannelsBtn" style="margin-top:9px">微信视频号 · 查看接入说明</button></div>
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>Facebook</strong><div class="helper">已授权的 Facebook Pages 请在上方账号列表管理；连接状态以实际页面授权为准。</div><button type="button" class="btn" id="ndShowFacebookPagesBtn" style="margin-top:9px">查看 Facebook Pages ↑</button></div>
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>Instagram</strong><div class="helper">自动检查当前登录用户可读取的 Instagram 账号及品牌绑定；可重新授权。</div><div class="nd-social-account-actions"><button type="button" class="btn primary" id="ndConnectInstagramBtn">Connect / Reauthorize</button><button type="button" class="btn" id="ndRefreshInstagramBtn">↻ Refresh Status</button></div><div class="helper" id="ndInstagramCardStatus" aria-live="polite">检查中…</div></div>
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>TikTok</strong><div class="helper">尚未配置 TikTok 官方 OAuth 与内容发布接口，不会显示虚假 Connected。</div><div class="nd-social-account-actions"><button type="button" class="btn" id="ndConnectTikTokBtn">查看官方接入要求</button><button type="button" class="btn" id="ndTikTokHelpBtn">打开开发者平台 ↗</button></div><div class="helper">状态：尚未配置官方连接接口</div></div>
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>小红书</strong><div class="helper">官方账号授权与发布接口尚未接入。</div><div class="nd-social-account-actions"><button type="button" class="btn" id="ndConnectChinaPlatformsBtn">查看连接状态</button></div><div class="helper">状态：尚未接入官方授权接口</div></div>
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>微信视频号</strong><div class="helper">官方账号授权与发布接口尚未接入。</div><div class="nd-social-account-actions"><button type="button" class="btn" id="ndConnectWeChatChannelsBtn">查看连接状态</button></div><div class="helper">状态：尚未接入官方授权接口</div></div>
       </div>
       <div class="helper" id="ndPlatformConnectMessage" aria-live="polite" style="margin-top:10px"></div>
     </section>
@@ -28659,7 +28660,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialViewCalendar").onclick=()=>setSocialView("calendar");
    $("socialViewList").onclick=()=>setSocialView("list");
    $("socialNewPostBtn").onclick=()=>{if(!ndSelectedBrand())return alert("请先选择品牌，再创建贴文。");openNew();};
-   $("ndSocialActiveBrand").onchange=()=>{ndSyncComposerBrand();populateFacebookPageSelect(null);ndRefreshOtherAccounts();render();const legacy=$('ndBrandBindSelect');if(legacy){legacy.value=$("ndSocialActiveBrand").value||'';legacy.dispatchEvent(new Event('change'));}};
+   $("ndSocialActiveBrand").onchange=()=>{ndSyncComposerBrand();populateFacebookPageSelect(null);ndRefreshOtherAccounts();render();};
    $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
    $("socialPublishNowBtn").onclick=publishNowFacebook;$("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>{save("scheduled")};
    $("socialDeletePostBtn").onclick=del;
@@ -28713,18 +28714,19 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
          btn.textContent='Instagram Connected ✓ · Reconnect';
          btn.dataset.connected='true';
          const label=connected.map(x=>x.account_name&&x.account_name!=='Instagram'?x.account_name:x.platform_account_id).join(', ');
+         ndSetCardMessage('ndInstagramCardStatus','已读取到 '+connected.length+' 个 Instagram 品牌绑定');
          if(info)info.textContent='Instagram 已绑定'+(brand?'当前品牌':'品牌')+'：'+label+'。可重新授权更新连接。';
        }else{
-         // A successful empty SELECT cannot distinguish an unbound account from an RLS-filtered row.
-         // Do not label this as disconnected or invite needless OAuth reauthorization.
-         btn.textContent='Instagram · 检查授权 / 重新连接';
-         btn.dataset.connected='unknown';
-         if(info)info.textContent='没有读取到'+(brand?'当前品牌':'当前账号')+'的 Instagram 绑定。可能是未绑定、品牌不一致或读取权限限制；不能据此判断 Instagram 已断开。';
+         btn.textContent='Connect Instagram · Instagram 官方授权';
+         btn.dataset.connected='false';
+         ndSetCardMessage('ndInstagramCardStatus','未找到可读取的 Instagram 品牌绑定');
+         if(info)info.textContent='当前'+(brand?'所选品牌':'登录账号')+'没有可读取的 Instagram 绑定；请核对品牌选择和 Supabase SELECT/RLS 权限。';
        }
      }catch(e){
        if(seq!==ndInstagramStatusSeq)return;
        btn.textContent='Check Instagram Connection · Retry';
        btn.dataset.connected='unknown';
+       ndSetCardMessage('ndInstagramCardStatus','读取失败，请检查 Supabase 权限');
        if(info)info.textContent='Instagram 连接状态读取失败：'+(e?.message||String(e))+'。请检查账号权限/RLS。';
      }finally{if(seq===ndInstagramStatusSeq)btn.disabled=false;}
    }
@@ -28733,6 +28735,20 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $('ndSocialActiveBrand')?.addEventListener('change',ndRefreshInstagramConnectedStatus);
    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$('socialAccountsModal')?.classList.contains('open'))ndRefreshInstagramConnectedStatus();});
    window.addEventListener('nd-brand-binding-updated',ndRefreshInstagramConnectedStatus);
+   // Unified social platform buttons: every control has an observable action.
+   const ndSetCardMessage=(id,msg)=>{const el=$(id);if(el)el.textContent=msg;};
+   $('ndRefreshInstagramBtn')?.addEventListener('click',async()=>{
+     ndSetCardMessage('ndInstagramCardStatus','正在读取 Instagram 品牌绑定…');
+     await ndRefreshInstagramConnectedStatus();
+   });
+   $('ndShowFacebookPagesBtn')?.addEventListener('click',()=>{
+     const target=$('metaConnectedPages')||$('metaConnectionStatus');
+     if(target){target.scrollIntoView({behavior:'smooth',block:'start'});target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
+     else ndSetCardMessage('ndPlatformConnectMessage','Facebook Pages 列表未加载，请点击上方 Refresh。');
+   });
+   $('ndTikTokHelpBtn')?.addEventListener('click',()=>{
+     window.open('https://developers.tiktok.com/','_blank','noopener,noreferrer');
+   });
    const ndConnectInfo=$('ndPlatformConnectMessage');
    if($('ndConnectInstagramBtn'))$('ndConnectInstagramBtn').onclick=async()=>{
      const btn=$('ndConnectInstagramBtn');
@@ -29325,7 +29341,6 @@ document.addEventListener("DOMContentLoaded",function(){
      const sel=$('ndBrandBindSelect'),old=preferred||sel.value;
      sel.innerHTML='<option value="">请选择或创建品牌</option>'+brands.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
      if(brands.some(x=>x.id===old))sel.value=old;
-     else {const active=$('ndSocialActiveBrand')?.value;if(brands.some(x=>x.id===active))sel.value=active;}
      const typed=$('ndBrandNameInput')?.value.trim().toLowerCase();
      const matched=typed&&brands.find(x=>x.name.toLowerCase()===typed);
      if(matched)sel.value=matched.id;
@@ -29334,7 +29349,7 @@ document.addEventListener("DOMContentLoaded",function(){
    }catch(e){say('加载失败：'+(e.message||e))}finally{loading=false}
  }
  async function render(){
-   platformUI();const brand=$('ndBrandBindSelect')?.value||$('ndSocialActiveBrand')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
+   platformUI();const brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
    if($('ndBrandActiveName'))$('ndBrandActiveName').textContent=brand?'当前品牌：'+(brands.find(x=>x.id===brand)?.name||'已创建品牌'):'请输入品牌名称并点击创建品牌，然后绑定账号。';
    if(!brand){box.innerHTML='<p class="helper">请先输入品牌名称并点击「创建品牌」。</p>';say(`已读取 ${pages.length} 个授权 Facebook 主页。`);return}
    const {data,error}=await db().rpc('nd_list_facebook_brand_bindings');
@@ -29367,7 +29382,7 @@ document.addEventListener("DOMContentLoaded",function(){
  }
  async function bindPage(btn){
    if(bindingBusy)return;
-   const id=btn.getAttribute('data-nd-page'),brand=$('ndBrandBindSelect')?.value||$('ndSocialActiveBrand')?.value;
+   const id=btn.getAttribute('data-nd-page'),brand=$('ndBrandBindSelect')?.value;
    if(!brand){say('请先输入品牌名称并点击创建品牌。');return}
    if(!id){say('Facebook Page ID 为空，请刷新主页列表。');return}
    const unlink=bindings.some(x=>String(x.platform_account_id)===String(id)&&x.brand_id===brand);
