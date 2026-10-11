@@ -28103,7 +28103,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
  }
  async function ndLoadBindings(){
    try{
-     const {data,error}=await db().from("social_brand_accounts").select("brand_id,platform_account_id,connection_status").eq("platform","facebook");
+     const {data,error}=await db().rpc("nd_list_facebook_brand_bindings");
      if(error)throw error;ndBindings=data||[];
    }catch(e){ndBindings=[];console.warn("Brand bindings unavailable",e);}
  }
@@ -29189,17 +29189,17 @@ document.addEventListener("DOMContentLoaded",function(){
    platformUI();const brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
    if($('ndBrandActiveName'))$('ndBrandActiveName').textContent=brand?'当前品牌：'+(brands.find(x=>x.id===brand)?.name||'已创建品牌'):'请输入品牌名称并点击创建品牌，然后绑定账号。';
    if(!brand){box.innerHTML='<p class="helper">请先输入品牌名称并点击「创建品牌」。</p>';say(`已读取 ${pages.length} 个授权 Facebook 主页。`);return}
-   const {data,error}=await db().from('social_brand_accounts').select('platform,platform_account_id,brand_id,connection_status').eq('platform','facebook');
+   const {data,error}=await db().rpc('nd_list_facebook_brand_bindings');
    if(error){say('读取绑定失败：'+error.message+'。请检查 social_brand_accounts 的读取权限。');box.innerHTML='<p class="helper">无法读取绑定状态，请检查数据库权限。</p>';return}
    bindings=data||[];
    if(!pages.length){box.innerHTML='<p class="helper">未读取到 Facebook 主页，请先点击下方 Connect Facebook 完成授权。</p>';return}
    box.innerHTML=pages.map(p=>{
-     const id=String(p.page_id||''),found=bindings.find(x=>x.platform_account_id===id),mine=found?.brand_id===brand,other=!!found&&!mine;
-     return `<div class="nd-brand-account-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #e6ece8"><div style="min-width:0;overflow-wrap:anywhere"><strong>${esc(p.page_name||'Facebook Page')}</strong><div class="helper">${esc(id)} · ${mine?'已绑定此品牌':other?'已绑定其他品牌':'未绑定'}</div></div><button type="button" class="btn" data-nd-page="${esc(id)}" ${other?'disabled':''}>${mine?'取消绑定':other?'其他品牌使用中':'绑定'}</button></div>`
+     const id=String(p.page_id||''),mine=bindings.some(x=>String(x.platform_account_id)===id&&x.brand_id===brand);
+     return `<div class="nd-brand-account-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #e6ece8"><div style="min-width:0;overflow-wrap:anywhere"><strong>${esc(p.page_name||'Facebook Page')}</strong><div class="helper">${esc(id)} · ${mine?'已绑定此品牌':'未绑定此品牌'}</div></div><button type="button" class="btn" data-nd-page="${esc(id)}" >${mine?'取消绑定':'绑定'}</button></div>`
    }).join('');
    // Button clicks are handled by one delegated listener below, so re-rendering
    // the Page list never disconnects the click handler.
-   say('选择主页点击绑定；同一 Facebook Page 只能绑定一个品牌。');
+   say('同一个 Facebook Page 可以绑定多个品牌；取消绑定只影响当前品牌。');
  }
  async function create(){
    const name=$('ndBrandNameInput').value.trim().replace(/\s+/g,' ');
@@ -29220,11 +29220,9 @@ document.addEventListener("DOMContentLoaded",function(){
  async function bindPage(btn){
    if(bindingBusy)return;
    const id=btn.getAttribute('data-nd-page'),brand=$('ndBrandBindSelect')?.value;
-   if(!brand){say('请先选择品牌。');return}
+   if(!brand){say('请先输入品牌名称并点击创建品牌。');return}
    if(!id){say('Facebook Page ID 为空，请刷新主页列表。');return}
-   const found=bindings.find(x=>String(x.platform_account_id)===String(id));
-   const unlink=found?.brand_id===brand;
-   if(found&&!unlink){say('此主页已绑定其他品牌，不能重复绑定。');return}
+   const unlink=bindings.some(x=>String(x.platform_account_id)===String(id)&&x.brand_id===brand);
    // Show feedback immediately even on browsers that suppress native confirm dialogs.
    say((unlink?'正在取消绑定：':'正在绑定：')+id+' ...');
    bindingBusy=true;btn.disabled=true;
