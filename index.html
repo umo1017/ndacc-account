@@ -8831,7 +8831,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <strong>连接其他平台 · Connect Other Platforms</strong>
       <p class="helper" style="margin:8px 0 14px">选择官方授权入口。授权完成后，还需由后台读取账号并绑定品牌；未完成接入前不会显示为 Connected。</p>
       <div style="display:grid;gap:10px">
-        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>Instagram</strong><div class="helper">已关联 Facebook Page 的专业账号，可先更新 Meta 授权；还需要后台支持 IG 权限及账号读取。</div><button type="button" class="btn primary" id="ndConnectInstagramBtn" style="margin-top:9px">Connect Instagram · 更新 Meta 授权</button></div>
+        <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>Instagram</strong><div class="helper">连接 Instagram 专业账号。登录后使用 Instagram 官方授权；账号连接成功后可进一步绑定品牌。</div><button type="button" class="btn primary" id="ndConnectInstagramBtn" style="margin-top:9px">Connect Instagram · Instagram 官方授权</button></div>
         <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>TikTok</strong><div class="helper">需要配置 TikTok Login Kit / Content Posting API。</div><button type="button" class="btn" id="ndConnectTikTokBtn" style="margin-top:9px">TikTok · 查看接入步骤</button></div>
         <div style="border:1px solid #e1e8e9;border-radius:10px;padding:12px"><strong>小红书 / 微信视频号</strong><div class="helper">需要对应平台开放的官方授权与发布接口，当前尚未接通。</div><button type="button" class="btn" id="ndConnectChinaPlatformsBtn" style="margin-top:9px">查看连接说明</button></div>
       </div>
@@ -28681,10 +28681,30 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
 
    const ndConnectInfo=$('ndPlatformConnectMessage');
    if($('ndConnectInstagramBtn'))$('ndConnectInstagramBtn').onclick=async()=>{
-     const info='Instagram 接入第 1 步：通过现有 Meta App 更新授权。注意：当前 OAuth Edge Function 必须先配置 Instagram 权限及 IG 账号读取；仅重新授权 Facebook 不会自动完成 IG 连接。';
-     if(ndConnectInfo)ndConnectInfo.textContent=info;
-     if(!confirm(info+'\n\n是否现在打开 Meta 授权？'))return;
-     await connectFacebookMeta();
+     const btn=$('ndConnectInstagramBtn');
+     const client=window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
+     if(!client){if(ndConnectInfo)ndConnectInfo.textContent='Supabase 尚未初始化，请刷新后再试。';return;}
+     btn.disabled=true;
+     if(ndConnectInfo)ndConnectInfo.textContent='正在验证登录并生成 Instagram 授权链接...';
+     try{
+       const {data:{session},error:sessionError}=await client.auth.getSession();
+       if(sessionError)throw sessionError;
+       if(!session?.access_token)throw new Error('请先登录 ndacc.us，再连接 Instagram。');
+       const {data,error}=await client.functions.invoke('instagram-oauth-start',{
+         method:'POST',
+         headers:{Authorization:'Bearer '+session.access_token},
+         body:{}
+       });
+       if(error)throw error;
+       if(data?.error)throw new Error(String(data.error));
+       const authorizationUrl=String(data?.authorization_url||'');
+       const target=new URL(authorizationUrl);
+       if(target.protocol!=='https:'||target.hostname!=='www.instagram.com')throw new Error('授权地址无效，请检查 Instagram OAuth 设置。');
+       if(ndConnectInfo)ndConnectInfo.textContent='即将打开 Instagram 官方授权页面。完成后返回本站并刷新账号。';
+       window.location.assign(target.href);
+     }catch(e){
+       if(ndConnectInfo)ndConnectInfo.textContent='Instagram 连接未开始：'+(e?.message||String(e))+'。请确认新版 OAuth start/callback 已正确部署。';
+     }finally{btn.disabled=false;}
    };
    if($('ndConnectTikTokBtn'))$('ndConnectTikTokBtn').onclick=()=>{
      if(ndConnectInfo)ndConnectInfo.textContent='TikTok 尚未接入 OAuth 后台。需要先在 TikTok for Developers 创建应用、配置回调和授权权限，再接入 ndacc.us；当前不会创建虚假连接。';
