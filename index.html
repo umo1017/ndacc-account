@@ -3903,7 +3903,8 @@ html.auth-pending body .main-page-close{
 <style id="nd-brand-create-style">#socialAccountsModal .nd-platform-option{display:flex;align-items:center;gap:9px;padding:11px 12px;background:#fff;border:1px solid #dce6e2;border-radius:11px;margin:0;cursor:pointer;font-weight:750}#socialAccountsModal .nd-platform-option input{width:19px;height:19px;flex:none;accent-color:#245f55}#ndCreateBrandBtn{white-space:nowrap}#ndBrandNameInput{min-width:0}@media(max-width:600px){#socialAccountsModal .nd-brand-account-row{align-items:flex-start!important}#socialAccountsModal .nd-brand-account-row button{flex:0 0 auto;padding:9px 10px;font-size:13px}}</style><style id="nd-compact-social-style">
 #socialAccountsModal .social-modal-head .helper{display:none}
 #socialAccountsModal #ndBrandBindPanel,#socialAccountsModal #ndMultiAccountInventory,#socialAccountsModal .meta-connect-panel,#socialAccountsModal #ndPlatformConnectPanel{display:none}
-#socialAccountsModal.nd-social-advanced #ndBrandBindPanel,#socialAccountsModal.nd-social-advanced #ndMultiAccountInventory,#socialAccountsModal.nd-social-advanced .meta-connect-panel,#socialAccountsModal.nd-social-advanced #ndPlatformConnectPanel{display:block}
+#socialAccountsModal.nd-social-advanced #ndBrandBindPanel,#socialAccountsModal.nd-social-advanced .meta-connect-panel,#socialAccountsModal.nd-social-advanced #ndPlatformConnectPanel{display:block}
+#socialAccountsModal #ndMultiAccountInventory{display:none!important}
 .nd-compact-social{padding:14px;border:1px solid #dce5e2;border-radius:16px;margin:12px 0;background:#fff;display:grid;gap:12px}
 .nd-compact-heading,.nd-compact-brand,.nd-compact-actions,.nd-compact-platform-head{display:flex;gap:8px;align-items:center;justify-content:space-between}
 .nd-compact-brand select{min-width:0;flex:1}.nd-compact-brand button{flex-shrink:0}.nd-compact-actions{flex-wrap:wrap}.nd-compact-actions button{flex:1 1 180px}
@@ -8824,7 +8825,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
  <div id="ndMultiAccountRows" style="display:grid;gap:12px;margin-top:12px"></div>
 </section>
 <section id="ndCompactSocialAccounts" class="nd-compact-social">
- <div class="nd-compact-heading"><strong>平台账号 · Accounts</strong><span class="helper" style="font-size:11px">v4 · 2026-10-11</span><button type="button" class="btn" id="ndCompactRefresh">↻ 刷新</button></div>
+ <div class="nd-compact-heading"><strong>平台账号 · Accounts</strong><span class="helper" style="font-size:11px">v5 · 2026-10-11</span><button type="button" class="btn" id="ndCompactRefresh">↻ 刷新</button></div>
  <label for="ndCompactBrand">当前品牌</label><div class="nd-compact-brand"><select id="ndCompactBrand"><option value="">选择品牌</option></select><button type="button" class="btn" id="ndCompactNewBrand">＋ 品牌</button></div>
  <div class="helper" style="font-weight:700">勾选平台及要使用的账号／主页（不自动全选）</div><div class="nd-compact-platform" id="ndCompactPlatformList"><div class="helper">正在读取账号…</div></div>
  <div class="nd-compact-actions"><button type="button" class="btn primary" id="ndCompactAddInstagram">＋ Instagram 账号</button><button type="button" class="btn" id="ndCompactAddFacebook">＋ Facebook 账号</button></div>
@@ -29525,119 +29526,88 @@ document.addEventListener("DOMContentLoaded",function(){
  });
 })();
 </script>
-<script id="nd-compact-social-accounts-v3">
+<script id="nd-compact-social-accounts-v5">
 (function(){
  'use strict';
  const $=id=>document.getElementById(id);
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const client=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
- const names={instagram:'Instagram',facebook:'Facebook',tiktok:'TikTok',xiaohongshu:'小红书',wechat_channels:'微信视频号'};
- const KEY='nd_social_selected_accounts_v2';
- const PLATFORM_KEY='nd_social_enabled_platforms_v1';
- const enabledPlatforms=()=>{try{const v=JSON.parse(sessionStorage.getItem(PLATFORM_KEY)||'null');return Array.isArray(v)?v:['facebook','instagram']}catch{return ['facebook','instagram']}};
- const savePlatforms=v=>{try{sessionStorage.setItem(PLATFORM_KEY,JSON.stringify(v))}catch{}};
- const getChosen=()=>{try{const v=JSON.parse(sessionStorage.getItem(KEY)||'{}');return v&&typeof v==='object'?v:{}}catch{return {}}};
- const saveChosen=v=>{try{sessionStorage.setItem(KEY,JSON.stringify(v))}catch{}};
- const msg=v=>{const el=$('ndCompactMessage');if(el)el.textContent=v||''};
- let busy=false;
- let generation=0;
- async function refresh(){
-  if(busy){generation++;return}
-  const box=$('ndCompactPlatformList'),db=client();if(!box)return;
-  if(!db){msg('请先登录系统，再刷新账号。');return}
-  busy=true;box.textContent='正在读取账号…';
+ const db=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
+ const KEY='nd_social_selected_accounts_v2', PKEY='nd_social_enabled_platforms_v1', BKEY='nd_social_current_brand_v5';
+ const names={facebook:'Facebook',instagram:'Instagram',tiktok:'TikTok',xiaohongshu:'小红书',wechat_channels:'微信视频号'};
+ const read=(key,fallback)=>{try{const x=JSON.parse(sessionStorage.getItem(key));return x===null?fallback:x}catch{return fallback}};
+ const write=(key,value)=>{try{sessionStorage.setItem(key,JSON.stringify(value))}catch{}};
+ const selected=()=>read(KEY,{}),enabled=()=>read(PKEY,['facebook','instagram']);
+ const message=v=>{if($('ndCompactMessage'))$('ndCompactMessage').textContent=v};
+ let refreshing=false,pending=false,accounts=[],brandRows=[],current='',fbBindings=[];
+ const validName=v=>String(v||'').trim();
+ const normalizePages=data=>{const sources=[data?.pages,data?.data?.pages,data?.result?.pages];return (sources.find(Array.isArray)||[]).map(p=>({id:String(p.page_id||p.id||''),name:String(p.page_name||p.name||'Facebook Page')})).filter(p=>p.id)};
+ async function load(){
+  const client=db();if(!client){message('请先登录系统');return}
+  if(refreshing){pending=true;return}refreshing=true;
+  const box=$('ndCompactPlatformList');if(box)box.textContent='正在读取平台账号…';
   try{
-   const [bindings,brands,igAccounts]=await Promise.all([
-    db.from('social_brand_accounts').select('brand_id,platform,platform_account_id,account_name,connection_status'),
-    db.from('social_brands').select('id,name').order('name'),
-    db.rpc('nd_list_my_instagram_accounts')
+   const [br,bindings,ig,fb,fbBound]=await Promise.all([
+    client.from('social_brands').select('id,name').order('name'),
+    client.from('social_brand_accounts').select('brand_id,platform,platform_account_id,account_name,connection_status'),
+    client.rpc('nd_list_my_instagram_accounts'),
+    client.functions.invoke('meta-facebook-oauth',{body:{action:'status'}}),
+    client.rpc('nd_list_facebook_brand_bindings')
    ]);
-   if(bindings.error)throw bindings.error;
-   const brandRows=brands.error?[]:(brands.data||[]);
-   const brandNames=new Map(brandRows.map(b=>[String(b.id),String(b.name||b.id)]));
-   const brandSelect=$('ndCompactBrand');
-   const active=$('ndSocialActiveBrand');
-   const old=$('ndBrandBindSelect');
-   const previous=brandSelect?.value||active?.value||old?.value||'';
-   if(brandSelect){
-    brandSelect.innerHTML='<option value="">选择品牌</option>'+brandRows.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.name||b.id)+'</option>').join('');
-    if(brandNames.has(String(previous)))brandSelect.value=previous;
-   }
-   const current=brandSelect?.value||'';
-   const accounts=new Map();
-   const ensure=(platform,id)=>{const k=platform+'|'+id;if(!accounts.has(k))accounts.set(k,{platform,id,name:'',brands:new Set(),boundCurrent:false,linked:false,authorized:false});return accounts.get(k)};
-   for(const r of bindings.data||[]){
-    const platform=String(r.platform||'').toLowerCase(),id=String(r.platform_account_id||'');if(!platform||!id)continue;
-    const a=ensure(platform,id);
-    if(r.account_name&&String(r.account_name).toLowerCase()!==platform)a.name=String(r.account_name);
-    if(r.brand_id)a.brands.add(brandNames.get(String(r.brand_id))||('Brand ID: '+r.brand_id));
-    if(String(r.connection_status||'').toLowerCase()==='connected'){
-     a.linked=true;
-     if(current&&String(r.brand_id)===String(current))a.boundCurrent=true;
-    }
-   }
-   // Optional SECURITY DEFINER RPC exposes account metadata only, never tokens.
-   if(!igAccounts.error){
-    for(const r of igAccounts.data||[]){
-     const id=String(r.instagram_user_id||r.platform_account_id||'');if(!id)continue;
-     const a=ensure('instagram',id);
-     a.authorized=String(r.connection_status||'').toLowerCase()==='connected';
-     const username=String(r.username||r.account_name||'').trim();
-     if(username)a.name=username.startsWith('@')?username:'@'+username;
-    }
-   }
-   const all=[...accounts.values()],chosen=getChosen();
-   const platforms=['instagram','facebook','tiktok','xiaohongshu','wechat_channels'];
-   const enabled=enabledPlatforms();
-   box.innerHTML=platforms.map(platform=>{
-    const list=all.filter(a=>a.platform===platform);
-    return '<details '+((platform==='instagram'||platform==='facebook')?'open':'')+'><summary><span style="display:inline-flex;align-items:center;gap:8px"><input type="checkbox" data-nd-platform-toggle="'+esc(platform)+'" '+(enabled.includes(platform)?'checked':'')+' style="width:20px;height:20px;accent-color:#245f55">'+esc(names[platform])+'</span><span class="nd-compact-count">'+list.length+' 个账号</span></summary>'+
-    (list.length?'<label class="nd-compact-account" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-nd-select-all="'+esc(platform)+'" style="width:19px;height:19px"> 全选 / 取消全选</label>':'')+
-    (list.length?list.map(a=>{
-     const eligible=!!current&&a.boundCurrent&&enabled.includes(platform);
-     const checked=eligible&&Array.isArray(chosen[platform])&&chosen[platform].includes(a.id);
-     const state=eligible?'已绑定当前品牌 · 可选择':a.authorized?'已授权 · 尚未绑定当前品牌':a.linked?'已绑定其他品牌或未选品牌':'授权状态待确认';
-     return '<label class="nd-compact-account" style="display:flex;gap:10px;align-items:flex-start;cursor:'+(eligible?'pointer':'default')+'"><input type="checkbox" data-nd-compact-account="1" data-platform="'+esc(platform)+'" data-account-id="'+esc(a.id)+'" '+(checked?'checked ':'')+(eligible?'':'disabled ')+'style="width:20px;height:20px;flex:0 0 20px;margin-top:3px;accent-color:#245f55"><span><strong>'+esc(a.name||names[platform]+' · '+a.id)+'</strong><small>Account ID: '+esc(a.id)+'</small><small>'+esc(state)+'</small><small>绑定品牌：'+esc([...a.brands].join('、')||'未绑定')+'</small></span></label>';
-    }).join(''):'<div class="nd-compact-account helper">暂无可读取的账号</div>')+'</details>';
-   }).join('');
-   box.querySelectorAll('input[data-nd-platform-toggle]').forEach(input=>{
-    input.addEventListener('click',e=>e.stopPropagation());
-    input.addEventListener('change',()=>{const set=new Set(enabledPlatforms());if(input.checked)set.add(input.dataset.ndPlatformToggle);else set.delete(input.dataset.ndPlatformToggle);savePlatforms([...set]);refresh()});
-   });
-   box.querySelectorAll('input[data-nd-select-all]').forEach(all=>{
-    const group=[...box.querySelectorAll('input[data-nd-compact-account]')].filter(x=>x.dataset.platform===all.dataset.ndSelectAll&&!x.disabled);
-    const sync=()=>{all.checked=group.length>0&&group.every(x=>x.checked);all.indeterminate=group.some(x=>x.checked)&&!all.checked;all.disabled=!group.length};
-    all.addEventListener('change',()=>{const v=getChosen(),p=all.dataset.ndSelectAll,ids=new Set(Array.isArray(v[p])?v[p]:[]);for(const x of group){x.checked=all.checked;if(all.checked)ids.add(x.dataset.accountId);else ids.delete(x.dataset.accountId)}v[p]=[...ids];saveChosen(v);sync()});
-    group.forEach(x=>x.addEventListener('change',sync));sync();
-   });
-   box.querySelectorAll('input[data-nd-compact-account]').forEach(input=>input.addEventListener('change',()=>{
-    const v=getChosen(),p=input.dataset.platform,id=input.dataset.accountId;
-    const ids=new Set(Array.isArray(v[p])?v[p]:[]);
-    if(input.checked)ids.add(id);else ids.delete(id);
-    v[p]=[...ids];saveChosen(v);
-    msg('已更新账号选择。打开 Create Post 后，请再次确认目标账号。');
-   }));
-   if(brands.error)msg('账号已读取，但品牌名称读取失败：'+brands.error.message);
-   else if(igAccounts.error)msg('已显示可读取的品牌绑定账号；独立 Instagram 授权账号清单不可用。需要检查 nd_list_my_instagram_accounts 的安全 RPC。');
-   else msg(current?'请先勾选平台，再选择已绑定当前品牌的账号或主页。':'请先选择品牌，才能勾选账号和主页。');
-  }catch(e){box.textContent='账号读取失败';msg('读取失败：'+(e?.message||String(e)))}
-  finally{busy=false;if(generation){generation=0;setTimeout(refresh,0)}}
+   if(br.error)throw Error('品牌读取失败：'+br.error.message);
+   if(bindings.error)throw Error('账号绑定读取失败：'+bindings.error.message);
+   brandRows=br.data||[];fbBindings=fbBound.error?[]:(fbBound.data||[]);
+   const sel=$('ndCompactBrand');const prev=sel?.value||read(BKEY,'')||$('ndSocialActiveBrand')?.value||$('ndBrandBindSelect')?.value||'';
+   const ids=new Set(brandRows.map(b=>String(b.id)));
+   current=ids.has(String(prev))?String(prev):(brandRows.length===1?String(brandRows[0].id):'');
+   if(sel){sel.innerHTML='<option value="">选择品牌</option>'+brandRows.map(b=>'<option value="'+esc(b.id)+'">'+esc(validName(b.name)||'品牌 '+b.id)+'</option>').join('');sel.value=current}
+   if(current)write(BKEY,current);
+   const map=new Map();
+   const ensure=(platform,id)=>{const k=platform+'|'+id;if(!map.has(k))map.set(k,{platform,id,name:'',brands:[],authorized:false,bound:false,connected:false});return map.get(k)};
+   for(const r of bindings.data||[]){const p=String(r.platform||'').toLowerCase(),id=String(r.platform_account_id||'');if(!p||!id)continue;const x=ensure(p,id);if(r.account_name&&String(r.account_name).toLowerCase()!==p)x.name=String(r.account_name);if(r.brand_id)x.brands.push(String(r.brand_id));if(String(r.connection_status||'').toLowerCase()==='connected'){x.connected=true;if(current&&String(r.brand_id)===current)x.bound=true}}
+   if(!ig.error){for(const r of ig.data||[]){const id=String(r.instagram_user_id||r.platform_account_id||'');if(!id)continue;const x=ensure('instagram',id);x.authorized=String(r.connection_status||'').toLowerCase()==='connected';const username=String(r.username||r.account_name||'').trim();if(username)x.name=username.startsWith('@')?username:'@'+username}}
+   if(!fb.error&&!fb.data?.error){for(const page of normalizePages(fb.data)){const x=ensure('facebook',page.id);x.name=page.name;x.authorized=true}}
+   // The Facebook binding RPC is also used by the existing brand-management screen.
+   for(const r of fbBindings){const id=String(r.platform_account_id||r.page_id||'');if(!id)continue;const x=ensure('facebook',id);if(r.brand_id&&!x.brands.includes(String(r.brand_id)))x.brands.push(String(r.brand_id));if(current&&String(r.brand_id)===current)x.bound=true}
+   accounts=[...map.values()];render();
+   const warnings=[];
+   if(ig.error)warnings.push('Instagram 授权清单读取失败（已显示可读取的绑定记录）');
+   if(fb.error||fb.data?.error)warnings.push('Facebook 官方主页清单读取失败');
+   if(fbBound.error)warnings.push('Facebook 品牌绑定读取失败');
+   message((current?'当前品牌：'+(brandRows.find(b=>String(b.id)===current)?.name||current):'请先选择品牌')+(warnings.length?'；'+warnings.join('；'):'。选择平台和账号后，Create Post 将读取你的选择。'));
+  }catch(e){if(box)box.textContent='账号读取失败';message(e.message||String(e))}
+  finally{refreshing=false;if(pending){pending=false;setTimeout(load,0)}}
+ }
+ function render(){
+  const box=$('ndCompactPlatformList');if(!box)return;
+  const on=enabled(),chosen=selected();const nameById=new Map(brandRows.map(b=>[String(b.id),validName(b.name)||String(b.id)]));
+  box.innerHTML=['facebook','instagram','tiktok','xiaohongshu','wechat_channels'].map(platform=>{
+   const list=accounts.filter(x=>x.platform===platform);
+   return '<details '+(['facebook','instagram'].includes(platform)?'open':'')+'><summary><span style="display:inline-flex;align-items:center;gap:8px"><input type="checkbox" data-platform-toggle="'+platform+'" '+(on.includes(platform)?'checked':'')+' style="width:20px;height:20px;accent-color:#245f55">'+names[platform]+'</span><span class="nd-compact-count">'+list.length+' 个账号</span></summary>'+
+    (list.length?'<label class="nd-compact-account" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-all="'+platform+'" style="width:19px;height:19px"> 全选 / 取消全选</label>':'')+
+    (list.length?list.map(x=>{
+     const eligible=!!current&&x.bound&&on.includes(platform)&&(platform!=='instagram'||x.authorized||x.connected);
+     const checked=eligible&&Array.isArray(chosen[platform])&&chosen[platform].map(String).includes(x.id);
+     const status=x.bound?'已绑定当前品牌':x.authorized?'已授权 · 尚未绑定当前品牌':x.brands.length?'已绑定其他品牌':'尚未绑定当前品牌';
+     const bind=platform==='facebook'&&current&&x.authorized?'<button type="button" class="btn" data-fb-bind="'+esc(x.id)+'" style="margin-top:7px;padding:7px 12px">'+(x.bound?'取消绑定':'绑定到当前品牌')+'</button>':'';
+     return '<div class="nd-compact-account" style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-account="1" data-platform="'+platform+'" data-id="'+esc(x.id)+'" '+(checked?'checked ':'')+(eligible?'':'disabled ')+'style="width:20px;height:20px;flex:0 0 20px;margin-top:4px;accent-color:#245f55"><div style="min-width:0"><strong>'+esc(x.name||names[platform]+' · '+x.id)+'</strong><small>Account ID: '+esc(x.id)+'</small><small>'+esc(status)+'</small><small>绑定品牌：'+esc(x.brands.map(id=>nameById.get(id)||id).join('、')||'未绑定')+'</small>'+bind+'</div></div>';
+    }).join(''):'<div class="nd-compact-account helper">'+(platform==='facebook'?'没有读取到 Facebook 主页，请检查 Facebook 授权':'暂无可读取的账号')+'</div>')+'</details>';
+  }).join('');
+  box.querySelectorAll('[data-platform-toggle]').forEach(el=>{el.addEventListener('click',e=>e.stopPropagation());el.addEventListener('change',()=>{const x=new Set(enabled());el.checked?x.add(el.dataset.platformToggle):x.delete(el.dataset.platformToggle);write(PKEY,[...x]);render()})});
+  box.querySelectorAll('[data-account]').forEach(el=>el.addEventListener('change',()=>{const v=selected(),p=el.dataset.platform,ids=new Set(Array.isArray(v[p])?v[p].map(String):[]);el.checked?ids.add(el.dataset.id):ids.delete(el.dataset.id);v[p]=[...ids];write(KEY,v);render();message('已保存选择；Create Post 会按当前品牌及绑定状态筛选。')}));
+  box.querySelectorAll('[data-all]').forEach(el=>{const group=[...box.querySelectorAll('[data-account]')].filter(x=>x.dataset.platform===el.dataset.all&&!x.disabled);el.disabled=!group.length;el.checked=group.length>0&&group.every(x=>x.checked);el.indeterminate=group.some(x=>x.checked)&&!el.checked;el.addEventListener('change',()=>{const v=selected(),p=el.dataset.all,ids=new Set(Array.isArray(v[p])?v[p].map(String):[]);for(const x of group){if(el.checked)ids.add(x.dataset.id);else ids.delete(x.dataset.id)}v[p]=[...ids];write(KEY,v);render()})});
+  box.querySelectorAll('[data-fb-bind]').forEach(btn=>btn.addEventListener('click',async()=>{const id=btn.dataset.fbBind,x=accounts.find(a=>a.platform==='facebook'&&a.id===id);if(!x||!current)return;btn.disabled=true;message('正在更新 Facebook 主页绑定…');try{const fn=x.bound?'nd_unbind_facebook_brand':'nd_bind_facebook_brand';const result=await db().rpc(fn,{p_brand_id:current,p_page_id:id});if(result.error)throw result.error;window.dispatchEvent(new Event('nd-brand-binding-updated'));await load()}catch(e){message('绑定失败：'+(e.message||e));btn.disabled=false}}));
  }
  document.addEventListener('DOMContentLoaded',()=>{
-  $('ndCompactRefresh')?.addEventListener('click',refresh);
-  $('ndCompactAddInstagram')?.addEventListener('click',()=>{const b=$('ndConnectInstagramBtn');if(b)b.click();else msg('Instagram 官方 OAuth 授权入口不可用')});
-  $('ndCompactAddFacebook')?.addEventListener('click',()=>{const b=$('metaConnectBtn');if(b)b.click();else msg('Facebook 官方 OAuth 授权入口不可用')});
-  $('ndCompactNewBrand')?.addEventListener('click',()=>{const modal=$('socialAccountsModal');modal?.classList.add('nd-social-advanced');$('ndBrandNameInput')?.focus();$('ndBrandNameInput')?.scrollIntoView({behavior:'smooth',block:'center'})});
+  $('ndCompactRefresh')?.addEventListener('click',load);
+  $('ndCompactBrand')?.addEventListener('change',e=>{write(BKEY,e.target.value);current=e.target.value;for(const id of ['ndBrandBindSelect','ndSocialActiveBrand']){const x=$(id);if(x&&[...x.options].some(o=>o.value===current)){x.value=current;x.dispatchEvent(new Event('change',{bubbles:true}))}}load()});
+  $('ndCompactNewBrand')?.addEventListener('click',()=>{const modal=$('socialAccountsModal');modal?.classList.add('nd-social-advanced');$('ndBrandNameInput')?.scrollIntoView({block:'center',behavior:'smooth'});$('ndBrandNameInput')?.focus()});
   $('ndCompactAdvanced')?.addEventListener('click',()=>{const modal=$('socialAccountsModal');if(!modal)return;const show=!modal.classList.contains('nd-social-advanced');modal.classList.toggle('nd-social-advanced',show);$('ndCompactAdvanced').textContent=show?'收起高级管理 ▴':'品牌绑定与高级管理 ▾'});
-  $('ndCompactBrand')?.addEventListener('change',e=>{
-   const value=e.target.value;
-   for(const id of ['ndBrandBindSelect','ndSocialActiveBrand']){const el=$(id);if(el&&[...el.options].some(o=>o.value===value)){el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}))}}
-   refresh();
-  });
-  $('socialAccountsBtn')?.addEventListener('click',()=>{const modal=$('socialAccountsModal');modal?.classList.remove('nd-social-advanced');if($('ndCompactAdvanced'))$('ndCompactAdvanced').textContent='品牌绑定与高级管理 ▾';setTimeout(refresh,250)});
-  $('ndBrandBindSelect')?.addEventListener('change',()=>setTimeout(refresh,100));
-  window.addEventListener('nd-brand-binding-updated',()=>setTimeout(refresh,100));
-  if($('socialAccountsModal')?.classList.contains('open'))refresh();
+  $('ndCompactAddInstagram')?.addEventListener('click',()=>{const b=$('ndConnectInstagramBtn');if(b)b.click();else message('Instagram OAuth 按钮不可用')});
+  $('ndCompactAddFacebook')?.addEventListener('click',()=>{const b=$('metaConnectBtn');if(b)b.click();else message('Facebook OAuth 按钮不可用')});
+  $('socialAccountsBtn')?.addEventListener('click',()=>{$('socialAccountsModal')?.classList.remove('nd-social-advanced');setTimeout(load,250)});
+  $('ndBrandBindSelect')?.addEventListener('change',()=>setTimeout(load,150));
+  window.addEventListener('nd-brand-binding-updated',()=>setTimeout(load,150));
+  if($('socialAccountsModal')?.classList.contains('open'))load();
  });
 })();
 </script>
