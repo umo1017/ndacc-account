@@ -8739,7 +8739,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <button class="btn bad" id="socialDeletePostBtn" type="button" style="display:none">Delete</button>
       <button class="btn studio-save-draft" id="socialSaveDraftBtn" type="button">Save Draft</button>
       <button class="btn primary studio-schedule" id="socialScheduleBtn" type="button" style="display:none">Save Schedule</button>
-      <button class="btn studio-publish-disabled" id="socialPublishNowBtn" type="button" style="display:none" disabled title="Publishing backend is not connected">Publish Now · 未接通</button>
+      <button class="btn studio-publish-disabled" id="socialPublishNowBtn" type="button" style="display:none">Publish Now · Facebook</button>
     </div>
     <div class="helper" id="socialPostMsg"></div>
   </div>
@@ -27948,6 +27948,62 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
  #socialPostModal .social-modal-actions .btn{font-size:13px;min-height:44px}
 }
 </style>
+<style id="social-publishing-mode-mobile-v5">
+/* Social Media editor only: prevent inherited full-width inputs and cramped three-column radio labels. */
+#socialPostModal .studio-mode-options{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  gap:9px!important;
+  width:100%;
+  min-width:0;
+}
+#socialPostModal .studio-mode-options label{
+  display:flex!important;
+  flex-direction:row!important;
+  justify-content:flex-start!important;
+  align-items:center!important;
+  gap:12px!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:49px;
+  padding:12px 14px!important;
+  margin:0!important;
+  font-size:14px!important;
+  line-height:1.35!important;
+  text-align:left!important;
+  white-space:normal!important;
+  word-break:keep-all!important;
+  overflow-wrap:normal!important;
+  writing-mode:horizontal-tb!important;
+  cursor:pointer;
+}
+#socialPostModal .studio-mode-options input[type="radio"]{
+  appearance:auto;
+  -webkit-appearance:radio;
+  display:block!important;
+  flex:0 0 19px!important;
+  width:19px!important;
+  min-width:19px!important;
+  max-width:19px!important;
+  height:19px!important;
+  min-height:19px!important;
+  max-height:19px!important;
+  margin:0!important;
+  padding:0!important;
+  accent-color:#276d56;
+}
+#socialPostModal .studio-mode-options label:has(input:checked){
+  border-color:#79a995!important;
+  background:#edf6f0!important;
+  color:#214e3c!important;
+}
+@media(max-width:650px){
+  #socialPostModal .studio-mode-options label{font-size:14px!important;padding:12px 14px!important}
+  #socialPostModal .studio-date-row{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  #socialPostModal .studio-date-row .field{min-width:0}
+  #socialPostModal .studio-date-row input{min-width:0;width:100%;font-size:16px}
+}
+</style>
 <script id="social-media-module-v1">
 (function(){
  const $=id=>document.getElementById(id);
@@ -28087,7 +28143,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    if(draft)draft.style.display=chosen==='draft'?'':'none';
    if(later)later.style.display=chosen==='scheduled'?'':'none';
    if(now)now.style.display=chosen==='now'?'':'none';
-   if(help)help.textContent=chosen==='now'?'尚未连接发布服务器。此按钮暂不可用，避免误以为已发布。':chosen==='scheduled'?'只保存预约记录，尚未连接服务器自动发布。':'保存草稿不会发布到社交平台。';
+   if(help)help.textContent=chosen==='now'?'目前只支持 Facebook 文字或单张图片立即发布；其他平台暂未接通。':chosen==='scheduled'?'只保存预约记录，尚未连接服务器自动发布。':'保存草稿不会发布到社交平台。';
    if($('socialPostStatus'))$('socialPostStatus').value=chosen==='scheduled'?'scheduled':'draft';
  }
  function setPublishMode(mode){
@@ -28174,6 +28230,40 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      const {error}=await q;if(error)throw error;
      closeModals();await loadPosts();
    }catch(e){console.error(e);setMsg(e.message||String(e),true)}
+ }
+ async function publishNowFacebook(){
+   const btn=$("socialPublishNowBtn");
+   if(btn?.disabled)return;
+   try{
+     const platforms=[...document.querySelectorAll(".social-platform-checks input:checked")].map(x=>x.value);
+     if(platforms.length!==1||platforms[0]!=="facebook")return setMsg("目前只支持单独发布 Facebook；请取消其他平台。",true);
+     const pageId=String($("socialFacebookPageSelect")?.value||"").trim();
+     if(!pageId||!metaConnectedPages.some(x=>String(x.page_id)===pageId))return setMsg("请先选择已连接的 Facebook Page。",true);
+     const files=[...($("socialMediaFiles").files||[])];
+     if(files.length+editingMedia.length>1)return setMsg("目前只支持单张图片。请移除其他图片或视频。",true);
+     if(files.some(f=>!f.type.startsWith("image/"))||editingMedia.some(m=>!String(m.type||"").startsWith("image/")))return setMsg("目前不支持视频立即发布。",true);
+     if(!String($("socialCaption").value||"").trim()&&!files.length&&!editingMedia.length)return setMsg("请输入文案或上传图片。",true);
+     btn.disabled=true;btn.textContent="Publishing...";
+     await uploadFiles();
+     const imageUrl=editingMedia[0]?.url||"";
+     if(!confirm("确定立即发布到选中的 Facebook Page？\n\n"+($('socialFacebookPageSelect').selectedOptions[0]?.textContent||pageId)))return;
+     setMsg("正在发送至 Facebook，请勿重复点击...");
+     const {data,error}=await db().functions.invoke("facebook-publish",{body:{facebook_page_id:pageId,caption:$("socialCaption").value,image_url:imageUrl}});
+     if(error)throw new Error(error.message||String(error));
+     if(!data?.success||!data?.post_id)throw new Error(data?.error||"Facebook 未确认发布成功，请先检查主页，避免重复发布。");
+     const row={brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),caption:$("socialCaption").value,
+       platforms:["facebook"],media:editingMedia,scheduled_at:new Date().toISOString(),timezone:"Asia/Kuala_Lumpur",status:"published",
+       updated_at:new Date().toISOString(),facebook_page_id:pageId,
+       facebook_page_name:metaConnectedPages.find(x=>String(x.page_id)===pageId)?.page_name||null,
+       created_by:String(window.currentUserEmail||"").toLowerCase()};
+     const id=$("socialPostId").value;
+     const q=id?db().from("social_media_posts").update(row).eq("id",id):db().from("social_media_posts").insert(row);
+     const {error:saveError}=await q;
+     if(saveError){setMsg("Facebook 已接受发布！Post ID: "+data.post_id+"。但网站历史保存失败："+saveError.message,true);return;}
+     closeModals();await loadPosts();
+     alert("Facebook 发布成功！\nPost ID: "+data.post_id);
+   }catch(e){console.error(e);setMsg("发布未确认："+(e?.message||String(e))+"。请先检查 Facebook 主页再重试。",true)}
+   finally{if(btn){btn.disabled=false;btn.textContent="Publish Now · Facebook";}}
  }
  async function del(){
    const id=$("socialPostId").value;if(!id||!confirm("Delete this scheduled post?"))return;
@@ -28442,7 +28532,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialViewList").onclick=()=>setSocialView("list");
    $("socialNewPostBtn").onclick=()=>openNew();
    $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
-   $("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>{if(confirm("This saves a schedule only. Automatic publishing is not verified yet. Continue?"))save("scheduled")};
+   $("socialPublishNowBtn").onclick=publishNowFacebook;$("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>{if(confirm("This saves a schedule only. Automatic publishing is not verified yet. Continue?"))save("scheduled")};
    $("socialDeletePostBtn").onclick=del;
 
    document.querySelectorAll(".social-platform-checks input").forEach(chk=>{
