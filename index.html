@@ -8825,7 +8825,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
  <div id="ndMultiAccountRows" style="display:grid;gap:12px;margin-top:12px"></div>
 </section>
 <section id="ndCompactSocialAccounts" class="nd-compact-social">
- <div class="nd-compact-heading"><strong>平台账号 · Accounts</strong><span class="helper" style="font-size:11px">v6 · 2026-10-11</span><button type="button" class="btn" id="ndCompactRefresh">↻ 刷新</button></div>
+ <div class="nd-compact-heading"><strong>平台账号 · Accounts</strong><span class="helper" style="font-size:11px">v7 · 2026-10-11</span><button type="button" class="btn" id="ndCompactRefresh">↻ 刷新</button></div>
  <label for="ndCompactBrand">当前品牌</label><div class="nd-compact-brand"><select id="ndCompactBrand"><option value="">选择品牌</option></select><button type="button" class="btn" id="ndCompactNewBrand">＋ 品牌</button></div>
  <div class="helper" style="font-weight:700">勾选平台及要使用的账号／主页（不自动全选）</div><div class="nd-compact-platform" id="ndCompactPlatformList"><div class="helper">正在读取账号…</div></div>
  <div class="nd-compact-actions"><button type="button" class="btn primary" id="ndCompactAddInstagram">＋ Instagram 账号</button><button type="button" class="btn" id="ndCompactAddFacebook">＋ Facebook 账号</button></div>
@@ -29526,7 +29526,7 @@ document.addEventListener("DOMContentLoaded",function(){
  });
 })();
 </script>
-<script id="nd-compact-social-accounts-v6">
+<script id="nd-compact-social-accounts-v7">
 (function(){
  'use strict';
  const $=id=>document.getElementById(id);
@@ -29589,12 +29589,45 @@ document.addEventListener("DOMContentLoaded",function(){
      const checked=eligible&&Array.isArray(chosen[platform])&&chosen[platform].map(String).includes(x.id);
      const status=x.bound?'已绑定当前品牌 · 可用于当前品牌发布':x.authorized?'已授权 · 可勾选，发布前须绑定当前品牌':x.brands.length?'已绑定其他品牌 · 可勾选，发布前须绑定当前品牌':'尚未绑定当前品牌';
      const bind=platform==='facebook'&&current&&x.authorized?'<button type="button" class="btn" data-fb-bind="'+esc(x.id)+'" style="margin-top:7px;padding:7px 12px">'+(x.bound?'取消绑定':'绑定到当前品牌')+'</button>':'';
-     return '<div class="nd-compact-account" style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-account="1" data-platform="'+platform+'" data-id="'+esc(x.id)+'" '+(checked?'checked ':'')+(eligible?'':'disabled ')+'style="width:20px;height:20px;flex:0 0 20px;margin-top:4px;accent-color:#245f55"><div style="min-width:0"><strong>'+esc(x.name||names[platform]+' · '+x.id)+'</strong><small>Account ID: '+esc(x.id)+'</small><small>'+esc(status)+'</small><small>绑定品牌：'+esc(x.brands.map(id=>nameById.get(id)||id).join('、')||'未绑定')+'</small>'+bind+'</div></div>';
+     const igBind=platform==='instagram'&&current&&x.authorized?'<button type="button" class="btn" data-ig-bind="'+esc(x.id)+'" style="margin-top:7px;padding:7px 12px">'+(x.bound?'取消当前品牌绑定':'绑定到当前品牌')+'</button>':'';
+     return '<div class="nd-compact-account" style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-account="1" data-platform="'+platform+'" data-id="'+esc(x.id)+'" '+(checked?'checked ':'')+(eligible?'':'disabled ')+'style="width:20px;height:20px;flex:0 0 20px;margin-top:4px;accent-color:#245f55"><div style="min-width:0"><strong>'+esc(x.name||names[platform]+' · '+x.id)+'</strong><small>Account ID: '+esc(x.id)+'</small><small>'+esc(status)+'</small><small>绑定品牌：'+esc(x.brands.map(id=>nameById.get(id)||id).join('、')||'未绑定')+'</small>'+bind+igBind+'</div></div>';
     }).join(''):'<div class="nd-compact-account helper">'+(platform==='facebook'?'没有读取到 Facebook 主页，请检查 Facebook 授权':'暂无可读取的账号')+'</div>')+'</details>';
   }).join('');
   box.querySelectorAll('[data-platform-toggle]').forEach(el=>{el.addEventListener('click',e=>e.stopPropagation());el.addEventListener('change',()=>{const x=new Set(enabled());el.checked?x.add(el.dataset.platformToggle):x.delete(el.dataset.platformToggle);write(PKEY,[...x]);render()})});
   box.querySelectorAll('[data-account]').forEach(el=>el.addEventListener('change',()=>{const v=selected(),p=el.dataset.platform,ids=new Set(Array.isArray(v[p])?v[p].map(String):[]);el.checked?ids.add(el.dataset.id):ids.delete(el.dataset.id);v[p]=[...ids];write(KEY,v);render();message('已保存账号选择。未绑定当前品牌的账号可以勾选，但须完成绑定后才能发布。')}));
   box.querySelectorAll('[data-all]').forEach(el=>{const group=[...box.querySelectorAll('[data-account]')].filter(x=>x.dataset.platform===el.dataset.all&&!x.disabled);el.disabled=!group.length;el.checked=group.length>0&&group.every(x=>x.checked);el.indeterminate=group.some(x=>x.checked)&&!el.checked;el.addEventListener('change',()=>{const v=selected(),p=el.dataset.all,ids=new Set(Array.isArray(v[p])?v[p].map(String):[]);for(const x of group){if(el.checked)ids.add(x.dataset.id);else ids.delete(x.dataset.id)}v[p]=[...ids];write(KEY,v);render()})});
+  box.querySelectorAll('[data-ig-bind]').forEach(btn=>btn.addEventListener('click',async()=>{
+   const id=btn.dataset.igBind,acct=accounts.find(a=>a.platform==='instagram'&&a.id===id);
+   if(!acct||!current){message('请先选择品牌');return}
+   const client=db();btn.disabled=true;
+   message(acct.bound?'正在取消 Instagram 品牌绑定…':'正在绑定 Instagram 到当前品牌…');
+   try{
+    const {data:auth,error:ae}=await client.auth.getUser();
+    if(ae||!auth?.user)throw Error('登录已过期，请重新登录');
+    const {data:ig,error:ie}=await client.rpc('nd_list_my_instagram_accounts');
+    if(ie)throw Error('无法验证 Instagram 授权：'+ie.message);
+    if(!(ig||[]).some(r=>String(r.instagram_user_id||r.platform_account_id||'')===id&&String(r.connection_status||'').toLowerCase()==='connected'))throw Error('此 Instagram 账号未通过当前用户的授权验证');
+    const q=client.from('social_brand_accounts');
+    if(acct.bound){
+     const {error}=await q.delete().eq('brand_id',current).eq('platform','instagram').eq('platform_account_id',id);
+     if(error)throw error;
+    }else{
+     const {data:existing,error:re}=await q.select('id').eq('brand_id',current).eq('platform','instagram').eq('platform_account_id',id).limit(1);
+     if(re)throw re;
+     if(existing?.length){
+      const {error}=await q.update({connection_status:'connected'}).eq('id',existing[0].id);
+      if(error)throw error;
+     }else{
+      const {error}=await q.insert({brand_id:current,platform:'instagram',platform_account_id:id,account_name:acct.name||'Instagram',connection_status:'connected'});
+      if(error)throw error;
+     }
+    }
+    const wasBound=acct.bound;
+    await load();
+    window.dispatchEvent(new Event('nd-brand-binding-updated'));
+    message(wasBound?'Instagram 已取消当前品牌绑定':'Instagram 已绑定到当前品牌；发布前请确认选中正确品牌');
+   }catch(e){message('Instagram 绑定失败：'+(e.message||String(e))+'。若提示权限不足，需要检查 Supabase RLS。');btn.disabled=false}
+  }));
   box.querySelectorAll('[data-fb-bind]').forEach(btn=>btn.addEventListener('click',async()=>{const id=btn.dataset.fbBind,x=accounts.find(a=>a.platform==='facebook'&&a.id===id);if(!x||!current)return;btn.disabled=true;message('正在更新 Facebook 主页绑定…');try{const fn=x.bound?'nd_unbind_facebook_brand':'nd_bind_facebook_brand';const result=await db().rpc(fn,{p_brand_id:current,p_page_id:id});if(result.error)throw result.error;window.dispatchEvent(new Event('nd-brand-binding-updated'));await load()}catch(e){message('绑定失败：'+(e.message||e));btn.disabled=false}}));
  }
  document.addEventListener('DOMContentLoaded',()=>{
