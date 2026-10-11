@@ -29801,6 +29801,10 @@ document.addEventListener("DOMContentLoaded",function(){
 .nd-ai-assets figure{margin:0}.nd-ai-assets figcaption{font-size:12px;margin:5px 0;color:#64746d}
 .nd-ai-detail-caption{white-space:pre-wrap;line-height:1.6;background:#f7faf8;padding:13px;border-radius:10px;max-height:250px;overflow:auto}
 @media(max-width:550px){.nd-ai-assets{gap:7px}#ndAiDetailDialog{padding:15px}}
+#ndAiDetailDialog .nd-ai-generate-actions{margin-top:18px;padding-top:14px;border-top:1px solid #e5ebe7;display:grid;gap:9px}
+#ndAiDetailDialog .nd-ai-generate-btn{background:#2c6553;color:white;border-color:#2c6553;padding:14px;font-size:15px}
+#ndAiDetailDialog .nd-ai-generate-btn:disabled{opacity:.55;cursor:not-allowed}
+#ndAiDetailDialog .nd-ai-generate-message{font-size:12px;color:#596b62;white-space:pre-wrap;overflow-wrap:anywhere}
 </style>
 <script id="nd-ai-calendar-integration-v1">
 (function(){'use strict';
@@ -29847,8 +29851,27 @@ function detail(id){const j=jobs.find(x=>x.id===id);if(!j)return;const a=assets.
  '<div class="nd-ai-assets">'+['cover_path','content_path'].map((k,i)=>'<figure><figcaption>'+(i?'知识页':'封面')+'</figcaption>'+(a?.[k]?'<div class="helper">储存路径：'+escapeHtml(a[k])+'</div>':'<div class="helper">尚无图片</div>')+'</figure>').join('')+'</div>'+
  '<p><b>文案：</b></p><div class="nd-ai-detail-caption">'+escapeHtml(a?.caption||'尚未生成')+'</div>'+
  '<h3>平台排程 / 发布结果</h3>'+(q.length?q.map(x=>'<p>'+escapeHtml(x.platform.toUpperCase())+' · '+escapeHtml(states[x.status]||x.status)+' · '+escapeHtml(x.scheduled_at?new Date(x.scheduled_at).toLocaleString('zh-MY',{timeZone:'Asia/Kuala_Lumpur'}):'未排程')+(x.last_error?' · '+escapeHtml(x.last_error):'')+'</p>').join(''):'<p class="helper">尚未进入发布队列。不会自动发布。</p>')+
- (j.error_message?'<p style="color:#a33">'+escapeHtml(j.error_message)+'</p>':'');modal.classList.add('open');}
-function setup(){if(!by('socialCalendar')||by('ndAiDetailOverlay'))return;const modal=document.createElement('div');modal.id='ndAiDetailOverlay';modal.innerHTML='<div id="ndAiDetailDialog" role="dialog" aria-modal="true" aria-label="AI 内容详情"><div class="nd-ai-detail-top"><h2>✦ AI 内容详情</h2><button type="button" class="btn" id="ndAiDetailClose">关闭 ×</button></div><div id="ndAiDetailBody"></div></div>';document.body.appendChild(modal);by('ndAiDetailClose').onclick=()=>modal.classList.remove('open');modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open');});
+ (j.error_message?'<p style="color:#a33">'+escapeHtml(j.error_message)+'</p>':'')+
+ '<div class="nd-ai-generate-actions"><button type="button" class="btn nd-ai-generate-btn" data-nd-ai-generate="'+escapeHtml(j.id)+'" '+(['generating','checking','completed'].includes(j.status)?'disabled':'')+'>✦ AI 一键生成海报 + 文案</button><div class="nd-ai-generate-message" role="status">'+(['generating','checking'].includes(j.status)?'任务正在处理中，请稍后同步日历。':'生成需要已部署的安全后端；自动发布保持关闭。')+'</div></div>';modal.classList.add('open');}
+async function generate(jobId,btn){
+ const j=jobs.find(x=>x.id===jobId);if(!j)return;
+ const status=by('ndAiDetailOverlay')?.querySelector('.nd-ai-generate-message');
+ const show=t=>{if(status)status.textContent=t;};
+ if(!db()?.functions?.invoke){show('无法调用 Supabase Edge Functions，请检查网站连接。');return;}
+ btn.disabled=true;show('正在请求 AI 生成服务，可能需要数分钟…');
+ try{
+  const {data,error}=await db().functions.invoke('nd-ai-generate',{body:{job_id:jobId}});
+  if(error)throw error;
+  if(!data?.ok)throw Error(data?.error||'生成服务未返回成功结果');
+  show('生成完成，正在刷新日历…');lastKey='';await refresh(true);detail(jobId);
+ }catch(e){
+  let msg=e?.message||String(e);
+  if(/non-2xx|failed to send|fetch/i.test(msg))msg+='。请确认 Supabase Edge Function「nd-ai-generate」已部署，并检查 Functions Logs。';
+  show('生成失败：'+msg);btn.disabled=false;
+ }
+}
+
+function setup(){if(!by('socialCalendar')||by('ndAiDetailOverlay'))return;const modal=document.createElement('div');modal.id='ndAiDetailOverlay';modal.innerHTML='<div id="ndAiDetailDialog" role="dialog" aria-modal="true" aria-label="AI 内容详情"><div class="nd-ai-detail-top"><h2>✦ AI 内容详情</h2><button type="button" class="btn" id="ndAiDetailClose">关闭 ×</button></div><div id="ndAiDetailBody"></div></div>';document.body.appendChild(modal);by('ndAiDetailClose').onclick=()=>modal.classList.remove('open');modal.addEventListener('click',e=>{const b=e.target.closest('[data-nd-ai-generate]');if(b)generate(b.dataset.ndAiGenerate,b);});modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open');});
  const root=by('socialCalendar');const observer=new MutationObserver(ms=>{if(ms.some(m=>Array.from(m.addedNodes).some(n=>n.nodeType===1&&n.classList?.contains('social-day'))))refresh();});observer.observe(root,{childList:true});
  by('ndSocialActiveBrand')?.addEventListener('change',()=>{lastKey='';refresh(true);});
  const button=document.createElement('button');button.type='button';button.className='btn';button.textContent='↻ AI 日历同步';button.style.marginLeft='8px';button.onclick=()=>{lastKey='';refresh(true);};
