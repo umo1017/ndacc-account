@@ -8788,7 +8788,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     
     <section class="nd-brand-bind" id="ndBrandBindPanel" style="border:1px solid #dbe6e0;border-radius:16px;padding:16px;margin:14px 0;background:#f9fcfa">
       <h3 style="margin:0 0 8px">创建与绑定品牌 · Create & Connect Brand</h3>
-      <p class="helper">自己填写品牌名称，再选择平台及对应账号。Facebook 可绑定已授权的主页；Instagram / TikTok 必须完成官方授权后才能连接。</p>
+      <p class="helper">自己填写品牌名称，再选择平台及对应账号。Facebook 可绑定已授权的主页；Instagram / TikTok 必须完成官方授权后才能连接；勾选平台不等于已连接。</p>
       <label for="ndBrandNameInput">品牌名称 · Brand Name</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input id="ndBrandNameInput" placeholder="例如 Lumi Beauty 光之美" style="flex:1 1 180px"><button type="button" class="btn primary" id="ndCreateBrandBtn">＋ 创建品牌</button></div>
       <label for="ndBrandBindSelect">选择已创建的品牌 · Existing Brand</label>
@@ -29150,11 +29150,12 @@ document.addEventListener("DOMContentLoaded",function(){
 })();
 </script>
 
-<script id="nd-brand-binding-ui-v2">
+<script id="nd-brand-binding-ui-v3">
 (function(){
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const db=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
- let brands=[],pages=[],bindings=[],loading=false;
+ let brands=[],pages=[],bindings=[],loading=false,bindingBusy=false;
+ const normalizePages=data=>{const candidates=[data?.pages,data?.data?.pages,data?.result?.pages];return (candidates.find(Array.isArray)||[]).map(p=>({page_id:String(p.page_id||p.id||''),page_name:p.page_name||p.name||'Facebook Page'})).filter(p=>p.page_id)};
  function say(t){if($('ndBrandBindStatus'))$('ndBrandBindStatus').textContent=t}
  function platformUI(){
    const fb=$('ndPlatformFacebook')?.checked;
@@ -29172,7 +29173,8 @@ document.addEventListener("DOMContentLoaded",function(){
        client.functions.invoke('meta-facebook-oauth',{body:{action:'status'}})
      ]);
      if(be)throw be;
-     brands=b||[];pages=ae?[]:(Array.isArray(auth?.pages)?auth.pages:[]);
+     brands=b||[];pages=ae?[]:normalizePages(auth);
+     if(!ae&&auth?.error)throw Error(String(auth.error));
      const sel=$('ndBrandBindSelect'),old=preferred||sel.value;
      sel.innerHTML='<option value="">请选择或创建品牌</option>'+brands.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
      if(brands.some(x=>x.id===old))sel.value=old;
@@ -29184,20 +29186,15 @@ document.addEventListener("DOMContentLoaded",function(){
    platformUI();const brand=$('ndBrandBindSelect')?.value,box=$('ndBrandFacebookChoices');if(!box)return;
    if(!brand){box.innerHTML='<p class="helper">先输入新品牌名称并创建，或选择已创建的品牌。</p>';say(`现有 ${brands.length} 个品牌，${pages.length} 个已授权 Facebook 主页。`);return}
    const {data,error}=await db().from('social_brand_accounts').select('platform,platform_account_id,brand_id,connection_status').eq('platform','facebook');
-   if(error){say('读取绑定失败：'+error.message);box.innerHTML='';return}
+   if(error){say('读取绑定失败：'+error.message+'。请检查 social_brand_accounts 的读取权限。');box.innerHTML='<p class="helper">无法读取绑定状态，请检查数据库权限。</p>';return}
    bindings=data||[];
    if(!pages.length){box.innerHTML='<p class="helper">未读取到 Facebook 主页，请先点击下方 Connect Facebook 完成授权。</p>';return}
    box.innerHTML=pages.map(p=>{
      const id=String(p.page_id||''),found=bindings.find(x=>x.platform_account_id===id),mine=found?.brand_id===brand,other=!!found&&!mine;
      return `<div class="nd-brand-account-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #e6ece8"><div style="min-width:0;overflow-wrap:anywhere"><strong>${esc(p.page_name||'Facebook Page')}</strong><div class="helper">${esc(id)} · ${mine?'已绑定此品牌':other?'已绑定其他品牌':'未绑定'}</div></div><button type="button" class="btn" data-nd-page="${esc(id)}" ${other?'disabled':''}>${mine?'取消绑定':other?'其他品牌使用中':'绑定'}</button></div>`
    }).join('');
-   box.querySelectorAll('[data-nd-page]').forEach(btn=>btn.addEventListener('click',async()=>{
-     const id=btn.dataset.ndPage,found=bindings.find(x=>x.platform_account_id===id),unlink=found?.brand_id===brand;
-     if(!confirm(unlink?'取消这个主页的品牌绑定？Facebook 授权仍保留。':'将此 Facebook Page 绑定到所选品牌？'))return;
-     btn.disabled=true;const {error}=await db().rpc(unlink?'nd_unbind_facebook_brand':'nd_bind_facebook_brand',{p_brand_id:brand,p_page_id:id});
-     if(error){say('操作失败：'+error.message);btn.disabled=false;return}
-     await render();say(unlink?'已取消绑定':'Facebook 主页绑定成功');window.dispatchEvent(new Event('nd-brand-binding-updated'));
-   }));
+   // Button clicks are handled by one delegated listener below, so re-rendering
+   // the Page list never disconnects the click handler.
    say('选择主页点击绑定；同一 Facebook Page 只能绑定一个品牌。');
  }
  async function create(){
@@ -29216,13 +29213,48 @@ document.addEventListener("DOMContentLoaded",function(){
      say('品牌创建成功。现在选择 Facebook Page 绑定；其他平台需分别完成授权。');
    }catch(e){say('创建失败：'+(e.message||e)+'。请先运行新版品牌创建 SQL。')}finally{btn.disabled=false}
  }
+ async function bindPage(btn){
+   if(bindingBusy)return;
+   const id=btn.getAttribute('data-nd-page'),brand=$('ndBrandBindSelect')?.value;
+   if(!brand){say('请先选择品牌。');return}
+   if(!id){say('Facebook Page ID 为空，请刷新主页列表。');return}
+   const found=bindings.find(x=>String(x.platform_account_id)===String(id));
+   const unlink=found?.brand_id===brand;
+   if(found&&!unlink){say('此主页已绑定其他品牌，不能重复绑定。');return}
+   // Show feedback immediately even on browsers that suppress native confirm dialogs.
+   say((unlink?'正在取消绑定：':'正在绑定：')+id+' ...');
+   bindingBusy=true;btn.disabled=true;
+   try{
+     const client=db();if(!client)throw Error('Supabase 尚未初始化');
+     const {data:{session},error:se}=await client.auth.getSession();
+     if(se)throw se;
+     if(!session)throw Error('登录已过期，请重新登录');
+     const fn=unlink?'nd_unbind_facebook_brand':'nd_bind_facebook_brand';
+     const {error}=await client.rpc(fn,{p_brand_id:brand,p_page_id:id});
+     if(error)throw error;
+     try{await render()}catch(refreshError){console.warn('Binding succeeded, refresh failed',refreshError)}
+     say(unlink?'已取消绑定 Facebook Page：'+id:'绑定成功！Facebook Page：'+id);
+     window.dispatchEvent(new Event('nd-brand-binding-updated'));
+   }catch(e){say('绑定操作失败：'+(e?.message||String(e))+'。如显示 permission denied，请检查 Supabase RLS / RPC。')}
+   finally{bindingBusy=false;btn.disabled=false}
+ }
+ // Capture phase handles dynamically rendered buttons reliably on iPhone Safari.
+ document.addEventListener('click',e=>{
+   const btn=e.target?.closest?.('#ndBrandFacebookChoices button[data-nd-page]');
+   if(!btn)return;
+   e.preventDefault();e.stopPropagation();bindPage(btn);
+ },true);
  document.addEventListener('DOMContentLoaded',()=>{
    $('ndBrandBindSelect')?.addEventListener('change',render);
    ['ndPlatformFacebook','ndPlatformInstagram','ndPlatformTiktok'].forEach(id=>$(id)?.addEventListener('change',platformUI));
    $('ndCreateBrandBtn')?.addEventListener('click',create);
    $('ndBrandNameInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();create()}});
    $('socialAccountsBtn')?.addEventListener('click',()=>setTimeout(()=>load(),80));
+   $('socialAccountsModal')?.addEventListener('click',e=>{if(e.target?.closest?.('#metaRefreshBtn'))setTimeout(()=>load(),450)});
+   // Load even if the modal is opened through another navigation path.
+   $('ndBrandBindSelect')?.addEventListener('focus',()=>{if(!brands.length)load()});
    $('metaRefreshBtn')?.addEventListener('click',()=>setTimeout(()=>load(),350));
+   if($('socialAccountsModal')?.classList.contains('open'))load();
  });
 })();
 </script>
