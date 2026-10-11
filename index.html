@@ -28695,7 +28695,31 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
          headers:{Authorization:'Bearer '+session.access_token},
          body:{}
        });
-       if(error)throw error;
+       if(error){
+         let detail=String(error.message||'Instagram OAuth request failed');
+         const response=error.context;
+         if(response && typeof response.clone==='function'){
+           try{
+             const raw=await response.clone().text();
+             if(raw){
+               let parsed=null;
+               try{parsed=JSON.parse(raw);}catch(_){/* non-JSON response */}
+               if(parsed && typeof parsed==='object'){
+                 const safeParts=[parsed.error,parsed.message,parsed.details,parsed.hint]
+                   .filter(v=>typeof v==='string' && v.trim());
+                 if(Array.isArray(parsed.missing))safeParts.push('Missing: '+parsed.missing.join(', '));
+                 if(parsed.code)safeParts.push('Code: '+String(parsed.code));
+                 if(safeParts.length)detail=safeParts.join(' | ');
+                 else detail=raw.slice(0,350);
+               }else detail=raw.slice(0,350);
+             }
+             if(response.status)detail='HTTP '+response.status+' · '+detail;
+           }catch(readError){
+             if(response.status)detail='HTTP '+response.status+' · '+detail;
+           }
+         }
+         throw new Error(detail.slice(0,600));
+       }
        if(data?.error)throw new Error(String(data.error));
        const authorizationUrl=String(data?.authorization_url||'');
        const target=new URL(authorizationUrl);
