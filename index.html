@@ -8777,7 +8777,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
       <button class="btn bad" id="socialDeletePostBtn" type="button" style="display:none">Delete</button>
       <button class="btn studio-save-draft" id="socialSaveDraftBtn" type="button">Save Draft</button>
       <button class="btn primary studio-schedule" id="socialScheduleBtn" type="button" style="display:none">Save Schedule</button>
-      <button class="btn studio-publish-disabled" id="socialPublishNowBtn" type="button" style="display:none">Publish Now · Facebook</button>
+      <button class="btn studio-publish-disabled" id="socialPublishNowBtn" type="button" style="display:none">Publish Now · Selected Accounts</button>
     </div>
     <div class="helper" id="socialPostMsg"></div>
   </div>
@@ -28277,7 +28277,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    if(draft)draft.style.display=chosen==='draft'?'':'none';
    if(later)later.style.display=chosen==='scheduled'?'':'none';
    if(now)now.style.display=chosen==='now'?'':'none';
-   if(help)help.textContent=chosen==='now'?'目前只支持 Facebook 文字或单张图片立即发布；其他平台暂未接通。':chosen==='scheduled'?'Facebook 预约发布会交给后台定时任务处理；其他平台尚不支持自动发布。':'保存草稿不会发布到社交平台。';
+   if(help)help.textContent=chosen==='now'?'立即发布支持已绑定的 Facebook Pages 和 Instagram 图片账号；其他平台暂未接通。':chosen==='scheduled'?'Facebook 预约发布会交给后台定时任务处理；其他平台尚不支持自动发布。':'保存草稿不会发布到社交平台。';
    if($('socialPostStatus'))$('socialPostStatus').value=chosen==='scheduled'?'scheduled':'draft';
  }
  function setPublishMode(mode){
@@ -28359,43 +28359,54 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      closeModals();await loadPosts();
    }catch(e){console.error(e);setMsg(e.message||String(e),true)}
  }
- async function publishNowFacebook(){
+ async function publishNowSelectedAccounts(){
    const btn=$("socialPublishNowBtn");
    if(btn?.disabled)return;
    try{
      if(!ndSelectedBrand())return setMsg("请先选择品牌。",true);
      const platforms=[...document.querySelectorAll(".social-platform-checks input:checked")].map(x=>x.value);
-     if(platforms.length!==1||platforms[0]!=="Facebook")return setMsg("目前只支持单独发布 Facebook；请取消其他平台。",true);
-     const pageIds=selectedFacebookPageIds();
-     if(!pageIds.length||pageIds.some(id=>!ndAllowedPages().some(x=>String(x.page_id)===id)))return setMsg("请至少勾选一个已连接的 Facebook Page。",true);
-     const files=[...($("socialMediaFiles").files||[])];
-     if(files.length+editingMedia.length>1)return setMsg("目前只支持单张图片。请移除其他图片或视频。",true);
+     if(!platforms.length)return setMsg("请至少选择一个平台。",true);
+     const unsupported=platforms.filter(p=>p!=="Facebook"&&p!=="Instagram");
+     if(unsupported.length)return setMsg("以下平台尚未接入官方发布接口："+unsupported.join("、")+"。请先取消勾选。",true);
+     const pageIds=platforms.includes("Facebook")?selectedFacebookPageIds():[];
+     const igIds=platforms.includes("Instagram")?[...new Set(ndSelectedOtherAccounts().filter(a=>a.platform==="instagram").map(a=>String(a.account_id)))]:[];
+     if(platforms.includes("Facebook")&&(!pageIds.length||pageIds.some(id=>!ndAllowedPages().some(x=>String(x.page_id)===String(id)))))return setMsg("请勾选至少一个当前品牌已绑定的 Facebook Page。",true);
+     if(platforms.includes("Instagram")&&!igIds.length)return setMsg("请勾选至少一个当前品牌已绑定的 Instagram 账号。",true);
+     const files=[...($('socialMediaFiles').files||[])];
+     if(files.length+editingMedia.length>1)return setMsg("目前立即发布只支持单张图片；请移除其他文件。",true);
      if(files.some(f=>!f.type.startsWith("image/"))||editingMedia.some(m=>!String(m.type||"").startsWith("image/")))return setMsg("目前不支持视频立即发布。",true);
+     if(igIds.length&&!files.length&&!editingMedia.length)return setMsg("Instagram 图片贴文必须上传一张图片。",true);
      if(!String($("socialCaption").value||"").trim()&&!files.length&&!editingMedia.length)return setMsg("请输入文案或上传图片。",true);
-     btn.disabled=true;btn.textContent="Publishing...";
+     btn.disabled=true;btn.textContent="Preparing media...";
      await uploadFiles();
      const imageUrl=editingMedia[0]?.url||"";
-     if(!confirm(`确定立即发布到 ${pageIds.length} 个 Facebook Page？\n\n`+pageIds.map(id=>ndAllowedPages().find(p=>String(p.page_id)===id)?.page_name||id).join("\n")))return;
+     if(igIds.length&&!imageUrl)return setMsg("Instagram 图片必须具有可公开访问的 HTTPS 图片地址。",true);
+     const targets=[...pageIds.map(id=>({platform:"facebook",id,name:ndAllowedPages().find(p=>String(p.page_id)===String(id))?.page_name||id})),...igIds.map(id=>({platform:"instagram",id,name:ndOtherAccounts.find(a=>String(a.platform_account_id)===id&&String(a.platform).toLowerCase()==="instagram")?.account_name||("Instagram "+id)}))];
+     if(!confirm(`确定立即发布到 ${targets.length} 个账号？\n\n`+targets.map(t=>`${t.platform}: ${t.name} (${t.id})`).join("\n")+"\n\n请勿重复点击，发布后不能自动撤回。"))return;
      const results=[];
-     for(const pageId of pageIds){
-       const name=ndAllowedPages().find(p=>String(p.page_id)===pageId)?.page_name||pageId;
-       setMsg(`正在发布 ${results.length+1}/${pageIds.length}：${name}，请勿重复点击...`);
+     for(const target of targets){
+       setMsg(`正在发布 ${results.length+1}/${targets.length}：${target.name}，请勿重复点击...`);
        try{
-         const {data,error}=await db().functions.invoke("facebook-publish",{body:{facebook_page_id:pageId,caption:$("socialCaption").value,image_url:imageUrl}});
+         const body=target.platform==="facebook"?{facebook_page_id:target.id,caption:$("socialCaption").value,image_url:imageUrl}:{instagram_user_id:target.id,caption:$("socialCaption").value,image_url:imageUrl};
+         const functionName=target.platform==="facebook"?"facebook-publish":"instagram-publish";
+         const {data,error}=await db().functions.invoke(functionName,{body});
          if(error)throw new Error(error.message||String(error));
-         if(!data?.success||!data?.post_id)throw new Error(data?.error||"Facebook 未确认发布成功");
-         const row={brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),caption:$("socialCaption").value,platforms:["facebook"],media:editingMedia,scheduled_at:new Date().toISOString(),timezone:"Asia/Kuala_Lumpur",status:"published",updated_at:new Date().toISOString(),facebook_page_id:pageId,facebook_page_name:name,created_by:String(window.currentUserEmail||"").toLowerCase()};
+         const postId=target.platform==="facebook"?data?.post_id:(data?.media_id||data?.post_id);
+         if(!data?.success||!postId)throw new Error(data?.error||"平台未确认发布成功；请先在平台检查，避免重复发布。");
+         const row={brand:$("socialBrand").value.trim(),title:$("socialTitle").value.trim(),caption:$("socialCaption").value,platforms:[target.platform==="facebook"?"Facebook":"Instagram"],media:editingMedia,scheduled_at:new Date().toISOString(),timezone:"Asia/Kuala_Lumpur",status:"published",updated_at:new Date().toISOString(),created_by:String(window.currentUserEmail||"").toLowerCase()};
+         if(target.platform==="facebook"){row.facebook_page_id=target.id;row.facebook_page_name=target.name;}
+         // Do not write unknown Instagram-specific columns into existing posts schema.
          const {error:saveError}=await db().from("social_media_posts").insert(row);
-         results.push({name,ok:true,postId:data.post_id,historyError:saveError?.message});
-       }catch(err){results.push({name,ok:false,error:err?.message||String(err)});}
+         results.push({name:target.name,platform:target.platform,ok:true,postId,historyError:saveError?.message});
+       }catch(err){results.push({name:target.name,platform:target.platform,ok:false,error:err?.message||String(err)});}
      }
      await loadPosts();
-     const summary=results.map(r=>`${r.ok?'成功':'失败'}：${r.name}${r.historyError?'（历史保存失败：'+r.historyError+'）':''}${r.error?'（'+r.error+'）':''}`).join("\n");
+     const summary=results.map(r=>`${r.ok?'成功':'未确认/失败'}：${r.platform} · ${r.name}${r.historyError?'（历史保存失败：'+r.historyError+'）':''}${r.error?'（'+r.error+'）':''}`).join("\n");
      setMsg(summary,results.some(r=>!r.ok||r.historyError));
-     alert(`Facebook 发布结果 (${results.filter(r=>r.ok).length}/${results.length})\n\n${summary}`);
+     alert(`发布结果 (${results.filter(r=>r.ok).length}/${results.length})\n\n${summary}\n\n如有未确认项目，请先检查平台，避免重复发布。`);
      if(results.every(r=>r.ok&&!r.historyError))closeModals();
-   }catch(e){console.error(e);setMsg("发布未确认："+(e?.message||String(e))+"。请先检查 Facebook 主页再重试。",true)}
-   finally{if(btn){btn.disabled=false;btn.textContent="Publish Now · Facebook";}}
+   }catch(e){console.error(e);setMsg("发布未确认："+(e?.message||String(e))+"。请先检查各平台再重试。",true)}
+   finally{if(btn){btn.disabled=false;btn.textContent="Publish Now · Selected Accounts";}}
  }
  async function del(){
    const id=$("socialPostId").value;if(!id||!confirm("Delete this scheduled post?"))return;
@@ -28668,7 +28679,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    $("socialNewPostBtn").onclick=()=>{if(!ndSelectedBrand())return alert("请先选择品牌，再创建贴文。");openNew();};
    $("ndSocialActiveBrand").onchange=()=>{ndSyncComposerBrand();populateFacebookPageSelect(null);ndRefreshOtherAccounts();render();};
    $("socialPostClose").onclick=closeModals;$("socialAccountsClose").onclick=closeModals;
-   $("socialPublishNowBtn").onclick=publishNowFacebook;$("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>{save("scheduled")};
+   $("socialPublishNowBtn").onclick=publishNowSelectedAccounts;$("socialSaveDraftBtn").onclick=()=>save("draft");$("socialScheduleBtn").onclick=()=>{save("scheduled")};
    $("socialDeletePostBtn").onclick=del;
 
    document.querySelectorAll(".social-platform-checks input").forEach(chk=>{
