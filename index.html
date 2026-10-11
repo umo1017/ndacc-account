@@ -28356,6 +28356,15 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    const brand=ndSelectedBrand();
    return posts.filter(x=>(!brand||x.brand===brand.name)&&(!p||(x.platforms||[]).includes(p))&&(!st||x.status===st));
  }
+ function ndDisplayPostTitle(x){
+   const title=String(x.title||'').trim();
+   if(title && title.toLowerCase()!=='untitled')return title;
+   const caption=String(x.caption||'').replace(/https?:\/\/\S+/g,'').replace(/[#＃][^\s]+/g,'').replace(/\s+/g,' ').trim();
+   if(caption)return caption.length>27?caption.slice(0,27)+'…':caption;
+   const media=Array.isArray(x.media)?x.media:[];
+   if(media.length)return '图片贴文 · '+media.length+'张';
+   return '未命名贴文';
+ }
  function render(){
    $("socialMonthLabel").textContent=viewMonth.toLocaleDateString("en-MY",{month:"long",year:"numeric"});
    const arr=filtered(), first=new Date(viewMonth.getFullYear(),viewMonth.getMonth(),1), start=new Date(first);
@@ -28372,7 +28381,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
          const lp=localParts(x.scheduled_at),m=(x.media||[])[0];
          return `<button class="social-event" type="button" data-social-post="${x.id}">
            <div class="social-event-time">${esc(lp.time)} · ${esc(x.status)}</div>
-           <div>${esc(x.title||"Untitled")}</div>
+           <div>${esc(ndDisplayPostTitle(x))}</div>
            <div class="social-platform-mini">${esc(platformText(x.platforms))}</div>
            ${m&&!String(m.type||"").startsWith("video")?`<img class="social-event-thumb" src="${esc(m.url)}" alt="">`:""}
          </button>`;
@@ -28387,7 +28396,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
      const lp=localParts(x.scheduled_at);
      return `<button type="button" class="social-list-row" data-social-post="${x.id}" style="background:#fff;text-align:left">
        <div>${mediaThumb(x.media)||'<div class="social-list-thumb"></div>'}</div>
-       <div><strong>${esc(x.title||"Untitled")}</strong><br><span class="helper">${esc(x.brand||"")}</span></div>
+       <div><strong>${esc(ndDisplayPostTitle(x))}</strong><br><span class="helper">${esc(x.brand||"")}</span></div>
        <div class="social-list-platforms">${esc(platformText(x.platforms))}${x.facebook_page_name?` · ${esc(x.facebook_page_name)}`:""}</div>
        <div class="social-list-date">${esc(lp.date)}<br>${esc(lp.time)}</div>
        <div><span class="social-status">${esc(x.status)}</span></div>
@@ -29798,7 +29807,7 @@ document.addEventListener("DOMContentLoaded",function(){
 const by=id=>document.getElementById(id);
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const states={planned:'计划中',generating:'生成中',checking:'质量检查',needs_review:'待审核',ready:'已准备',scheduled:'已排程',completed:'已完成',failed:'失败',cancelled:'已取消',pending:'待发布',processing:'发布中',published:'已发布',retry:'重试中'};
-let jobs=[],assets=[],queues=[],lastKey='',busy=false,seq=0;
+let jobs=[],assets=[],queues=[],topics=[],lastKey='',busy=false,seq=0;
 const db=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
 function notice(msg,error=false){let e=by('ndAiCalendarNotice');if(!e){const frame=by('socialCalendarFrame');if(!frame)return;e=document.createElement('div');e.id='ndAiCalendarNotice';frame.parentNode.insertBefore(e,frame);}e.textContent=msg;e.dataset.error=String(error);}
 function month(){const label=by('socialMonthLabel')?.textContent||'';const d=new Date('1 '+label);return Number.isNaN(d.getTime())?new Date():d;}
@@ -29813,22 +29822,27 @@ async function refresh(force=false){
   let q=db().from('ai_content_jobs').select('id,brand_id,content_date,status,topic_id,error_message').gte('content_date',from).lte('content_date',to).order('content_date',{ascending:true}).limit(500);
   if(brand)q=q.eq('brand_id',brand);
   const result=await q;if(result.error)throw result.error;
-  jobs=result.data||[];assets=[];queues=[];
+  jobs=result.data||[];assets=[];queues=[];topics=[];
   if(jobs.length){const ids=jobs.map(x=>x.id);const [a,b]=await Promise.all([
     db().from('ai_generated_assets').select('id,job_id,version,cover_path,content_path,caption,qa_status,qa_result').in('job_id',ids).order('version',{ascending:false}).limit(500),
     db().from('ai_publish_queue').select('id,job_id,platform,scheduled_at,status,last_error').in('job_id',ids).limit(500)
   ]);if(a.error)throw a.error;if(b.error)throw b.error;assets=a.data||[];queues=b.data||[];}
+  if(jobs.some(x=>x.topic_id)){
+   const topicIds=[...new Set(jobs.map(x=>x.topic_id).filter(Boolean))];
+   const tr=await db().from('ai_topic_history').select('id,topic,category').in('id',topicIds).limit(500);
+   if(tr.error){console.warn('AI topic titles unavailable:',tr.error.message);}else topics=tr.data||[];
+  }
   if(request!==seq)return;
   notice(jobs.length?'AI 日历已同步：'+jobs.length+' 项内容 · 点击日历里的绿色 AI 卡片查看详情':'这个月份还没有 AI 内容任务。现有手动发布日历照常使用。');paint();
- }catch(err){jobs=[];assets=[];queues=[];notice('AI 日历无法读取：'+(err.message||String(err))+'。请检查 AI 表的 RLS 读取权限；原有发帖功能不受影响。',true);paint();}
+ }catch(err){jobs=[];assets=[];queues=[];topics=[];notice('AI 日历无法读取：'+(err.message||String(err))+'。请检查 AI 表的 RLS 读取权限；原有发帖功能不受影响。',true);paint();}
  finally{busy=false;}
 }
 function paint(){const root=by('socialCalendar');if(!root)return;root.querySelectorAll('.nd-ai-event').forEach(x=>x.remove());
  const dates=new Map();root.querySelectorAll('.social-day[data-social-date]').forEach(x=>dates.set(x.dataset.socialDate,x));
- jobs.forEach(j=>{const cell=dates.get(j.content_date);if(!cell)return;const q=queues.filter(x=>x.job_id===j.id);const a=assets.find(x=>x.job_id===j.id);const btn=document.createElement('button');btn.type='button';btn.className='nd-ai-event';btn.dataset.aiJob=j.id;btn.innerHTML='<strong>✦ AI · '+escapeHtml(states[j.status]||j.status)+'</strong><small>'+escapeHtml(q.length?q.map(x=>x.platform.toUpperCase()+' '+(states[x.status]||x.status)).join(' · '):(a?.qa_status==='pass'?'QA 通过':'未安排发布'))+'</small>';btn.addEventListener('click',e=>{e.stopPropagation();detail(j.id);});cell.appendChild(btn);});}
-function detail(id){const j=jobs.find(x=>x.id===id);if(!j)return;const a=assets.find(x=>x.job_id===id),q=queues.filter(x=>x.job_id===id);const modal=by('ndAiDetailOverlay');if(!modal)return;
+ jobs.forEach(j=>{const cell=dates.get(j.content_date);if(!cell)return;const q=queues.filter(x=>x.job_id===j.id);const a=assets.find(x=>x.job_id===j.id);const topic=topics.find(x=>x.id===j.topic_id)?.topic;const btn=document.createElement('button');btn.type='button';btn.className='nd-ai-event';btn.dataset.aiJob=j.id;btn.innerHTML='<strong>✦ '+escapeHtml(topic||'AI 内容')+'</strong><small>'+escapeHtml(states[j.status]||j.status)+' · '+escapeHtml(q.length?q.map(x=>x.platform.toUpperCase()+' '+(states[x.status]||x.status)).join(' · '):(a?.qa_status==='pass'?'QA 通过':'未安排发布'))+'</small>';btn.addEventListener('click',e=>{e.stopPropagation();detail(j.id);});cell.appendChild(btn);});}
+function detail(id){const j=jobs.find(x=>x.id===id);if(!j)return;const a=assets.find(x=>x.job_id===id),q=queues.filter(x=>x.job_id===id),topic=topics.find(x=>x.id===j.topic_id); const modal=by('ndAiDetailOverlay');if(!modal)return;
  by('ndAiDetailBody').innerHTML='<p><b>日期：</b>'+escapeHtml(j.content_date)+'　<b>状态：</b>'+escapeHtml(states[j.status]||j.status)+'</p>'+
- '<p><b>主题 ID：</b>'+escapeHtml(j.topic_id||'尚未分配')+'</p>'+
+ '<p><b>主题：</b>'+escapeHtml(topic?.topic||'尚未生成')+(topic?.category?' · '+escapeHtml(topic.category):'')+'</p>'+ 
  '<p><b>图片检查：</b>'+escapeHtml(a?.qa_status||'尚未生成')+'</p>'+
  '<div class="nd-ai-assets">'+['cover_path','content_path'].map((k,i)=>'<figure><figcaption>'+(i?'知识页':'封面')+'</figcaption>'+(a?.[k]?'<div class="helper">储存路径：'+escapeHtml(a[k])+'</div>':'<div class="helper">尚无图片</div>')+'</figure>').join('')+'</div>'+
  '<p><b>文案：</b></p><div class="nd-ai-detail-caption">'+escapeHtml(a?.caption||'尚未生成')+'</div>'+
