@@ -25317,31 +25317,65 @@ input,select,textarea,button,a{
  function inputs(){[['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']].forEach(([id,k])=>$(id).value=settings[k]);}
  async function save(){const b=branch();if(!b)return;const next={};for(const [id,k] of [['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']]){const n=Number($(id).value);if(!Number.isFinite(n)||n<0){alert('Invalid target amount');return;}next[k]=n;}if(next.required_days<1||next.required_days>7||!Number.isInteger(next.required_days)){alert('Required days must be 1–7');return;}
  settings=next;localStorage.setItem(key(b),JSON.stringify(next));edit(false);await refresh();}
- function isPresent(e,date,overrides){const first=String(e.start_date||e.join_date||e.hire_date||e.date_joined||'').slice(0,10),last=String(e.last_working_date||'').slice(0,10);
- if(first&&first>date||last&&last<date)return false;
- const k=String(e.id)+'|'+date;const override=overrides.get(k);if(override==='rest')return false;if(override==='work')return true;
- const rest=e.fixed_rest_weekday;if(rest!==null&&rest!==undefined&&rest!==''&&Number(rest)===new Date(date+'T12:00:00').getDay())return false;
- return true;
+ function normalizedName(v){return String(v||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');}
+ function staffForDate(date,assignments,weeklyNames){
+   const explicit=assignments.get(date);
+   if(explicit!==undefined)return String(explicit||'').trim();
+   const dow=new Date(date+'T12:00:00').getDay();
+   return String(weeklyNames?.[String(dow)]||'').trim();
  }
- async function refresh(){const root=ensure(),b=branch(),m=month();if(!root||!b)return;const serial=++loadSerial;
- $('tbSync').textContent='Loading...';if(loadedBranch!==b){settings=config(b);loadedBranch=b;inputs();edit(false);}loadedMonth=m;
- const c=client();if(!c){$('tbSync').textContent='Database unavailable';return;}
- const start=m+'-01',end=m+'-'+String(monthEnd(m)).padStart(2,'0');
- const requests=await Promise.all([c.from('daily_settlements').select('settlement_date,branch,grand_total').eq('branch',b).gte('settlement_date',start).lte('settlement_date',end),c.from('employees').select('*').eq('outlet',b),c.from('employee_rest_day_overrides').select('*').gte('work_date',start).lte('work_date',end)]);
- if(serial!==loadSerial)return;
- if(requests[0].error||requests[1].error){$('tbSync').textContent=esc(requests[0].error?.message||requests[1].error?.message);return;}
- const sales=new Map();for(const r of requests[0].data||[])sales.set(String(r.settlement_date).slice(0,10),(sales.get(String(r.settlement_date).slice(0,10))||0)+Number(r.grand_total||0));
- const employees=(requests[1].data||[]).filter(e=>{const t=String(e.employment_type||e.employee_type||'').toLowerCase().replace(/[\s_-]/g,'');return t!=='parttime'&&t!=='pt';});
- const overrides=new Map();for(const r of requests[2].data||[]){const id=r.employee_id,dt=String(r.work_date||'').slice(0,10);overrides.set(String(id)+'|'+dt,String(r.override_type||r.status||r.day_type||'').toLowerCase());}
- const dates=Array.from({length:monthEnd(m)},(_,i)=>m+'-'+String(i+1).padStart(2,'0'));
- const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});const weeks=new Map();for(const date of dates){const w=weekMonday(date);if(!weeks.has(w))weeks.set(w,[]);weeks.get(w).push(date);}
- let wHtml='';for(const [w,ds] of weeks){for(const e of employees){const n=ds.filter(d=>d<=today&&isPresent(e,d,overrides)&&Number(sales.get(d)||0)>=settings.daily_target).length;const reached=n>=settings.required_days;wHtml+=`<tr><td>${esc(e.name)}</td><td>${esc(w)} – ${esc(datePlus(w,6))}</td><td>${n} / ${settings.required_days}</td><td class="${reached?'tb-good':'tb-bad'}">${reached?'达标':'未达标'}</td><td>${fmt(reached?settings.weekly_bonus:0)}</td></tr>`;}}
- $('tbWeekBody').innerHTML=wHtml||'<tr><td colspan="5">No roster staff</td></tr>';
- const total=dates.filter(d=>d<=today).reduce((s,d)=>s+Number(sales.get(d)||0),0);const achieved=total>=settings.monthly_target;
- const attendance=employees.map(e=>({e,days:dates.filter(d=>d<=today&&isPresent(e,d,overrides)).length}));const all=attendance.reduce((s,x)=>s+x.days,0);
- let remaining=Math.round(settings.monthly_pool*100);let eligible=attendance.filter(x=>x.days>0);let amounts=new Map();eligible.forEach((x,i)=>{const cents=i===eligible.length-1?remaining:Math.round(settings.monthly_pool*100*x.days/all);remaining-=cents;amounts.set(String(x.e.id),cents/100)});
- $('tbMonthBody').innerHTML=attendance.map(x=>`<tr><td>${esc(x.e.name)}</td><td>${x.days}</td><td class="${achieved&&x.days?'tb-good':'tb-bad'}">${achieved&&x.days?'达标':'未达标'}</td><td>${fmt(achieved?(amounts.get(String(x.e.id))||0):0)}</td></tr>`).join('')+`<tr><td><strong>Total</strong></td><td>${all}</td><td class="${achieved?'tb-good':'tb-bad'}">${achieved?'达标':'未达标'}</td><td><strong>${fmt(achieved&&all?settings.monthly_pool:0)}</strong></td></tr>`;
- $('tbSync').textContent='Synced · '+fmt(total)+' / '+fmt(settings.monthly_target);
+ async function refresh(){
+   const root=ensure(),b=branch(),m=month();if(!root||!b)return;
+   const serial=++loadSerial;$('tbSync').textContent='Loading...';
+   if(loadedBranch!==b){settings=config(b);loadedBranch=b;inputs();edit(false);}loadedMonth=m;
+   const c=client();if(!c){$('tbSync').textContent='Database unavailable';return;}
+   const start=m+'-01',end=m+'-'+String(monthEnd(m)).padStart(2,'0');
+   const requests=await Promise.all([
+     c.from('daily_settlements').select('settlement_date,branch,grand_total').eq('branch',b).gte('settlement_date',start).lte('settlement_date',end),
+     c.from('employees').select('*').eq('outlet',b),
+     c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',b).gte('work_date',start).lte('work_date',end),
+     c.from('roster_outlet_settings').select('weekly_names').eq('outlet_name',b).maybeSingle()
+   ]);
+   if(serial!==loadSerial)return;
+   const err=requests.find(r=>r.error)?.error;
+   if(err){$('tbSync').textContent='Unable to load: '+String(err.message||'');$('tbWeekBody').innerHTML='';$('tbMonthBody').innerHTML='';return;}
+   const sales=new Map();for(const r of requests[0].data||[]){const d=String(r.settlement_date).slice(0,10);sales.set(d,(sales.get(d)||0)+Number(r.grand_total||0));}
+   const employees=(requests[1].data||[]).filter(e=>{const t=String(e.employment_type||e.employee_type||'').toLowerCase().replace(/[\s_-]/g,'');return t!=='parttime'&&t!=='pt';});
+   const staffLookup=new Map();for(const e of employees){for(const n of [e.name,e.full_name,e.nickname,e.staff_name,e.employee_name]){if(normalizedName(n))staffLookup.set(normalizedName(n),e);}}
+   const assignments=new Map();for(const r of requests[2].data||[])assignments.set(String(r.work_date).slice(0,10),String(r.staff_name||'').trim());
+   const weeklyNames=requests[3].data?.weekly_names||{};
+   const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
+   const dates=Array.from({length:monthEnd(m)},(_,i)=>m+'-'+String(i+1).padStart(2,'0'));
+   const weeks=new Map(),attendance=new Map();let unresolved=0;
+   for(const d of dates){
+     if(d>today)continue;
+     const w=weekMonday(d);if(!weeks.has(w))weeks.set(w,new Map());
+     const name=staffForDate(d,assignments,weeklyNames);
+     if(!name)continue;
+     const employee=staffLookup.get(normalizedName(name));
+     // A copied roster name must match an employee of this branch; do not show all employees.
+     if(!employee){unresolved++;continue;}
+     const first=String(employee.start_date||employee.join_date||employee.hire_date||employee.date_joined||'').slice(0,10);
+     const last=String(employee.last_working_date||'').slice(0,10);
+     if((first&&d<first)||(last&&d>last))continue;
+     const id=String(employee.id),hit=Number(sales.get(d)||0)>=settings.daily_target;
+     const weekStaff=weeks.get(w);if(!weekStaff.has(id))weekStaff.set(id,{employee,days:0,qualified:0});
+     const row=weekStaff.get(id);row.days++;if(hit)row.qualified++;
+     if(!attendance.has(id))attendance.set(id,{employee,days:0});attendance.get(id).days++;
+   }
+   let wHtml='';for(const [w,people] of weeks){for(const x of people.values()){
+     const reached=x.qualified>=settings.required_days;
+     wHtml+=`<tr><td>${esc(x.employee.name)}</td><td>${esc(w)} – ${esc(datePlus(w,6))}</td><td>${x.qualified} / ${settings.required_days}</td><td class="${reached?'tb-good':'tb-bad'}">${reached?'达标':'未达标'}</td><td>${fmt(reached?settings.weekly_bonus:0)}</td></tr>`;
+   }}
+   $('tbWeekBody').innerHTML=wHtml||'<tr><td colspan="5">No participating staff</td></tr>';
+   const total=dates.filter(d=>d<=today).reduce((sum,d)=>sum+Number(sales.get(d)||0),0);
+   const achieved=total>=settings.monthly_target;
+   const eligible=Array.from(attendance.values()).filter(x=>x.days>0);
+   const all=eligible.reduce((sum,x)=>sum+x.days,0);
+   let remaining=Math.round(settings.monthly_pool*100);const amounts=new Map();
+   eligible.forEach((x,i)=>{const cents=i===eligible.length-1?remaining:Math.round(settings.monthly_pool*100*x.days/all);remaining-=cents;amounts.set(String(x.employee.id),cents/100);});
+   $('tbMonthBody').innerHTML=eligible.map(x=>`<tr><td>${esc(x.employee.name)}</td><td>${x.days}</td><td class="${achieved?'tb-good':'tb-bad'}">${achieved?'达标':'未达标'}</td><td>${fmt(achieved?(amounts.get(String(x.employee.id))||0):0)}</td></tr>`).join('')+`<tr><td><strong>Total</strong></td><td>${all}</td><td class="${achieved?'tb-good':'tb-bad'}">${achieved?'达标':'未达标'}</td><td><strong>${fmt(achieved&&all?settings.monthly_pool:0)}</strong></td></tr>`;
+   $('tbSync').textContent='Synced · '+fmt(total)+' / '+fmt(settings.monthly_target)+(unresolved?' · '+unresolved+' roster name(s) unmatched':'');
  }
  document.addEventListener('DOMContentLoaded',()=>{ensure();const obs=new MutationObserver(()=>{if($('bonusPage')?.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus'){const b=branch(),m=month();if(b&&(b!==loadedBranch||m!==loadedMonth))refresh();}});obs.observe($('bonusPage'),{attributes:true,attributeFilter:['class']});$('bonusMonth')?.addEventListener('change',()=>{loadedMonth='';refresh()});$('bonusRefreshBtn')?.addEventListener('click',()=>setTimeout(refresh,400));$('bonusBranchTabs')?.addEventListener('click',()=>setTimeout(refresh,150));});
 })();
