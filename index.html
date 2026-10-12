@@ -8770,13 +8770,29 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     <div class="nd-ai-grid">
       <div><label for="ndAiBrand">Brand / 品牌</label><select id="ndAiBrand"></select></div>
       <div><label for="ndAiLogo">Official Logo / 原版 Logo</label><input id="ndAiLogo" type="file" accept="image/png,image/jpeg,image/svg+xml"/><small id="ndAiLogoHint">Logo 仅本地预览，尚未上传服务器</small></div>
-      <div><label>Frequency / 频率</label><input value="Daily · 每天 1 个主题" disabled/></div>
+      <div><label>Frequency / 频率</label><input value="Weekly · 每周生成（每品牌独立）" disabled/></div>
       <div><label>Posting time / 发布时间</label><input value="Smart · 根据平台数据优化" disabled/></div>
       <div><label>Platforms / 平台</label><input value="Facebook + Instagram" disabled/></div>
       <div><label>Format / 格式</label><input value="Carousel · 两张 1080 × 1350" disabled/></div>
-      <div><label>Approval / 审核</label><input value="Auto · 仅通过检查后发布" disabled/></div>
+      <div><label>Approval / 审核</label><input value="Manual · 人工审核后发布" disabled/></div>
       <div><label>Automation / 自动化</label><input value="OFF · 后端尚未部署" disabled/></div>
     </div>
+    <section id="ndContentTypesPanel" class="nd-types-panel" aria-label="品牌内容类型管理">
+      <div class="nd-types-heading"><div><h3>生成内容类型 · Content Types</h3><p class="helper">每个品牌独立添加、编辑及停用内容类型；每周配额总数最多7套。保存后仅更新配置，不会自动发布。</p></div><button type="button" class="btn" id="ndTypeAdd">＋ 添加类型</button></div>
+      <div id="ndTypeStatus" class="helper" role="status"></div>
+      <div id="ndTypeList" class="nd-type-list"></div>
+      <div id="ndTypeEditor" class="nd-type-editor hidden">
+        <h4 id="ndTypeEditorTitle">新增内容类型</h4>
+        <div class="nd-type-form">
+          <div><label for="ndTypeName">名称</label><input id="ndTypeName" maxlength="80" placeholder="例如：会员福利"/></div>
+          <div><label for="ndTypeQuota">每周生成套数（0–7）</label><input id="ndTypeQuota" type="number" min="0" max="7" step="1" value="0"/></div>
+          <div class="nd-type-full"><label for="ndTypeDesc">说明</label><input id="ndTypeDesc" maxlength="300" placeholder="此类型的内容目标"/></div>
+          <div class="nd-type-full"><label for="ndTypePrompt">专属 AI Prompt</label><textarea id="ndTypePrompt" rows="4" placeholder="说明文案、画面风格及限制条件"></textarea></div>
+          <div class="nd-type-full nd-type-flags"><label><input type="checkbox" id="ndTypePrice"/> 允许显示价格</label><label><input type="checkbox" id="ndTypePromo"/> 允许促销</label><label><input type="checkbox" id="ndTypeBooking"/> 允许预约信息</label><label><input type="checkbox" id="ndTypeActive" checked/> 启用</label></div>
+        </div>
+        <div class="nd-type-actions"><button class="btn" type="button" id="ndTypeCancel">取消</button><button class="btn primary" type="button" id="ndTypeSave">保存内容类型</button></div>
+      </div>
+    </section>
     <label for="ndAiPrompt">Master Prompt / 固定指令</label>
     <textarea id="ndAiPrompt" rows="15" spellcheck="false"></textarea>
     <div class="nd-ai-footer"><span id="ndAiSaveState" role="status">尚未保存</span><button class="btn" type="button" id="ndAiReset">恢复默认</button><button class="btn primary" type="button" id="ndAiSave">Save to Supabase · 云端保存</button></div>
@@ -8787,6 +8803,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 .nd-ai-overlay.hidden{display:none!important}.nd-ai-dialog{width:min(850px,100%);max-height:92dvh;overflow-y:auto;background:white;border-radius:18px;padding:clamp(14px,3vw,26px);box-shadow:0 20px 70px #0003;min-width:0}
 .nd-ai-head,.nd-ai-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.nd-ai-head h2{margin:6px 0 10px}.nd-ai-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}.nd-ai-grid>div{min-width:0}.nd-ai-grid small{display:block;margin-top:4px;color:#666}.nd-ai-dialog textarea{width:100%;max-width:100%;resize:vertical;border:1px solid #ddd;border-radius:12px;padding:12px;font:14px/1.65 inherit;min-height:280px}.nd-ai-footer{margin-top:12px}.nd-ai-dialog input:disabled{background:#f5f5f5;color:#444}
 @media(max-width:600px){.nd-ai-grid{grid-template-columns:minmax(0,1fr)}.nd-ai-overlay{padding:6px}.nd-ai-dialog{max-height:96dvh}.nd-ai-head h2{font-size:20px}}
+.nd-types-panel{margin:18px 0;padding:16px;border:1px solid #e5e1d8;border-radius:16px;background:#fbfaf7}.nd-types-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.nd-types-heading h3{margin:0 0 5px}.nd-type-list{display:grid;gap:8px;margin:12px 0}.nd-type-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:white;border:1px solid #e5e1d8;border-radius:12px;padding:12px;flex-wrap:wrap}.nd-type-item small{display:block;color:#777;margin-top:4px}.nd-type-item .nd-type-actions{margin:0}.nd-type-editor{padding:14px;border:1px solid #d9d2bf;border-radius:12px;background:white}.nd-type-editor h4{margin:0 0 12px}.nd-type-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.nd-type-full{grid-column:1/-1}.nd-type-editor textarea{min-height:90px}.nd-type-flags{display:flex;gap:12px;flex-wrap:wrap}.nd-type-flags label{display:flex;gap:5px;align-items:center;margin:0}.nd-type-flags input{width:auto}.nd-type-actions{display:flex;gap:7px;justify-content:flex-end;margin-top:12px}.nd-type-danger{color:#a32626}.nd-type-item button{padding:7px 10px}@media(max-width:600px){.nd-type-form{grid-template-columns:1fr}.nd-type-full{grid-column:auto}}
 </style>
 <script id="nd-ai-settings-v1-script">
 (function(){
@@ -8826,8 +8843,31 @@ function status(message){$('ndAiSaveState').textContent=message;}
 function validBrand(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id||'');}
 function populate(){const from=$('ndSocialActiveBrand'),to=$('ndAiBrand');if(!to)return;const prev=to.value;to.replaceChildren();if(from){for(const option of from.options){if(!validBrand(option.value))continue;to.add(new Option(option.textContent,option.value));}}if(!to.options.length)to.add(new Option('尚未找到品牌 UUID',''));to.value=[...to.options].some(o=>o.value===prev)?prev:([...to.options].some(o=>o.value===from?.value)?from.value:to.options[0].value);load();}
 async function load(){const id=$('ndAiBrand')?.value,seq=++loadSeq;if(!validBrand(id)){$('ndAiPrompt').value=DEFAULT;status('请选择有效品牌后读取');return;}status('正在从 Supabase 读取…');$('ndAiSave').disabled=true;try{const {data,error}=await client().from('ai_brand_settings').select('master_prompt').eq('brand_id',id).maybeSingle();if(seq!==loadSeq)return;if(error)throw error;let local=null;try{local=localStorage.getItem(key(id));}catch(e){}$('ndAiPrompt').value=data?.master_prompt||local||DEFAULT;status(data?'已从 Supabase 读取 · 自动发布 OFF':local?'未找到云端设置，已载入本机旧草稿；请点击云端保存':'暂无云端设置，已载入默认指令 · 自动发布 OFF');}catch(e){if(seq!==loadSeq)return;status('云端读取失败：'+(e.message||e));}finally{if(seq===loadSeq)$('ndAiSave').disabled=false;}}
-async function save(){const id=$('ndAiBrand')?.value;if(!validBrand(id)){status('保存失败：请选择有效品牌');return;}const prompt=$('ndAiPrompt').value.trim();if(!prompt){status('请先填写 Master Prompt');return;}const btn=$('ndAiSave');btn.disabled=true;status('正在保存到 Supabase…');try{const {error}=await client().from('ai_brand_settings').upsert({brand_id:id,master_prompt:prompt,frequency:'daily',publish_format:'carousel',approval_mode:'auto',platforms:['facebook','instagram'],timezone:'Asia/Kuala_Lumpur',enabled:false},{onConflict:'brand_id'});if(error)throw error;try{localStorage.setItem(key(id),prompt);}catch(e){}status('已成功保存至 Supabase · 自动发布仍 OFF');}catch(e){status('云端保存失败：'+(e.message||e));}finally{btn.disabled=false;}}
+async function save(){const id=$('ndAiBrand')?.value;if(!validBrand(id)){status('保存失败：请选择有效品牌');return;}const prompt=$('ndAiPrompt').value.trim();if(!prompt){status('请先填写 Master Prompt');return;}const btn=$('ndAiSave');btn.disabled=true;status('正在保存到 Supabase…');try{const {error}=await client().from('ai_brand_settings').upsert({brand_id:id,master_prompt:prompt,frequency:'weekly',publish_format:'carousel',approval_mode:'manual',platforms:['facebook','instagram'],timezone:'Asia/Kuala_Lumpur',enabled:false},{onConflict:'brand_id'});if(error)throw error;try{localStorage.setItem(key(id),prompt);}catch(e){}status('已成功保存至 Supabase · 自动发布仍 OFF');}catch(e){status('云端保存失败：'+(e.message||e));}finally{btn.disabled=false;}}
 function init(){if(!$('ndAiSettingsBtn'))return;$('ndAiSettingsBtn').addEventListener('click',()=>{populate();$('ndAiSettingsModal').classList.remove('hidden');});$('ndAiClose').addEventListener('click',()=>{$('ndAiSettingsModal').classList.add('hidden');});$('ndAiBrand').addEventListener('change',load);$('ndAiSave').addEventListener('click',save);$('ndAiReset').addEventListener('click',()=>{$('ndAiPrompt').value=DEFAULT;status('已恢复默认，点击云端保存才会写入 Supabase');});$('ndAiLogo').addEventListener('change',()=>{$('ndAiLogoHint').textContent=$('ndAiLogo').files[0]?.name?'已选择：'+$('ndAiLogo').files[0].name+'（尚未上传服务器）':'Logo 尚未上传服务器';});$('ndAiSettingsModal').addEventListener('click',e=>{if(e.target===$('ndAiSettingsModal'))$('ndAiSettingsModal').classList.add('hidden');});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+<script id="nd-content-types-v2-script">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const URL='https://cofmjwsejcbfsgdrswku.supabase.co';
+const KEY='sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU';
+let db=null,records=[],editing=null,seq=0;
+const valid=id=>/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id||'');
+function client(){if(!db){if(!window.supabase?.createClient)throw Error('Supabase SDK 未加载');db=window.supabase.createClient(URL,KEY);}return db;}
+function message(v){$('ndTypeStatus').textContent=v;}
+function brand(){return $('ndAiBrand')?.value||'';}
+function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
+function render(){const list=$('ndTypeList');list.replaceChildren();let total=0;for(const item of records){if(item.is_active)total+=Number(item.weekly_quota||0);const row=el('div','nd-type-item');const detail=el('div');detail.append(el('strong','',item.name),el('small','',`${item.is_active?'启用':'已停用'} · 每周 ${item.weekly_quota||0} 套${item.description?' · '+item.description:''}`));const actions=el('div','nd-type-actions');const edit=el('button','btn','编辑');edit.type='button';edit.addEventListener('click',()=>open(item));const toggle=el('button','btn',item.is_active?'停用':'启用');toggle.type='button';toggle.addEventListener('click',()=>toggleActive(item));actions.append(edit,toggle);row.append(detail,actions);list.append(row);}if(!records.length)list.append(el('p','helper','此品牌还没有内容类型，点击「添加类型」。'));message(`当前品牌：${records.length} 个类型 · 已启用每周 ${total}/7 套${total>7?'（超出7套，请调整）':''}`);}
+async function load(){const id=brand(),token=++seq;records=[];editing=null;$('ndTypeEditor').classList.add('hidden');$('ndTypeList').replaceChildren();if(!valid(id)){message('请先选择品牌');return;}message('读取品牌内容类型…');try{const {data,error}=await client().from('ai_content_types').select('*').eq('brand_id',id).order('sort_order',{ascending:true}).order('created_at',{ascending:true});if(token!==seq)return;if(error)throw error;records=data||[];render();}catch(e){if(token!==seq)return;message('读取失败：'+(e.message||e)+'。请检查 ai_content_types 的品牌访问权限（RLS）。');}}
+function open(item){editing=item?.id||null;$('ndTypeEditorTitle').textContent=item?'编辑内容类型':'新增内容类型';$('ndTypeName').value=item?.name||'';$('ndTypeQuota').value=item?.weekly_quota??0;$('ndTypeDesc').value=item?.description||'';$('ndTypePrompt').value=item?.custom_prompt||'';$('ndTypePrice').checked=!!item?.allow_price;$('ndTypePromo').checked=!!item?.allow_promotion;$('ndTypeBooking').checked=!!item?.allow_booking_info;$('ndTypeActive').checked=item?.is_active!==false;$('ndTypeEditor').classList.remove('hidden');$('ndTypeName').focus();}
+async function save(){const id=brand();if(!valid(id)){message('请选择品牌');return;}const name=$('ndTypeName').value.trim();const quota=Number($('ndTypeQuota').value);if(!name||!Number.isInteger(quota)||quota<0||quota>7){message('请输入类型名称及0–7的整数套数');return;}const active=$('ndTypeActive').checked;const sum=records.filter(r=>r.id!==editing&&r.is_active).reduce((n,r)=>n+Number(r.weekly_quota||0),0)+(active?quota:0);if(sum>7){message(`已启用类型每周总计 ${sum} 套，超过7套，请先减少其他类型的数量。`);return;}
+const payload={brand_id:id,name,weekly_quota:quota,description:$('ndTypeDesc').value.trim(),custom_prompt:$('ndTypePrompt').value.trim(),allow_price:$('ndTypePrice').checked,allow_promotion:$('ndTypePromo').checked,allow_booking_info:$('ndTypeBooking').checked,is_active:active,updated_at:new Date().toISOString()};
+const btn=$('ndTypeSave');btn.disabled=true;message('正在保存…');try{let result;if(editing)result=await client().from('ai_content_types').update(payload).eq('id',editing).eq('brand_id',id).select('id');else result=await client().from('ai_content_types').insert({...payload,sort_order:records.length+1}).select('id');if(result.error)throw result.error;if(!result.data?.length)throw Error('没有更新记录，请检查品牌权限');$('ndTypeEditor').classList.add('hidden');await load();}catch(e){message('保存失败：'+(e.message||e)+'。需要为当前品牌配置安全的 Supabase RLS 权限。');}finally{btn.disabled=false;}}
+async function toggleActive(item){const next=!item.is_active;if(next&&records.filter(r=>r.id!==item.id&&r.is_active).reduce((n,r)=>n+Number(r.weekly_quota||0),0)+Number(item.weekly_quota||0)>7){message('启用后每周总套数超过7，请先编辑配额。');return;}try{const {data,error}=await client().from('ai_content_types').update({is_active:next,updated_at:new Date().toISOString()}).eq('id',item.id).eq('brand_id',brand()).select('id');if(error)throw error;if(!data?.length)throw Error('无权修改此品牌');await load();}catch(e){message('操作失败：'+(e.message||e));}}
+function init(){if(!$('ndAiBrand')||!$('ndTypeAdd'))return;$('ndAiBrand').addEventListener('change',load);$('ndAiSettingsBtn')?.addEventListener('click',()=>setTimeout(load,0));$('ndTypeAdd').addEventListener('click',()=>open(null));$('ndTypeCancel').addEventListener('click',()=>$('ndTypeEditor').classList.add('hidden'));$('ndTypeSave').addEventListener('click',save);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 </script>
