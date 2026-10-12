@@ -25284,100 +25284,96 @@ input,select,textarea,button,a{
 
 
 <script id="nd-target-bonus-script">
-/* Target Bonus: shared branch revenue, individual roster attendance, independent weekly/monthly rules. */
+/* Target Bonus: 7-day cycles beginning 2026-10-08; only explicitly copied roster staff participate. */
 (function(){
- const $=id=>document.getElementById(id);
+ const $=id=>document.getElementById(id),origin='2026-10-08';
  const fmt=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults={daily_target:4000,required_days:4,weekly_bonus:388,monthly_target:100000,monthly_pool:1888};
- const esc=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
- let loadedMonth='',loadedBranch='',settings={...defaults},isEditing=false,loadSerial=0;
  const client=()=>typeof salaryDb!=='undefined'&&salaryDb?salaryDb:(typeof db!=='undefined'?db:null);
- function key(branch){return 'nd_target_bonus_settings_v1_'+branch;}
- function config(branch){try{return {...defaults,...JSON.parse(localStorage.getItem(key(branch))||'{}')}}catch(_){return {...defaults}}}
- function month(){return $('bonusMonth')?.value||new Date().toISOString().slice(0,7)}
- function branch(){const selected=document.querySelector('#bonusBranchTabs .bonus-branch-btn.active');return selected?.dataset.bonusBranch||''}
- function monthEnd(m){const [y,n]=m.split('-').map(Number);return new Date(y,n,0).getDate()}
- function weekMonday(date){const d=new Date(date+'T12:00:00');d.setDate(d.getDate()-(d.getDay()+6)%7);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
- function datePlus(s,days){const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+days);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
- function ensure(){const page=$('bonusPage');if(!page)return null;let root=$('targetBonusSection');if(root)return root;
- root=document.createElement('section');root.id='targetBonusSection';root.className='bonus-card';root.innerHTML=`<div class="tb-head"><h2 style="margin:0;font-size:21px">Target Bonus</h2><span id="tbSync" class="helper"></span></div>
- <div class="tb-row"><div class="tb-head"><strong>Weekly Target Bonus</strong><button type="button" class="btn tb-edit">Edit</button></div>
- <div class="tb-fields"><div><label>Daily Branch Target (RM)</label><input id="tbDaily" type="number" min="0" step="1" readonly></div><div><label>Required Days / Week</label><input id="tbDays" type="number" min="1" max="7" step="1" readonly></div><div><label>Bonus / Staff (RM)</label><input id="tbWeekly" type="number" min="0" step="1" readonly></div></div>
- <div class="tb-table"><table><thead><tr><th>Employee</th><th>Week</th><th>Qualified Days</th><th>Status</th><th>Bonus</th></tr></thead><tbody id="tbWeekBody"></tbody></table></div></div>
- <div class="tb-row"><div class="tb-head"><strong>Monthly Target Bonus</strong><button type="button" class="btn tb-edit">Edit</button></div>
- <div class="tb-fields"><div><label>Monthly Branch Target (RM)</label><input id="tbMonthly" type="number" min="0" step="1" readonly></div><div><label>Total Bonus Pool (RM)</label><input id="tbPool" type="number" min="0" step="1" readonly></div></div>
- <div class="tb-table"><table><thead><tr><th>Employee</th><th>Attendance Days</th><th>Status</th><th>Bonus</th></tr></thead><tbody id="tbMonthBody"></tbody></table></div></div>
+ const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+ const parse=s=>new Date(s+'T12:00:00');
+ const plus=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return iso(d)};
+ const today=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
+ const weekNo=d=>Math.max(0,Math.floor((parse(d)-parse(origin))/604800000));
+ const startOfWeek=n=>plus(origin,n*7);
+ const month=()=>$('bonusMonth')?.value||today().slice(0,7);
+ const branch=()=>document.querySelector('#bonusBranchTabs .bonus-branch-btn.active')?.dataset.bonusBranch||'';
+ const monthLast=m=>{const [y,n]=m.split('-').map(Number);return iso(new Date(y,n,0))};
+ const key=b=>'nd_target_bonus_settings_v1_'+b;
+ const config=b=>{try{return {...defaults,...JSON.parse(localStorage.getItem(key(b))||'{}')}}catch(_){return {...defaults}}};
+ const norm=v=>String(v||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+ let settings={...defaults},loadedBranch='',loadedMonth='',selectedWeek=null,serial=0,editing=false;
+ function ensure(){let root=$('targetBonusSection');if(root)return root;const page=$('bonusPage');if(!page)return null;
+ root=document.createElement('section');root.id='targetBonusSection';root.className='bonus-card';
+ root.innerHTML=`<div class="tb-head"><h2 style="margin:0;font-size:21px">Target Bonus</h2><span class="helper" id="tbSync"></span></div>
+ <div class="tb-row"><div class="tb-head"><strong>Weekly Target Bonus</strong><button class="btn tb-edit" type="button">Edit</button></div>
+ <div class="tb-fields"><div><label>Daily Branch Target (RM)</label><input id="tbDaily" type="number" min="0" readonly></div><div><label>Required Days / Week</label><input id="tbDays" type="number" min="1" max="7" readonly></div><div><label>Bonus / Staff (RM)</label><input id="tbWeekly" type="number" min="0" readonly></div></div>
+ <div class="tb-head"><button class="btn" id="tbPrev" type="button">‹ Previous Week</button><strong id="tbWeekLabel"></strong><button class="btn" id="tbNext" type="button">Next Week ›</button><button class="btn" id="tbLatest" type="button">Latest Week</button></div>
+ <div class="tb-table"><table><thead><tr><th>Date</th><th>Staff</th><th>Branch Sales</th><th>Status</th></tr></thead><tbody id="tbDailyBody"></tbody></table></div>
+ <div class="tb-table"><table><thead><tr><th>Staff</th><th>Qualified Days</th><th>Status</th><th>Weekly Bonus</th></tr></thead><tbody id="tbWeekBody"></tbody></table></div></div>
+ <div class="tb-row"><div class="tb-head"><strong>Monthly Target Bonus</strong><button class="btn tb-edit" type="button">Edit</button></div>
+ <div class="tb-fields"><div><label>Monthly Branch Target (RM)</label><input id="tbMonthly" type="number" min="0" readonly></div><div><label>Total Bonus Pool (RM)</label><input id="tbPool" type="number" min="0" readonly></div></div>
+ <div class="tb-table"><table><thead><tr><th>Staff</th><th>Participating Days</th><th>Status</th><th>Monthly Bonus</th></tr></thead><tbody id="tbMonthBody"></tbody></table></div>
+ <div class="tb-row"><strong id="tbEarnedTitle">Monthly Earned Bonus</strong><div class="tb-table"><table><thead><tr><th>Staff</th><th>Weekly Earned</th><th>Monthly Earned</th><th>Total Earned</th></tr></thead><tbody id="tbEarnedBody"></tbody></table></div></div></div>
  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button id="tbSave" class="btn primary" type="button" hidden>Save Settings</button><button id="tbCancel" class="btn" type="button" hidden>Cancel</button><button id="tbRefresh" class="btn" type="button">Refresh</button></div>`;
  page.querySelector('.bonus-shell')?.appendChild(root);
- root.querySelectorAll('.tb-edit').forEach(b=>b.addEventListener('click',()=>edit(true)));
+ root.querySelectorAll('.tb-edit').forEach(x=>x.addEventListener('click',()=>edit(true)));
  $('tbSave').addEventListener('click',save);$('tbCancel').addEventListener('click',()=>{edit(false);inputs()});$('tbRefresh').addEventListener('click',refresh);
- return root;
+ $('tbPrev').addEventListener('click',()=>{selectedWeek=Math.max(0,selectedWeek-1);refresh()});
+ $('tbNext').addEventListener('click',()=>{selectedWeek=Math.min(weekNo(today()),selectedWeek+1);refresh()});
+ $('tbLatest').addEventListener('click',()=>{selectedWeek=weekNo(today());refresh()});return root;}
+ function inputs(){for(const [id,k] of [['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']])$(id).value=settings[k]}
+ function edit(v){if(v&&!(window.isGlobalAdmin||window.isPayrollManager||String(window.currentUserEmail||'').toLowerCase()==='umo1017@gmail.com')){alert('Only payroll managers can edit Target Bonus.');return}editing=v;for(const id of ['tbDaily','tbDays','tbWeekly','tbMonthly','tbPool'])$(id).readOnly=!v;$('tbSave').hidden=!v;$('tbCancel').hidden=!v}
+ async function save(){const b=branch();if(!b)return;const next={};for(const [id,k] of [['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']]){const n=Number($(id).value);if(!Number.isFinite(n)||n<0){alert('Invalid amount');return}next[k]=n}if(!Number.isInteger(next.required_days)||next.required_days<1||next.required_days>7){alert('Required days must be 1–7');return}settings=next;localStorage.setItem(key(b),JSON.stringify(next));edit(false);await refresh()}
+ async function refresh(){if(!ensure())return;const b=branch(),m=month();if(!b)return;const request=++serial;
+ if(b!==loadedBranch){settings=config(b);loadedBranch=b;inputs();edit(false)}loadedMonth=m;
+ if(selectedWeek===null)selectedWeek=weekNo(today());selectedWeek=Math.min(selectedWeek,weekNo(today()));
+ const ws=startOfWeek(selectedWeek),we=plus(ws,6),first=m+'-01',last=monthLast(m);
+ const queryStart=first<ws?first:ws,queryEnd=last>we?last:we;
+ $('tbWeekLabel').textContent=`Week ${selectedWeek+1} · ${ws} – ${we}`;
+ $('tbPrev').disabled=selectedWeek===0;$('tbNext').disabled=selectedWeek>=weekNo(today());
+ $('tbEarnedTitle').textContent=`Monthly Earned Bonus · ${m}`;$('tbSync').textContent='Loading...';
+ const c=client();if(!c){$('tbSync').textContent='Database unavailable';return}
+ const results=await Promise.all([
+ c.from('daily_settlements').select('settlement_date,branch,grand_total').eq('branch',b).gte('settlement_date',queryStart).lte('settlement_date',queryEnd),
+ c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',b).gte('work_date',queryStart).lte('work_date',queryEnd),
+ c.from('employees').select('*').eq('outlet',b)
+ ]);if(request!==serial)return;
+ const err=results.find(r=>r.error)?.error;if(err){$('tbSync').textContent='Unable to load: '+String(err.message||'');for(const id of ['tbDailyBody','tbWeekBody','tbMonthBody','tbEarnedBody'])$(id).innerHTML='';return}
+ const sales=new Map(),assign=new Map();for(const r of results[0].data||[]){const d=String(r.settlement_date).slice(0,10);sales.set(d,(sales.get(d)||0)+Number(r.grand_total||0))}
+ for(const r of results[1].data||[]){const d=String(r.work_date).slice(0,10),n=String(r.staff_name||'').trim();if(n)assign.set(d,n)}
+ const staff=new Map();for(const e of results[2].data||[]){for(const n of [e.name,e.full_name,e.nickname,e.staff_name,e.employee_name])if(norm(n))staff.set(norm(n),e)}
+ const max=today(),daily=[],monthStaff=new Map(),weekStaff=new Map(),earned=new Map();let unmatched=0;
+ function nameOf(n){const e=staff.get(norm(n));if(!e){unmatched++;return n}return String(e.name||e.full_name||n)}
+ function record(map,n,hit){const k=norm(n);if(!map.has(k))map.set(k,{name:nameOf(n),days:0,hits:0});const x=map.get(k);x.days++;if(hit)x.hits++}
+ for(let d=queryStart;d<=queryEnd;d=plus(d,1)){if(d>max)break;const n=assign.get(d);if(!n)continue;const hit=Number(sales.get(d)||0)>=settings.daily_target;
+ if(d>=ws&&d<=we){daily.push({d,n,sales:sales.get(d)||0,hit});record(weekStaff,n,hit)}
+ if(d>=first&&d<=last)record(monthStaff,n,hit);
  }
- function edit(v){if(v && !(window.isGlobalAdmin||window.isPayrollManager||String(window.currentUserEmail||'').toLowerCase()==='umo1017@gmail.com')){alert('Only payroll managers can edit Target Bonus.');return;}isEditing=v;['tbDaily','tbDays','tbWeekly','tbMonthly','tbPool'].forEach(id=>$(id).readOnly=!v);$('tbSave').hidden=!v;$('tbCancel').hidden=!v;}
- function inputs(){[['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']].forEach(([id,k])=>$(id).value=settings[k]);}
- async function save(){const b=branch();if(!b)return;const next={};for(const [id,k] of [['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']]){const n=Number($(id).value);if(!Number.isFinite(n)||n<0){alert('Invalid target amount');return;}next[k]=n;}if(next.required_days<1||next.required_days>7||!Number.isInteger(next.required_days)){alert('Required days must be 1–7');return;}
- settings=next;localStorage.setItem(key(b),JSON.stringify(next));edit(false);await refresh();}
- function normalizedName(v){return String(v||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');}
- function staffForDate(date,assignments,weeklyNames){
-   const explicit=assignments.get(date);
-   if(explicit!==undefined)return String(explicit||'').trim();
-   const dow=new Date(date+'T12:00:00').getDay();
-   return String(weeklyNames?.[String(dow)]||'').trim();
+ $('tbDailyBody').innerHTML=daily.map(x=>`<tr><td>${esc(x.d)}</td><td>${esc(x.n)}</td><td>${fmt(x.sales)}</td><td class="${x.hit?'tb-good':'tb-bad'}">${x.hit?'达标':'未达标'}</td></tr>`).join('')||'<tr><td colspan="4">No participating staff</td></tr>';
+ $('tbWeekBody').innerHTML=[...weekStaff.values()].map(x=>{const hit=x.hits>=settings.required_days;return `<tr><td>${esc(x.name)}</td><td>${x.hits} / ${settings.required_days}</td><td class="${hit?'tb-good':'tb-bad'}">${hit?'达标':'未达标'}</td><td>${fmt(hit?settings.weekly_bonus:0)}</td></tr>`}).join('')||'<tr><td colspan="4">No participating staff</td></tr>';
+ const monthSales=[...sales].filter(([d])=>d>=first&&d<=last&&d<=max).reduce((a,[,v])=>a+v,0);
+ const monthHit=monthSales>=settings.monthly_target,people=[...monthStaff.values()],days=people.reduce((a,x)=>a+x.days,0);
+ let remain=Math.round(settings.monthly_pool*100);const amounts=new Map();people.forEach((x,i)=>{const cents=i===people.length-1?remain:Math.round(settings.monthly_pool*100*x.days/days);remain-=cents;amounts.set(norm(x.name),monthHit?cents/100:0)});
+ $('tbMonthBody').innerHTML=people.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.days}</td><td class="${monthHit?'tb-good':'tb-bad'}">${monthHit?'达标':'未达标'}</td><td>${fmt(amounts.get(norm(x.name)))}</td></tr>`).join('')||'<tr><td colspan="4">No participating staff</td></tr>';
+ // Weekly bonus is booked into the month in which the seven-day cycle ends.
+ const monthStartWeek=weekNo(first),monthEndWeek=weekNo(last);
+ const weeklyTotals=new Map();
+ for(let w=monthStartWeek;w<=monthEndWeek;w++){
+   const wstart=startOfWeek(w),wend=plus(wstart,6);if(wend.slice(0,7)!==m||wend>max)continue;
+   const rosterResult=await c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',b).gte('work_date',wstart).lte('work_date',wend);
+   const salesResult=await c.from('daily_settlements').select('settlement_date,grand_total').eq('branch',b).gte('settlement_date',wstart).lte('settlement_date',wend);
+   if(request!==serial)return;if(rosterResult.error||salesResult.error){$('tbSync').textContent='Unable to load weekly history';return}
+   const daySales=new Map();for(const r of salesResult.data||[]){const d=String(r.settlement_date).slice(0,10);daySales.set(d,(daySales.get(d)||0)+Number(r.grand_total||0))}
+   const wk=new Map();for(const r of rosterResult.data||[]){const n=String(r.staff_name||'').trim();if(!n)continue;const k=norm(n);if(!wk.has(k))wk.set(k,{name:n,hits:0});if(Number(daySales.get(String(r.work_date).slice(0,10))||0)>=settings.daily_target)wk.get(k).hits++}
+   for(const [k,x] of wk)if(x.hits>=settings.required_days)weeklyTotals.set(k,(weeklyTotals.get(k)||0)+settings.weekly_bonus);
  }
- async function refresh(){
-   const root=ensure(),b=branch(),m=month();if(!root||!b)return;
-   const serial=++loadSerial;$('tbSync').textContent='Loading...';
-   if(loadedBranch!==b){settings=config(b);loadedBranch=b;inputs();edit(false);}loadedMonth=m;
-   const c=client();if(!c){$('tbSync').textContent='Database unavailable';return;}
-   const start=m+'-01',end=m+'-'+String(monthEnd(m)).padStart(2,'0');
-   const requests=await Promise.all([
-     c.from('daily_settlements').select('settlement_date,branch,grand_total').eq('branch',b).gte('settlement_date',start).lte('settlement_date',end),
-     c.from('employees').select('*').eq('outlet',b),
-     c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',b).gte('work_date',start).lte('work_date',end),
-     c.from('roster_outlet_settings').select('weekly_names').eq('outlet_name',b).maybeSingle()
-   ]);
-   if(serial!==loadSerial)return;
-   const err=requests.find(r=>r.error)?.error;
-   if(err){$('tbSync').textContent='Unable to load: '+String(err.message||'');$('tbWeekBody').innerHTML='';$('tbMonthBody').innerHTML='';return;}
-   const sales=new Map();for(const r of requests[0].data||[]){const d=String(r.settlement_date).slice(0,10);sales.set(d,(sales.get(d)||0)+Number(r.grand_total||0));}
-   const employees=(requests[1].data||[]).filter(e=>{const t=String(e.employment_type||e.employee_type||'').toLowerCase().replace(/[\s_-]/g,'');return t!=='parttime'&&t!=='pt';});
-   const staffLookup=new Map();for(const e of employees){for(const n of [e.name,e.full_name,e.nickname,e.staff_name,e.employee_name]){if(normalizedName(n))staffLookup.set(normalizedName(n),e);}}
-   const assignments=new Map();for(const r of requests[2].data||[])assignments.set(String(r.work_date).slice(0,10),String(r.staff_name||'').trim());
-   const weeklyNames=requests[3].data?.weekly_names||{};
-   const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
-   const dates=Array.from({length:monthEnd(m)},(_,i)=>m+'-'+String(i+1).padStart(2,'0'));
-   const weeks=new Map(),attendance=new Map();let unresolved=0;
-   for(const d of dates){
-     if(d>today)continue;
-     const w=weekMonday(d);if(!weeks.has(w))weeks.set(w,new Map());
-     const name=staffForDate(d,assignments,weeklyNames);
-     if(!name)continue;
-     const employee=staffLookup.get(normalizedName(name));
-     // A copied roster name must match an employee of this branch; do not show all employees.
-     if(!employee){unresolved++;continue;}
-     const first=String(employee.start_date||employee.join_date||employee.hire_date||employee.date_joined||'').slice(0,10);
-     const last=String(employee.last_working_date||'').slice(0,10);
-     if((first&&d<first)||(last&&d>last))continue;
-     const id=String(employee.id),hit=Number(sales.get(d)||0)>=settings.daily_target;
-     const weekStaff=weeks.get(w);if(!weekStaff.has(id))weekStaff.set(id,{employee,days:0,qualified:0});
-     const row=weekStaff.get(id);row.days++;if(hit)row.qualified++;
-     if(!attendance.has(id))attendance.set(id,{employee,days:0});attendance.get(id).days++;
-   }
-   let wHtml='';for(const [w,people] of weeks){for(const x of people.values()){
-     const reached=x.qualified>=settings.required_days;
-     wHtml+=`<tr><td>${esc(x.employee.name)}</td><td>${esc(w)} – ${esc(datePlus(w,6))}</td><td>${x.qualified} / ${settings.required_days}</td><td class="${reached?'tb-good':'tb-bad'}">${reached?'达标':'未达标'}</td><td>${fmt(reached?settings.weekly_bonus:0)}</td></tr>`;
-   }}
-   $('tbWeekBody').innerHTML=wHtml||'<tr><td colspan="5">No participating staff</td></tr>';
-   const total=dates.filter(d=>d<=today).reduce((sum,d)=>sum+Number(sales.get(d)||0),0);
-   const achieved=total>=settings.monthly_target;
-   const eligible=Array.from(attendance.values()).filter(x=>x.days>0);
-   const all=eligible.reduce((sum,x)=>sum+x.days,0);
-   let remaining=Math.round(settings.monthly_pool*100);const amounts=new Map();
-   eligible.forEach((x,i)=>{const cents=i===eligible.length-1?remaining:Math.round(settings.monthly_pool*100*x.days/all);remaining-=cents;amounts.set(String(x.employee.id),cents/100);});
-   $('tbMonthBody').innerHTML=eligible.map(x=>`<tr><td>${esc(x.employee.name)}</td><td>${x.days}</td><td class="${achieved?'tb-good':'tb-bad'}">${achieved?'达标':'未达标'}</td><td>${fmt(achieved?(amounts.get(String(x.employee.id))||0):0)}</td></tr>`).join('')+`<tr><td><strong>Total</strong></td><td>${all}</td><td class="${achieved?'tb-good':'tb-bad'}">${achieved?'达标':'未达标'}</td><td><strong>${fmt(achieved&&all?settings.monthly_pool:0)}</strong></td></tr>`;
-   $('tbSync').textContent='Synced · '+fmt(total)+' / '+fmt(settings.monthly_target)+(unresolved?' · '+unresolved+' roster name(s) unmatched':'');
+ const allNames=new Map(people.map(x=>[norm(x.name),x.name]));for(const [k] of weeklyTotals)if(!allNames.has(k))allNames.set(k,staff.get(k)?.name||k);
+ $('tbEarnedBody').innerHTML=[...allNames].map(([k,n])=>{const weekly=weeklyTotals.get(k)||0,monthly=amounts.get(k)||0;return `<tr><td>${esc(n)}</td><td>${fmt(weekly)}</td><td>${fmt(monthly)}</td><td><strong>${fmt(weekly+monthly)}</strong></td></tr>`}).join('')||'<tr><td colspan="4">No earned bonus</td></tr>';
+ $('tbSync').textContent=`Synced · ${fmt(monthSales)} / ${fmt(settings.monthly_target)}`+(unmatched?` · ${unmatched} unmatched staff name(s)`:'');
  }
- document.addEventListener('DOMContentLoaded',()=>{ensure();const obs=new MutationObserver(()=>{if($('bonusPage')?.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus'){const b=branch(),m=month();if(b&&(b!==loadedBranch||m!==loadedMonth))refresh();}});obs.observe($('bonusPage'),{attributes:true,attributeFilter:['class']});$('bonusMonth')?.addEventListener('change',()=>{loadedMonth='';refresh()});$('bonusRefreshBtn')?.addEventListener('click',()=>setTimeout(refresh,400));$('bonusBranchTabs')?.addEventListener('click',()=>setTimeout(refresh,150));});
+ document.addEventListener('DOMContentLoaded',()=>{if(!ensure())return;const observer=new MutationObserver(()=>{if($('bonusPage')?.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus'){const b=branch(),m=month();if(b&&(b!==loadedBranch||m!==loadedMonth))refresh()}});observer.observe($('bonusPage'),{attributes:true,attributeFilter:['class']});$('bonusMonth')?.addEventListener('change',()=>{loadedMonth='';refresh()});$('bonusRefreshBtn')?.addEventListener('click',()=>setTimeout(refresh,400));$('bonusBranchTabs')?.addEventListener('click',()=>setTimeout(refresh,150))});
 })();
 </script>
 <script>
