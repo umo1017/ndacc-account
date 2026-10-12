@@ -8078,6 +8078,18 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
  .bonus-title{font-size:20px}
 }
 </style>
+<style id="nd-target-bonus-css">
+#targetBonusSection .tb-row{border:1px solid var(--line);border-radius:14px;padding:15px;margin-top:14px;background:#fff}
+#targetBonusSection .tb-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+#targetBonusSection .tb-fields{display:grid;grid-template-columns:repeat(3,minmax(110px,1fr));gap:10px;margin-bottom:12px}
+#targetBonusSection .tb-fields label{font-size:12px}
+#targetBonusSection .tb-fields input{min-width:0}
+#targetBonusSection .tb-table{overflow:auto;width:100%}
+#targetBonusSection table{min-width:510px}
+#targetBonusSection .tb-good{color:#177343;font-weight:800}
+#targetBonusSection .tb-bad{color:#b42318;font-weight:800}
+@media(max-width:650px){#targetBonusSection .tb-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
 <div class="salary-page" id="bonusPage">
  <div class="bonus-shell">
   <div class="bonus-top">
@@ -25271,6 +25283,69 @@ input,select,textarea,button,a{
 </script>
 
 
+<script id="nd-target-bonus-script">
+/* Target Bonus: shared branch revenue, individual roster attendance, independent weekly/monthly rules. */
+(function(){
+ const $=id=>document.getElementById(id);
+ const fmt=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const defaults={daily_target:4000,required_days:4,weekly_bonus:388,monthly_target:100000,monthly_pool:1888};
+ const esc=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ let loadedMonth='',loadedBranch='',settings={...defaults},isEditing=false,loadSerial=0;
+ const client=()=>typeof salaryDb!=='undefined'&&salaryDb?salaryDb:(typeof db!=='undefined'?db:null);
+ function key(branch){return 'nd_target_bonus_settings_v1_'+branch;}
+ function config(branch){try{return {...defaults,...JSON.parse(localStorage.getItem(key(branch))||'{}')}}catch(_){return {...defaults}}}
+ function month(){return $('bonusMonth')?.value||new Date().toISOString().slice(0,7)}
+ function branch(){const selected=document.querySelector('#bonusBranchTabs .bonus-branch-btn.active');return selected?.dataset.bonusBranch||''}
+ function monthEnd(m){const [y,n]=m.split('-').map(Number);return new Date(y,n,0).getDate()}
+ function weekMonday(date){const d=new Date(date+'T12:00:00');d.setDate(d.getDate()-(d.getDay()+6)%7);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+ function datePlus(s,days){const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+days);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+ function ensure(){const page=$('bonusPage');if(!page)return null;let root=$('targetBonusSection');if(root)return root;
+ root=document.createElement('section');root.id='targetBonusSection';root.className='bonus-card';root.innerHTML=`<div class="tb-head"><h2 style="margin:0;font-size:21px">Target Bonus</h2><span id="tbSync" class="helper"></span></div>
+ <div class="tb-row"><div class="tb-head"><strong>Weekly Target Bonus</strong><button type="button" class="btn tb-edit">Edit</button></div>
+ <div class="tb-fields"><div><label>Daily Branch Target (RM)</label><input id="tbDaily" type="number" min="0" step="1" readonly></div><div><label>Required Days / Week</label><input id="tbDays" type="number" min="1" max="7" step="1" readonly></div><div><label>Bonus / Staff (RM)</label><input id="tbWeekly" type="number" min="0" step="1" readonly></div></div>
+ <div class="tb-table"><table><thead><tr><th>Employee</th><th>Week</th><th>Qualified Days</th><th>Status</th><th>Bonus</th></tr></thead><tbody id="tbWeekBody"></tbody></table></div></div>
+ <div class="tb-row"><div class="tb-head"><strong>Monthly Target Bonus</strong><button type="button" class="btn tb-edit">Edit</button></div>
+ <div class="tb-fields"><div><label>Monthly Branch Target (RM)</label><input id="tbMonthly" type="number" min="0" step="1" readonly></div><div><label>Total Bonus Pool (RM)</label><input id="tbPool" type="number" min="0" step="1" readonly></div></div>
+ <div class="tb-table"><table><thead><tr><th>Employee</th><th>Attendance Days</th><th>Status</th><th>Bonus</th></tr></thead><tbody id="tbMonthBody"></tbody></table></div></div>
+ <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button id="tbSave" class="btn primary" type="button" hidden>Save Settings</button><button id="tbCancel" class="btn" type="button" hidden>Cancel</button><button id="tbRefresh" class="btn" type="button">Refresh</button></div>`;
+ page.querySelector('.bonus-shell')?.appendChild(root);
+ root.querySelectorAll('.tb-edit').forEach(b=>b.addEventListener('click',()=>edit(true)));
+ $('tbSave').addEventListener('click',save);$('tbCancel').addEventListener('click',()=>{edit(false);inputs()});$('tbRefresh').addEventListener('click',refresh);
+ return root;
+ }
+ function edit(v){if(v && !(window.isGlobalAdmin||window.isPayrollManager||String(window.currentUserEmail||'').toLowerCase()==='umo1017@gmail.com')){alert('Only payroll managers can edit Target Bonus.');return;}isEditing=v;['tbDaily','tbDays','tbWeekly','tbMonthly','tbPool'].forEach(id=>$(id).readOnly=!v);$('tbSave').hidden=!v;$('tbCancel').hidden=!v;}
+ function inputs(){[['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']].forEach(([id,k])=>$(id).value=settings[k]);}
+ async function save(){const b=branch();if(!b)return;const next={};for(const [id,k] of [['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']]){const n=Number($(id).value);if(!Number.isFinite(n)||n<0){alert('Invalid target amount');return;}next[k]=n;}if(next.required_days<1||next.required_days>7||!Number.isInteger(next.required_days)){alert('Required days must be 1–7');return;}
+ settings=next;localStorage.setItem(key(b),JSON.stringify(next));edit(false);await refresh();}
+ function isPresent(e,date,overrides){const first=String(e.start_date||e.join_date||e.hire_date||e.date_joined||'').slice(0,10),last=String(e.last_working_date||'').slice(0,10);
+ if(first&&first>date||last&&last<date)return false;
+ const k=String(e.id)+'|'+date;const override=overrides.get(k);if(override==='rest')return false;if(override==='work')return true;
+ const rest=e.fixed_rest_weekday;if(rest!==null&&rest!==undefined&&rest!==''&&Number(rest)===new Date(date+'T12:00:00').getDay())return false;
+ return true;
+ }
+ async function refresh(){const root=ensure(),b=branch(),m=month();if(!root||!b)return;const serial=++loadSerial;
+ $('tbSync').textContent='Loading...';if(loadedBranch!==b){settings=config(b);loadedBranch=b;inputs();edit(false);}loadedMonth=m;
+ const c=client();if(!c){$('tbSync').textContent='Database unavailable';return;}
+ const start=m+'-01',end=m+'-'+String(monthEnd(m)).padStart(2,'0');
+ const requests=await Promise.all([c.from('daily_settlements').select('settlement_date,branch,grand_total').eq('branch',b).gte('settlement_date',start).lte('settlement_date',end),c.from('employees').select('*').eq('outlet',b),c.from('employee_rest_day_overrides').select('*').gte('work_date',start).lte('work_date',end)]);
+ if(serial!==loadSerial)return;
+ if(requests[0].error||requests[1].error){$('tbSync').textContent=esc(requests[0].error?.message||requests[1].error?.message);return;}
+ const sales=new Map();for(const r of requests[0].data||[])sales.set(String(r.settlement_date).slice(0,10),(sales.get(String(r.settlement_date).slice(0,10))||0)+Number(r.grand_total||0));
+ const employees=(requests[1].data||[]).filter(e=>{const t=String(e.employment_type||e.employee_type||'').toLowerCase().replace(/[\s_-]/g,'');return t!=='parttime'&&t!=='pt';});
+ const overrides=new Map();for(const r of requests[2].data||[]){const id=r.employee_id,dt=String(r.work_date||'').slice(0,10);overrides.set(String(id)+'|'+dt,String(r.override_type||r.status||r.day_type||'').toLowerCase());}
+ const dates=Array.from({length:monthEnd(m)},(_,i)=>m+'-'+String(i+1).padStart(2,'0'));
+ const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});const weeks=new Map();for(const date of dates){const w=weekMonday(date);if(!weeks.has(w))weeks.set(w,[]);weeks.get(w).push(date);}
+ let wHtml='';for(const [w,ds] of weeks){for(const e of employees){const n=ds.filter(d=>d<=today&&isPresent(e,d,overrides)&&Number(sales.get(d)||0)>=settings.daily_target).length;const reached=n>=settings.required_days;wHtml+=`<tr><td>${esc(e.name)}</td><td>${esc(w)} – ${esc(datePlus(w,6))}</td><td>${n} / ${settings.required_days}</td><td class="${reached?'tb-good':'tb-bad'}">${reached?'达标':'未达标'}</td><td>${fmt(reached?settings.weekly_bonus:0)}</td></tr>`;}}
+ $('tbWeekBody').innerHTML=wHtml||'<tr><td colspan="5">No roster staff</td></tr>';
+ const total=dates.filter(d=>d<=today).reduce((s,d)=>s+Number(sales.get(d)||0),0);const achieved=total>=settings.monthly_target;
+ const attendance=employees.map(e=>({e,days:dates.filter(d=>d<=today&&isPresent(e,d,overrides)).length}));const all=attendance.reduce((s,x)=>s+x.days,0);
+ let remaining=Math.round(settings.monthly_pool*100);let eligible=attendance.filter(x=>x.days>0);let amounts=new Map();eligible.forEach((x,i)=>{const cents=i===eligible.length-1?remaining:Math.round(settings.monthly_pool*100*x.days/all);remaining-=cents;amounts.set(String(x.e.id),cents/100)});
+ $('tbMonthBody').innerHTML=attendance.map(x=>`<tr><td>${esc(x.e.name)}</td><td>${x.days}</td><td class="${achieved&&x.days?'tb-good':'tb-bad'}">${achieved&&x.days?'达标':'未达标'}</td><td>${fmt(achieved?(amounts.get(String(x.e.id))||0):0)}</td></tr>`).join('')+`<tr><td><strong>Total</strong></td><td>${all}</td><td class="${achieved?'tb-good':'tb-bad'}">${achieved?'达标':'未达标'}</td><td><strong>${fmt(achieved&&all?settings.monthly_pool:0)}</strong></td></tr>`;
+ $('tbSync').textContent='Synced · '+fmt(total)+' / '+fmt(settings.monthly_target);
+ }
+ document.addEventListener('DOMContentLoaded',()=>{ensure();const obs=new MutationObserver(()=>{if($('bonusPage')?.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus'){const b=branch(),m=month();if(b&&(b!==loadedBranch||m!==loadedMonth))refresh();}});obs.observe($('bonusPage'),{attributes:true,attributeFilter:['class']});$('bonusMonth')?.addEventListener('change',()=>{loadedMonth='';refresh()});$('bonusRefreshBtn')?.addEventListener('click',()=>setTimeout(refresh,400));$('bonusBranchTabs')?.addEventListener('click',()=>setTimeout(refresh,150));});
+})();
+</script>
 <script>
 /* ===== BRANCH BONUS PAGE V2 =====
    Employee pool = branch monthly total × 1%, shared equally by all eligible employees.
