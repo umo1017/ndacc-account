@@ -29956,7 +29956,7 @@ function detail(id){const j=jobs.find(x=>x.id===id);if(!j)return;const a=assets.
  '<h3>平台排程 / 发布结果</h3>'+(q.length?q.map(x=>'<p>'+escapeHtml(x.platform.toUpperCase())+' · '+escapeHtml(states[x.status]||x.status)+' · '+escapeHtml(x.scheduled_at?new Date(x.scheduled_at).toLocaleString('zh-MY',{timeZone:'Asia/Kuala_Lumpur'}):'未排程')+(x.last_error?' · '+escapeHtml(x.last_error):'')+'</p>').join(''):'<p class="helper">尚未进入发布队列。不会自动发布。</p>')+
  (j.error_message?'<p style="color:#a33">'+escapeHtml(j.error_message)+'</p>':'')+
  '<div class="nd-ai-review-warning">审核提示：请检查中文错字、Logo、尺寸及健康表述。未经审核不会自动发布。</div>'+
- '<div class="nd-ai-generate-actions"><button type="button" class="btn nd-ai-generate-btn" data-nd-ai-generate="'+escapeHtml(j.id)+'" '+(['generating','completed','needs_review'].includes(j.status)?'disabled':'')+'>✦ AI 一键生成海报 + 文案</button><div class="nd-ai-generate-message" role="status">'+(['generating','checking'].includes(j.status)?'任务正在处理中，请稍后同步日历。':'生成需要已部署的安全后端；自动发布保持关闭。')+'</div></div>';modal.classList.add('open');loadAiPosterPreviews(modal);}
+ '<div class="nd-ai-generate-actions"><button type="button" class="btn nd-ai-generate-btn" data-nd-ai-generate="'+escapeHtml(j.id)+'" '+(['generating','completed','needs_review'].includes(j.status)?'disabled':'')+'>✦ AI 生成单张海报 + 文案</button><div class="nd-ai-generate-message" role="status">'+(['generating','checking'].includes(j.status)?'任务正在处理中，请稍后同步日历。':'生成需要已部署的安全后端；自动发布保持关闭。')+'</div></div>';modal.classList.add('open');loadAiPosterPreviews(modal);}
 async function loadAiPosterPreviews(modal){
  const client=db();const slots=[...modal.querySelectorAll('[data-nd-ai-path]')];
  await Promise.all(slots.map(async slot=>{
@@ -30041,27 +30041,21 @@ async function generate(jobId,btn){
  if(!db()?.functions?.invoke){show('无法调用 Supabase Edge Functions。');return;}
  btn.disabled=true;
  try{
-  show('步骤 1/4：AI 正在生成文案和两张背景，请保持页面开启…');
+  show('步骤 1/4：准备单张海报。AI 生成高清背景可能需要一些时间…');
   const {data,error}=await db().functions.invoke('nd-ai-generate',{body:{job_id:jobId,action:j.status==='checking'?'resume':'generate'}});
   if(error)throw error;if(!data?.ok)throw Error(data?.error||'AI 生成失败');
   if(data.status!=='checking')throw Error('后端没有返回待合成状态');
-  show('步骤 2/4：加载官方 Logo 和背景…');
-  const [coverBg,contentBg,logo]=await Promise.all([
-   ndAiSignedImage(data.cover_background_path),ndAiSignedImage(data.content_background_path),ndAiSignedImage(data.logo_path)
-  ]);
-  show('步骤 3/4：合成两张 1080 × 1350 中文海报…');
+  show('步骤 2/4：加载官方 Logo 和封面背景…');
+  const [coverBg,logo]=await Promise.all([ndAiSignedImage(data.cover_background_path),ndAiSignedImage(data.logo_path)]);
+  show('步骤 3/4：合成一张 1080 × 1350 中文海报…');
   const variant=Number(j.content_date.replace(/\D/g,''))||0;
-  const [cover,content]=await Promise.all([
-   ndAiCompose(coverBg,logo,data.poster_copy,'cover',variant,j.brand_id),
-   ndAiCompose(contentBg,logo,data.poster_copy,'content',variant+1,j.brand_id)
-  ]);
-  show('步骤 4/4：安全上传并保存人工审核…');
+  const cover=await ndAiCompose(coverBg,logo,data.poster_copy,'cover',variant,j.brand_id);
+  show('步骤 4/4：上传并等待人工审核…');
   await ndAiUploadSigned(data.cover_path,data.cover_upload_token,cover);
-  await ndAiUploadSigned(data.content_path,data.content_upload_token,content);
   const finish=await db().functions.invoke('nd-ai-generate',{body:{job_id:jobId,action:'finalize'}});
   if(finish.error)throw finish.error;if(!finish.data?.ok)throw Error(finish.data?.error||'确认保存失败');
   lastKey='';await refresh(true);detail(jobId);
- }catch(e){show('生成未完成：'+(e?.message||String(e))+'。请勿反复点击；如已进入「质量检查」，请先查看任务状态。');btn.disabled=false;}
+ }catch(e){show('生成未完成：'+(e?.message||String(e))+'。请先检查任务状态和 Edge Function Logs，避免重复扣费。');btn.disabled=false;}
 }
 
 function setup(){if(!by('socialCalendar')||by('ndAiDetailOverlay'))return;const modal=document.createElement('div');modal.id='ndAiDetailOverlay';modal.innerHTML='<div id="ndAiDetailDialog" role="dialog" aria-modal="true" aria-label="AI 内容详情"><div class="nd-ai-detail-top"><h2>✦ AI 内容详情</h2><button type="button" class="btn" id="ndAiDetailClose">关闭 ×</button></div><div id="ndAiDetailBody"></div></div>';document.body.appendChild(modal);by('ndAiDetailClose').onclick=()=>modal.classList.remove('open');modal.addEventListener('click',e=>{const b=e.target.closest('[data-nd-ai-generate]');if(b)generate(b.dataset.ndAiGenerate,b);});modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open');});
