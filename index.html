@@ -29951,12 +29951,12 @@ function detail(id){const j=jobs.find(x=>x.id===id);if(!j)return;const a=assets.
  by('ndAiDetailBody').innerHTML='<p><b>日期：</b>'+escapeHtml(j.content_date)+'　<b>状态：</b>'+escapeHtml(states[j.status]||j.status)+'</p>'+
  '<p><b>主题：</b>'+escapeHtml(topic?.topic||'尚未生成')+(topic?.category?' · '+escapeHtml(topic.category):'')+'</p>'+ 
  '<p><b>图片检查：</b>'+escapeHtml(a?.qa_status||'尚未生成')+'</p>'+
- '<div class="nd-ai-assets">'+['cover_path','content_path'].map((k,i)=>'<figure><figcaption>'+(i?'知识页':'封面')+'</figcaption>'+(a?.[k]?'<div class="nd-ai-preview-slot" data-nd-ai-path="'+escapeHtml(a[k])+'"><div class="helper">正在加载海报预览…</div></div>':'<div class="helper">尚无图片</div>')+'</figure>').join('')+'</div>'+
+ '<div class="nd-ai-assets">'+['cover_path'].map((k,i)=>'<figure><figcaption>'+'专业健康科普海报'+'</figcaption>'+(a?.[k]?'<div class="nd-ai-preview-slot" data-nd-ai-path="'+escapeHtml(a[k])+'"><div class="helper">正在加载海报预览…</div></div>':'<div class="helper">尚无图片</div>')+'</figure>').join('')+'</div>'+
  '<p><b>文案：</b></p><div class="nd-ai-detail-caption">'+escapeHtml(a?.caption||'尚未生成')+'</div>'+
  '<h3>平台排程 / 发布结果</h3>'+(q.length?q.map(x=>'<p>'+escapeHtml(x.platform.toUpperCase())+' · '+escapeHtml(states[x.status]||x.status)+' · '+escapeHtml(x.scheduled_at?new Date(x.scheduled_at).toLocaleString('zh-MY',{timeZone:'Asia/Kuala_Lumpur'}):'未排程')+(x.last_error?' · '+escapeHtml(x.last_error):'')+'</p>').join(''):'<p class="helper">尚未进入发布队列。不会自动发布。</p>')+
  (j.error_message?'<p style="color:#a33">'+escapeHtml(j.error_message)+'</p>':'')+
  '<div class="nd-ai-review-warning">审核提示：请检查中文错字、Logo、尺寸及健康表述。未经审核不会自动发布。</div>'+
- '<div class="nd-ai-generate-actions"><button type="button" class="btn nd-ai-generate-btn" data-nd-ai-generate="'+escapeHtml(j.id)+'" '+(['generating','completed','needs_review'].includes(j.status)?'disabled':'')+'>✦ AI 生成单张海报 + 文案</button><div class="nd-ai-generate-message" role="status">'+(['generating','checking'].includes(j.status)?'任务正在处理中，请稍后同步日历。':'生成需要已部署的安全后端；自动发布保持关闭。')+'</div></div>';modal.classList.add('open');loadAiPosterPreviews(modal);}
+ '<div class="nd-ai-generate-actions"><button type="button" class="btn nd-ai-generate-btn" data-nd-ai-generate="'+escapeHtml(j.id)+'" '+(['generating','completed','needs_review'].includes(j.status)?'disabled':'')+'>✦ 生成专业健康科普海报</button><div class="nd-ai-generate-message" role="status">'+(['generating','checking'].includes(j.status)?'任务正在处理中，请稍后同步日历。':'生成需要已部署的安全后端；自动发布保持关闭。')+'</div></div>';modal.classList.add('open');loadAiPosterPreviews(modal);}
 async function loadAiPosterPreviews(modal){
  const client=db();const slots=[...modal.querySelectorAll('[data-nd-ai-path]')];
  await Promise.all(slots.map(async slot=>{
@@ -29994,39 +29994,48 @@ function ndAiWrap(ctx,text,maxWidth,maxLines){
 }
 function ndAiDrawLines(ctx,lines,x,y,lineHeight){for(const line of lines){ctx.fillText(line,x,y);y+=lineHeight;}return y;}
 async function ndAiCompose(bg,logo,copy,kind,variant,brandId){
- const c=document.createElement('canvas');c.width=1080;c.height=1350;const ctx=c.getContext('2d',{alpha:false});
- if(!ctx)throw Error('浏览器不支持 Canvas');
- const palettes=[['#f7f2e9','#244339','#bda67f'],['#eef3ee','#29483e','#b4a17e'],['#f5eff2','#473b45','#c7a8ae'],['#f2f0eb','#313e4c','#c2b093'],['#f6efe8','#624c3c','#c8a484'],['#f1eff8','#433c60','#b8a9ce']];
- const [panel,ink,accent]=palettes[variant%palettes.length];
- const scale=Math.max(1080/bg.width,1350/bg.height),bw=bg.width*scale,bh=bg.height*scale;
- ctx.drawImage(bg,(1080-bw)/2,(1350-bh)/2,bw,bh);
- const cover=kind==='cover';const top=cover?(variant%2?615:685):140;
- ctx.fillStyle=panel;ctx.globalAlpha=.97;
- if(cover)ctx.fillRect(0,top,1080,1350-top);else{ctx.beginPath();ctx.roundRect(35,top,1010,1080,28);ctx.fill();}
- ctx.globalAlpha=1;ctx.fillStyle=accent;ctx.fillRect(75,top+56,112,5);
- ctx.textBaseline='alphabetic';ctx.textAlign='left';ctx.fillStyle=ink;
- const title=cover?copy.cover_title:copy.content_title;
- ctx.font=`700 ${cover?68:58}px "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif`;
- const titleLines=ndAiWrap(ctx,title,920,3);
- let y=ndAiDrawLines(ctx,titleLines,76,top+154,cover?87:78);
- if(cover){ctx.font='400 35px "PingFang SC","Microsoft YaHei",sans-serif';
-  ndAiDrawLines(ctx,ndAiWrap(ctx,copy.cover_subtitle||'',900,2),76,y+35,52);
- }else{
-  const points=Array.isArray(copy.knowledge_points)?copy.knowledge_points.slice(0,3):[];
-  for(let i=0;i<points.length;i++){
-   const py=560+i*200;ctx.fillStyle=accent;ctx.beginPath();ctx.arc(110,py-13,25,0,Math.PI*2);ctx.fill();
-   ctx.fillStyle='#ffffff';ctx.font='600 24px sans-serif';ctx.textAlign='center';ctx.fillText(String(i+1),110,py-5);ctx.textAlign='left';
-   ctx.fillStyle=ink;ctx.font='400 35px "PingFang SC","Microsoft YaHei",sans-serif';
-   ndAiDrawLines(ctx,ndAiWrap(ctx,points[i],850,3),160,py,48);
-  }
- }
- // Keep the original logo image unchanged in proportion and without generated lettering.
- const logoSize=cover?182:155,logoX=cover&&variant%2?75:1080-logoSize-70,logoY=cover?60:32;
- const ls=Math.min(logoSize/logo.width,logoSize/logo.height),lw=logo.width*ls,lh=logo.height*ls;
- ctx.drawImage(logo,logoX+(logoSize-lw)/2,logoY+(logoSize-lh)/2,lw,lh);
- ctx.strokeStyle=accent;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(76,1260);ctx.lineTo(1004,1260);ctx.stroke();
+ const c=document.createElement('canvas');c.width=1080;c.height=1350;
+ const ctx=c.getContext('2d',{alpha:false});if(!ctx)throw Error('浏览器不支持 Canvas');
+ await document.fonts.ready;
+ const palettes=[['#f4f6f1','#183d35','#9b8460'],['#f5f1e9','#3a493e','#b49a72'],['#f3f0f4','#433c54','#a58ba8'],['#f0f4f6','#203d51','#8ca9b6'],['#f7f1ea','#654735','#b18e69'],['#eff4ee','#244c45','#a0ad85']];
+ const [paper,ink,accent]=palettes[variant%palettes.length];
+ const round=(x,y,w,h,r)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);};
+ const textFont='"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif';
+ ctx.fillStyle=paper;ctx.fillRect(0,0,1080,1350);
+ // Topic-specific editorial illustration is displayed without stretching.
+ const artX=54,artY=180,artW=972,artH=455;
+ ctx.save();round(artX,artY,artW,artH,26);ctx.clip();
+ const scale=Math.max(artW/bg.width,artH/bg.height),bw=bg.width*scale,bh=bg.height*scale;
+ ctx.drawImage(bg,artX+(artW-bw)/2,artY+(artH-bh)/2,bw,bh);ctx.restore();
+ ctx.strokeStyle=accent;ctx.lineWidth=2;round(artX,artY,artW,artH,26);ctx.stroke();
+ // Solid editorial title zone, independent of image brightness.
+ ctx.fillStyle=ink;ctx.font='700 24px '+textFont;ctx.textAlign='left';
+ ctx.fillText('HEALTH  /  WELLNESS INSIGHTS',62,90);
+ ctx.fillStyle=accent;ctx.fillRect(62,111,175,5);
+ const logoMaxW=165,logoMaxH=105,ls=Math.min(logoMaxW/logo.width,logoMaxH/logo.height);
+ ctx.drawImage(logo,860+(logoMaxW-logo.width*ls)/2,30+(logoMaxH-logo.height*ls)/2,logo.width*ls,logo.height*ls);
+ // Lower section: legible Chinese editorial title and three numbered insights.
+ ctx.fillStyle=ink;ctx.font='700 56px '+textFont;
+ const titleLines=ndAiWrap(ctx,copy.cover_title||copy.topic,940,2);
+ let ty=711;ty=ndAiDrawLines(ctx,titleLines,65,ty,75);
+ ctx.fillStyle=accent;ctx.font='500 25px '+textFont;
+ const subtitle=ndAiWrap(ctx,copy.cover_subtitle||'专业健康知识 · 科学认识身体',930,1);
+ ndAiDrawLines(ctx,subtitle,67,ty+5,38);
+ const points=Array.isArray(copy.knowledge_points)?copy.knowledge_points.slice(0,3):[];
+ let py=Math.max(850,ty+77);
+ points.forEach((point,i)=>{
+   ctx.fillStyle='#ffffff';round(58,py-40,964,116,18);ctx.fill();
+   ctx.fillStyle=accent;round(74,py-22,53,53,13);ctx.fill();
+   ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.font='700 26px '+textFont;ctx.fillText(String(i+1).padStart(2,'0'),100,py+14);
+   ctx.textAlign='left';ctx.fillStyle=ink;ctx.font='400 27px '+textFont;
+   const lines=ndAiWrap(ctx,String(point),846,2);
+   ndAiDrawLines(ctx,lines,150,py+2,38);
+   py+=126;
+ });
+ ctx.strokeStyle=accent;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(60,1274);ctx.lineTo(1020,1274);ctx.stroke();
  if(brandId==='817e4bb8-8898-46e3-a20a-a29e060de0c3'){
-  ctx.textAlign='center';ctx.fillStyle=ink;ctx.font='400 29px "PingFang SC","Microsoft YaHei",sans-serif';ctx.fillText('Eco Botanic  |  Nusa Bestari',540,1304);
+   ctx.fillStyle=ink;ctx.textAlign='center';ctx.font='500 26px '+textFont;
+   ctx.fillText('Eco Botanic  |  Nusa Bestari',540,1320);
  }
  return await new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(Error('PNG 输出失败')),'image/png'));
 }
