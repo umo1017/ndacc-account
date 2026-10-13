@@ -30603,21 +30603,21 @@ async function generate(jobId,btn){
  if(!db()?.functions?.invoke){show('无法调用 Supabase Edge Functions。');return;}
  btn.disabled=true;
  try{
-  show('步骤 1/4：准备单张海报。AI 生成高清背景可能需要一些时间…');
-  const {data,error}=await db().functions.invoke('nd-ai-generate',{body:{job_id:jobId,action:j.status==='checking'?'resume':'generate'}});
-  if(error)throw error;if(!data?.ok)throw Error(data?.error||'AI 生成失败');
-  if(data.status!=='checking')throw Error('后端没有返回待合成状态');
-  show('步骤 2/4：加载官方 Logo 和封面背景…');
-  const [coverBg,logo]=await Promise.all([ndAiSignedImage(data.cover_background_path),ndAiSignedImage(data.logo_path)]);
-  show('步骤 3/4：合成一张 1080 × 1350 中文海报…');
-  const variant=Number(j.content_date.replace(/\D/g,''))||0;
-  const cover=await ndAiCompose(coverBg,logo,data.poster_copy,'cover',variant,j.brand_id);
-  show('步骤 4/4：上传并等待人工审核…');
-  await ndAiUploadSigned(data.cover_path,data.cover_upload_token,cover);
-  const finish=await db().functions.invoke('nd-ai-generate',{body:{job_id:jobId,action:'finalize'}});
-  if(finish.error)throw finish.error;if(!finish.data?.ok)throw Error(finish.data?.error||'确认保存失败');
+  show('正在由 AI 原生设计一张完整养生知识海报（不使用浏览器合成）…');
+  const {data,error}=await db().functions.invoke('nd-ai-generate',{
+   body:{job_id:jobId,topic:j.topic||j.title||j.poster_copy?.topic||'',action:'generate_native'}
+  });
+  if(error)throw error;
+  if(!data?.ok)throw Error(data?.error||'AI 原生海报生成失败');
+  if(!data.image_path)throw Error('后端尚未支持 generate_native 或未返回 image_path。请先部署兼容的 Edge Function。');
+  const {data:signed,error:signedError}=await db().storage.from('ai-posters').createSignedUrl(data.image_path,3600);
+  if(signedError)throw signedError;
+  if(!signed?.signedUrl)throw Error('无法取得私人海报预览链接');
+  show('AI 原生海报已生成；等待审核。');
   lastKey='';await refresh(true);detail(jobId);
- }catch(e){show('生成未完成：'+(e?.message||String(e))+'。请先检查任务状态和 Edge Function Logs，避免重复扣费。');btn.disabled=false;}
+ }catch(e){
+  show('生成未完成：'+(e?.message||String(e))+'。请检查 Edge Function Logs；不要重复点击，以免重复扣费。');
+ }finally{btn.disabled=false;}
 }
 
 function setup(){if(!by('socialCalendar')||by('ndAiDetailOverlay'))return;const modal=document.createElement('div');modal.id='ndAiDetailOverlay';modal.innerHTML='<div id="ndAiDetailDialog" role="dialog" aria-modal="true" aria-label="AI 内容详情"><div class="nd-ai-detail-top"><h2>✦ AI 内容详情</h2><button type="button" class="btn" id="ndAiDetailClose">关闭 ×</button></div><div id="ndAiDetailBody"></div></div>';document.body.appendChild(modal);by('ndAiDetailClose').onclick=()=>modal.classList.remove('open');modal.addEventListener('click',e=>{const b=e.target.closest('[data-nd-ai-generate]');if(b)generate(b.dataset.ndAiGenerate,b);});modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open');});
