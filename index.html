@@ -4180,6 +4180,13 @@ table tbody tr:hover{background:#f3f7f9!important}
       <div class="helper" id="cashRemittanceSubmitState" style="margin-top:5px"></div>
     </div>
   </div>
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid #bfd4e5">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <strong>My Submission History · 我的提交记录</strong>
+      <button type="button" class="mini" id="cashRemittanceMyRefreshBtn">Refresh</button>
+    </div>
+    <div id="cashRemittanceMyHistory" class="table-wrap"><div class="helper">Loading history...</div></div>
+  </div>
 </div>
 <div class="card span12" style="background:var(--soft)">
 <h3 style="margin-top:0">Petty Cash</h3><div id="pettyInOutTitle" style="font-weight:800;font-size:15px;margin:12px 0 8px">Petty Cash Expense</div>
@@ -4222,6 +4229,14 @@ table tbody tr:hover{background:#f3f7f9!important}
 </div>
 <div class="card span12">
 <div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong></div></div>
+<div class="card" style="background:var(--soft);margin-top:12px" id="cashToPettyPanel">
+  <label for="cashToPettyAmount">Cash Withdrawal to Petty Cash</label>
+  <div class="money-line" style="margin-top:8px">
+    <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashToPettyAmount" min="0" step="0.01" type="number" placeholder="0.00"/></div>
+    <button class="btn" id="cashToPettySubmitBtn" type="button">Transfer to Petty Cash</button>
+  </div>
+  <div class="helper" id="cashToPettyState" style="margin-top:8px">Deduct from Total Cash and add to Petty Cash once.</div>
+</div>
 <div class="card" style="background:var(--soft);margin-top:12px">
 <label>Cash Withdrawal</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashWithdrawal" min="0" step="0.01" type="number" value=""/></div>
@@ -4715,6 +4730,7 @@ table tbody tr:hover{background:#f3f7f9!important}
       if(state){state.textContent="Submitted · Pending Verification";state.className="helper ok";}
       await fetchRows();
       renderAll();
+      renderMyCashRemittanceHistory();
       setTimeout(()=>{if(state)state.textContent="";},2500);
     }catch(err){
       if(uploaded?.path){
@@ -4725,6 +4741,25 @@ table tbody tr:hover{background:#f3f7f9!important}
     }finally{
       if(btn){btn.disabled=false;btn.textContent="Submit Cash Remittance";}
     }
+  }
+
+  function renderMyCashRemittanceHistory(errorMessage=""){
+    const root=$("cashRemittanceMyHistory");
+    if(!root) return;
+    if(errorMessage){root.innerHTML=`<div class="bad" style="padding:10px">Unable to load records: ${escHtml(errorMessage)}</div>`;return;}
+    const email=String(currentUserEmail||"").trim().toLowerCase();
+    if(!email){root.innerHTML='<div class="helper">Please sign in to view your submissions.</div>';return;}
+    const rows=(cashRemittances||[]).filter(x=>String(x.submitted_by||"").trim().toLowerCase()===email)
+      .sort((a,b)=>String(b.submitted_at||b.remittance_date||"").localeCompare(String(a.submitted_at||a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
+    if(!rows.length){root.innerHTML='<div class="helper" style="padding:10px">No submissions found for your account.</div>';return;}
+    root.innerHTML=`<table style="min-width:620px"><thead><tr><th>Date</th><th>Branch</th><th>Amount</th><th>Receipt</th><th>Status</th></tr></thead><tbody>${rows.map(x=>{
+      const status=String(x.status||"pending").toLowerCase();
+      return `<tr><td>${escHtml(x.remittance_date||"")}</td><td>${escHtml(x.branch||"")}</td><td><strong>${money(x.amount)}</strong></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Submitted · Pending"}</span></td></tr>`;
+    }).join("")}</tbody></table>`;
+    root.querySelectorAll("[data-my-remittance-receipt]").forEach(btn=>btn.onclick=()=>{
+      const item=rows.find(x=>Number(x.id)===Number(btn.dataset.myRemittanceReceipt));
+      if(item)openCashRemittanceReceipt(item);
+    });
   }
 
   function renderCashRemittanceHistoryBranchButtons(){
@@ -5934,8 +5969,10 @@ return `<div class="history-date-card">
     if(remittanceRes.error){
       console.warn("cash_remittances unavailable:",remittanceRes.error.message);
       cashRemittances=[];
+      renderMyCashRemittanceHistory(remittanceRes.error.message);
     }else{
       cashRemittances=remittanceRes.data||[];
+      renderMyCashRemittanceHistory();
     }
     renderDailyBranchButtons();
     $("syncState").textContent="云端已同步 ✓";$("syncState").className="ok";return true;
@@ -7330,6 +7367,24 @@ return `<div class="history-date-card">
     $("reviewMonth").onchange=renderMonth;
     $("cash").oninput=()=>{calc();scheduleSave();};
     $("cashWithdrawal").oninput=()=>{calc();scheduleSave();};
+    // Cash -> Petty Cash is one internal transfer: cash withdrawal + petty IN.
+    // The transfer is persisted with the existing daily settlement, not counted as revenue.
+    const cashToPettyBtn=$("cashToPettySubmitBtn");
+    if(cashToPettyBtn) cashToPettyBtn.onclick=()=>{
+      const amount=Number($("cashToPettyAmount")?.value||0);
+      const status=$("cashToPettyState");
+      if(!Number.isFinite(amount)||amount<=0){alert("Please enter a valid transfer amount.");return;}
+      const remaining=Number(String($("todayTotalCash")?.textContent||"0").replace(/[^0-9.-]/g,""))||0;
+      if(amount>remaining+0.005){alert("Transfer exceeds available Total Cash.");return;}
+      if(!confirm(`Transfer RM ${amount.toFixed(2)} from Total Cash to Petty Cash?`))return;
+      const withdrawal=Number($("cashWithdrawal").value||0);
+      $("cashWithdrawal").value=(Math.round((withdrawal+amount)*100)/100).toFixed(2);
+      pettyEntries.push({type:"in",amount,reason:"Cash Withdrawal to Petty Cash",transfer_to_petty:true,created_at:new Date().toISOString()});
+      $("cashToPettyAmount").value="";
+      calc();renderPetty();setDailyDirty();scheduleSave();
+      if(status)status.textContent=`RM ${amount.toFixed(2)} transferred. Save/Submit Daily Settlement to confirm.`;
+    };
+
     const dailySubmitBtn=$("dailySubmitBtn");
     if(dailySubmitBtn) dailySubmitBtn.onclick=submitDailySettlement;
 
@@ -7379,6 +7434,8 @@ return `<div class="history-date-card">
     };
     if(cashRemittanceSubmitBtn) cashRemittanceSubmitBtn.onclick=submitCashRemittance;
     refreshCashRemittanceFileUI();
+    const myRemittanceRefreshBtn=$("cashRemittanceMyRefreshBtn");
+    if(myRemittanceRefreshBtn)myRemittanceRefreshBtn.onclick=async()=>{await fetchRows();};
 
     const cashRemittanceHistoryBtn=$("cashRemittanceHistoryBtn");
     if(cashRemittanceHistoryBtn) cashRemittanceHistoryBtn.onclick=()=>{
@@ -27639,6 +27696,8 @@ function monthKey(){
  }
  function key(){return "nd_last_authorized_page_v4::"+account();}
  function allowed(page){
+   // Bonus lives under Salary; its former sidebar item is intentionally hidden.
+   if(page==="bonus")return allowed("salary");
    const id=nav[page],el=id&&document.getElementById(id);
    if(!el||el.hidden||el.disabled||el.getAttribute("aria-disabled")==="true")return false;
    if(page==="orders" && window.canViewOrders!==true)return false;
@@ -30395,9 +30454,13 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     e.preventDefault();e.stopPropagation();
     if(typeof window.showBonus==='function')window.showBonus();
     else document.getElementById('sidebarBonus')?.click();
+    // The exclusive-screen CSS only displays Bonus when this state is set.
+    document.body.dataset.ndVisiblePage='bonus';
+    document.getElementById('bonusPage')?.classList.add('active','sidebar-offset');
+    document.getElementById('salaryPage')?.classList.remove('active');
     document.getElementById('sidebarSalary')?.classList.add('active');
     document.getElementById('sidebarBonus')?.classList.remove('active');
-    try{localStorage.setItem('nd_last_page_v2','salary');localStorage.setItem('nd_last_page_v3','salary');}catch(_){}
+    try{localStorage.setItem('nd_last_page_v2','salary');localStorage.setItem('nd_last_page_v3','bonus');}catch(_){}
   },true);
   bonusTabs.addEventListener('click',function(e){
     const b=e.target.closest('[data-nd-salary-mode]');if(!b)return;
