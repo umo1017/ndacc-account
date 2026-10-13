@@ -3942,7 +3942,7 @@ html.auth-pending body .main-page-close{
 #socialPostModal #ndOtherPlatformAccountLists label{display:flex!important;align-items:center!important;min-width:0!important;overflow-wrap:anywhere!important;writing-mode:horizontal-tb!important;white-space:normal!important;}
 @media(max-width:700px){#socialPostModal .social-modal-card{width:100%!important;max-width:100%!important;min-width:0!important;}#socialPostModal .social-form-grid{grid-template-columns:minmax(0,1fr)!important;}#socialPostModal .social-span-2{grid-column:1/-1!important;}}
 </style>
-</head>
+<style id="nd-week-cards-style">.nd-week-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.nd-week-card{border:1px solid #d9e2ec;border-radius:14px;background:#fff;padding:12px;min-width:0}.nd-week-card.achieved{border-color:#93d6ad}.nd-week-card.missed{border-color:#efb3b3}.nd-week-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}.nd-week-card.achieved .nd-week-top strong{color:#168348}.nd-week-card.missed .nd-week-top strong{color:#c13737}.nd-week-staff{font-weight:800;margin-top:10px;overflow-wrap:anywhere}.nd-week-sales{font-weight:900;color:#2468bc;font-size:18px;margin-top:6px}</style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
@@ -9987,7 +9987,8 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate()){
       Number(c.customer_referral||0)+
       Number(c.staff_referral||0)+
       Number(c.bonus||0)+
-      Number(c.three_month_bonus||0)
+      Number(c.three_month_bonus||0)+
+      Number(c.w_bonus||0)
     ).toFixed(2);
   }
 
@@ -10165,6 +10166,47 @@ function legacyCommissionA(row={}){
   const legacy=Number(row.total_commission||0);
   return legacy>0 ? legacy : 0;
 }
+window.ndWBonusCache=window.ndWBonusCache||new Map();
+function ndWBonusForEmployee(e){
+ const k=String(monthKey())+'|'+String(e?.outlet||'')+'|'+String(e?.id||'');
+ return Number(window.ndWBonusCache.get(k)||0);
+}
+async function ndLoadWBonusForSalary(){
+ const c=typeof salaryDb!=='undefined'?salaryDb:null;
+ if(!c||!Array.isArray(salaryEmployees)||!salaryEmployees.length)return;
+ const m=monthKey(),first=m+'-01',last=(()=>{const [y,n]=m.split('-').map(Number);return new Date(y,n,0).toLocaleDateString('en-CA')})();
+ const origin='2026-10-08';
+ const parse=x=>new Date(x+'T12:00:00');
+ const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+ const add=(x,n)=>{const d=parse(x);d.setDate(d.getDate()+n);return iso(d)};
+ const norm=x=>String(x||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+ const start=Math.max(0,Math.floor((parse(first)-parse(origin))/604800000));
+ const end=Math.max(0,Math.floor((parse(last)-parse(origin))/604800000));
+ const outlets=[...new Set(salaryEmployees.map(e=>String(e.outlet||'')).filter(Boolean))];
+ const now=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
+ for(const outlet of outlets){
+   let cfg={daily_target:4000,required_days:4,weekly_bonus:388};
+   try{cfg={...cfg,...JSON.parse(localStorage.getItem('nd_target_bonus_settings_v1_'+outlet)||'{}')}}catch(_){}
+   const [r,s]=await Promise.all([
+     c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',outlet).gte('work_date',first).lte('work_date',last),
+     c.from('daily_settlements').select('settlement_date,grand_total').eq('branch',outlet).gte('settlement_date',first).lte('settlement_date',last)
+   ]);
+   if(r.error||s.error){console.warn('W-Bonus sync failed',r.error||s.error);continue;}
+   const sales=new Map();for(const x of s.data||[]){const d=String(x.settlement_date).slice(0,10);sales.set(d,(sales.get(d)||0)+Number(x.grand_total||0))}
+   const earned=new Map();
+   for(let w=start;w<=end;w++){
+     const ws=add(origin,w*7),we=add(ws,6),a=ws<first?first:ws,b=we>last?last:we;
+     if(b>now)continue;
+     const hits=new Map();
+     for(const x of r.data||[]){const d=String(x.work_date).slice(0,10);if(d<a||d>b)continue;const n=norm(x.staff_name);if(!n)continue;if(Number(sales.get(d)||0)>=Number(cfg.daily_target))hits.set(n,(hits.get(n)||0)+1)}
+     for(const [n,count] of hits)if(count>=Number(cfg.required_days))earned.set(n,(earned.get(n)||0)+Number(cfg.weekly_bonus));
+   }
+   for(const e of salaryEmployees.filter(e=>String(e.outlet||'')===outlet)){
+     const names=[e.name,e.full_name,e.nickname,e.staff_name,e.employee_name].map(norm);
+     window.ndWBonusCache.set(m+'|'+outlet+'|'+e.id,Number(names.map(n=>earned.get(n)||0).find(v=>v>0)||0));
+   }
+ }
+}
 function calculate14th(m={},snapshot=null,threeBonus=0){
   const commissionA=legacyCommissionA(m);
   const commissionB=Number(m.commission_b||0);
@@ -10172,6 +10214,7 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
   const staff=Number(m.staff_referral||0);
   const bonus=Number(m.reward||0);
   const threeMonthBonus=Number(threeBonus||0);
+  const wBonus=Number(m.w_bonus||0);
 
   // Requested order:
   // Commission A + Commission B + Customer Referral + Staff Referral + Bonus + 3-Bonus
@@ -10182,7 +10225,8 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
     customer+
     staff+
     bonus+
-    threeMonthBonus
+    threeMonthBonus+
+    wBonus
   ).toFixed(2);
 
   // 7th employer cost to be recovered from Total Commission.
@@ -10225,6 +10269,7 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
     staff_referral:staff,
     bonus,
     three_month_bonus:threeMonthBonus,
+    w_bonus:wBonus,
     seventh_basic_pay:basicPay,
     seventh_allowance:allowance,
     employer_epf:employerEpf,
@@ -11548,6 +11593,7 @@ async function loadSalaryData(){
 
   byId("salarySyncState").textContent=`Cloud Synced ✓ · ${salaryEmployees.length} Staff`;
   try{if(byId("empNo") && !byId("empNo").value) prepareAutoEmployeeNo();}catch(_){}
+  await ndLoadWBonusForSalary();
   renderSalary();
 }
 
@@ -11839,9 +11885,10 @@ function renderFourteenTable(emps){
           commission_b:Number(cs.commission_b||0),
           customer_referral:Number(cs.customer_referral||0),
           staff_referral:Number(cs.staff_referral||0),
-          reward:Number(cs.bonus||0)
+          reward:Number(cs.bonus||0),
+          w_bonus:Number(cs.w_bonus||0)
         },snapshotFor(e.id),threeBonus)
-      : calculate14th(m,snapshotFor(e.id),threeBonus);
+      : calculate14th({...m,w_bonus:ndWBonusForEmployee(e)},snapshotFor(e.id),threeBonus);
     const c=applyFourteenManualOverrides(e,{...(cs||{}),...base14,three_month_bonus:threeBonus});
     const a=Number(c.commission_a||0);
     const b=Number(c.commission_b||0);
@@ -11849,6 +11896,7 @@ function renderFourteenTable(emps){
     const staff=Number(c.staff_referral||0);
     const bonus=Number(c.bonus||0);
     const total=Number(c.total_commission||0);
+    const wBonus=Number(c.w_bonus||0);
     const canPayslip=Number(c.commission||0)>0;
     const net=Number(c.net_pay||0);
     const pm=String(e.payment_method||"").trim();
@@ -11865,6 +11913,7 @@ function renderFourteenTable(emps){
       <td>${cs?money(staff):salaryOverrideInput(e.id,"14","staff_referral",staff)}</td>
       <td>${cs?money(bonus):salaryOverrideInput(e.id,"14","bonus",bonus)}</td>
       <td data-live-3bonus="${e.id}">${cs?money(c.three_month_bonus||0):salaryOverrideInput(e.id,"14","three_month_bonus",c.three_month_bonus||0)}</td>
+      <td style="color:#7040b4;font-weight:800">${money(wBonus)}</td>
       <td data-live-totalcommission14="${e.id}">${cs?money(total):salaryOverrideInput(e.id,"14","total_commission",total)}</td>
       <td>${cs?money(c.seventh_basic_pay||0):salaryOverrideInput(e.id,"14","seventh_basic_pay",c.seventh_basic_pay||0)}</td>
       <td>${cs?money(c.seventh_allowance||0):salaryOverrideInput(e.id,"14","seventh_allowance",c.seventh_allowance||0)}</td>
@@ -11896,6 +11945,7 @@ function renderFourteenTable(emps){
       <th>Staff Referral</th>
       <th>Bonus</th>
       <th>3-Bonus</th>
+      <th>W-Bonus</th>
       <th>Total Commission</th>
       <th>7th Basic Pay</th>
       <th>Allowance</th>
@@ -12917,7 +12967,7 @@ async function confirm14th(empId){
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || commissionSnapshotFor(empId)) return;
   const m=monthlyFor(empId);
-  const c=applyFourteenManualOverrides(e,calculate14th(m,snapshotFor(empId),salaryQuarter3BonusFor(empId)));
+  const c=applyFourteenManualOverrides(e,calculate14th({...m,w_bonus:ndWBonusForEmployee(e)},snapshotFor(empId),salaryQuarter3BonusFor(empId)));
   const row={
     employee_id:e.id,
     salary_month:monthDate(),
@@ -12928,6 +12978,7 @@ async function confirm14th(empId){
     staff_referral:Number(m.staff_referral||0),
     bonus:Number(m.reward||0),
     three_month_bonus:Number(c.three_month_bonus||0),
+    w_bonus:Number(c.w_bonus||0),
     commission:Number(c.commission||0),
     total_income:Number(c.total_income||0),
     net_pay:Number(c.net_pay||0)
@@ -13848,7 +13899,8 @@ async function openPayslip(empId,type){
       total_commission:Number(rawC.total_commission||0),
       customer_referral:Number(rawC.customer_referral||0),
       staff_referral:Number(rawC.staff_referral||0),
-      reward:Number(rawC.bonus||0)
+      reward:Number(rawC.bonus||0),
+      w_bonus:Number(rawC.w_bonus||0)
     },sevenSnapshot,threeBonus);
 
     const c=applyFourteenManualOverrides(e,{...rawC,...recalculated,three_month_bonus:threeBonus});
@@ -13864,7 +13916,7 @@ async function openPayslip(empId,type){
     }
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}<div style="height:198px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div style="height:190px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}${payslipLine("W-Bonus (included)",c.w_bonus||0)}<div style="height:180px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div style="height:190px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
 <div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
@@ -25310,7 +25362,7 @@ input,select,textarea,button,a{
  <div class="tb-row"><div class="tb-head"><strong>Weekly Target Bonus</strong><button class="btn tb-edit" type="button">Edit</button></div>
  <div class="tb-fields"><div><label>Daily Branch Target (RM)</label><input id="tbDaily" type="number" min="0" readonly></div><div><label>Required Days / Week</label><input id="tbDays" type="number" min="1" max="7" readonly></div><div><label>Bonus / Staff (RM)</label><input id="tbWeekly" type="number" min="0" readonly></div></div>
  <div class="tb-head"><button class="btn" id="tbPrev" type="button">‹ Previous Week</button><strong id="tbWeekLabel"></strong><button class="btn" id="tbNext" type="button">Next Week ›</button><button class="btn" id="tbLatest" type="button">Latest Week</button></div>
- <div class="tb-table"><table><thead><tr><th>Date</th><th>Staff</th><th>Branch Sales</th><th>Status</th></tr></thead><tbody id="tbDailyBody"></tbody></table></div>
+ <div id="tbDailyCards" class="nd-week-cards"></div>
  <div class="tb-table"><table><thead><tr><th>Staff</th><th>Qualified Days</th><th>Status</th><th>Weekly Bonus</th></tr></thead><tbody id="tbWeekBody"></tbody></table></div></div>
  <div class="tb-row"><div class="tb-head"><strong>Monthly Target Bonus</strong><button class="btn tb-edit" type="button">Edit</button></div>
  <div class="tb-fields"><div><label>Monthly Branch Target (RM)</label><input id="tbMonthly" type="number" min="0" readonly></div><div><label>Total Bonus Pool (RM)</label><input id="tbPool" type="number" min="0" readonly></div></div>
@@ -25340,7 +25392,7 @@ input,select,textarea,button,a{
  c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',b).gte('work_date',queryStart).lte('work_date',queryEnd),
  c.from('employees').select('*').eq('outlet',b)
  ]);if(request!==serial)return;
- const err=results.find(r=>r.error)?.error;if(err){$('tbSync').textContent='Unable to load: '+String(err.message||'');for(const id of ['tbDailyBody','tbWeekBody','tbMonthBody','tbEarnedBody'])$(id).innerHTML='';return}
+ const err=results.find(r=>r.error)?.error;if(err){$('tbSync').textContent='Unable to load: '+String(err.message||'');for(const id of ['tbDailyCards','tbWeekBody','tbMonthBody','tbEarnedBody'])$(id).innerHTML='';return}
  const sales=new Map(),assign=new Map();for(const r of results[0].data||[]){const d=String(r.settlement_date).slice(0,10);sales.set(d,(sales.get(d)||0)+Number(r.grand_total||0))}
  for(const r of results[1].data||[]){const d=String(r.work_date).slice(0,10),n=String(r.staff_name||'').trim();if(n)assign.set(d,n)}
  const staff=new Map();for(const e of results[2].data||[]){for(const n of [e.name,e.full_name,e.nickname,e.staff_name,e.employee_name])if(norm(n))staff.set(norm(n),e)}
@@ -25348,10 +25400,10 @@ input,select,textarea,button,a{
  function nameOf(n){const e=staff.get(norm(n));if(!e){unmatched++;return n}return String(e.name||e.full_name||n)}
  function record(map,n,hit){const k=norm(n);if(!map.has(k))map.set(k,{name:nameOf(n),days:0,hits:0});const x=map.get(k);x.days++;if(hit)x.hits++}
  for(let d=queryStart;d<=queryEnd;d=plus(d,1)){if(d>max)break;const n=assign.get(d);if(!n)continue;const hit=Number(sales.get(d)||0)>=settings.daily_target;
- if(d>=ws&&d<=we){daily.push({d,n,sales:sales.get(d)||0,hit});record(weekStaff,n,hit)}
+ if(d>=ws&&d<=we&&d>=first&&d<=last){daily.push({d,n,sales:sales.get(d)||0,hit});record(weekStaff,n,hit)}
  if(d>=first&&d<=last)record(monthStaff,n,hit);
  }
- $('tbDailyBody').innerHTML=daily.map(x=>`<tr><td>${esc(x.d)}</td><td>${esc(x.n)}</td><td>${fmt(x.sales)}</td><td class="${x.hit?'tb-good':'tb-bad'}">${x.hit?'达标':'未达标'}</td></tr>`).join('')||'<tr><td colspan="4">No participating staff</td></tr>';
+ $('tbDailyCards').innerHTML=daily.map(x=>`<div class="nd-week-card ${x.hit?'achieved':'missed'}"><div class="nd-week-top"><strong>${x.hit?'✓ 达标':'✕ 未达标'}</strong><span>${esc(x.d)}</span></div><div class="nd-week-staff">${esc(x.n)}</div><div class="nd-week-sales">${fmt(x.sales)}</div></div>`).join('')||'<div class="helper">No participating staff</div>';
  $('tbWeekBody').innerHTML=[...weekStaff.values()].map(x=>{const hit=x.hits>=settings.required_days;return `<tr><td>${esc(x.name)}</td><td>${x.hits} / ${settings.required_days}</td><td class="${hit?'tb-good':'tb-bad'}">${hit?'达标':'未达标'}</td><td>${fmt(hit?settings.weekly_bonus:0)}</td></tr>`}).join('')||'<tr><td colspan="4">No participating staff</td></tr>';
  const monthSales=[...sales].filter(([d])=>d>=first&&d<=last&&d<=max).reduce((a,[,v])=>a+v,0);
  const monthHit=monthSales>=settings.monthly_target,people=[...monthStaff.values()],days=people.reduce((a,x)=>a+x.days,0);
@@ -25361,9 +25413,9 @@ input,select,textarea,button,a{
  const monthStartWeek=weekNo(first),monthEndWeek=weekNo(last);
  const weeklyTotals=new Map();
  for(let w=monthStartWeek;w<=monthEndWeek;w++){
-   const wstart=startOfWeek(w),wend=plus(wstart,6);if(wend.slice(0,7)!==m||wend>max)continue;
-   const rosterResult=await c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',b).gte('work_date',wstart).lte('work_date',wend);
-   const salesResult=await c.from('daily_settlements').select('settlement_date,grand_total').eq('branch',b).gte('settlement_date',wstart).lte('settlement_date',wend);
+   const wstart=startOfWeek(w),wend=plus(wstart,6),cycleStart=wstart<first?first:wstart,cycleEnd=wend>last?last:wend;if(cycleEnd>max)continue;
+   const rosterResult=await c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',b).gte('work_date',cycleStart).lte('work_date',cycleEnd);
+   const salesResult=await c.from('daily_settlements').select('settlement_date,grand_total').eq('branch',b).gte('settlement_date',cycleStart).lte('settlement_date',cycleEnd);
    if(request!==serial)return;if(rosterResult.error||salesResult.error){$('tbSync').textContent='Unable to load weekly history';return}
    const daySales=new Map();for(const r of salesResult.data||[]){const d=String(r.settlement_date).slice(0,10);daySales.set(d,(daySales.get(d)||0)+Number(r.grand_total||0))}
    const wk=new Map();for(const r of rosterResult.data||[]){const n=String(r.staff_name||'').trim();if(!n)continue;const k=norm(n);if(!wk.has(k))wk.set(k,{name:n,hits:0});if(Number(daySales.get(String(r.work_date).slice(0,10))||0)>=settings.daily_target)wk.get(k).hits++}
