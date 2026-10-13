@@ -4240,10 +4240,7 @@ table tbody tr:hover{background:#f3f7f9!important}
 <div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong></div></div>
 <div class="card" style="background:var(--soft);margin-top:12px" id="cashToPettyPanel">
   <label for="cashToPettyAmount">Cash Withdrawal to Petty Cash</label>
-  <div class="money-line" style="margin-top:8px">
-    <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashToPettyAmount" min="0" step="0.01" type="number" placeholder="0.00"/></div>
-    <button class="btn" id="cashToPettySubmitBtn" type="button">Transfer to Petty Cash</button>
-  </div>
+  <div class="money-wrap" style="margin-top:8px"><span class="rm-prefix">RM</span><input class="money-field" id="cashToPettyAmount" min="0" step="0.01" type="number" placeholder="0.00"/></div>
   <div class="helper" id="cashToPettyState" style="margin-top:8px" aria-live="polite"></div>
 </div>
 <div class="card" style="background:var(--soft);margin-top:12px">
@@ -4251,7 +4248,7 @@ table tbody tr:hover{background:#f3f7f9!important}
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashWithdrawal" min="0" step="0.01" type="number" value=""/></div>
 <div class="helper" id="cashWithdrawalAccess" style="display:none"></div>
 </div>
-<div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="bedFeeHistoryBtn" type="button">Bed Fee History</button><button class="btn" id="cashRemittanceHistoryBtn" type="button">Cash Transfer to Bank History</button><button class="btn" id="cashWithdrawalHistoryBtn" type="button">Cash Withdrawal Record</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div>
+<div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="bedFeeHistoryBtn" type="button">Bed Fee History</button><button class="btn" id="cashRemittanceHistoryBtn" type="button">Cash History</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div>
 <div style="display:none">
 <button id="refreshBtn" type="button"></button>
 <button id="exportBtn" type="button"></button>
@@ -6426,6 +6423,11 @@ return `<div class="history-date-card">
   }
 
   async function submitDailySettlement(){
+    const transferInput=$("cashToPettyAmount");
+    if(transferInput && Number(transferInput.value||0)>0){
+      transferInput.dispatchEvent(new Event("change"));
+      if(Number(transferInput.value||0)>0) return;
+    }
     const btn=$("dailySubmitBtn");
     const state=$("dailySubmitState");
     if(!dailyDirty){
@@ -7462,23 +7464,24 @@ return `<div class="history-date-card">
     $("reviewMonth").onchange=renderMonth;
     $("cash").oninput=()=>{calc();scheduleSave();};
     $("cashWithdrawal").oninput=()=>{calc();scheduleSave();};
-    // Cash -> Petty Cash is one internal transfer: cash withdrawal + petty IN.
-    // The transfer is persisted with the existing daily settlement, not counted as revenue.
-    const cashToPettyBtn=$("cashToPettySubmitBtn");
-    if(cashToPettyBtn) cashToPettyBtn.onclick=()=>{
-      const amount=Number($("cashToPettyAmount")?.value||0);
-      const status=$("cashToPettyState");
-      if(!Number.isFinite(amount)||amount<=0){alert("Please enter a valid transfer amount.");return;}
-      const remaining=Number(String($("todayTotalCash")?.textContent||"0").replace(/[^0-9.-]/g,""))||0;
-      if(amount>remaining+0.005){alert("Transfer exceeds available Total Cash.");return;}
-      if(!confirm(`Transfer RM ${amount.toFixed(2)} from Total Cash to Petty Cash?`))return;
-      const withdrawal=Number($("cashWithdrawal").value||0);
-      $("cashWithdrawal").value=(Math.round((withdrawal+amount)*100)/100).toFixed(2);
-      pettyEntries.push({type:"in",amount,reason:"Cash Withdrawal to Petty Cash",transfer_to_petty:true,created_at:new Date().toISOString()});
-      $("cashToPettyAmount").value="";
-      calc();renderPetty();setDailyDirty();scheduleSave();
-      if(status)status.textContent=`RM ${amount.toFixed(2)} transferred. Save/Submit Daily Settlement to confirm.`;
-    };
+    // Cash Withdrawal to Petty Cash behaves like Cash Withdrawal: amount input only.
+    // Stage the transfer on field change, then persist via Submit Daily Settlement.
+    const cashToPettyInput=$("cashToPettyAmount");
+    if(cashToPettyInput){
+      cashToPettyInput.oninput=()=>setDailyDirty();
+      cashToPettyInput.onchange=()=>{
+        const amount=Number(cashToPettyInput.value||0);
+        if(!amount) return;
+        if(!Number.isFinite(amount)||amount<0){alert("Please enter a valid amount.");cashToPettyInput.value="";return;}
+        const remaining=Number(String($("todayTotalCash")?.textContent||"0").replace(/[^0-9.-]/g,""))||0;
+        if(amount>remaining+0.005){alert("Amount exceeds available Total Cash.");cashToPettyInput.value="";return;}
+        const withdrawal=Number($("cashWithdrawal").value||0);
+        $("cashWithdrawal").value=(Math.round((withdrawal+amount)*100)/100).toFixed(2);
+        pettyEntries.push({type:"in",amount,reason:"Cash Withdrawal to Petty Cash",transfer_to_petty:true,created_at:new Date().toISOString()});
+        cashToPettyInput.value="";
+        calc();renderPetty();scheduleSave();
+      };
+    }
 
     const dailySubmitBtn=$("dailySubmitBtn");
     if(dailySubmitBtn) dailySubmitBtn.onclick=submitDailySettlement;
@@ -7539,9 +7542,9 @@ return `<div class="history-date-card">
       if(m) m.value=($("settlementDate")?.value||today()).slice(0,7);
       cashRemittanceHistoryBranch=currentBranch;
       renderCashRemittanceHistory();
-      $("cashRemittanceHistoryModal")?.classList.add("open");
+      ndOpenUnifiedCashHistory("bank");
     };
-    if($("closeCashRemittanceHistoryModal")) $("closeCashRemittanceHistoryModal").onclick=()=>$("cashRemittanceHistoryModal")?.classList.remove("open");
+    if($("closeCashRemittanceHistoryModal")) $("closeCashRemittanceHistoryModal").onclick=()=>$("unifiedCashHistoryModal")?.classList.remove("open");
     if($("cashRemittanceHistoryMonth")) $("cashRemittanceHistoryMonth").onchange=renderCashRemittanceHistory;
 
     const pettyCamera=$("pettyReceiptCamera");
@@ -7669,10 +7672,10 @@ return `<div class="history-date-card">
       if($("cashWithdrawalHistoryMonth")) $("cashWithdrawalHistoryMonth").value=month;
       cashWithdrawalHistoryBranch=currentBranch;
       renderCashWithdrawalMonthlyHistory();
-      $("cashWithdrawalHistoryModal")?.classList.add("open");
+      ndOpenUnifiedCashHistory("withdrawal");
     };
     const cwhc=$("closeCashWithdrawalHistoryModal");
-    if(cwhc) cwhc.onclick=()=>$("cashWithdrawalHistoryModal")?.classList.remove("open");
+    if(cwhc) cwhc.onclick=()=>$("unifiedCashHistoryModal")?.classList.remove("open");
     const cwhm=$("cashWithdrawalHistoryMonth");
     if(cwhm) cwhm.onchange=()=>{
       renderCashWithdrawalMonthlyHistory();
@@ -8099,6 +8102,53 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 </div>
 </div>
+<div class="salary-modal" id="unifiedCashHistoryModal">
+  <div class="salary-dialog" style="width:min(1160px,96vw)">
+    <div class="outlet-title"><h3 style="margin:0">Cash History</h3><button class="main-page-close" type="button" onclick="document.getElementById('unifiedCashHistoryModal').classList.remove('open')">×</button></div>
+    <div class="nd-cash-history-tabs" role="tablist" aria-label="Cash history type">
+      <button type="button" id="ndCashBankTab" class="btn active" onclick="ndOpenUnifiedCashHistory('bank')">Cash Transfer to Bank</button>
+      <button type="button" id="ndCashWithdrawalTab" class="btn" onclick="ndOpenUnifiedCashHistory('withdrawal')">Cash Withdrawal</button>
+    </div>
+    <div id="ndCashBankPanel"></div>
+    <div id="ndCashWithdrawalPanel" style="display:none"></div>
+  </div>
+</div>
+<style>
+.nd-cash-history-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px;padding:5px;background:#eef3f8;border-radius:14px}
+.nd-cash-history-tabs .btn{flex:1;min-width:170px;border:0;border-radius:10px;background:transparent;color:#3b5b78;padding:12px;font-weight:800}
+.nd-cash-history-tabs .btn.active{background:#fff;color:#164675;box-shadow:0 2px 10px rgba(17,62,104,.12)}
+#unifiedCashHistoryModal .salary-dialog .salary-dialog{width:100%!important;max-height:none!important;overflow:visible!important;padding:0!important;box-shadow:none!important;border:0!important}
+#unifiedCashHistoryModal #ndCashBankPanel>.salary-dialog>.outlet-title,
+#unifiedCashHistoryModal #ndCashWithdrawalPanel>.salary-dialog>.outlet-title{display:none}
+</style>
+<script>
+function ndInitUnifiedCashHistory(){
+  const bank=document.querySelector('#cashRemittanceHistoryModal > .salary-dialog');
+  const withdrawal=document.querySelector('#cashWithdrawalHistoryModal > .salary-dialog');
+  const bankPanel=document.getElementById('ndCashBankPanel');
+  const withdrawalPanel=document.getElementById('ndCashWithdrawalPanel');
+  if(bank&&bankPanel&&!bankPanel.contains(bank))bankPanel.appendChild(bank);
+  if(withdrawal&&withdrawalPanel&&!withdrawalPanel.contains(withdrawal))withdrawalPanel.appendChild(withdrawal);
+}
+function ndOpenUnifiedCashHistory(type){
+  ndInitUnifiedCashHistory();
+  const isBank=type!=='withdrawal';
+  document.getElementById('ndCashBankPanel').style.display=isBank?'':'none';
+  document.getElementById('ndCashWithdrawalPanel').style.display=isBank?'none':'';
+  document.getElementById('ndCashBankTab').classList.toggle('active',isBank);
+  document.getElementById('ndCashWithdrawalTab').classList.toggle('active',!isBank);
+  document.getElementById('unifiedCashHistoryModal').classList.add('open');
+  if(isBank){
+    const m=document.getElementById('cashRemittanceHistoryMonth');
+    if(m&&!m.value)m.value=(document.getElementById('settlementDate')?.value||new Date().toISOString().slice(0,10)).slice(0,7);
+    if(typeof renderCashRemittanceHistory==='function')renderCashRemittanceHistory();
+  }else{
+    const m=document.getElementById('cashWithdrawalHistoryMonth');
+    if(m&&!m.value)m.value=(document.getElementById('reviewMonth')?.value||new Date().toISOString().slice(0,7));
+    if(typeof renderCashWithdrawalMonthlyHistory==='function')renderCashWithdrawalMonthlyHistory();
+  }
+}
+</script>
 <div class="salary-modal" id="cashRemittanceHistoryModal">
 <div class="salary-dialog" style="width:min(1100px,96vw)">
 <div class="outlet-title">
@@ -8197,6 +8247,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <button class="salary-view-btn active" id="salaryView7Btn" type="button">7th</button>
 <button class="salary-view-btn" id="salaryView14Btn" type="button">14th</button>
 <button class="salary-view-btn" id="salaryViewBonusBtn" type="button">Bonus</button>
+<button class="salary-view-btn" id="salaryViewTargetBonusBtn" type="button">Target Bonus</button>
 <button class="salary-view-btn" id="salaryViewTotalBtn" type="button"></button>
 </div>
 <div class="manager-note" id="salaryRoleNote" style="margin-top:8px"></div>
@@ -30610,7 +30661,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   if(!bonusBtn||!bonusPage||!salaryTabs)return;
   const bonusTabs=document.createElement('div');
   bonusTabs.id='ndBonusSalaryTabs';
-  bonusTabs.innerHTML='<button type="button" class="salary-view-btn" data-nd-salary-mode="7th">7th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="14th">14th</button><button type="button" class="salary-view-btn active" data-nd-salary-mode="bonus">Bonus</button>';
+  bonusTabs.innerHTML='<button type="button" class="salary-view-btn" data-nd-salary-mode="7th">7th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="14th">14th</button><button type="button" class="salary-view-btn active" data-nd-salary-mode="bonus">Bonus</button><button type="button" class="salary-view-btn" data-nd-salary-mode="target">Target Bonus</button>';
   const shell=bonusPage.querySelector('.bonus-shell');
   if(shell)shell.insertBefore(bonusTabs,shell.firstChild);
   bonusBtn.addEventListener('click',function(e){
@@ -30628,10 +30679,18 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   bonusTabs.addEventListener('click',function(e){
     const b=e.target.closest('[data-nd-salary-mode]');if(!b)return;
     const mode=b.dataset.ndSalaryMode;
-    if(mode==='bonus')return;
+    if(mode==='bonus'){setTimeout(()=>window.ndSetBonusSubTab?.('bonus'),0);return;}
+    if(mode==='target'){window.ndSetBonusSubTab?.('target');return;}
+    // Restore the exclusive-screen state before rendering the selected salary tab.
+    // Otherwise #salaryPage remains hidden behind body[data-nd-visible-page=bonus].
+    document.body.dataset.ndVisiblePage='salary';
+    bonusPage.classList.remove('active','sidebar-offset','nd-target-only');
+    document.getElementById('salaryPage')?.classList.add('active','sidebar-offset');
     if(typeof window.showSalary==='function')window.showSalary();
+    document.body.dataset.ndVisiblePage='salary';
     if(typeof window.setSalaryViewMode==='function')window.setSalaryViewMode(mode);
     else document.getElementById(mode==='7th'?'salaryView7Btn':'salaryView14Btn')?.click();
+    try{localStorage.setItem('nd_last_page_v3','salary');}catch(_){}
   });
   const nav=document.getElementById('sidebarBonus');
   if(nav)nav.style.setProperty('display','none','important');
@@ -30653,6 +30712,46 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <div id="ndPettyReminderAmount" class="nd-petty-total">RM 0.00</div>
 <div class="helper">当天分行已充值 Petty Cash</div>
 <button type="button" class="nd-petty-understood" id="ndPettyReminderUnderstood">我已清楚 · Understood</button></div></div>
+<style id="nd-target-bonus-tab-style">
+#bonusPage.nd-target-only .bonus-shell > .bonus-card:not(.nd-bonus-filter-card){display:none!important}
+#bonusPage.nd-target-only #targetBonusSection{display:block!important}
+#bonusPage:not(.nd-target-only) #targetBonusSection{display:none!important}
+#bonusPage.nd-target-only .nd-bonus-filter-card .bonus-metrics{display:none!important}
+#salaryViewTargetBonusBtn.active,#ndBonusSalaryTabs [data-nd-salary-mode="target"].active{background:#294b62!important;color:#fff!important;border-color:#294b62!important}
+</style>
+<script id="nd-target-bonus-separate-tab-v1">
+(function(){
+ function setTab(mode){
+  const target=mode==='target',page=document.getElementById('bonusPage');
+  if(!page)return;
+  page.querySelector('.bonus-shell > .bonus-card')?.classList.add('nd-bonus-filter-card');
+  page.classList.toggle('nd-target-only',target);
+  document.querySelectorAll('#ndBonusSalaryTabs [data-nd-salary-mode]').forEach(b=>b.classList.toggle('active',b.dataset.ndSalaryMode===(target?'target':'bonus')));
+  document.getElementById('salaryViewTargetBonusBtn')?.classList.toggle('active',target);
+  document.getElementById('salaryViewBonusBtn')?.classList.toggle('active',!target&&document.body.dataset.ndVisiblePage==='bonus');
+  const title=page.querySelector('.bonus-title');if(title)title.textContent=target?'Target Bonus':'Branch Bonus';
+ }
+ window.ndSetBonusSubTab=setTab;
+ function setup(){
+  const target=document.getElementById('salaryViewTargetBonusBtn');
+  const bonus=document.getElementById('salaryViewBonusBtn');
+  if(!target||!bonus)return;
+  target.addEventListener('click',function(e){
+   e.preventDefault();e.stopPropagation();
+   bonus.click();
+   setTab('target');
+  },true);
+  bonus.addEventListener('click',()=>setTab('bonus'));
+  const tabs=document.getElementById('ndBonusSalaryTabs');
+  if(tabs)tabs.addEventListener('click',e=>{
+   const btn=e.target.closest('[data-nd-salary-mode]');
+   if(btn?.dataset.ndSalaryMode==='target')setTab('target');
+   else if(btn?.dataset.ndSalaryMode==='bonus')setTab('bonus');
+  });
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
 </body>
 </html>
 
