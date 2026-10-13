@@ -4197,7 +4197,7 @@ table tbody tr:hover{background:#f3f7f9!important}
   </div>
 </div>
 <div class="card span12" style="background:var(--soft)">
-<h3 style="margin-top:0">Petty Cash</h3><div id="pettyInOutTitle" style="font-weight:800;font-size:15px;margin:12px 0 8px">Petty Cash Expense</div>
+<h3 style="margin-top:0" id="pettyInOutTitle">Petty Cash Expense</h3>
 <div style="display:grid;gap:10px">
 <div class="petty-row petty-type-receipt-row">
 <div class="petty-inline-receipt">
@@ -4243,7 +4243,7 @@ table tbody tr:hover{background:#f3f7f9!important}
     <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashToPettyAmount" min="0" step="0.01" type="number" placeholder="0.00"/></div>
     <button class="btn" id="cashToPettySubmitBtn" type="button">Transfer to Petty Cash</button>
   </div>
-  <div class="helper" id="cashToPettyState" style="margin-top:8px">Deduct from Total Cash and add to Petty Cash once.</div>
+  <div class="helper" id="cashToPettyState" style="margin-top:8px" aria-live="polite"></div>
 </div>
 <div class="card" style="background:var(--soft);margin-top:12px">
 <label>Cash Withdrawal</label>
@@ -25690,7 +25690,32 @@ input,select,textarea,button,a{
  $('tbEarnedBody').innerHTML=[...allNames].map(([k,n])=>{const weekly=weeklyTotals.get(k)||0,monthly=amounts.get(k)||0;return `<tr><td>${esc(n)}</td><td>${fmt(weekly)}</td><td>${fmt(monthly)}</td><td><strong>${fmt(weekly+monthly)}</strong></td></tr>`}).join('')||'<tr><td colspan="4">No earned bonus</td></tr>';
  $('tbSync').textContent=`Synced · ${fmt(monthSales)} / ${fmt(settings.monthly_target)}`+(unmatched?` · ${unmatched} unmatched staff name(s)`:'');
  }
- document.addEventListener('DOMContentLoaded',()=>{if(!ensure())return;const observer=new MutationObserver(()=>{if($('bonusPage')?.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus'){const b=branch(),m=month();if(b&&(b!==loadedBranch||m!==loadedMonth))refresh()}});observer.observe($('bonusPage'),{attributes:true,attributeFilter:['class']});$('bonusMonth')?.addEventListener('change',()=>{loadedMonth='';selectedWeek=null;refresh()});$('bonusRefreshBtn')?.addEventListener('click',()=>setTimeout(refresh,400));$('bonusBranchTabs')?.addEventListener('click',()=>setTimeout(refresh,150))});
+ document.addEventListener('DOMContentLoaded',()=>{
+  if(!ensure())return;
+  const visible=()=>{const p=$('bonusPage');return !!p&&(p.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus');};
+  let timer=0,lastAuto=0,lastSignature='';
+  const schedule=(force=false)=>{
+    if(!visible())return;
+    const signature=branch()+'|'+month();
+    if(!branch())return;
+    if(signature!==lastSignature){lastSignature=signature;loadedBranch='';loadedMonth='';selectedWeek=null;force=true;}
+    if(!force&&Date.now()-lastAuto<12000)return;
+    clearTimeout(timer);
+    timer=setTimeout(()=>{if(!visible())return;lastAuto=Date.now();refresh().catch(e=>{const el=$('tbSync');if(el)el.textContent='Unable to load: '+String(e?.message||e);});},120);
+  };
+  const observer=new MutationObserver(()=>schedule(true));
+  observer.observe($('bonusPage'),{attributes:true,attributeFilter:['class','style']});
+  observer.observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});
+  $('bonusMonth')?.addEventListener('change',()=>schedule(true));
+  $('bonusBranchTabs')?.addEventListener('click',()=>setTimeout(()=>schedule(true),80));
+  $('bonusRefreshBtn')?.addEventListener('click',()=>setTimeout(()=>schedule(true),180));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)schedule(true)});
+  window.addEventListener('focus',()=>schedule());
+  document.addEventListener('nd-bonus-open',()=>schedule(true));
+  // Recheck automatically while Bonus is open; no manual Refresh required.
+  setInterval(()=>schedule(),15000);
+  schedule(true);
+});
 })();
 </script>
 <script>
@@ -25935,6 +25960,7 @@ input,select,textarea,button,a{
    $("sidebarBonus")?.classList.add("active");
    try{closeMobileSidebar();}catch(_){}
    loadBonus();
+   document.dispatchEvent(new Event("nd-bonus-open"));
  }
  window.showBonus=showBonus;
 
