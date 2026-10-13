@@ -3997,6 +3997,14 @@ table tbody tr:hover{background:#f3f7f9!important}
 .petty-out-text{color:#a55d56!important}.petty-in-text{color:#416b59!important}
 @media print{.sidebar-btn.active,.branch-btn.active{background:#fff!important;color:#111!important}}
 </style>
+<style id="nd-petty-reminder-style">
+#ndPettyTopupReminder{position:fixed;inset:0;z-index:22000;background:rgba(18,35,49,.48);display:none;align-items:center;justify-content:center;padding:18px}
+#ndPettyTopupReminder.nd-open{display:flex}
+#ndPettyTopupReminder .nd-petty-dialog{width:min(430px,100%);background:#fff;border-radius:20px;padding:24px;position:relative;text-align:center;box-shadow:0 22px 65px rgba(0,0,0,.24);border:1px solid #dce4e9}
+#ndPettyTopupReminder .nd-petty-close{position:absolute;right:13px;top:11px;border:0;background:transparent;font-size:25px;cursor:pointer;color:#516675;width:36px;height:36px}
+#ndPettyTopupReminder .nd-petty-total{font-size:32px;font-weight:900;color:#294b62;margin:15px 0}
+#ndPettyTopupReminder .nd-petty-understood{width:100%;background:#294b62;color:#fff;border:0;border-radius:12px;padding:13px;cursor:pointer;font-weight:800;margin-top:15px}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -4752,14 +4760,44 @@ table tbody tr:hover{background:#f3f7f9!important}
     const rows=(cashRemittances||[]).filter(x=>String(x.submitted_by||"").trim().toLowerCase()===email)
       .sort((a,b)=>String(b.submitted_at||b.remittance_date||"").localeCompare(String(a.submitted_at||a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
     if(!rows.length){root.innerHTML='<div class="helper" style="padding:10px">No submissions found for your account.</div>';return;}
-    root.innerHTML=`<table style="min-width:620px"><thead><tr><th>Date</th><th>Branch</th><th>Amount</th><th>Receipt</th><th>Status</th></tr></thead><tbody>${rows.map(x=>{
+    root.innerHTML=`<table style="min-width:620px"><thead><tr><th>Date</th><th>Branch</th><th>Amount</th><th>Receipt</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows.map(x=>{
       const status=String(x.status||"pending").toLowerCase();
-      return `<tr><td>${escHtml(x.remittance_date||"")}</td><td>${escHtml(x.branch||"")}</td><td><strong>${money(x.amount)}</strong></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Submitted · Pending"}</span></td></tr>`;
+      return `<tr><td>${escHtml(x.remittance_date||"")}</td><td>${escHtml(x.branch||"")}</td><td><strong>${money(x.amount)}</strong></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Submitted · Pending"}</span></td><td>${["pending","rejected"].includes(status)?`<button class="mini error" type="button" data-my-remittance-delete="${Number(x.id)}">Delete</button>`:"—"}</td></tr>`;
     }).join("")}</tbody></table>`;
     root.querySelectorAll("[data-my-remittance-receipt]").forEach(btn=>btn.onclick=()=>{
       const item=rows.find(x=>Number(x.id)===Number(btn.dataset.myRemittanceReceipt));
       if(item)openCashRemittanceReceipt(item);
     });
+    root.querySelectorAll("[data-my-remittance-delete]").forEach(btn=>btn.onclick=()=>{
+      const item=rows.find(x=>Number(x.id)===Number(btn.dataset.myRemittanceDelete));
+      if(item)deleteMyCashRemittance(item,btn);
+    });
+  }
+
+  async function deleteMyCashRemittance(item,button){
+    const email=String(currentUserEmail||"").trim().toLowerCase();
+    if(!email || String(item?.submitted_by||"").trim().toLowerCase()!==email){
+      alert("You can only delete your own submissions.");return;
+    }
+    if(!["pending","rejected"].includes(String(item?.status||"").toLowerCase())){
+      alert("Only pending or rejected submissions can be deleted.");return;
+    }
+    if(!confirm(`Delete this ${String(item.status||"pending").toLowerCase()} Cash Transfer to Bank submission (${money(item.amount)})?`))return;
+    if(button){button.disabled=true;button.textContent="Deleting...";}
+    try{
+      // Filter on owner and the original status to protect verified accounting records.
+      const {data,error}=await db.from("cash_remittances")
+        .delete().eq("id",item.id).eq("submitted_by",item.submitted_by)
+        .eq("status",String(item.status||"pending").toLowerCase()).select("id");
+      if(error)throw error;
+      if(!data?.length)throw new Error("Not deleted. The record status may have changed or your account lacks delete permission.");
+      // Keep uploaded receipt intact for audit/recovery; never remove a verified receipt.
+      await fetchRows();
+      renderCashRemittanceHistory();
+    }catch(err){
+      alert("Delete failed: "+(err?.message||err));
+      if(button){button.disabled=false;button.textContent="Delete";}
+    }
   }
 
   function renderCashRemittanceHistoryBranchButtons(){
@@ -5978,6 +6016,34 @@ return `<div class="history-date-card">
     $("syncState").textContent="云端已同步 ✓";$("syncState").className="ok";return true;
   }
 
+  // Cash -> Petty reminder: only persisted transfers; X closes temporarily,
+  // Understood acknowledges the saved branch/date/total for this browser session.
+  let ndPettyReminderKey="";
+  function ndPettySavedTotal(branch,date){
+    const row=(allRows||[]).find(r=>String(r.branch||"")===String(branch||"") && String(r.settlement_date||"")===String(date||""));
+    return (Array.isArray(row?.petty_entries)?row.petty_entries:[])
+      .filter(e=>e && e.type==="in" && (e.transfer_to_petty===true || e.reason==="Cash Withdrawal to Petty Cash"))
+      .reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+  }
+  function ndPettyReminderHide(){ $("ndPettyTopupReminder")?.classList.remove("nd-open"); }
+  function ndPettyReminderShow(){
+    const date=$("settlementDate")?.value||today();
+    if(date!==today())return ndPettyReminderHide();
+    const total=ndPettySavedTotal(currentBranch,date);
+    if(total<=0)return ndPettyReminderHide();
+    const key=`nd-petty-ack:${currentBranch}:${date}:${total.toFixed(2)}`;
+    if(sessionStorage.getItem(key)==="1")return ndPettyReminderHide();
+    ndPettyReminderKey=key;
+    $("ndPettyReminderBranchDate").textContent=`${currentBranch} · ${date}`;
+    $("ndPettyReminderAmount").textContent=money(total);
+    $("ndPettyTopupReminder")?.classList.add("nd-open");
+  }
+  $("ndPettyReminderClose")?.addEventListener("click",ndPettyReminderHide);
+  $("ndPettyReminderUnderstood")?.addEventListener("click",()=>{
+    if(ndPettyReminderKey)sessionStorage.setItem(ndPettyReminderKey,"1");
+    ndPettyReminderHide();
+  });
+
   function calc(){
     let total=0;
     paymentIds.forEach(id=>total+=num(id));
@@ -6187,6 +6253,7 @@ return `<div class="history-date-card">
     const r=allRows.find(x=>x.branch===currentBranch&&x.settlement_date===date);
     if(r) await loadRow(r);
     else await blankDate(date);
+    ndPettyReminderShow();
   }
 
   function payload(){
@@ -6404,6 +6471,7 @@ return `<div class="history-date-card">
     const saved=sync && sync.classList.contains("ok");
 
     if(saved){
+      ndPettyReminderShow();
       dailyDirty=false;
       if(btn) btn.textContent="Saved ✓";
       if(state){
@@ -7300,14 +7368,17 @@ return `<div class="history-date-card">
     // all CASH up to the selected date minus all Cash Withdrawal up to that date.
     let balance=directCashRemainingForBranch(currentBranch,allRows,selectedDate);
 
-    // If the selected day is new / unsaved, include what is currently typed on screen.
+    // The ledger contains the last SAVED row. Always apply the on-screen
+    // difference, even when this date already has a saved settlement.
+    // This makes Cash -> Petty transfers deduct immediately, without double
+    // counting the withdrawal after the next save/reload.
     const existing=(allRows||[]).find(r=>
       String(r.branch||"").trim()===String(currentBranch||"").trim() &&
       String(r.settlement_date||"")===String(selectedDate||"")
     );
-    if(!existing){
-      balance+=num("cash")-num("cashWithdrawal");
-    }
+    const savedCash=existing ? Number(existing.cash||0) : 0;
+    const savedWithdrawal=existing ? Number(existing.cash_withdrawal||0) : 0;
+    balance+=(num("cash")-savedCash)-(num("cashWithdrawal")-savedWithdrawal);
 
     el.textContent=money(balance);
   }
@@ -25574,7 +25645,7 @@ input,select,textarea,button,a{
  async function save(){const b=branch();if(!b)return;const next={};for(const [id,k] of [['tbDaily','daily_target'],['tbDays','required_days'],['tbWeekly','weekly_bonus'],['tbMonthly','monthly_target'],['tbPool','monthly_pool']]){const n=Number($(id).value);if(!Number.isFinite(n)||n<0){alert('Invalid amount');return}next[k]=n}if(!Number.isInteger(next.required_days)||next.required_days<1||next.required_days>7){alert('Required days must be 1–7');return}settings=next;localStorage.setItem(key(b),JSON.stringify(next));edit(false);await refresh()}
  async function refresh(){if(!ensure())return;const b=branch(),m=month();if(!b)return;const request=++serial;
  if(b!==loadedBranch){settings=config(b);loadedBranch=b;inputs();edit(false)}loadedMonth=m;
- if(selectedWeek===null)selectedWeek=weekNo(today());selectedWeek=Math.min(selectedWeek,weekNo(today()));
+ if(selectedWeek===null)selectedWeek=Math.min(weekNo(m+'-01'),weekNo(today()));selectedWeek=Math.min(selectedWeek,weekNo(today()));
  const ws=startOfWeek(selectedWeek),we=plus(ws,6),first=m+'-01',last=monthLast(m);
  const queryStart=first<ws?first:ws,queryEnd=last>we?last:we;
  $('tbWeekLabel').textContent=`Week ${selectedWeek+1} · ${ws} – ${we}`;
@@ -25593,11 +25664,11 @@ input,select,textarea,button,a{
  const max=today(),daily=[],monthStaff=new Map(),weekStaff=new Map(),earned=new Map();let unmatched=0;
  function nameOf(n){const e=staff.get(norm(n));if(!e){unmatched++;return n}return String(e.name||e.full_name||n)}
  function record(map,n,hit){const k=norm(n);if(!map.has(k))map.set(k,{name:nameOf(n),days:0,hits:0});const x=map.get(k);x.days++;if(hit)x.hits++}
- for(let d=queryStart;d<=queryEnd;d=plus(d,1)){if(d>max)break;const n=assign.get(d);if(!n)continue;const hit=Number(sales.get(d)||0)>=settings.daily_target;
- if(d>=ws&&d<=we&&d>=first&&d<=last){daily.push({d,n,sales:sales.get(d)||0,hit});record(weekStaff,n,hit)}
- if(d>=first&&d<=last)record(monthStaff,n,hit);
+ for(let d=queryStart;d<=queryEnd;d=plus(d,1)){if(d>max)break;const n=assign.get(d);const hit=Number(sales.get(d)||0)>=settings.daily_target;
+ if(d>=ws&&d<=we){daily.push({d,n:n||'',sales:sales.get(d)||0,hit});if(n&&d>=first&&d<=last)record(weekStaff,n,hit)}
+ if(n&&d>=first&&d<=last)record(monthStaff,n,hit);
  }
- $('tbDailyCards').innerHTML=daily.map(x=>`<div class="nd-week-card ${x.hit?'achieved':'missed'}"><div class="nd-week-top"><strong>${x.hit?'✓ 达标':'✕ 未达标'}</strong><span>${esc(x.d)}</span></div><div class="nd-week-staff">${esc(x.n)}</div><div class="nd-week-sales">${fmt(x.sales)}</div></div>`).join('')||'<div class="helper">No participating staff</div>';
+ $('tbDailyCards').innerHTML=daily.map(x=>`<div class="nd-week-card ${x.hit?'achieved':'missed'}"><div class="nd-week-top"><strong>${x.hit?'✓ 达标':'✕ 未达标'}</strong><span>${esc(x.d)}</span></div><div class="nd-week-staff">${esc(x.n||'No roster staff')}</div><div class="nd-week-sales">${fmt(x.sales)}</div></div>`).join('')||'<div class="helper">No participating staff</div>';
  $('tbWeekBody').innerHTML=[...weekStaff.values()].map(x=>{const hit=x.hits>=settings.required_days;return `<tr><td>${esc(x.name)}</td><td>${x.hits} / ${settings.required_days}</td><td class="${hit?'tb-good':'tb-bad'}">${hit?'达标':'未达标'}</td><td>${fmt(hit?settings.weekly_bonus:0)}</td></tr>`}).join('')||'<tr><td colspan="4">No participating staff</td></tr>';
  const monthSales=[...sales].filter(([d])=>d>=first&&d<=last&&d<=max).reduce((a,[,v])=>a+v,0);
  const monthHit=monthSales>=settings.monthly_target,people=[...monthStaff.values()],days=people.reduce((a,x)=>a+x.days,0);
@@ -25619,7 +25690,7 @@ input,select,textarea,button,a{
  $('tbEarnedBody').innerHTML=[...allNames].map(([k,n])=>{const weekly=weeklyTotals.get(k)||0,monthly=amounts.get(k)||0;return `<tr><td>${esc(n)}</td><td>${fmt(weekly)}</td><td>${fmt(monthly)}</td><td><strong>${fmt(weekly+monthly)}</strong></td></tr>`}).join('')||'<tr><td colspan="4">No earned bonus</td></tr>';
  $('tbSync').textContent=`Synced · ${fmt(monthSales)} / ${fmt(settings.monthly_target)}`+(unmatched?` · ${unmatched} unmatched staff name(s)`:'');
  }
- document.addEventListener('DOMContentLoaded',()=>{if(!ensure())return;const observer=new MutationObserver(()=>{if($('bonusPage')?.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus'){const b=branch(),m=month();if(b&&(b!==loadedBranch||m!==loadedMonth))refresh()}});observer.observe($('bonusPage'),{attributes:true,attributeFilter:['class']});$('bonusMonth')?.addEventListener('change',()=>{loadedMonth='';refresh()});$('bonusRefreshBtn')?.addEventListener('click',()=>setTimeout(refresh,400));$('bonusBranchTabs')?.addEventListener('click',()=>setTimeout(refresh,150))});
+ document.addEventListener('DOMContentLoaded',()=>{if(!ensure())return;const observer=new MutationObserver(()=>{if($('bonusPage')?.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus'){const b=branch(),m=month();if(b&&(b!==loadedBranch||m!==loadedMonth))refresh()}});observer.observe($('bonusPage'),{attributes:true,attributeFilter:['class']});$('bonusMonth')?.addEventListener('change',()=>{loadedMonth='';selectedWeek=null;refresh()});$('bonusRefreshBtn')?.addEventListener('click',()=>setTimeout(refresh,400));$('bonusBranchTabs')?.addEventListener('click',()=>setTimeout(refresh,150))});
 })();
 </script>
 <script>
@@ -30483,6 +30554,13 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
+<div id="ndPettyTopupReminder" role="dialog" aria-modal="true" aria-labelledby="ndPettyReminderTitle">
+<div class="nd-petty-dialog"><button type="button" class="nd-petty-close" id="ndPettyReminderClose" aria-label="Close">×</button>
+<h3 id="ndPettyReminderTitle" style="margin:7px 0 8px">Petty Cash Top Up Reminder</h3>
+<div id="ndPettyReminderBranchDate" class="helper"></div><div class="helper" style="margin-top:14px">Today's Petty Cash Top Up</div>
+<div id="ndPettyReminderAmount" class="nd-petty-total">RM 0.00</div>
+<div class="helper">当天分行已充值 Petty Cash</div>
+<button type="button" class="nd-petty-understood" id="ndPettyReminderUnderstood">我已清楚 · Understood</button></div></div>
 </body>
 </html>
 
