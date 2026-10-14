@@ -18322,9 +18322,11 @@ function renderRoster(){
 async function openRosterNameEditor(outlet,date){
   const picker=document.getElementById("rosterNameInput");
   picker.innerHTML='<option value="">Select duty staff / 选择值班员工</option>';
-  let people=(typeof rosterCleaningEmployees!=="undefined" && Array.isArray(rosterCleaningEmployees))?rosterCleaningEmployees:[];
-  if(!people.length){const r=await rosterDb().from("employees").select("id,name,outlet,last_working_date").eq("outlet",outlet).order("name");if(!r.error)people=r.data||[];}
-  const names=[...new Set(people.filter(e=>String(e.outlet||"").trim()===outlet && !(typeof rosterStaffHasLeft==="function" && rosterStaffHasLeft(e))).map(e=>String(e.name||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  let people=[];
+  const staffResult=await rosterDb().from("employees").select("id,name,outlet,last_working_date").order("name");
+  if(staffResult.error){document.getElementById("rosterNameMsg").textContent=staffResult.error.message;return;}
+  people=staffResult.data||[];
+  const names=[...new Set(people.filter(e=>!(typeof rosterStaffHasLeft==="function" && rosterStaffHasLeft(e))).map(e=>String(e.name||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const selected=rosterDisplayName(outlet,date);
   if(selected&&!names.includes(selected))names.unshift(selected);
   for(const name of names){const o=document.createElement("option");o.value=name;o.textContent=name;picker.appendChild(o);}
@@ -30814,21 +30816,20 @@ async function listDuty(){
 }
 async function openDuty(){
  let m=document.getElementById('ndDutyAdminModal');
- if(!m){m=document.createElement('div');m.id='ndDutyAdminModal';m.innerHTML=`<div class="nd-duty-dialog" role="dialog" aria-modal="true"><h2>Salary Duty Access · 薪水值班授权</h2><p>独立薪水值班，不关联卫生值班或 Monthly Roster。</p><label>Staff Name / 选择员工</label><select id="ndDutyName"><option value="">Select employee</option></select><label>Login Email</label><input id="ndDutyEmail" type="email" placeholder="name@example.com"><label>Branch</label><select id="ndDutyOutlet"><option>Eco Botanic</option><option>Nusa Bestari</option></select><label>Duty Date</label><input id="ndDutyDate" type="date"><div style="display:flex;gap:8px"><button class="btn" id="ndDutySave">+ Add Duty Staff</button><button class="btn" id="ndDutyClose">Close</button></div><p id="ndDutyError" role="alert"></p><h3>Authorized Duty Staff</h3><div id="ndDutyList"></div></div>`;document.body.appendChild(m);m.querySelector('#ndDutyClose').onclick=()=>m.classList.remove('open');m.querySelector('#ndDutySave').onclick=async()=>{
- const name=m.querySelector('#ndDutyName').value.trim(),email=m.querySelector('#ndDutyEmail').value.trim(),outlet=m.querySelector('#ndDutyOutlet').value,date=m.querySelector('#ndDutyDate').value;
+ if(!m){m=document.createElement('div');m.id='ndDutyAdminModal';m.innerHTML=`<div class="nd-duty-dialog" role="dialog" aria-modal="true"><h2>Salary Duty Access · 薪水值班授权</h2><p>薪水授权按当前 Roster 分行及所选日期设置；员工可跨分行调动。</p><label>Staff Name / 选择员工</label><select id="ndDutyName"><option value="">Select employee</option></select><label>Login Email</label><input id="ndDutyEmail" type="email" placeholder="name@example.com"><div class="helper" id="ndDutyBranchInfo"></div><label>Duty Date</label><input id="ndDutyDate" type="date"><div style="display:flex;gap:8px"><button class="btn" id="ndDutySave">+ Add Duty Staff</button><button class="btn" id="ndDutyClose">Close</button></div><p id="ndDutyError" role="alert"></p><h3>Authorized Duty Staff</h3><div id="ndDutyList"></div></div>`;document.body.appendChild(m);m.querySelector('#ndDutyClose').onclick=()=>m.classList.remove('open');m.querySelector('#ndDutySave').onclick=async()=>{
+ const name=m.querySelector('#ndDutyName').value.trim(),email=m.querySelector('#ndDutyEmail').value.trim(),outlet=rosterActiveOutlet,date=m.querySelector('#ndDutyDate').value;
  if(!name||!email||!date){m.querySelector('#ndDutyError').textContent='Name, email and date required';return;}
  const {error}=await salaryDb.rpc('nd_salary_duty_add',{p_staff_name:name,p_email:email,p_outlet:outlet,p_duty_date:date});
  m.querySelector('#ndDutyError').textContent=error?error.message:'Saved';if(!error)await listDuty();
  };}
  const picker=m.querySelector('#ndDutyName');
  const fillPeople=async()=>{
-   const outlet=m.querySelector('#ndDutyOutlet').value;
    picker.innerHTML='<option value="">Select employee / 选择员工</option>';
-   const {data,error}=await salaryDb.from('employees').select('id,name,outlet,last_working_date').eq('outlet',outlet).order('name');
+   const {data,error}=await salaryDb.from('employees').select('id,name,outlet,last_working_date').order('name');
    if(error){m.querySelector('#ndDutyError').textContent='Unable to load employees: '+error.message;return;}
    for(const e of data||[]){if(!e.name)continue;const opt=document.createElement('option');opt.value=e.name;opt.textContent=e.name;picker.appendChild(opt);}
  };
- m.querySelector('#ndDutyOutlet').onchange=fillPeople;
+ m.querySelector('#ndDutyBranchInfo').textContent='Duty branch: '+rosterActiveOutlet+' (current roster tab)';
  await fillPeople();
  m.querySelector('#ndDutyDate').value=today();m.classList.add('open');await listDuty();
 }
