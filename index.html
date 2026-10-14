@@ -4074,6 +4074,29 @@ table tbody tr:hover{background:#f3f7f9!important}
 #ordersPage .helper{color:#668091}
 @media(max-width:700px){#ordersPage .salary-top{padding:17px!important;border-radius:15px}#ordersPage .salary-card{padding:13px!important}#ordersPage .orders-toolbar{gap:8px!important}#ordersPage .orders-tab{font-size:12px!important;padding:9px 8px!important}}
 </style>
+<style id="nd-payslip-color-edition-20261015">
+/* Payslip color edition: styling only, no payroll calculations or layout changes. */
+#salaryPayslipPrint .payslip-sheet{background:#fff!important;color:#24372e!important;border:1px solid #cbd9d1!important;box-shadow:none!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+#salaryPayslipPrint .payslip-company{color:#244d3c!important}
+#salaryPayslipPrint .payslip-title-box .title{color:#244d3c!important}
+#salaryPayslipPrint .payslip-title-box .box{background:#edf3ee!important;border-color:#91aa99!important;color:#294a39!important}
+#salaryPayslipPrint .payslip-meta-grid{border-color:#94aa9b!important;background:#f8faf8!important}
+#salaryPayslipPrint .payslip-meta-grid .meta-right{border-left-color:#94aa9b!important}
+#salaryPayslipPrint .meta-row .k{color:#456b56!important}
+#salaryPayslipPrint .payslip-main-grid{border-top-color:#749584!important;border-bottom-color:#749584!important}
+#salaryPayslipPrint .payslip-col+.payslip-col{border-left-color:#a8baad!important}
+#salaryPayslipPrint .payslip-col-head{background:#e9f1eb!important;color:#284c3a!important;border-bottom-color:#94aa9b!important;font-weight:800!important;padding-left:5px!important;padding-right:5px!important}
+#salaryPayslipPrint .payslip-col-total{background:#f0f4ef!important;color:#294c3b!important;border-top-color:#91aa9b!important;padding-left:5px!important;padding-right:5px!important}
+#salaryPayslipPrint .payslip-net-box{background:#e7f0e9!important;border-color:#729481!important;color:#204c34!important}
+#salaryPayslipPrint .payslip-net-row{color:#204c34!important}
+#salaryPayslipPrint .payslip-bottom{border-top-color:#91aa9b!important}
+#salaryPayslipPrint .payslip-bottom-section+.payslip-bottom-section{border-left-color:#a8baad!important}
+#salaryPayslipPrint .payslip-bottom-title{color:#35624a!important;font-weight:800!important}
+#salaryPayslipPrint .payslip-received{color:#385745!important}
+#salaryPayslipPrint .ref-pay-summary,#salaryPayslipPrint .ref-total-line{border-color:#91aa9b!important}
+#salaryPayslipPrint .ref-total-line{background:#edf3ee!important;color:#244d3c!important}
+@media print{#salaryPayslipPrint .payslip-sheet,#salaryPayslipPrint .payslip-sheet *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -12253,19 +12276,9 @@ function renderSevenTable(emps){
         <td class="netpay-method-total">${money(tngTotal)}</td>
         <td colspan="4"></td>
       </tr>
-      <tr class="netpay-grand-row">
-        <td colspan="19" style="text-align:right;font-weight:900">ALL NET PAY</td>
-        <td colspan="3" style="text-align:center;font-weight:900">${money(grandTotal)}</td>
-        <td colspan="4"></td>
-      </tr>
+
     </tbody>
-  </table></div>
-  <div class="salary-branch-total-bar">
-    <div><span>Cash Total</span><strong>${money(cashTotal)}</strong></div>
-    <div><span>Bank Transfer Total</span><strong>${money(transferTotal)}</strong></div>
-    <div><span>TNG Total</span><strong>${money(tngTotal)}</strong></div>
-    <div class="all-total"><span>All Net Pay</span><strong>${money(grandTotal)}</strong></div>
-  </div>`;
+  </table></div>`;
 }
 
 /* Salary payment hold: device-local until a server-side hold column is provisioned. */
@@ -12380,18 +12393,8 @@ function renderFourteenTable(emps){
         <td class="netpay-method-total">${money(tngTotal)}</td>
         <td colspan="4"></td>
       </tr>
-      <tr class="netpay-grand-row">
-        <td colspan="17" style="text-align:right;font-weight:900">ALL NET PAY</td>
-        <td colspan="3" style="text-align:center;font-weight:900">${money(grandTotal)}</td>
-        <td colspan="4"></td>
-      </tr>
-    </tbody></table></div>
-    <div class="salary-branch-total-bar">
-      <div><span>Cash Total</span><strong>${money(cashTotal)}</strong></div>
-      <div><span>Bank Transfer Total</span><strong>${money(transferTotal)}</strong></div>
-      <div><span>TNG Total</span><strong>${money(tngTotal)}</strong></div>
-      <div class="all-total"><span>All Net Pay</span><strong>${money(grandTotal)}</strong></div>
-    </div>`;
+
+    </tbody></table></div>`;
 }
 
 let salaryQuarter3BonusMap=new Map();
@@ -13377,7 +13380,7 @@ async function toggleSalaryPayment(type,empId){
   if(!snap){alert('Confirm payroll first.');return;}
   if(snap.payment_done){return;}
   if(ndSalaryIsHeld(type,empId)){alert('Release On Hold first.');return;}
-  const name=employee?.name||'Employee #'+empId;
+  const name=typeof ndEmployeeFullName==='function'&&employee?ndEmployeeFullName(employee):(employee?.name||'Employee #'+empId);
   const outlet=employee?.outlet||'';
   const net=Number(snap.net_pay);
   if(!outlet||!Number.isFinite(net)||net<0){alert('Missing branch or confirmed Net Pay.');return;}
@@ -13490,7 +13493,7 @@ function ndShowSignedPaymentReceipt(r){
       const pdf=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
       const width=190,height=shot.height*width/shot.width;
       pdf.addImage(shot.toDataURL('image/png'),'PNG',10,10,width,Math.min(height,277));
-      pdf.save(`Nature_Dao_Signed_Salary_${r.salaryType}_${r.month}.pdf`);
+      pdf.save(`Nature_Dao_Signed_Salary_${String(r.employee||"Staff").replace(/[\\/:*?"<>|]/g," ").replace(/\s+/g," ").trim()}_${r.salaryType}_${r.month}.pdf`);
     }catch(e){alert('Unable to create signed PDF: '+(e.message||e));}
     finally{button.disabled=false;}
   };
@@ -14430,7 +14433,7 @@ async function openPayslip(empId,type){
   const selectedEmp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   window.currentPayslipStaff=selectedEmp ? {
     id:Number(selectedEmp.id),
-    name:String(selectedEmp.name||""),
+    name:ndEmployeeFullName(selectedEmp),
     phone:String(selectedEmp.phone||"")
   } : null;
   if(!salaryPayslipIsReleased(type)){
@@ -14445,7 +14448,7 @@ async function openPayslip(empId,type){
     const rawS=snapshotFor(empId); const s=rawS?(rawS.payment_done===true ? rawS : applySevenManualOverrides(e,normalizedSevenSnapshot(e,rawS))):rawS;
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
-<div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
+<div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
 <div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Basic Pay",s.guaranteed_pay)}${payslipLine("Allowance",s.allowance)}${Number(s.ot||0)>0?payslipLine(payslipOtLabel(s),s.ot):""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div>${payslipLine("Employee EPF",s.employee_epf)}${payslipLine("Employee SOCSO",employeeSocsoWithLindung(s))}${payslipLine("Employee EIS",s.employee_eis)}${String(e.tax_no||"").trim()?payslipLine("Income Tax PCB",s.tax):""}${payslipLine("Unpaid",s.off_day_deduction)}${payslipLine("Deduction",s.manual_deduction)}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
 <div class="ref-pay-summary">
   <div class="ref-gross-area">
@@ -14545,7 +14548,7 @@ async function openPayslip(empId,type){
       return false;
     }
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
-<div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
+<div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
 <div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}${rawC.payment_done===true ? "" : payslipLine("7th Unpaid Refund (+)",recalculated.seventh_deduction_refund)}${rawC.payment_done===true ? "" : (Math.abs(Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0))>0.005 ? payslipLine("Manual Net Pay Adjustment",Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0)) : "")}${payslipLine("W-Bonus (included)",c.w_bonus||0)}<div style="height:180px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div style="height:190px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
 <div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
@@ -15282,6 +15285,12 @@ function salaryExportMonthParts(){
 }
 
 
+// Use the employee's complete registered name for every individual payslip PDF.
+function ndEmployeeFullName(employee){
+  const value=String(employee?.full_name||employee?.name||employee?.employee_name||"Staff");
+  return value.replace(/\s+/g," ").trim()||"Staff";
+}
+
 function safeEmployeePdfFilename(name){
   const cleaned=String(name||"Staff")
     .replace(/[\\/:*?"<>|]/g," ")
@@ -15349,19 +15358,19 @@ function salaryExportJobs(mode){
     const has14=!!commissionSnapshotFor(e.id);
 
     if(mode==="7_cash" && payBy==="Cash" && has7){
-      jobs.push({empId:Number(e.id),type:7,payBy,outlet:e.outlet||"",name:e.name||"Staff"});
+      jobs.push({empId:Number(e.id),type:7,payBy,outlet:e.outlet||"",name:ndEmployeeFullName(e)});
     }
 
     if(mode==="7_transfer" && ["Bank Transfer","TNG"].includes(payBy) && has7){
-      jobs.push({empId:Number(e.id),type:7,payBy,outlet:e.outlet||"",name:e.name||"Staff"});
+      jobs.push({empId:Number(e.id),type:7,payBy,outlet:e.outlet||"",name:ndEmployeeFullName(e)});
     }
 
     if(mode==="14_cash" && payBy==="Cash" && has14){
-      jobs.push({empId:Number(e.id),type:14,payBy,outlet:e.outlet||"",name:e.name||"Staff"});
+      jobs.push({empId:Number(e.id),type:14,payBy,outlet:e.outlet||"",name:ndEmployeeFullName(e)});
     }
 
     if(mode==="14_transfer" && ["Bank Transfer","TNG"].includes(payBy) && has14){
-      jobs.push({empId:Number(e.id),type:14,payBy,outlet:e.outlet||"",name:e.name||"Staff"});
+      jobs.push({empId:Number(e.id),type:14,payBy,outlet:e.outlet||"",name:ndEmployeeFullName(e)});
     }
   });
 
@@ -15478,7 +15487,7 @@ async function buildPayslipPdfFile(){
     return payslipPdfCache.file;
   }
 
-  const file=await window.renderCurrentPayslipToA4PdfFile(employee.name||"Staff");
+  const file=await window.renderCurrentPayslipToA4PdfFile(ndEmployeeFullName(employee));
   payslipPdfCache={key:cacheKey,file};
   return file;
 }
@@ -31166,9 +31175,11 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
   const content=el('ndAdvanceConsent')?.textContent||'';
   const myTime=value=>{if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':new Intl.DateTimeFormat('en-MY',{timeZone:'Asia/Kuala_Lumpur',day:'2-digit',month:'short',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(d);};
   const niceDate=value=>{const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+' '+new Date(Date.UTC(+m[1],+m[2]-1,+m[3])).toLocaleString('en-MY',{month:'short',timeZone:'UTC'})+' '+m[1]:esc(value||'—');};
-  const employee=esc(r.employee_name||'—'),branch=esc(r.outlet||'—'),statusText=esc(r.status||'—');
+  const matchingEmployee=allEmployees.find(e=>Number(e.id)===Number(r.employee_id));
+  const fullEmployeeName=matchingEmployee?(typeof ndEmployeeFullName==='function'?ndEmployeeFullName(matchingEmployee):matchingEmployee.name):(r.employee_name||'—');
+  const employee=esc(fullEmployeeName),branch=esc(r.outlet||'—'),statusText=esc(r.status||'—');
   const amount='RM '+Number(r.amount||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Salary Advance Agreement · ${employee}</title><style>
+  const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${employee} - Signed Salary Advance Agreement</title><style>
   :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#e8edea;font-family:Arial,Helvetica,sans-serif;color:#1d332d}.toolbar{max-width:860px;margin:18px auto 0;display:flex;justify-content:flex-end;gap:10px;padding:0 16px}.toolbar button{border:0;border-radius:10px;padding:12px 18px;background:#204c3d;color:#fff;font-weight:700;cursor:pointer}.sheet{width:min(860px,calc(100% - 24px));margin:18px auto 30px;background:#fff;min-height:990px;box-shadow:0 12px 42px #15392b24;border-radius:14px;overflow:hidden}.mast{padding:35px 44px 30px;background:linear-gradient(125deg,#153d31,#295b47);color:#fff;position:relative}.mast:after{content:'';position:absolute;right:0;top:0;width:160px;height:100%;background:linear-gradient(120deg,transparent,#c5a36c22)}.brand{font-size:12px;letter-spacing:2px;color:#dfc89c;font-weight:700}.mast h1{font-size:27px;margin:12px 0 5px;line-height:1.25}.mast p{font-size:12px;color:#d7e5dc;margin:0;letter-spacing:.6px}.main{padding:28px 44px 36px}.eyebrow{font-size:11px;letter-spacing:1.7px;color:#5a7e6b;text-transform:uppercase;font-weight:800;margin:0 0 12px}.details{display:grid;grid-template-columns:1fr 1fr;gap:10px}.item{border:1px solid #e0e8e2;background:#f7faf8;border-radius:10px;padding:13px 15px;min-width:0}.item .key{font-size:10px;color:#697b70;letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px}.item .val{font-size:14px;font-weight:700;overflow-wrap:anywhere}.item.amount{background:#f9f2e6;border-color:#e8d7b7}.item.amount .val{color:#8d6121;font-size:19px}.status{display:inline-block;background:#e7f0e9;color:#22573e;padding:6px 9px;border-radius:20px;font-size:11px}.section{margin-top:24px}.consent{background:#f0f4f7;border-left:4px solid #607f98;padding:17px 20px;border-radius:0 10px 10px 0;font-size:13px;line-height:1.8;color:#314453}.signature{border:1px solid #dce5de;border-radius:10px;padding:14px 18px;background:#fff;min-height:135px;display:flex;align-items:center;justify-content:center}.signature img{max-width:100%;max-height:110px;object-fit:contain}.signlabel{font-size:11px;color:#617367;margin-top:8px}.footer{margin-top:24px;padding-top:16px;border-top:1px solid #dce6df;display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#64776c}.footer strong{color:#294a3a}.printnote{font-size:10px;color:#88988f;margin-top:7px}@media(max-width:580px){.mast{padding:26px 23px}.mast h1{font-size:22px}.main{padding:22px}.details{gap:8px}.item{padding:10px}.item .val{font-size:12px}.footer{flex-direction:column}.sheet{min-height:0}}@page{size:A4 portrait;margin:0}@media print{html,body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.toolbar{display:none!important}.sheet{margin:0;width:210mm;min-height:297mm;border-radius:0;box-shadow:none;break-inside:avoid}.mast{padding:12mm 15mm 10mm}.main{padding:9mm 15mm}.section{margin-top:7mm}.consent{font-size:11px;padding:12px 15px}.signature{min-height:105px}.footer{margin-top:7mm}}
   </style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><article class="sheet"><header class="mast"><div class="brand">NATURE'S DAO · STAFF FINANCE</div><h1>Salary Advance Repayment</h1><p>EMPLOYEE ACKNOWLEDGEMENT &amp; REPAYMENT AGREEMENT</p></header><main class="main"><p class="eyebrow">Advance details</p><div class="details"><div class="item"><div class="key">Employee</div><div class="val">${employee}</div></div><div class="item"><div class="key">Branch</div><div class="val">${branch}</div></div><div class="item"><div class="key">Advance date</div><div class="val">${niceDate(r.advance_date)}</div></div><div class="item amount"><div class="key">Advance amount</div><div class="val">${amount}</div></div><div class="item"><div class="key">Deduction month</div><div class="val">${niceDate(r.deduction_month)} · 7th of next month</div></div><div class="item"><div class="key">Repayment status</div><div class="val"><span class="status">${statusText}</span></div></div></div><section class="section"><p class="eyebrow">Employee written consent</p><div class="consent">${esc(r.consent_text||content)}</div></section><section class="section"><p class="eyebrow">Employee signature</p><div class="signature"><img alt="Employee signature" src="${esc(r.signature_data||'')}"></div><div class="signlabel">Signed acknowledgement by employee</div></section><footer class="footer"><div><strong>Nature's Dao</strong><div class="printnote">Confidential · Payroll record</div></div><div>Created: ${esc(myTime(r.created_at))} (MYT)</div></footer></main></article>
 <style id="nd-advance-premium-ui-v3">
@@ -31194,7 +31205,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  async function populateEmployees(){
   const select=el('ndAdvanceEmployee');select.innerHTML='<option value="">Loading employees...</option>';
   let emps=[],err='';const db=client();
-  if(db){try{const result=await db.from('employees').select('id,name,outlet').order('name',{ascending:true}).limit(1000);if(result.error)throw result.error;emps=Array.isArray(result.data)?result.data:[];}catch(e){err=e.message||String(e);}}
+  if(db){try{const result=await db.from('employees').select('*').order('name',{ascending:true}).limit(1000);if(result.error)throw result.error;emps=Array.isArray(result.data)?result.data:[];}catch(e){err=e.message||String(e);}}
   if(!emps.length){try{emps=typeof salaryEmployees!=='undefined'&&Array.isArray(salaryEmployees)?salaryEmployees:[];}catch(_){}}
   allEmployees=emps.filter(e=>Number(e.id)>0&&String(e.name||'').trim()).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
   renderEmployees();if(!allEmployees.length)status('No employees available. '+(err?'Database: '+err:'Check employee access or refresh Salary staff list.'));
