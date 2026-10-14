@@ -4271,6 +4271,11 @@ table tbody tr:hover{background:#f3f7f9!important}
 <div class="helper" id="cashWithdrawalAccess" style="display:none"></div>
 </div>
 <div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="bedFeeHistoryBtn" type="button">Bed Fee History</button><button class="btn" id="cashRemittanceHistoryBtn" type="button">Cash History</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div>
+<div class="card span12" id="ndAdvanceDailyHistoryCard" style="margin-top:16px;padding:18px">
+  <div class="nd-advance-history-head"><div><h3 style="margin:0 0 4px">Repayment History</h3><div class="helper">Salary advance records and signed consent reports</div></div><div class="nd-advance-history-tools"><button class="btn" id="ndAdvanceRefresh" type="button">Refresh History</button><button class="btn" id="ndAdvanceExport" type="button">Download History CSV</button></div></div>
+  <div class="helper" id="ndAdvanceHistoryStatus" aria-live="polite" style="margin:10px 0"></div>
+  <div class="nd-history" id="ndAdvanceHistory"></div>
+</div>
 <div style="display:none">
 <button id="refreshBtn" type="button"></button>
 <button id="exportBtn" type="button"></button>
@@ -30702,7 +30707,7 @@ function setup(){if(!by('socialCalendar')||by('ndAiDetailOverlay'))return;const 
  const toolbar=by('socialCalendarFrame');if(toolbar)toolbar.parentNode.insertBefore(button,toolbar);
  refresh(true);
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{setup();load();});else{setup();load();}
 })();
 </script>
 
@@ -30910,29 +30915,58 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
 <h3>Employee Written Consent</h3><div class="nd-consent" id="ndAdvanceConsent">I acknowledge receipt of the salary advance specified above. I voluntarily authorize the Company to deduct the full amount from my salary payable on the 7th of the following month, subject to applicable Malaysian employment laws and statutory deduction limits. I understand that the deduction will be recorded on my payslip.</div>
 <label style="margin-top:12px">Employee Signature</label><canvas id="ndAdvanceSign"></canvas><div class="nd-actions"><button class="btn" type="button" id="ndAdvanceClear">Clear Signature</button></div>
 <label style="margin-top:12px"><input type="checkbox" id="ndAdvanceAgree" style="width:auto;margin-right:8px">I have read and agree to the salary advance repayment terms.</label>
-<div class="nd-actions"><button class="btn" id="ndAdvanceSave" type="button">Save Signed Advance</button><button class="btn" id="ndAdvanceRefresh" type="button">Refresh History</button><button class="btn" id="ndAdvanceExport" type="button">Download History CSV</button></div>
-<div class="helper" id="ndAdvanceStatus"></div><h3>Repayment History</h3><div class="nd-history" id="ndAdvanceHistory"></div></div></div>
+<div class="nd-actions"><button class="btn" id="ndAdvanceSave" type="button">Save Signed Advance</button></div>
+<div class="helper" id="ndAdvanceStatus"></div></div></div>
 <script id="nd-advance-module-v1">
 (function(){
  const el=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let history=[],hasSignature=false,draw=false,last=null;
  const canvas=()=>el('ndAdvanceSign');
- function resize(){const c=canvas();if(!c)return;const r=c.getBoundingClientRect(),ratio=window.devicePixelRatio||1;c.width=Math.max(1,Math.round(r.width*ratio));c.height=Math.round(150*ratio);const ctx=c.getContext('2d');ctx.scale(ratio,ratio);ctx.lineWidth=2.3;ctx.strokeStyle='#171717';ctx.lineCap='round';hasSignature=false;}
+ function resize(){const c=canvas();if(!c)return;const r=c.getBoundingClientRect(),ratio=window.devicePixelRatio||1;c.width=Math.max(1,Math.round(r.width*ratio));c.height=Math.round(r.height*ratio);const ctx=c.getContext('2d');ctx.scale(ratio,ratio);ctx.lineWidth=2.3;ctx.strokeStyle='#171717';ctx.lineCap='round';hasSignature=false;}
  function dateMY(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
  function monthFor(date){return String(date||'').slice(0,7)+'-01';}
  function dateChanged(){el('ndAdvanceDeductMonth').value=String(el('ndAdvanceDate').value||'').slice(0,7)+' (7th of next month)';}
  function point(e){const r=canvas().getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
- function status(s){el('ndAdvanceStatus').textContent=s;}
+ function status(s){const a=el('ndAdvanceStatus'),b=el('ndAdvanceHistoryStatus');if(a)a.textContent=s;if(b)b.textContent=s;}
  function client(){return typeof salaryDb!=='undefined'?salaryDb:null;}
  async function load(){const db=client();if(!db){status('Salary connection is unavailable.');return;}const {data,error}=await db.rpc('nd_salary_advance_list');if(error){status('History unavailable: '+error.message);return;}history=Array.isArray(data)?data:[];el('ndAdvanceHistory').innerHTML='<table><thead><tr><th>Employee</th><th>Advance Date</th><th>Amount</th><th>Deduction Month</th><th>Status</th><th>Report</th></tr></thead><tbody>'+history.map(r=>'<tr><td>'+esc(r.employee_name)+'</td><td>'+esc(r.advance_date)+'</td><td>RM '+Number(r.amount||0).toFixed(2)+'</td><td>'+esc(r.deduction_month)+'</td><td>'+esc(r.status)+'</td><td><button class="btn" type="button" data-advance-report="'+esc(r.id)+'">View / Print</button></td></tr>').join('')+'</tbody></table>';status(history.length+' record(s).');}
  function report(r){const w=window.open('','_blank');if(!w){alert('Allow pop-ups to view the signed report.');return;}const content=el('ndAdvanceConsent').textContent;w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Salary Advance Report</title><style>body{font:15px Arial;max-width:800px;margin:40px auto;line-height:1.6}img{max-width:500px;border:1px solid #ddd}dt{font-weight:bold;margin-top:12px}@media print{button{display:none}}</style></head><body><h2>Nature\'s Dao — Salary Advance Repayment</h2><dl><dt>Employee</dt><dd>'+esc(r.employee_name)+'</dd><dt>Branch</dt><dd>'+esc(r.outlet)+'</dd><dt>Advance Date</dt><dd>'+esc(r.advance_date)+'</dd><dt>Amount</dt><dd>RM '+Number(r.amount).toFixed(2)+'</dd><dt>Deduction Month</dt><dd>'+esc(r.deduction_month)+'</dd><dt>Status</dt><dd>'+esc(r.status)+'</dd><dt>Written Consent</dt><dd>'+esc(r.consent_text||content)+'</dd><dt>Employee Signature</dt><dd><img alt="Employee signature" src="'+esc(r.signature_data)+'"></dd><dt>Created At</dt><dd>'+esc(r.created_at)+'</dd></dl><button onclick="window.print()">Print / Save as PDF</button></body></html>');w.document.close();}
- function open(){const emps=typeof salaryEmployees!=='undefined'&&Array.isArray(salaryEmployees)?salaryEmployees:[];el('ndAdvanceEmployee').innerHTML='<option value="">Select employee</option>'+emps.filter(e=>Number(e.id)>0).map(e=>'<option value="'+Number(e.id)+'">'+esc(e.name)+' — '+esc(e.outlet)+'</option>').join('');el('ndAdvanceDate').value=dateMY();dateChanged();el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;el('ndAdvanceModal').classList.add('open');requestAnimationFrame(resize);load();}
+ async function populateEmployees(){
+  const select=el('ndAdvanceEmployee');
+  select.innerHTML='<option value="">Loading employees...</option>';
+  let emps=[];let err='';
+  const db=client();
+  if(db){try{const result=await db.from('employees').select('id,name,outlet').order('name',{ascending:true}).limit(1000);if(result.error)throw result.error;emps=Array.isArray(result.data)?result.data:[];}catch(e){err=e.message||String(e);}}
+  if(!emps.length){try{emps=typeof salaryEmployees!=='undefined'&&Array.isArray(salaryEmployees)?salaryEmployees:[];}catch(_){}}
+  emps=emps.filter(e=>Number(e.id)>0&&String(e.name||'').trim());
+  emps.sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  select.innerHTML='<option value="">Select employee</option>'+emps.map(e=>'<option value="'+Number(e.id)+'">'+esc(e.name)+' — '+esc(e.outlet||'Unassigned')+'</option>').join('');
+  if(!emps.length)status('No employees available. '+(err?'Database: '+err:'Check employee access or refresh Salary staff list.'));
+}
+async function open(){el('ndAdvanceModal').classList.add('open');el('ndAdvanceDate').value=dateMY();dateChanged();el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;requestAnimationFrame(resize);await populateEmployees();}
  async function save(){const db=client();if(!db){status('Salary connection is unavailable.');return;}const id=Number(el('ndAdvanceEmployee').value),date=el('ndAdvanceDate').value,amount=Number(el('ndAdvanceAmount').value);if(!id||!date||!Number.isFinite(amount)||amount<=0||!hasSignature||!el('ndAdvanceAgree').checked){alert('Select employee, date, amount, sign and agree before saving.');return;}if(!confirm('Confirm signed salary advance of RM '+amount.toFixed(2)+'? The full amount will be deducted from the next 7th salary.'))return;const btn=el('ndAdvanceSave');btn.disabled=true;status('Saving...');try{const {error}=await db.rpc('nd_salary_advance_create',{p_employee_id:id,p_advance_date:date,p_amount:amount,p_signature_data:canvas().toDataURL('image/png'),p_consent_text:el('ndAdvanceConsent').textContent,p_acknowledged:true});if(error)throw error;status('Signed advance saved. The 7th salary deduction has been updated.');el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;resize();await load();if(typeof refreshSalaryStayHere==='function')await refreshSalaryStayHere();}catch(e){status('Save failed: '+(e.message||e));}finally{btn.disabled=false;}}
  function exportCsv(){const cols=['employee_name','outlet','advance_date','amount','deduction_month','status','created_at'];const q=x=>'"'+String(x??'').replace(/"/g,'""')+'"';const csv=[cols.join(','),...history.map(r=>cols.map(k=>q(r[k])).join(','))].join('\r\n');const blob=new Blob(['\ufeff',csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='salary_advance_history.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
  function setup(){el('ndAdvanceBtn')?.addEventListener('click',open);el('ndAdvanceClose')?.addEventListener('click',()=>el('ndAdvanceModal').classList.remove('open'));el('ndAdvanceDate')?.addEventListener('change',dateChanged);el('ndAdvanceClear')?.addEventListener('click',resize);el('ndAdvanceSave')?.addEventListener('click',save);el('ndAdvanceRefresh')?.addEventListener('click',load);el('ndAdvanceExport')?.addEventListener('click',exportCsv);el('ndAdvanceHistory')?.addEventListener('click',e=>{const id=e.target.closest('[data-advance-report]')?.dataset.advanceReport;const r=history.find(x=>String(x.id)===id);if(r)report(r);});const c=canvas();c.addEventListener('pointerdown',e=>{draw=true;last=point(e);c.setPointerCapture(e.pointerId);});c.addEventListener('pointermove',e=>{if(!draw)return;const p=point(e),ctx=c.getContext('2d');ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;hasSignature=true;});c.addEventListener('pointerup',()=>draw=false);c.addEventListener('pointercancel',()=>draw=false);}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
+<style id="nd-advance-daily-layout-v2">
+#ndAdvanceDailyHistoryCard{min-width:0;max-width:100%}
+.nd-advance-history-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.nd-advance-history-tools{display:flex;gap:8px;flex-wrap:wrap}
+#ndAdvanceDailyHistoryCard .nd-history{overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}
+#ndAdvanceDailyHistoryCard .nd-history table{min-width:690px;width:100%}
+#ndAdvanceDailyHistoryCard .nd-history th,#ndAdvanceDailyHistoryCard .nd-history td{padding:9px;font-size:12px}
+#ndAdvanceModal .nd-dialog{width:min(650px,100%);padding:18px;max-height:calc(100dvh - 30px)}
+#ndAdvanceModal .nd-consent{font-size:13px;font-weight:400;line-height:1.55;padding:12px;user-select:text}
+#ndAdvanceModal h2{font-size:20px;margin:0}
+#ndAdvanceModal h3{font-size:15px;margin:14px 0 8px}
+#ndAdvanceSign{height:125px}
+#ndAdvanceModal .nd-actions{margin-top:10px}
+#ndAdvanceModal #ndAdvanceSave{background:#193b30;color:#fff;border-color:#193b30;width:100%;font-weight:800}
+#ndAdvanceModal #ndAdvanceClear{padding:8px 12px;font-size:12px}
+@media(max-width:600px){#ndAdvanceModal{padding:8px;z-index:30000}#ndAdvanceModal .nd-dialog{padding:15px;border-radius:15px;max-height:calc(100dvh - 16px)}#ndAdvanceModal .nd-fields{grid-template-columns:1fr 1fr;gap:9px}#ndAdvanceModal .nd-fields>div:first-child{grid-column:1/-1}#ndAdvanceModal .nd-consent{font-size:12px;line-height:1.5}#ndAdvanceModal h2{font-size:17px}#ndAdvanceModal input,#ndAdvanceModal select{font-size:14px;padding:9px}#ndAdvanceSign{height:110px}.nd-advance-history-tools{width:100%}.nd-advance-history-tools .btn{flex:1;min-width:125px;font-size:12px;padding:9px}}
+</style>
 </body>
 </html>
 
