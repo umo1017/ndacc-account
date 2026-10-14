@@ -13284,7 +13284,7 @@ function assertRecordEditable(dateValue){
 }
 
 /* Signed salary receipt: backend RPC is the only path to DONE. */
-window.ND_PAYMENT_BUILD='DUTY-BRANCH-ONLY-20261014';
+window.ND_PAYMENT_BUILD='RPC-BRANCH-PIC-20261015';
 async function toggleSalaryPayment(type,empId){
   if(!assertRecordEditable(monthDate()))return;
   const isSeven=Number(type)===7;
@@ -13297,22 +13297,20 @@ async function toggleSalaryPayment(type,empId){
   const outlet=employee?.outlet||'';
   const net=Number(snap.net_pay);
   if(!outlet||!Number.isFinite(net)||net<0){alert('Missing branch or confirmed Net Pay.');return;}
-  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  let names=[];
-  const {data:paymentSession,error:paymentSessionError}=await salaryDb.auth.getUser();
-  if(paymentSessionError||!paymentSession?.user?.email){alert('Login required to confirm payment.');return;}
-  const operatorEmail=String(paymentSession.user.email).trim().toLowerCase();
-  const fullPaymentOperator=ND_FULL_PAYMENT_EMAILS.includes(operatorEmail);
-  if(fullPaymentOperator){
-    // Signed-in account is the PIC; SQL independently validates this identity.
-    names=[operatorEmail];
-  }else{
-    // Only the signed-in employee's authorized nickname for today's branch.
-    const {data:selfDuty,error:dutyError}=await salaryDb.rpc('nd_salary_duty_my_pic',{p_outlet:outlet});
-    if(dutyError){alert('Cannot verify Salary Duty access: '+dutyError.message);return;}
-    names=[...new Set((selfDuty||[]).map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
-    if(!names.length){alert('Your account is not assigned to Salary Duty at this branch today.');return;}
-  }
+  // The database is the authority for direct branch grants and dated Salary Duty.
+  const {data:canConfirm,error:permissionError}=await salaryDb.rpc(
+    'nd_can_confirm_salary_payment',
+    {p_outlet:outlet,p_salary_type:Number(type)}
+  );
+  if(permissionError){alert('Unable to verify payment permission: '+permissionError.message);return;}
+  if(canConfirm!==true){alert('Payment DONE is not authorized for this branch and salary date.');return;}
+  const {data:selfPic,error:picError}=await salaryDb.rpc(
+    'nd_salary_duty_my_pic',{p_outlet:outlet}
+  );
+  if(picError){alert('Unable to verify Person in Charge: '+picError.message);return;}
+  const names=[...new Set((selfPic||[])
+    .map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
+  if(!names.length){alert('No authorized Person in Charge for this payment.');return;}
   let modal=document.getElementById('ndSignedPaymentModal');
   if(!modal){
     modal=document.createElement('div');modal.id='ndSignedPaymentModal';
