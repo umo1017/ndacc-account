@@ -11217,7 +11217,7 @@ window.openMonthlyRosterPage=function(ev){
 
 /* ND salary branch access: server-authorized, never grant Global to SAM/Wendy. */
 const ND_SAM_EMAIL='samchin6006@gmail.com';
-const ND_BILLY_EMAIL=''; // Set verified Billy account email in Supabase salary_user_access, not by guessing.
+const ND_BILLY_EMAIL='kwongweicheng6608@gmail.com';
 const ND_WENDY_EMAIL='yokewong0327@gmail.com';
 const ND_FULL_PAYMENT_EMAILS=['umo1017@gmail.com','mars83002566@gmail.com'];
 function ndHasFullPaymentAccess(){return ND_FULL_PAYMENT_EMAILS.includes(String(currentSalaryUserEmail||'').trim().toLowerCase());}
@@ -11229,7 +11229,9 @@ async function ndCanAccessCommissionBranch(outlet){
   const session=await salaryDb.auth.getUser();
   if(session.error||!session.data?.user?.email)return false;
   const email=String(session.data.user.email).trim().toLowerCase();
-  if(ND_FULL_PAYMENT_EMAILS.includes(email)||email===ND_SAM_EMAIL)return true;
+  if(ND_FULL_PAYMENT_EMAILS.includes(email)||email===ND_SAM_EMAIL||(email===ND_BILLY_EMAIL&&branch==='Nusa Bestari'))return true;
+  const direct=await salaryDb.rpc('nd_my_payroll_access',{p_branch:branch,p_action:'view_salary'});
+  if(!direct.error&&direct.data===true)return true;
   const check=await salaryDb.rpc('nd_salary_duty_my_pic',{p_outlet:branch});
   if(check.error){console.warn('Salary Duty check failed:',check.error.message);return false;}
   return Array.isArray(check.data)&&check.data.some(row=>String(row.staff_name||'').trim());
@@ -11243,10 +11245,15 @@ async function ndRequireCommissionBranch(outlet){
 async function ndSpecialSalaryOutlets(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
   if(ND_FULL_PAYMENT_EMAILS.includes(email)||email===ND_SAM_EMAIL)return ['Eco Botanic','Nusa Bestari'];
+  const directBranches=email===ND_BILLY_EMAIL?['Nusa Bestari']:[];
+  for(const branch of ['Eco Botanic','Nusa Bestari']){
+    const result=await salaryDb.rpc('nd_my_payroll_access',{p_branch:branch,p_action:'view_salary'});
+    if(!result.error&&result.data===true&&!directBranches.includes(branch))directBranches.push(branch);
+  }
   // Duty access is an independent roster, never hygiene/monthly roster.
   const {data,error}=await salaryDb.rpc('nd_salary_duty_my_outlets');
-  if(error){console.warn('Salary duty access unavailable:',error.message);return [];}
-  return (data||[]).map(x=>String(x.outlet||'')).filter(x=>['Eco Botanic','Nusa Bestari'].includes(x));
+  if(error){console.warn('Salary duty access unavailable:',error.message);return directBranches;}
+  return [...new Set([...directBranches,...(data||[]).map(x=>String(x.outlet||'')).filter(x=>['Eco Botanic','Nusa Bestari'].includes(x))])];
 }
 function ndRestrictGlobalSalaryAccess(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
