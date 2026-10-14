@@ -8441,7 +8441,7 @@ function ndOpenUnifiedCashHistory(type){
 <div class="roster-toolbar">
 <div class="field"><label>Month</label><input id="rosterMonth" type="month"/></div>
 <button class="btn" id="rosterRefreshBtn" type="button">Refresh</button>
-<button class="btn" id="ndDutyRosterBtn" type="button" style="display:none;background:#244b39;color:#fff;border-color:#244b39">+ Salary Duty Staff / 新增薪水值班员工</button>
+<button class="btn" id="ndDutyRosterBtn" type="button" style="display:none;background:#244b39;color:#fff;border-color:#244b39">+ Salary Duty Staff</button>
 <span class="helper" id="rosterSyncState">Cloud roster</span>
 </div>
 <div class="roster-branch-tabs" id="rosterOutletTabs" style="margin-top:12px"></div>
@@ -11183,9 +11183,11 @@ window.openMonthlyRosterPage=function(ev){
 /* ND salary branch access: server-authorized, never grant Global to SAM/Wendy. */
 const ND_SAM_EMAIL='samchin6006@gmail.com';
 const ND_WENDY_EMAIL='yokewong0327@gmail.com';
+const ND_FULL_PAYMENT_EMAILS=['umo1017@gmail.com','mars8381@gmail.com'];
+function ndHasFullPaymentAccess(){return ND_FULL_PAYMENT_EMAILS.includes(String(currentSalaryUserEmail||'').trim().toLowerCase());}
 async function ndSpecialSalaryOutlets(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
-  if(email===ND_SAM_EMAIL)return ['Eco Botanic','Nusa Bestari'];
+  if(email===ND_SAM_EMAIL||email==='mars8381@gmail.com')return ['Eco Botanic','Nusa Bestari'];
   // Duty access is an independent roster, never hygiene/monthly roster.
   const {data,error}=await salaryDb.rpc('nd_salary_duty_my_outlets');
   if(error){console.warn('Salary duty access unavailable:',error.message);return [];}
@@ -11193,7 +11195,7 @@ async function ndSpecialSalaryOutlets(){
 }
 function ndRestrictGlobalSalaryAccess(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
-  if(email===ND_SAM_EMAIL||email===ND_WENDY_EMAIL){
+  if(email===ND_SAM_EMAIL||email===ND_WENDY_EMAIL||email==='mars8381@gmail.com'){
     accessibleSalaryOutlets=(accessibleSalaryOutlets||[]).filter(x=>x!=='Global');
   }
 }
@@ -13232,20 +13234,26 @@ async function toggleSalaryPayment(type,empId){
   const net=Number(snap.net_pay);
   if(!outlet||!Number.isFinite(net)||net<0){alert('Missing branch or confirmed Net Pay.');return;}
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  const {data:roster,error:rosterError}=await salaryDb.rpc('nd_salary_duty_branch_today',{p_outlet:outlet});
-  if(rosterError){alert('Cannot verify salary duty: '+rosterError.message);return;}
-  const names=[...new Set((roster||[]).map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
-  if(!names.length){alert('No Salary Duty staff authorized for this branch today.');return;}
+  let names=[];
+  if(ndHasFullPaymentAccess()){
+    // Full payment operators are not required to be on the duty roster.
+    names=[String(currentSalaryUserEmail||'').trim().toLowerCase()];
+  }else{
+    const {data:roster,error:rosterError}=await salaryDb.rpc('nd_salary_duty_branch_today',{p_outlet:outlet});
+    if(rosterError){alert('Cannot verify salary duty: '+rosterError.message);return;}
+    names=[...new Set((roster||[]).map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
+    if(!names.length){alert('No Salary Duty staff authorized for this branch today.');return;}
+  }
   let modal=document.getElementById('ndSignedPaymentModal');
   if(!modal){
     modal=document.createElement('div');modal.id='ndSignedPaymentModal';
     modal.innerHTML=`<div class="nd-sign-dialog" role="dialog" aria-modal="true" aria-label="Salary payment confirmation">
       <h2>Salary Payment Confirmation</h2><div id="ndSignDetails"></div>
-      <label for="ndSignPic">Person In Charge · 当天值班负责人</label><select id="ndSignPic"></select>
-      <label>Employee Signature · 员工签名</label>
+      <label for="ndSignPic">Person In Charge</label><select id="ndSignPic"></select>
+      <label>Employee Signature</label>
       <canvas id="ndSignCanvas" width="720" height="240" aria-label="Employee handwritten signature"></canvas>
       <button type="button" id="ndSignClear" class="btn">Clear Signature</button>
-      <label class="nd-sign-check"><input type="checkbox" id="ndSignAck"> 我确认已收到上述薪水 / I acknowledge receipt of the salary shown above.</label>
+      <label class="nd-sign-check"><input type="checkbox" id="ndSignAck"> I acknowledge receipt of the salary shown above.</label>
       <div id="ndSignError" role="alert"></div>
       <div class="nd-sign-actions"><button type="button" class="btn" id="ndSignCancel">Cancel</button><button type="button" class="btn" id="ndSignConfirm">Confirm Payment DONE</button></div>
     </div>`;
@@ -18287,8 +18295,8 @@ function renderRoster(){
     const day=i+1;
     const date=rosterDate(m,day);
     const row=rosterAssignment(rosterActiveOutlet,date);
-    const dutyNicknames=(window.ndDutyNicknamesByDay||{})[rosterActiveOutlet+'|'+date];
-    const name=dutyNicknames?.length?dutyNicknames.join(', '):rosterDisplayName(rosterActiveOutlet,date);
+    // Preserve existing roster assignments; only normalize displayed staff nickname.
+    const name=window.ndRosterNickname?window.ndRosterNickname(rosterDisplayName(rosterActiveOutlet,date)):rosterDisplayName(rosterActiveOutlet,date);
     const changed=!!String(row?.staff_name||"").trim();
     const dow=ROSTER_WEEKDAYS[new Date(year,month-1,day).getDay()];
     return `<div class="roster-cal-day ${date===todayStr?"today":""}">
@@ -18323,14 +18331,17 @@ function renderRoster(){
 async function openRosterNameEditor(outlet,date){
   const picker=document.getElementById("rosterNameInput");
   picker.innerHTML='<option value="">Select duty staff</option>';
-  let people=[];
-  const staffResult=await rosterDb().from("employees").select("id,name,outlet,last_working_date").order("name");
-  if(staffResult.error){document.getElementById("rosterNameMsg").textContent=staffResult.error.message;return;}
-  people=staffResult.data||[];
-  const names=[...new Set(people.filter(e=>!(typeof rosterStaffHasLeft==="function" && rosterStaffHasLeft(e))).map(e=>String(e.name||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const selected=rosterDisplayName(outlet,date);
-  if(selected&&!names.includes(selected))names.unshift(selected);
-  for(const name of names){const o=document.createElement("option");o.value=name;o.textContent=name;picker.appendChild(o);}
+  // Only staff registered in Salary Duty Staff directory appear as choices.
+  // Existing historical roster entries remain selectable without being overwritten.
+  if(typeof window.ndLoadDutyDirectory==='function')await window.ndLoadDutyDirectory();
+  const names=(window.ndDutyStaffNames||[]).slice().sort((a,b)=>a.localeCompare(b));
+  const selectedRaw=rosterDisplayName(outlet,date);
+  const selected=window.ndRosterNickname?window.ndRosterNickname(selectedRaw):selectedRaw;
+  if(selected&&!names.some(n=>n.toLowerCase()===selected.toLowerCase())){
+    // Legacy record: allow preserving it but don't introduce as a new choice.
+    const old=document.createElement('option');old.value=selectedRaw;old.textContent=selected+' (existing record)';picker.appendChild(old);
+  }
+  for(const name of names){const o=document.createElement('option');o.value=name;o.textContent=name;picker.appendChild(o);}
 
   const defaultName=rosterDefaultName(outlet,date);
   document.getElementById("rosterNameOutlet").value=outlet;
@@ -30800,6 +30811,41 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();
 </script>
 <style id="nd-duty-style">#ndDutyAdminBtn{display:none!important}#ndDutyAdminModal{display:none;position:fixed;inset:0;background:#0009;z-index:22000;align-items:center;justify-content:center;padding:14px}#ndDutyAdminModal.open{display:flex}#ndDutyAdminModal .nd-duty-dialog{background:white;border-radius:16px;padding:22px;width:min(620px,100%);max-height:90vh;overflow:auto}#ndDutyAdminModal input,#ndDutyAdminModal select{margin:4px 0 10px}#ndDutyAdminModal .nd-duty-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #eee;padding:10px 0}#ndDutyAdminModal .nd-duty-line button{margin-left:auto}</style>
+<script id="nd-duty-directory-merge-v2">
+(function(){
+ const initial=[
+  {staff_name:'Sam',email:'samchin6006@gmail.com'},
+  {staff_name:'Wendy',email:'yokewong0327@gmail.com'},
+  {staff_name:'Billy',email:'kwongweicheng6608@gmail.com'}
+ ];
+ window.ndDutyStaffDirectory=initial.slice();
+ window.ndDutyStaffNames=initial.map(x=>x.staff_name);
+ window.ndRosterNickname=function(raw){
+   const name=String(raw||'').trim();
+   const match=window.ndDutyStaffDirectory.find(x=>x.staff_name.toLowerCase()===name.toLowerCase()||x.email.toLowerCase()===name.toLowerCase());
+   return match?match.staff_name:name;
+ };
+ window.ndMergeDutyDirectory=function(records){
+   const directory=new Map(initial.map(x=>[x.email.toLowerCase(),x]));
+   for(const r of records||[]){
+     const email=String(r.email||'').trim().toLowerCase(),nickname=String(r.staff_name||'').trim();
+     if(email&&nickname)directory.set(email,{email,staff_name:nickname});
+   }
+   window.ndDutyStaffDirectory=[...directory.values()];
+   window.ndDutyStaffNames=[...new Set(window.ndDutyStaffDirectory.map(x=>x.staff_name))];
+ };
+ let loading=null;
+ window.ndLoadDutyDirectory=function(){
+   if(loading)return loading;
+   if(typeof salaryDb==='undefined'||!salaryDb)return Promise.resolve(window.ndDutyStaffDirectory);
+   loading=salaryDb.rpc('nd_salary_duty_admin_list').then(({data,error})=>{
+     if(!error)window.ndMergeDutyDirectory(data);
+     return window.ndDutyStaffDirectory;
+   }).catch(()=>window.ndDutyStaffDirectory).finally(()=>{loading=null;});
+   return loading;
+ };
+})();
+</script>
 <script id="nd-duty-management-v1">
 (function(){
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -30809,6 +30855,7 @@ async function listDuty(){
  const d=document.getElementById('ndDutyList'); if(!d)return;
  const {data,error}=await salaryDb.rpc('nd_salary_duty_admin_list');
  if(error){d.textContent='Cannot load: '+error.message;return;}
+ window.ndMergeDutyDirectory(data||[]);
  window.ndDutyNicknamesByDay={};
  for(const r of data||[]){const k=String(r.outlet)+'|'+String(r.duty_date).slice(0,10);(window.ndDutyNicknamesByDay[k]??=[]).push(String(r.staff_name||'').trim());}
  if(typeof renderRoster==='function')renderRoster();
@@ -30830,6 +30877,9 @@ async function openDuty(){
  const picker=m.querySelector('#ndDutyName');
  m.querySelector('#ndDutyBranchInfo').textContent='Duty branch: '+rosterActiveOutlet+' (current roster tab)';
  picker.value='';
+ const emailInput=m.querySelector('#ndDutyEmail');
+ emailInput.value='';
+ picker.oninput=()=>{const hit=(window.ndDutyStaffDirectory||[]).find(x=>x.staff_name.toLowerCase()===picker.value.trim().toLowerCase());if(hit)emailInput.value=hit.email;};
  m.querySelector('#ndDutyDate').value=today();m.classList.add('open');await listDuty();
 }
 function sync(){
@@ -30840,6 +30890,17 @@ function sync(){
  if(b.style.display!=='none'&&!window.ndDutyNicknamesLoaded){window.ndDutyNicknamesLoaded=true;salaryDb.rpc('nd_salary_duty_admin_list').then(({data,error})=>{if(error)return;window.ndDutyNicknamesByDay={};for(const r of data||[]){const k=String(r.outlet)+'|'+String(r.duty_date).slice(0,10);(window.ndDutyNicknamesByDay[k]??=[]).push(String(r.staff_name||'').trim());}if(typeof renderRoster==='function')renderRoster();});}
 }
 document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});});
+})();
+</script>
+
+<script id="nd-salary-duty-english-label-final">
+(function(){
+  function applyEnglishLabel(){
+    const btn=document.getElementById('ndDutyRosterBtn');
+    if(btn && btn.textContent.trim() !== '+ Salary Duty Staff') btn.textContent='+ Salary Duty Staff';
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',applyEnglishLabel);
+  else applyEnglishLabel();
 })();
 </script>
 </body>
