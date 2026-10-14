@@ -4329,8 +4329,8 @@ table tbody tr:hover{background:#f3f7f9!important}
 <div class="helper" id="cashWithdrawalAccess" style="display:none"></div>
 </div>
 <div style="display:flex;flex-direction:row;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap"><button class="btn" id="pettyCashHistoryBtn" type="button">Petty Cash History</button><button class="btn" id="bedFeeHistoryBtn" type="button">Bed Fee History</button><button class="btn" id="cashRemittanceHistoryBtn" type="button">Cash History</button><button class="btn" id="historyRecordsBtn" type="button">History Records</button></div>
-<div class="card span12" id="ndAdvanceDailyHistoryCard" style="margin-top:16px;padding:18px">
-  <div class="nd-advance-history-head"><div><h3 style="margin:0 0 4px">Repayment History</h3><div class="helper">Salary advance records and signed consent reports</div></div><div class="nd-advance-history-tools"><span id="ndAdvanceActiveBranchLabel" class="helper" aria-live="polite"></span></div></div>
+<div class="card span12" id="ndAdvanceDailyHistoryCard" style="margin-top:12px;padding:18px;display:none">
+  <div class="nd-advance-history-head"><div><h3 style="margin:0 0 4px">Repayment History</h3></div><div class="nd-advance-history-tools"><span id="ndAdvanceActiveBranchLabel" class="helper" aria-live="polite"></span></div></div>
   <div class="helper" id="ndAdvanceHistoryStatus" aria-live="polite" style="margin:10px 0"></div>
   <div class="nd-history" id="ndAdvanceHistory"></div>
 </div>
@@ -8331,11 +8331,13 @@ function ndOpenUnifiedCashHistory(type){
 <button class="salary-view-btn" id="salaryViewBonusBtn" type="button">Bonus</button>
 <button class="salary-view-btn" id="salaryViewTargetBonusBtn" type="button">Target Bonus</button>
 <button class="salary-view-btn" id="ndAdvanceBtn" type="button">Salary Advance Repayment</button>
+<button class="salary-view-btn" id="ndAdvanceHistoryBtn" type="button" aria-expanded="false">Repayment History</button>
 <button class="salary-view-btn" id="salaryViewTotalBtn" type="button"></button>
 </div>
 <div class="manager-note" id="salaryRoleNote" style="margin-top:8px"></div>
 <div class="helper" id="taxRuleStatus" style="margin-top:6px"></div>
 </div>
+<div id="ndAdvanceSalaryHistoryMount"></div>
 <div id="salaryOutletRoot"></div>
 </div>
 </div>
@@ -9804,6 +9806,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <h3 style="margin:0">Payslip</h3>
 <div class="payslip-header-actions">
 <button class="btn" id="downloadPayslipPdfBtn" type="button">Download PDF</button>
+<button class="btn" id="sharePayslipPdfBtn" type="button">Share PDF</button>
 <button class="btn" id="shareWhatsAppBtn" type="button">Send WhatsApp</button>
 <button class="btn main-page-close" id="closePayslipModal" type="button">×</button>
 </div>
@@ -15528,6 +15531,28 @@ async function downloadCurrentPayslipPdf(){
   }
 }
 
+async function shareCurrentPayslipPdf(){
+  const btn=document.getElementById("sharePayslipPdfBtn");
+  const original=btn?.textContent||"Share PDF";
+  try{
+    if(btn){btn.disabled=true;btn.textContent="Preparing...";}
+    const file=await buildPayslipPdfFile();
+    const shareData={files:[file],title:"Payslip"};
+    if(typeof navigator.share==="function" &&
+       (typeof navigator.canShare!=="function" || navigator.canShare(shareData))){
+      if(btn)btn.textContent="Sharing...";
+      await navigator.share(shareData);
+    }else{
+      window.downloadPdfFile(file);
+      alert("PDF downloaded. This browser does not support direct PDF file sharing. Please attach the downloaded PDF in your preferred app.");
+    }
+  }catch(err){
+    if(err?.name!=="AbortError")alert("Unable to share payslip PDF: "+(err?.message||err));
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=original;}
+  }
+}
+
 async function sharePayslipWhatsApp(){
   const btn=document.getElementById("shareWhatsAppBtn");
   const oldText=btn?.textContent||"Send WhatsApp";
@@ -15587,6 +15612,8 @@ document.addEventListener("DOMContentLoaded",()=>{
   const downloadBtn=document.getElementById("downloadPayslipPdfBtn");
   if(downloadBtn) downloadBtn.onclick=downloadCurrentPayslipPdf;
 
+  const shareBtn=document.getElementById("sharePayslipPdfBtn");
+  if(shareBtn)shareBtn.onclick=shareCurrentPayslipPdf;
   const b=document.getElementById("shareWhatsAppBtn");
   if(b) b.onclick=sharePayslipWhatsApp;
 });
@@ -31148,29 +31175,55 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
 (function(){
  const el=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let history=[],allEmployees=[],hasSignature=false,draw=false,last=null;
+ let ndAdvanceViewerEmail='';
+ const ndAdvanceOwner='umo1017@gmail.com';
+ function ndAdvanceCanView(r){
+   if(ndAdvanceViewerEmail===ndAdvanceOwner)return true;
+   const created=new Date(r.created_at||'');
+   return Number.isFinite(created.getTime()) && Date.now()-created.getTime()>=24*60*60*1000;
+ }
+ async function ndAdvanceResolveViewer(db){
+   ndAdvanceViewerEmail='';
+   try{const {data,error}=await db.auth.getUser();if(error)throw error;ndAdvanceViewerEmail=String(data?.user?.email||'').trim().toLowerCase();}catch(e){console.warn('Advance history viewer unavailable',e);}
+ }
  const canvas=()=>el('ndAdvanceSign');
  function resize(){const c=canvas();if(!c)return;const r=c.getBoundingClientRect(),ratio=window.devicePixelRatio||1;c.width=Math.max(1,Math.round(r.width*ratio));c.height=Math.round(r.height*ratio);const ctx=c.getContext('2d');ctx.scale(ratio,ratio);ctx.lineWidth=2.3;ctx.strokeStyle='#171717';ctx.lineCap='round';hasSignature=false;}
  function dateMY(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
  function monthFor(date){return String(date||'').slice(0,7)+'-01';}
- function dateChanged(){el('ndAdvanceDeductMonth').value=String(el('ndAdvanceDate').value||'').slice(0,7)+' (7th of next month)';}
+ function dateChanged(){el('ndAdvanceDeductMonth').value=String(el('ndAdvanceDate').value||'').slice(0,7)+' (7th Salary)';}
  function point(e){const r=canvas().getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
  function status(s){const a=el('ndAdvanceStatus');if(a)a.textContent=s;}
  function historyStatus(s){const b=el('ndAdvanceHistoryStatus');if(b)b.textContent=s;}
- function activeHistoryBranch(){
-  // Match the currently selected Daily Settlement branch; no separate history filter.
-  const selected=document.querySelector('#dailyBranchToggle .branch-btn[data-branch].active');
-  const label=selected?.dataset.branch||document.getElementById('branchRecordState')?.textContent?.trim();
-  if(label)return label;
-  try{return typeof currentBranch!=='undefined'?String(currentBranch):'Eco Botanic';}catch(_){return 'Eco Botanic';}
- }
+ function activeHistoryBranch(){return 'All Branches';}
  let loadedHistoryBranch='',historyRequestSeq=0;
- function selectedHistory(){const branch=activeHistoryBranch();return history.filter(r=>String(r.outlet||'').trim()===branch);}
- function renderHistory(){const branch=activeHistoryBranch(),rows=selectedHistory(),box=el('ndAdvanceHistory');if(!box)return;box.innerHTML='<table><thead><tr><th>Employee</th><th>Branch</th><th>Advance Date</th><th>Amount</th><th>Deduction Month</th><th>Status</th><th>Report</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.employee_name)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.advance_date)+'</td><td>RM '+Number(r.amount||0).toFixed(2)+'</td><td>'+esc(r.deduction_month)+'</td><td>'+esc(r.status)+'</td><td><button class="btn" type="button" data-advance-report="'+esc(r.id)+'">View / Print</button></td></tr>').join('')+(rows.length?'':'<tr><td colspan="7">No records for this branch.</td></tr>')+'</tbody></table>';const label=el('ndAdvanceActiveBranchLabel');if(label)label.textContent=branch;historyStatus(rows.length+' record(s) · '+branch);}
+ function selectedHistory(){
+   const month=el('salaryMonth')?.value||dateMY().slice(0,7);
+   return history.filter(r=>String(r.advance_date||'').slice(0,7)===month && ndAdvanceCanView(r));
+ }
+ function renderHistory(){
+   const month=el('salaryMonth')?.value||dateMY().slice(0,7),rows=selectedHistory(),box=el('ndAdvanceHistory');
+   if(!box)return;
+   box.innerHTML='<table><thead><tr><th>Employee</th><th>Branch</th><th>Advance Date</th><th>Amount</th><th>Deduction Month</th><th>Status</th><th>Report</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.employee_name)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.advance_date)+'</td><td>RM '+Number(r.amount||0).toFixed(2)+'</td><td>'+esc(r.deduction_month)+'</td><td>'+esc(r.status)+'</td><td><button class="btn" type="button" data-advance-report="'+esc(r.id)+'">View / Print</button></td></tr>').join('')+(rows.length?'':'<tr><td colspan="7">No records for this month.</td></tr>')+'</tbody></table>';
+   const label=el('ndAdvanceActiveBranchLabel');if(label)label.textContent=month;
+   historyStatus(rows.length+' record(s) · '+month);
+ }
+ async function load(){
+   const request=++historyRequestSeq,db=client();if(!db){historyStatus('Salary connection is unavailable.');return;}await ndAdvanceResolveViewer(db);if(request!==historyRequestSeq)return;
+   const branches=['Eco Botanic','Nusa Bestari'];historyStatus('Loading repayment history...');
+   const results=await Promise.all(branches.map(p_outlet=>db.rpc('nd_salary_advance_list',{p_outlet})));
+   if(request!==historyRequestSeq)return;
+   const errors=results.filter(r=>r.error).map(r=>r.error.message);
+   history=results.flatMap(r=>Array.isArray(r.data)?r.data:[]);
+   loadedHistoryBranch='All Branches';renderHistory();
+   if(errors.length)historyStatus('Some branch records unavailable: '+errors.join('; '));
+ }
+ function syncHistoryBranch(){renderHistory();}
  function renderEmployees(){const branch=el('ndAdvanceBranch')?.value;const select=el('ndAdvanceEmployee');if(!select)return;const rows=allEmployees.filter(e=>String(e.outlet||'').trim()===branch);select.innerHTML='<option value="">Select employee</option>'+rows.map(e=>'<option value="'+Number(e.id)+'">'+esc(e.name)+'</option>').join('');if(!rows.length)status('No employees found for '+branch+'.');}
  function client(){return typeof salaryDb!=='undefined'?salaryDb:null;}
- async function load(){const branch=activeHistoryBranch(),request=++historyRequestSeq,db=client();if(!db){historyStatus('Salary connection is unavailable.');return;}historyStatus('Loading '+branch+' history...');const {data,error}=await db.rpc('nd_salary_advance_list',{p_outlet:branch});if(request!==historyRequestSeq||branch!==activeHistoryBranch())return;if(error){historyStatus('History unavailable: '+error.message);return;}loadedHistoryBranch=branch;history=Array.isArray(data)?data:[];renderHistory();}
+ async function load(){const branch=activeHistoryBranch(),request=++historyRequestSeq,db=client();if(!db){historyStatus('Salary connection is unavailable.');return;}await ndAdvanceResolveViewer(db);if(request!==historyRequestSeq)return;historyStatus('Loading '+branch+' history...');const {data,error}=await db.rpc('nd_salary_advance_list',{p_outlet:branch});if(request!==historyRequestSeq||branch!==activeHistoryBranch())return;if(error){historyStatus('History unavailable: '+error.message);return;}loadedHistoryBranch=branch;history=Array.isArray(data)?data:[];renderHistory();}
  function syncHistoryBranch(){const branch=activeHistoryBranch();if(branch!==loadedHistoryBranch){history=[];renderHistory();load();}}
  function report(r){
+  if(!ndAdvanceCanView(r)){alert('Signed report is available 24 hours after creation.');return;}
   const w=window.open('','_blank');if(!w){alert('Allow pop-ups to view the signed report.');return;}
   const content=el('ndAdvanceConsent')?.textContent||'';
   const myTime=value=>{if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':new Intl.DateTimeFormat('en-MY',{timeZone:'Asia/Kuala_Lumpur',day:'2-digit',month:'short',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(d);};
@@ -31181,7 +31234,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
   const amount='RM '+Number(r.amount||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
   const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${employee} - Signed Salary Advance Agreement</title><style>
   :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#e8edea;font-family:Arial,Helvetica,sans-serif;color:#1d332d}.toolbar{max-width:860px;margin:18px auto 0;display:flex;justify-content:flex-end;gap:10px;padding:0 16px}.toolbar button{border:0;border-radius:10px;padding:12px 18px;background:#204c3d;color:#fff;font-weight:700;cursor:pointer}.sheet{width:min(860px,calc(100% - 24px));margin:18px auto 30px;background:#fff;min-height:990px;box-shadow:0 12px 42px #15392b24;border-radius:14px;overflow:hidden}.mast{padding:35px 44px 30px;background:linear-gradient(125deg,#153d31,#295b47);color:#fff;position:relative}.mast:after{content:'';position:absolute;right:0;top:0;width:160px;height:100%;background:linear-gradient(120deg,transparent,#c5a36c22)}.brand{font-size:12px;letter-spacing:2px;color:#dfc89c;font-weight:700}.mast h1{font-size:27px;margin:12px 0 5px;line-height:1.25}.mast p{font-size:12px;color:#d7e5dc;margin:0;letter-spacing:.6px}.main{padding:28px 44px 36px}.eyebrow{font-size:11px;letter-spacing:1.7px;color:#5a7e6b;text-transform:uppercase;font-weight:800;margin:0 0 12px}.details{display:grid;grid-template-columns:1fr 1fr;gap:10px}.item{border:1px solid #e0e8e2;background:#f7faf8;border-radius:10px;padding:13px 15px;min-width:0}.item .key{font-size:10px;color:#697b70;letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px}.item .val{font-size:14px;font-weight:700;overflow-wrap:anywhere}.item.amount{background:#f9f2e6;border-color:#e8d7b7}.item.amount .val{color:#8d6121;font-size:19px}.status{display:inline-block;background:#e7f0e9;color:#22573e;padding:6px 9px;border-radius:20px;font-size:11px}.section{margin-top:24px}.consent{background:#f0f4f7;border-left:4px solid #607f98;padding:17px 20px;border-radius:0 10px 10px 0;font-size:13px;line-height:1.8;color:#314453}.signature{border:1px solid #dce5de;border-radius:10px;padding:14px 18px;background:#fff;min-height:135px;display:flex;align-items:center;justify-content:center}.signature img{max-width:100%;max-height:110px;object-fit:contain}.signlabel{font-size:11px;color:#617367;margin-top:8px}.footer{margin-top:24px;padding-top:16px;border-top:1px solid #dce6df;display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#64776c}.footer strong{color:#294a3a}.printnote{font-size:10px;color:#88988f;margin-top:7px}@media(max-width:580px){.mast{padding:26px 23px}.mast h1{font-size:22px}.main{padding:22px}.details{gap:8px}.item{padding:10px}.item .val{font-size:12px}.footer{flex-direction:column}.sheet{min-height:0}}@page{size:A4 portrait;margin:0}@media print{html,body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.toolbar{display:none!important}.sheet{margin:0;width:210mm;min-height:297mm;border-radius:0;box-shadow:none;break-inside:avoid}.mast{padding:12mm 15mm 10mm}.main{padding:9mm 15mm}.section{margin-top:7mm}.consent{font-size:11px;padding:12px 15px}.signature{min-height:105px}.footer{margin-top:7mm}}
-  </style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><article class="sheet"><header class="mast"><div class="brand">NATURE'S DAO · STAFF FINANCE</div><h1>Salary Advance Repayment</h1><p>EMPLOYEE ACKNOWLEDGEMENT &amp; REPAYMENT AGREEMENT</p></header><main class="main"><p class="eyebrow">Advance details</p><div class="details"><div class="item"><div class="key">Employee</div><div class="val">${employee}</div></div><div class="item"><div class="key">Branch</div><div class="val">${branch}</div></div><div class="item"><div class="key">Advance date</div><div class="val">${niceDate(r.advance_date)}</div></div><div class="item amount"><div class="key">Advance amount</div><div class="val">${amount}</div></div><div class="item"><div class="key">Deduction month</div><div class="val">${niceDate(r.deduction_month)} · 7th of next month</div></div><div class="item"><div class="key">Repayment status</div><div class="val"><span class="status">${statusText}</span></div></div></div><section class="section"><p class="eyebrow">Employee written consent</p><div class="consent">${esc(r.consent_text||content)}</div></section><section class="section"><p class="eyebrow">Employee signature</p><div class="signature"><img alt="Employee signature" src="${esc(r.signature_data||'')}"></div><div class="signlabel">Signed acknowledgement by employee</div></section><footer class="footer"><div><strong>Nature's Dao</strong><div class="printnote">Confidential · Payroll record</div></div><div>Created: ${esc(myTime(r.created_at))} (MYT)</div></footer></main></article>
+  </style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><article class="sheet"><header class="mast"><div class="brand">NATURE'S DAO · STAFF FINANCE</div><h1>Salary Advance Repayment</h1><p>EMPLOYEE ACKNOWLEDGEMENT &amp; REPAYMENT AGREEMENT</p></header><main class="main"><p class="eyebrow">Advance details</p><div class="details"><div class="item"><div class="key">Employee</div><div class="val">${employee}</div></div><div class="item"><div class="key">Branch</div><div class="val">${branch}</div></div><div class="item"><div class="key">Advance date</div><div class="val">${niceDate(r.advance_date)}</div></div><div class="item amount"><div class="key">Advance amount</div><div class="val">${amount}</div></div><div class="item"><div class="key">Deduction month</div><div class="val">${new Intl.DateTimeFormat('en-GB',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(String(r.deduction_month).slice(0,7)+'-01T00:00:00Z'))} · 7th Salary</div></div><div class="item"><div class="key">Repayment status</div><div class="val"><span class="status">${statusText}</span></div></div></div><section class="section"><p class="eyebrow">Employee written consent</p><div class="consent">${esc(r.consent_text||content)}</div></section><section class="section"><p class="eyebrow">Employee signature</p><div class="signature"><img alt="Employee signature" src="${esc(r.signature_data||'')}"></div><div class="signlabel">Signed acknowledgement by employee</div></section><footer class="footer"><div><strong>Nature's Dao</strong><div class="printnote">Confidential · Payroll record</div></div><div>Created: ${esc(myTime(r.created_at))} (MYT)</div></footer></main></article>
 <style id="nd-advance-premium-ui-v3">
 #ndAdvanceModal .nd-dialog{background:#fffdf9;border:1px solid #dfd9c9;box-shadow:0 24px 80px #102a2450}
 #ndAdvanceModal .nd-dialog>div:first-child{background:linear-gradient(110deg,#163e32,#315d48);color:#fff;margin:-18px -18px 20px;padding:20px;border-radius:16px 16px 0 0}
@@ -31212,16 +31265,21 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  }
 async function open(){el('ndAdvanceModal').classList.add('open');el('ndAdvanceDate').value=dateMY();dateChanged();el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;requestAnimationFrame(resize);await populateEmployees();}
  async function save(){const db=client();if(!db){status('Salary connection is unavailable.');return;}const id=Number(el('ndAdvanceEmployee').value),date=el('ndAdvanceDate').value,amount=Number(el('ndAdvanceAmount').value);if(!id||!date||!Number.isFinite(amount)||amount<=0||!hasSignature||!el('ndAdvanceAgree').checked){alert('Select employee, date, amount, sign and agree before saving.');return;}if(!confirm('Confirm signed salary advance of RM '+amount.toFixed(2)+'? The full amount will be deducted from the next 7th salary.'))return;const btn=el('ndAdvanceSave');btn.disabled=true;status('Saving...');try{const {error}=await db.rpc('nd_salary_advance_create',{p_employee_id:id,p_advance_date:date,p_amount:amount,p_signature_data:canvas().toDataURL('image/png'),p_consent_text:el('ndAdvanceConsent').textContent,p_acknowledged:true});if(error)throw error;status('Signed advance saved. The 7th salary deduction has been updated.');el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;resize();await load();if(typeof refreshSalaryStayHere==='function')await refreshSalaryStayHere();}catch(e){status('Save failed: '+(e.message||e));}finally{btn.disabled=false;}}
- function setup(){el('ndAdvanceBtn')?.addEventListener('click',open);el('ndAdvanceClose')?.addEventListener('click',()=>el('ndAdvanceModal').classList.remove('open'));el('ndAdvanceDate')?.addEventListener('change',dateChanged);el('ndAdvanceClear')?.addEventListener('click',resize);el('ndAdvanceSave')?.addEventListener('click',save);el('ndAdvanceBranch')?.addEventListener('change',renderEmployees);el('ndAdvanceHistory')?.addEventListener('click',e=>{const id=e.target.closest('[data-advance-report]')?.dataset.advanceReport;const r=history.find(x=>String(x.id)===id);if(r)report(r);});const c=canvas();c.addEventListener('pointerdown',e=>{draw=true;last=point(e);c.setPointerCapture(e.pointerId);});c.addEventListener('pointermove',e=>{if(!draw)return;const p=point(e),ctx=c.getContext('2d');ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;hasSignature=true;});c.addEventListener('pointerup',()=>draw=false);c.addEventListener('pointercancel',()=>draw=false);}
+ function setup(){el('ndAdvanceBtn')?.addEventListener('click',open);el('ndAdvanceClose')?.addEventListener('click',()=>el('ndAdvanceModal').classList.remove('open'));el('ndAdvanceDate')?.addEventListener('change',dateChanged);el('ndAdvanceClear')?.addEventListener('click',resize);el('ndAdvanceSave')?.addEventListener('click',save);el('ndAdvanceBranch')?.addEventListener('change',renderEmployees);el('ndAdvanceHistory')?.addEventListener('click',e=>{const id=e.target.closest('[data-advance-report]')?.dataset.advanceReport;const r=history.find(x=>String(x.id)===id);if(r&&ndAdvanceCanView(r))report(r);});const c=canvas();c.addEventListener('pointerdown',e=>{draw=true;last=point(e);c.setPointerCapture(e.pointerId);});c.addEventListener('pointermove',e=>{if(!draw)return;const p=point(e),ctx=c.getContext('2d');ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;hasSignature=true;});c.addEventListener('pointerup',()=>draw=false);c.addEventListener('pointercancel',()=>draw=false);}
  function startAutoHistory(){
-  const card=el('ndAdvanceDailyHistoryCard'),root=el('dailyBranchToggle');
-  if(!card)return;
-  if(root)new MutationObserver(syncHistoryBranch).observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['class','data-branch']});
-  document.addEventListener('click',e=>{if(e.target.closest('#dailyBranchToggle .branch-btn[data-branch]'))setTimeout(syncHistoryBranch,0);});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});
-  window.addEventListener('focus',()=>{if(!document.hidden)load();});
-  setInterval(()=>{if(!document.hidden&&card.getClientRects().length)load();},30000);
-  load();
+   const card=el('ndAdvanceDailyHistoryCard'),mount=el('ndAdvanceSalaryHistoryMount'),btn=el('ndAdvanceHistoryBtn');
+   if(!card||!mount||!btn)return;
+   mount.appendChild(card);
+   btn.addEventListener('click',()=>{
+     const opening=card.style.display==='none';
+     card.style.display=opening?'block':'none';btn.classList.toggle('active',opening);
+     btn.setAttribute('aria-expanded',String(opening));
+     if(opening)load();
+   });
+   el('salaryMonth')?.addEventListener('change',renderHistory);
+   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&card.style.display!=='none')load();});
+   window.addEventListener('focus',()=>{if(!document.hidden&&card.style.display!=='none')load();});
+   setInterval(()=>{if(!document.hidden&&card.style.display!=='none')load();},30000);
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{setup();startAutoHistory();});else{setup();startAutoHistory();}
 })();
