@@ -13235,27 +13235,20 @@ async function toggleSalaryPayment(type,empId){
   if(!outlet||!Number.isFinite(net)||net<0){alert('Missing branch or confirmed Net Pay.');return;}
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   let names=[];
-  const operatorEmail=String(currentSalaryUserEmail||'').trim().toLowerCase();
-  const fullPaymentOperator=ndHasFullPaymentAccess();
-  if(fullPaymentOperator){
-    // Matches the SQL full-access PIC exception: email or email local-part.
-    // Full payment operators do not require any duty assignment.
+  const {data:paymentSession,error:paymentSessionError}=await salaryDb.auth.getUser();
+  if(paymentSessionError||!paymentSession?.user?.email){alert('Login required to confirm payment.');return;}
+  const operatorEmail=String(paymentSession.user.email).trim().toLowerCase();
+  const fullPaymentOperator=ND_FULL_PAYMENT_EMAILS.includes(operatorEmail);
+  const samPaymentOperator=operatorEmail==='samchin6006@gmail.com';
+  if(fullPaymentOperator||samPaymentOperator){
+    // Signed-in account is the PIC; SQL independently validates this identity.
     names=[operatorEmail];
   }else{
-    // The backend verifies the actual signed-in email against today's duty
-    // assignment. Listing available PICs alone does NOT grant payment access.
-    const {data:allowed,error:accessError}=await salaryDb.rpc('nd_salary_duty_my_outlets');
-    if(accessError){alert('Cannot verify Salary Duty access: '+accessError.message);return;}
-    const hasDuty=(allowed||[]).some(x=>String(x.outlet||'')===outlet);
-    const sam=operatorEmail==='samchin6006@gmail.com';
-    if(!hasDuty&&!sam){alert('Your account is not authorized for Salary Duty at this branch today.');return;}
-    const {data:roster,error:rosterError}=await salaryDb.rpc('nd_salary_duty_branch_today',{p_outlet:outlet});
-    if(rosterError){alert('Cannot load Salary Duty staff: '+rosterError.message);return;}
-    names=[...new Set((roster||[]).map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
-    if(!names.length){
-      alert('No authorized payment person in charge for this branch today. Add a Salary Duty Staff assignment first.');
-      return;
-    }
+    // Only the signed-in employee's authorized nickname for today's branch.
+    const {data:selfDuty,error:dutyError}=await salaryDb.rpc('nd_salary_duty_my_pic',{p_outlet:outlet});
+    if(dutyError){alert('Cannot verify Salary Duty access: '+dutyError.message);return;}
+    names=[...new Set((selfDuty||[]).map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
+    if(!names.length){alert('Your account is not assigned to Salary Duty at this branch today.');return;}
   }
   let modal=document.getElementById('ndSignedPaymentModal');
   if(!modal){
@@ -15115,45 +15108,8 @@ function salaryExportJobs(mode){
   return jobs;
 }
 
-async function markExportedSalaryJobsDone(jobs){
-  if(!jobs?.length) return;
-
-  const {data:{session}}=await salaryDb.auth.getSession();
-  const email=String(session?.user?.email||"").toLowerCase();
-  const now=new Date().toISOString();
-  const salaryMonth=monthDate();
-
-  const sevenIds=[...new Set(jobs.filter(j=>j.type===7).map(j=>j.empId))];
-  const fourteenIds=[...new Set(jobs.filter(j=>j.type===14).map(j=>j.empId))];
-
-  if(sevenIds.length){
-    const {error}=await salaryDb
-      .from("payroll_snapshot")
-      .update({
-        payment_done:true,
-        payment_done_at:now,
-        payment_done_by:email
-      })
-      .eq("salary_month",salaryMonth)
-      .in("employee_id",sevenIds);
-
-    if(error) throw new Error("7th Payment DONE update failed: "+error.message);
-  }
-
-  if(fourteenIds.length){
-    const {error}=await salaryDb
-      .from("payroll_commission_snapshot")
-      .update({
-        payment_done:true,
-        payment_done_at:now,
-        payment_done_by:email
-      })
-      .eq("salary_month",salaryMonth)
-      .in("employee_id",fourteenIds);
-
-    if(error) throw new Error("14th Payment DONE update failed: "+error.message);
-  }
-}
+// Exporting payslips must never mark Payment DONE.
+// Only nd_confirm_signed_salary_payment can confirm a signed receipt.
 
 async function exportSalaryPayslipCategory(mode){
   const exportEmail=String(currentUserEmail||"").trim().toLowerCase();
