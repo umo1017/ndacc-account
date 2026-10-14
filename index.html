@@ -13235,14 +13235,27 @@ async function toggleSalaryPayment(type,empId){
   if(!outlet||!Number.isFinite(net)||net<0){alert('Missing branch or confirmed Net Pay.');return;}
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   let names=[];
-  if(ndHasFullPaymentAccess()){
-    // Full payment operators are not required to be on the duty roster.
-    names=[String(currentSalaryUserEmail||'').trim().toLowerCase()];
+  const operatorEmail=String(currentSalaryUserEmail||'').trim().toLowerCase();
+  const fullPaymentOperator=ndHasFullPaymentAccess();
+  if(fullPaymentOperator){
+    // Matches the SQL full-access PIC exception: email or email local-part.
+    // Full payment operators do not require any duty assignment.
+    names=[operatorEmail];
   }else{
+    // The backend verifies the actual signed-in email against today's duty
+    // assignment. Listing available PICs alone does NOT grant payment access.
+    const {data:allowed,error:accessError}=await salaryDb.rpc('nd_salary_duty_my_outlets');
+    if(accessError){alert('Cannot verify Salary Duty access: '+accessError.message);return;}
+    const hasDuty=(allowed||[]).some(x=>String(x.outlet||'')===outlet);
+    const sam=operatorEmail==='samchin6006@gmail.com';
+    if(!hasDuty&&!sam){alert('Your account is not authorized for Salary Duty at this branch today.');return;}
     const {data:roster,error:rosterError}=await salaryDb.rpc('nd_salary_duty_branch_today',{p_outlet:outlet});
-    if(rosterError){alert('Cannot verify salary duty: '+rosterError.message);return;}
+    if(rosterError){alert('Cannot load Salary Duty staff: '+rosterError.message);return;}
     names=[...new Set((roster||[]).map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
-    if(!names.length){alert('No Salary Duty staff authorized for this branch today.');return;}
+    if(!names.length){
+      alert('No authorized payment person in charge for this branch today. Add a Salary Duty Staff assignment first.');
+      return;
+    }
   }
   let modal=document.getElementById('ndSignedPaymentModal');
   if(!modal){
@@ -30890,17 +30903,6 @@ function sync(){
  if(b.style.display!=='none'&&!window.ndDutyNicknamesLoaded){window.ndDutyNicknamesLoaded=true;salaryDb.rpc('nd_salary_duty_admin_list').then(({data,error})=>{if(error)return;window.ndDutyNicknamesByDay={};for(const r of data||[]){const k=String(r.outlet)+'|'+String(r.duty_date).slice(0,10);(window.ndDutyNicknamesByDay[k]??=[]).push(String(r.staff_name||'').trim());}if(typeof renderRoster==='function')renderRoster();});}
 }
 document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});});
-})();
-</script>
-
-<script id="nd-salary-duty-english-label-final">
-(function(){
-  function applyEnglishLabel(){
-    const btn=document.getElementById('ndDutyRosterBtn');
-    if(btn && btn.textContent.trim() !== '+ Salary Duty Staff') btn.textContent='+ Salary Duty Staff';
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',applyEnglishLabel);
-  else applyEnglishLabel();
 })();
 </script>
 </body>
