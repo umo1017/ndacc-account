@@ -11224,6 +11224,25 @@ const ND_SAM_EMAIL='samchin6006@gmail.com';
 const ND_WENDY_EMAIL='yokewong0327@gmail.com';
 const ND_FULL_PAYMENT_EMAILS=['umo1017@gmail.com','mars83002566@gmail.com'];
 function ndHasFullPaymentAccess(){return ND_FULL_PAYMENT_EMAILS.includes(String(currentSalaryUserEmail||'').trim().toLowerCase());}
+
+/* Salary 14th/15th/16th: live duty branch check, independent of Salary Admin. */
+async function ndCanAccessCommissionBranch(outlet){
+  const branch=String(outlet||'').trim();
+  if(!['Eco Botanic','Nusa Bestari'].includes(branch))return false;
+  const session=await salaryDb.auth.getUser();
+  if(session.error||!session.data?.user?.email)return false;
+  const email=String(session.data.user.email).trim().toLowerCase();
+  if(ND_FULL_PAYMENT_EMAILS.includes(email))return true;
+  const check=await salaryDb.rpc('nd_salary_duty_my_pic',{p_outlet:branch});
+  if(check.error){console.warn('Salary Duty check failed:',check.error.message);return false;}
+  return Array.isArray(check.data)&&check.data.some(row=>String(row.staff_name||'').trim());
+}
+async function ndRequireCommissionBranch(outlet){
+  const allowed=await ndCanAccessCommissionBranch(outlet);
+  if(!allowed)alert('Access denied. You must be assigned to Salary Duty for this branch today.');
+  return allowed;
+}
+
 async function ndSpecialSalaryOutlets(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
   if(ND_FULL_PAYMENT_EMAILS.includes(email))return ['Eco Botanic','Nusa Bestari'];
@@ -14228,6 +14247,7 @@ async function openPayslip(empId,type){
     return false;
   }
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId)); if(!e) return;
+  if(Number(type)===14 && !(await ndRequireCommissionBranch(e.outlet)))return false;
   if(type===7){
     const rawS=snapshotFor(empId); const s=rawS?applySevenManualOverrides(e,normalizedSevenSnapshot(e,rawS)):rawS;
     if(!s){alert("Please confirm 7th payroll first.");return false;}
@@ -14973,6 +14993,11 @@ async function exportPayslipsByBranch(type){
       grouped[branch].push(e);
     });
 
+    if(!isSeven){
+      for(const branch of Object.keys(grouped)){
+        if(!(await ndCanAccessCommissionBranch(branch)))delete grouped[branch];
+      }
+    }
     const branches=Object.keys(grouped).sort((a,b)=>a.localeCompare(b));
     if(!branches.length){
       alert(`No confirmed ${isSeven?"7th":"14th"} payslips found for this month.`);
