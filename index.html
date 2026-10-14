@@ -4141,6 +4141,53 @@ table tbody tr:hover{background:#f3f7f9!important}
   <button id="dailyBirthdayReminderClose" type="button" aria-label="Close birthday reminder" style="position:absolute;right:10px;top:8px;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;padding:5px 8px">×</button>
   <div id="dailyBirthdayReminderText" style="font-weight:800;font-size:15px;padding-right:32px"></div>
 </div>
+
+<style id="nd-daily-reminder-design-v1">
+#dailyBirthdayReminder{background:linear-gradient(125deg,#fff8ed,#fff1f4)!important;border:1px solid #efd5bb!important;border-left:5px solid #c68a4c!important;box-shadow:0 12px 28px rgba(133,83,54,.1)!important}
+.nd-birthday-heading{font-size:13px;letter-spacing:.07em;color:#8e552b;font-weight:900;margin-bottom:10px;text-transform:uppercase}
+.nd-birthday-person{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid rgba(161,102,64,.12);color:#563d35;font-size:14px}
+.nd-birthday-day{border-radius:999px;padding:5px 10px;font-size:12px;font-weight:900;white-space:nowrap}
+.nd-birthday-day.today{background:#ffe0e5;color:#a72d53}.nd-birthday-day.tomorrow{background:#f7e7ca;color:#8c5b22}
+#ndPettyDailyReminder{position:fixed;inset:0;z-index:20050;background:rgba(15,29,25,.53);display:none;align-items:center;justify-content:center;padding:20px}
+#ndPettyDailyReminder.open{display:flex}
+#ndPettyDailyReminder .nd-petty-dialog{width:min(430px,100%);border-radius:24px;background:#fff;box-shadow:0 25px 90px rgba(0,0,0,.25);padding:25px;border-top:6px solid #c78338}
+#ndPettyDailyReminder .nd-petty-icon{width:54px;height:54px;display:grid;place-items:center;background:#fff1dc;border-radius:16px;font-size:27px;margin-bottom:12px}
+#ndPettyDailyReminder .nd-petty-title{font-size:21px;font-weight:900;color:#42301e;margin-bottom:7px}
+#ndPettyDailyReminder .nd-petty-desc{font-size:14px;line-height:1.65;color:#625d55}
+#ndPettyDailyReminder .nd-petty-total{font-size:28px;font-weight:900;color:#a45b20;padding:14px 0}
+#ndPettyDailyReminder .nd-petty-done{width:100%;border:0;border-radius:12px;background:#244e3d;color:white;font-size:15px;font-weight:800;padding:14px;cursor:pointer}
+</style>
+<div id="ndPettyDailyReminder" role="dialog" aria-modal="true" aria-labelledby="ndPettyReminderTitle">
+ <div class="nd-petty-dialog">
+  <div class="nd-petty-icon">💵</div>
+  <div class="nd-petty-title" id="ndPettyReminderTitle">Petty Cash · Cash Deduction</div>
+  <div class="nd-petty-desc" id="ndPettyReminderDescription">Please deduct today's Cash Withdrawal to Petty Cash from the branch cash balance.</div>
+  <div class="nd-petty-total" id="ndPettyReminderAmount"></div>
+  <button type="button" class="nd-petty-done" id="ndPettyReminderDone">I Have Completed</button>
+ </div>
+</div>
+<script id="nd-petty-reminder-behavior-v1">
+(function(){
+ let lastShownEntry=0;
+ window.ndPettyDailyReminderCheck=function(force){
+  const page=document.getElementById('appView');
+  if(!page||page.classList.contains('hidden')||getComputedStyle(page).display==='none')return;
+  const info=window.ndDailyPettyReminderData;
+  if(!info||info.amount<=0||info.date!==new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}))return;
+  if(!force&&lastShownEntry===info.entry)return;
+  lastShownEntry=info.entry;
+  const modal=document.getElementById('ndPettyDailyReminder');
+  const label=document.getElementById('ndPettyReminderDescription');
+  label.textContent=`${info.branch} · ${info.date}. Please verify today's Cash Withdrawal to Petty Cash has been deducted from Total Cash.`;
+  document.getElementById('ndPettyReminderAmount').textContent='RM '+info.amount.toFixed(2);
+  modal.classList.add('open');
+ };
+ document.getElementById('ndPettyReminderDone')?.addEventListener('click',()=>{
+  document.getElementById('ndPettyDailyReminder')?.classList.remove('open');
+ });
+})();
+</script>
+
 <div class="topbar">
 <div><div class="brand"> Nature’s Dao</div><div class="sub">Daily Settlement</div></div>
 <div style="display:flex;align-items:flex-start;gap:10px">
@@ -7491,7 +7538,11 @@ return `<div class="history-date-card">
     el.textContent=money(balance);
   }
 
-  function renderAll(){renderHistory();renderMonth();updateMonthTotal();updateTodayTotalCash();}
+  function renderAll(){renderHistory();renderMonth();updateMonthTotal();updateTodayTotalCash();
+    const day=String($("settlementDate")?.value||"");
+    const total=pettyEntries.filter(e=>e&&e.type==="in"&&(e.transfer_to_petty===true||e.reason==="Cash Withdrawal to Petty Cash")).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+    window.ndDailyPettyReminderData={date:day,branch:currentBranch,amount:total,entry:(window.ndDailyPettyReminderData?.entry||0)};
+  }
 
   async function clearSelectedDay(){
     if(!isCashWithdrawalManager){
@@ -10838,6 +10889,8 @@ function showDaily(){
   }
 
   try{setSidebarActive("daily");}catch(_){}
+  try{window.ndRefreshDailyBirthdayReminder?.(true);}catch(_){}
+  try{if(window.ndDailyPettyReminderData){window.ndDailyPettyReminderData.entry=(window.ndDailyPettyReminderData.entry||0)+1;window.ndPettyDailyReminderCheck?.(true);}}catch(_){}
   try{closeMobileSidebar();}catch(_){}
 }
 
@@ -11936,6 +11989,7 @@ async function loadSalaryData(){
   salaryEmployees=(empsRes.data||[])
     .filter(e=>{
       if(isGlobalAdmin) return true;
+  setTimeout(()=>{try{window.ndRefreshDailyBirthdayReminder?.(true);}catch(_){}},0);
 
       if(isPayrollManager) return true;
       return e.outlet==="Collaboration" || accessibleSalaryOutlets.includes(e.outlet);
@@ -28101,18 +28155,25 @@ function refreshDailyBirthdayReminder(){
  const box=document.getElementById("dailyBirthdayReminder"),txt=document.getElementById("dailyBirthdayReminderText");
  if(!box||!txt)return;
  box.style.display="none";txt.innerHTML="";
- const tomorrow=new Date();tomorrow.setHours(12,0,0,0);tomorrow.setDate(tomorrow.getDate()+1);
- const tm=tomorrow.getMonth()+1,td=tomorrow.getDate(),todayKey=birthdayLocalDateKey(new Date());
- const matches=(salaryEmployees||[]).filter(e=>{
-   if(!e||!e.birthday)return false;
-   const raw=String(e.birthday).slice(0,10),p=raw.split("-").map(Number);
-   if(p.length!==3||p[1]!==tm||p[2]!==td)return false;
-   if(e.last_working_date && String(e.last_working_date).slice(0,10)<todayKey)return false;
-   return localStorage.getItem(birthdayReminderDismissKey(e.id,todayKey))!=="1";
+ const today=new Date();today.setHours(12,0,0,0);
+ const tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
+ const todayKey=birthdayLocalDateKey(today);
+ const matches=(salaryEmployees||[]).flatMap(e=>{
+   if(!e||!e.birthday||e.birthday_na)return [];
+   const p=String(e.birthday).slice(0,10).split("-").map(Number);
+   if(p.length!==3)return [];
+   const isToday=p[1]===today.getMonth()+1&&p[2]===today.getDate();
+   const isTomorrow=p[1]===tomorrow.getMonth()+1&&p[2]===tomorrow.getDate();
+   if(!isToday&&!isTomorrow)return [];
+   if(e.last_working_date&&String(e.last_working_date).slice(0,10)<todayKey)return [];
+   if(localStorage.getItem(birthdayReminderDismissKey(e.id,todayKey))==="1")return [];
+   return [{e,isToday}];
  });
  if(!matches.length)return;
- txt.innerHTML=matches.map(e=>`⏰ ${birthdayEsc(e.name||"Employee")} 明天生日`).join("<br>");
- box.dataset.employeeIds=matches.map(e=>e.id).join(",");
+ txt.innerHTML='<div class="nd-birthday-heading">🎉 Staff Birthday Reminder</div>'+matches.map(({e,isToday})=>
+   `<div class="nd-birthday-person"><span>${birthdayEsc(e.name||"Employee")}</span><span class="nd-birthday-day ${isToday?'today':'tomorrow'}">${isToday?'Today 🎂':'Tomorrow 🎁'}</span></div>`
+ ).join("");
+ box.dataset.employeeIds=matches.map(x=>x.e.id).join(",");
  box.style.display="block";
 }
 function closeDailyBirthdayReminder(){
@@ -28131,6 +28192,8 @@ function refreshDailyBirthdayReminderLazy(force=false){
  dailyBirthdayLastCheckKey=key;
  try{refreshDailyBirthdayReminder();}catch(e){console.warn("Birthday reminder:",e);}
 }
+
+window.ndRefreshDailyBirthdayReminder=refreshDailyBirthdayReminderLazy;
 
 function monthKey(){
    const m=document.getElementById("rosterMonth")?.value||"";
@@ -31481,13 +31544,13 @@ function note(message){const el=$('nddStatus');if(el)el.textContent=message}
 function options(arr,selected=''){return arr.map(o=>`<option value="${esc(o.value)}" ${String(o.value)===String(selected)?'selected':''}>${esc(o.label)}</option>`).join('')}
 function month(){return val('salaryMonth')||new Date().toISOString().slice(0,7)}
 function isAdmin(){return admins.includes(email)}
-function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3><button type="button" class="btn" id="nddClose">Close</button></div><div class="ndd-note">Incident amounts are proposed only. Salary deductions require independent legal review and approval. No automatic wage deduction occurs from this screen.</div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${isAdmin()?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Record</button><button class="btn" type="button" id="nddManage">Manage Reasons</button></div><div id="nddForm" style="display:none"><div class="ndd-grid"><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en+' / '+r.name_zh})),selectedReason)}</select></div><div><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div><div><label>Warning Letter Required</label><select id="nddWarning"><option value="false">No</option><option value="true">Yes</option></select></div><div class="ndd-full"><label>Incident Details</label><textarea id="nddDetails"></textarea></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Chinese Name</label><input id="nddChinese"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Save Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Monthly History · ${esc(mm)}</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Warning</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.length?records.map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}<div class="helper">${esc(r.reason_zh)}</div></td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${r.warning_letter?'Yes':'No'}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${r.warning_letter?`<button class="mini" data-letter="${r.id}">Warning Letter</button>`:""}${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="9">No records for this month.</td></tr>'}</tbody></table></div>`;
+function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3><button type="button" class="btn" id="nddClose">Close</button></div><div class="ndd-note">Incident amounts are proposed only. Salary deductions require independent legal review and approval. No automatic wage deduction occurs from this screen.</div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${isAdmin()?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Record</button><button class="btn" type="button" id="nddManage">Manage Reasons</button></div><div id="nddForm" style="display:none"><div class="ndd-grid"><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en+' / '+r.name_zh})),selectedReason)}</select></div><div><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div><div><label>Warning Letter Required</label><select id="nddWarning"><option value="true">Yes — Generate Automatically</option><option value="false">No — Record Only</option></select></div><div class="ndd-full"><label>Incident Details</label><textarea id="nddDetails"></textarea></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Chinese Name</label><input id="nddChinese"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Save Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Monthly History · ${esc(mm)}</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Warning</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.length?records.map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}<div class="helper">${esc(r.reason_zh)}</div></td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${r.warning_letter?'Yes':'No'}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${r.warning_letter?`<button class="mini" data-letter="${r.id}">Warning Letter</button>`:""}${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="9">No records for this month.</td></tr>'}</tbody></table></div>`;
 $('nddClose').onclick=close;
 if(isAdmin()){$('nddNew').onclick=()=>{$('nddForm').style.display='block';$('nddReasonsPanel').style.display='none';setAmount()};$('nddCancel').onclick=()=>{$('nddForm').style.display='none'};$('nddManage').onclick=()=>{$('nddReasonsPanel').style.display=$('nddReasonsPanel').style.display==='none'?'block':'none';renderReasons()};$('nddBranch').onchange=()=>{$('nddEmployee').innerHTML=options(people.filter(p=>p.outlet===val('nddBranch')).map(p=>({value:p.id,label:p.name})))};$('nddReason').onchange=setAmount;$('nddSave').onclick=saveRecord;$('nddSaveReason').onclick=saveReason}
 m.querySelectorAll('[data-letter]').forEach(b=>b.onclick=()=>letter(records.find(r=>String(r.id)===b.dataset.letter)));
 m.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>review(records.find(r=>String(r.id)===b.dataset.review)));
 }
-function setAmount(){const r=reasons.find(x=>String(x.id)===val('nddReason'));if($('nddAmount'))$('nddAmount').value=r?.suggested_amount??0}
+function setAmount(){const r=reasons.find(x=>String(x.id)===val('nddReason'));if($('nddAmount'))$('nddAmount').value=r?.suggested_amount??0;if($('nddWarning'))$('nddWarning').value='true'}
 async function load(){const u=await db().auth.getUser();email=String(u.data?.user?.email||'').toLowerCase();const [p,rs,h]=await Promise.all([db().from('employees').select('id,name,outlet').order('name'),db().from('nd_deduction_reasons').select('*').order('name_en'),db().from('nd_staff_incidents').select('*').gte('incident_date',month()+'-01').lt('incident_date',nextMonth(month())+'-01').order('incident_date',{ascending:false})]);if(p.error||rs.error||h.error)throw Error(p.error?.message||rs.error?.message||h.error?.message);people=p.data||[];reasons=rs.data||[];records=h.data||[];render()}
 function nextMonth(m){const [y,mo]=m.split('-').map(Number);return (mo===12?y+1:y)+'-'+String(mo===12?1:mo+1).padStart(2,'0')}
 async function open(){const m=mount();if(!m)return;active=true;m.style.display='block';$('salaryOutletRoot').style.display='none';$('ndAdvanceSalaryHistoryMount').style.display='none';try{await load()}catch(e){m.innerHTML='<h3>Staff Deductions</h3><p class="bad">'+esc(e.message)+'</p><button class="btn" id="nddClose">Close</button>';$('nddClose').onclick=close}}
@@ -31538,7 +31601,51 @@ if(!attach())document.addEventListener('DOMContentLoaded',attach,{once:true});
   renderEmployees();if(!allEmployees.length)status('No employees available. '+(err?'Database: '+err:'Check employee access or refresh Salary staff list.'));
  }
 async function open(){el('ndAdvanceModal').classList.add('open');el('ndAdvanceDate').value=dateMY();dateChanged();el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;requestAnimationFrame(resize);await populateEmployees();}
- async function save(){const db=client();if(!db){status('Salary connection is unavailable.');return;}const id=Number(el('ndAdvanceEmployee').value),date=el('ndAdvanceDate').value,amount=Number(el('ndAdvanceAmount').value);if(!id||!date||!Number.isFinite(amount)||amount<=0||!hasSignature||!el('ndAdvanceAgree').checked){alert('Select employee, date, amount, sign and agree before saving.');return;}if(!confirm('Confirm signed salary advance of RM '+amount.toFixed(2)+'? The requested deduction month is the SAME month as the advance date (7th Salary). Verify payroll is not already finalised.'))return;const btn=el('ndAdvanceSave');btn.disabled=true;status('Saving...');try{const {error}=await db.rpc('nd_salary_advance_create',{p_employee_id:id,p_advance_date:date,p_amount:amount,p_signature_data:canvas().toDataURL('image/png'),p_consent_text:el('ndAdvanceConsent').textContent,p_acknowledged:true});if(error)throw error;status('Advance saved. Check the Deduction Month in history: the database must assign the same calendar month as the advance date.');el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;resize();await load();const matching=history.filter(r=>Number(r.employee_id)===id&&String(r.advance_date)===date&&Math.abs(Number(r.amount)-amount)<0.001).sort((a,b)=>Number(b.id)-Number(a.id))[0];if(matching&&String(matching.deduction_month).slice(0,7)!==date.slice(0,7)){status('WARNING: Database assigned '+String(matching.deduction_month).slice(0,7)+' instead of '+date.slice(0,7)+'. The nd_salary_advance_create SQL function must be corrected.');}if(typeof refreshSalaryStayHere==='function'){const salaryMonthInput=document.getElementById('salaryMonth');if(salaryMonthInput){salaryMonthInput.value=date.slice(0,7);}await refreshSalaryStayHere();status('Advance saved. Current-month 7th Salary Deduction has been refreshed. If a payroll snapshot was previously confirmed, re-confirm payroll before payment.');}}catch(e){status('Save failed: '+(e.message||e));}finally{btn.disabled=false;}}
+ async function save(){
+   const db=client();
+   if(!db){status('Salary connection is unavailable.');return;}
+   const id=Number(el('ndAdvanceEmployee').value);
+   const date=el('ndAdvanceDate').value;
+   const amount=Number(el('ndAdvanceAmount').value);
+   if(!id||!date||!Number.isFinite(amount)||amount<=0||!hasSignature||!el('ndAdvanceAgree').checked){
+     alert('Select employee, date, amount, sign and agree before saving.');return;
+   }
+   if(!confirm('Confirm signed salary advance of RM '+amount.toFixed(2)+'? This will be deducted from the current-month 7th Salary.'))return;
+   const btn=el('ndAdvanceSave');btn.disabled=true;status('Saving signed advance...');
+   let saved=false;
+   try{
+     const {error}=await db.rpc('nd_salary_advance_create',{
+       p_employee_id:id,p_advance_date:date,p_amount:amount,
+       p_signature_data:canvas().toDataURL('image/png'),
+       p_consent_text:el('ndAdvanceConsent').textContent,p_acknowledged:true
+     });
+     if(error)throw error;
+     saved=true;
+     el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;resize();
+     const salaryMonthInput=document.getElementById('salaryMonth');
+     if(salaryMonthInput)salaryMonthInput.value=date.slice(0,7);
+     status('Advance saved. Refreshing 7th Salary...');
+     const refreshes=[];
+     if(typeof refreshSalaryStayHere==='function')refreshes.push(refreshSalaryStayHere());
+     refreshes.push(load());
+     const outcomes=await Promise.allSettled(refreshes);
+     const failed=outcomes.find(x=>x.status==='rejected');
+     if(failed){
+       console.error('Salary advance refresh failed:',failed.reason);
+       status('Advance SAVED, but the Salary or history refresh failed. Reopen Salary to see updated values.');
+       return;
+     }
+     const matching=history.filter(r=>Number(r.employee_id)===id&&String(r.advance_date)===date&&Math.abs(Number(r.amount)-amount)<0.001).sort((a,b)=>Number(b.id)-Number(a.id))[0];
+     if(matching&&String(matching.deduction_month).slice(0,7)!==date.slice(0,7)){
+       status('Advance SAVED. WARNING: deduction month does not match advance month. Contact payroll administrator.');
+       return;
+     }
+     status('Advance saved. Current-month 7th Salary Deduction and Net Pay refreshed. Payment DONE and On Hold remain locked.');
+   }catch(e){
+     status((saved?'Advance SAVED; refresh issue: ':'Save failed: ')+(e.message||e));
+   }finally{btn.disabled=false;}
+ }
+
  function setup(){el('ndAdvanceBtn')?.addEventListener('click',open);el('ndAdvanceClose')?.addEventListener('click',()=>el('ndAdvanceModal').classList.remove('open'));el('ndAdvanceDate')?.addEventListener('change',dateChanged);el('ndAdvanceClear')?.addEventListener('click',resize);el('ndAdvanceSave')?.addEventListener('click',save);el('ndAdvanceBranch')?.addEventListener('change',renderEmployees);el('ndAdvanceHistory')?.addEventListener('click',e=>{const id=e.target.closest('[data-advance-report]')?.dataset.advanceReport;const r=history.find(x=>String(x.id)===id);if(r&&ndAdvanceCanView(r))report(r);});const c=canvas();c.addEventListener('pointerdown',e=>{draw=true;last=point(e);c.setPointerCapture(e.pointerId);});c.addEventListener('pointermove',e=>{if(!draw)return;const p=point(e),ctx=c.getContext('2d');ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;hasSignature=true;});c.addEventListener('pointerup',()=>draw=false);c.addEventListener('pointercancel',()=>draw=false);}
  function startAutoHistory(){
    const card=el('ndAdvanceDailyHistoryCard'),mount=el('ndAdvanceSalaryHistoryMount'),btn=el('ndAdvanceHistoryBtn');
