@@ -4045,7 +4045,7 @@ table tbody tr:hover{background:#f3f7f9!important}
 <div class="sidebar-brand">Nature's Dao</div>
 <button class="sidebar-btn active" id="sidebarDaily" type="button">Daily Settlement</button>
 <button class="sidebar-btn" id="sidebarRoster" type="button">Monthly Roster</button>
-<button class="sidebar-btn" id="sidebarSalary" style="display:none" type="button">Salary</button>
+<button class="sidebar-btn" id="sidebarSalary" type="button">Salary</button>
 <button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
 <button class="sidebar-btn" id="sidebarAiReceipt" style="display:none" type="button">Expenses</button>
@@ -10613,11 +10613,11 @@ function updateSalaryNavVisibility(){
     : [];
 
   const salaryNav=byId("sidebarSalary");
-  if(salaryNav) salaryNav.style.display=canViewSalary?"":"none";
-  window.canViewSalary=canViewSalary;
+  if(salaryNav) salaryNav.style.display="";
+  window.canViewSalary=true; // Menu visibility only; does not grant database access.
 
   // If access was removed while user is on Salary, return to Daily.
-  if(!canViewSalary && window.activeMainPage==="salary"){
+  if(false && !canViewSalary && window.activeMainPage==="salary"){
     try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
     try{showDaily();}catch(_){}
   }
@@ -10751,11 +10751,7 @@ function showDaily(){
 
 function showSalary(){
   try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
-  if(!window.canViewSalary){
-    try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
-    showDaily();
-    return;
-  }
+  // Salary navigation remains visible; protected payroll data is scoped by outlet access.
   rememberPreviousMainPage("salary");
   
   window.activeMainPage="salary";
@@ -11221,6 +11217,7 @@ window.openMonthlyRosterPage=function(ev){
 
 /* ND salary branch access: server-authorized, never grant Global to SAM/Wendy. */
 const ND_SAM_EMAIL='samchin6006@gmail.com';
+const ND_BILLY_EMAIL=''; // Set verified Billy account email in Supabase salary_user_access, not by guessing.
 const ND_WENDY_EMAIL='yokewong0327@gmail.com';
 const ND_FULL_PAYMENT_EMAILS=['umo1017@gmail.com','mars83002566@gmail.com'];
 function ndHasFullPaymentAccess(){return ND_FULL_PAYMENT_EMAILS.includes(String(currentSalaryUserEmail||'').trim().toLowerCase());}
@@ -11232,7 +11229,7 @@ async function ndCanAccessCommissionBranch(outlet){
   const session=await salaryDb.auth.getUser();
   if(session.error||!session.data?.user?.email)return false;
   const email=String(session.data.user.email).trim().toLowerCase();
-  if(ND_FULL_PAYMENT_EMAILS.includes(email))return true;
+  if(ND_FULL_PAYMENT_EMAILS.includes(email)||email===ND_SAM_EMAIL)return true;
   const check=await salaryDb.rpc('nd_salary_duty_my_pic',{p_outlet:branch});
   if(check.error){console.warn('Salary Duty check failed:',check.error.message);return false;}
   return Array.isArray(check.data)&&check.data.some(row=>String(row.staff_name||'').trim());
@@ -11245,7 +11242,7 @@ async function ndRequireCommissionBranch(outlet){
 
 async function ndSpecialSalaryOutlets(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
-  if(ND_FULL_PAYMENT_EMAILS.includes(email))return ['Eco Botanic','Nusa Bestari'];
+  if(ND_FULL_PAYMENT_EMAILS.includes(email)||email===ND_SAM_EMAIL)return ['Eco Botanic','Nusa Bestari'];
   // Duty access is an independent roster, never hygiene/monthly roster.
   const {data,error}=await salaryDb.rpc('nd_salary_duty_my_outlets');
   if(error){console.warn('Salary duty access unavailable:',error.message);return [];}
@@ -11355,6 +11352,7 @@ async function loadSalaryBranches(){
 
   accessibleSalaryOutlets=[...new Set([...accessibleSalaryOutlets,...await ndSpecialSalaryOutlets()])];
   ndRestrictGlobalSalaryAccess();
+  if(currentSalaryUserEmail===ND_SAM_EMAIL) accessibleSalaryOutlets=["Eco Botanic","Nusa Bestari"];
   populateOutletSelects();
   updateSalaryNavVisibility();
 }
