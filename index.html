@@ -12197,12 +12197,12 @@ function renderSevenTable(emps){
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
 
-      <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset7="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
+      <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset7="${e.id}" ${snap.payment_done?'disabled title="Payment DONE cannot be reset"':''}>Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
       <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${snap
         ? (snap.payment_done
-            ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button> <button class="btn" type="button" data-view-signed-receipt="14:${e.id}">View Signed Receipt</button> <button class="btn" type="button" data-view-signed-receipt="7:${e.id}">View Signed Receipt</button>`
+            ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button> <button class="btn" type="button" data-view-signed-receipt="7:${e.id}">View Signed Receipt</button>`
             : `${ndSalaryHoldButton(7,e.id)} <button class="btn payment-done-btn pending" type="button" data-payment7="${e.id}" ${ndSalaryIsHeld(7,e.id)?'disabled title="Release On Hold first"':''}>Payment — DONE</button>`)
         : `<span class="helper">Confirm first</span>`}</td>
     </tr>`;
@@ -12334,12 +12334,12 @@ function renderFourteenTable(emps){
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
-      <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button class="btn" data-reset14="${e.id}">Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
+      <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset14="${e.id}" ${cs.payment_done?'disabled title="Payment DONE cannot be reset"':''}>Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
       <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${cs
         ? (cs.payment_done
-            ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>`
+            ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button> <button class="btn" type="button" data-view-signed-receipt="14:${e.id}">View Signed Receipt</button>`
             : `${ndSalaryHoldButton(14,e.id)} <button class="btn payment-done-btn pending" type="button" data-payment14="${e.id}" ${ndSalaryIsHeld(14,e.id)?'disabled title="Release On Hold first"':''}>Payment — DONE</button>`)
         : `<span class="helper">Confirm first</span>`}</td>
     </tr>`;
@@ -13169,15 +13169,32 @@ function bindSalaryTableActions(){
     };
   });
   document.querySelectorAll("[data-confirm7]").forEach(btn=>btn.onclick=()=>confirm7th(Number(btn.dataset.confirm7)));
-  document.querySelectorAll("[data-reset7]").forEach(btn=>btn.onclick=()=>reset7th(Number(btn.dataset.reset7)));
+  // Reset clicks handled by persistent delegated listener.
   document.querySelectorAll("[data-confirm14]").forEach(btn=>btn.onclick=()=>confirm14th(Number(btn.dataset.confirm14)));
-  document.querySelectorAll("[data-reset14]").forEach(btn=>btn.onclick=()=>reset14th(Number(btn.dataset.reset14)));
+  // Reset clicks handled by persistent delegated listener.
   // Payment clicks handled by delegated listener so they continue to work after re-render.
   document.querySelectorAll("[data-payslip7]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip7),7));
   document.querySelectorAll("[data-payslip14]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip14),14));
 }
 
 
+
+// Salary Reset uses one persistent delegated handler. It works after table redraws.
+document.addEventListener('click',function(ev){
+  const target=ev.target instanceof Element?ev.target:null;
+  const btn=target?.closest('[data-reset7],[data-reset14]');
+  if(!btn)return;
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  if(btn.disabled)return;
+  const seven=btn.hasAttribute('data-reset7');
+  const id=Number(seven?btn.dataset.reset7:btn.dataset.reset14);
+  if(!Number.isSafeInteger(id)||id<=0)return;
+  btn.disabled=true;
+  Promise.resolve(ndResetSalaryToAutomatic(id,seven?'7':'14'))
+    .catch(e=>alert('Reset failed: '+String(e?.message||e)))
+    .finally(()=>{if(btn.isConnected)btn.disabled=false;});
+},true);
 
 document.addEventListener("click",async(ev)=>{
   const viewBtn=ev.target.closest('[data-view-signed-receipt]');
@@ -13419,8 +13436,9 @@ async function toggleSalaryPayment(type,empId){
       });
       if(error)throw error;
       const signedReceipt={employee:name,branch:outlet,salaryType:isSeven?'7th':'14th',month:monthDate(),netPay:net.toFixed(2),pic:pic.value,signature:canvas.toDataURL('image/png'),confirmedAt:new Date().toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'})};
-      close();await refreshSalaryStayHere();
+      close();
       ndShowSignedPaymentReceipt(signedReceipt);
+      try{await refreshSalaryStayHere();}catch(refreshError){console.error("Salary refresh after signed payment:",refreshError);}
     }catch(ex){err.textContent='Payment NOT marked DONE: '+String(ex.message||ex);}
     finally{btn.disabled=false;}
   };
