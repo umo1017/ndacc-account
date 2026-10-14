@@ -4006,7 +4006,7 @@ table tbody tr:hover{background:#f3f7f9!important}
 #ndPettyTopupReminder .nd-petty-total{font-size:32px;font-weight:900;color:#294b62;margin:15px 0}
 #ndPettyTopupReminder .nd-petty-understood{width:100%;background:#294b62;color:#fff;border:0;border-radius:12px;padding:13px;cursor:pointer;font-weight:800;margin-top:15px}
 </style>
-</head>
+<style id="nd-signed-payment-css">#ndSignedPaymentModal{display:none;position:fixed;inset:0;background:#0009;z-index:20000;align-items:center;justify-content:center;padding:14px}#ndSignedPaymentModal.open{display:flex}.nd-sign-dialog{background:#fff;border-radius:18px;width:min(540px,100%);max-height:95vh;overflow:auto;padding:22px;box-shadow:0 16px 60px #0003}.nd-sign-dialog h2{font-size:21px;margin:0 0 12px}.nd-sign-dialog p{margin:8px 0}.nd-sign-dialog label{display:block;font-weight:700;margin:12px 0 6px}.nd-sign-dialog canvas{width:100%;height:160px;touch-action:none;border:1px solid #bbb;border-radius:10px;background:#fff}.nd-sign-check{display:flex!important;gap:8px;align-items:flex-start}.nd-sign-check input{width:20px;flex:none}.nd-sign-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}.nd-sign-actions button:last-child{background:#1b4734;color:white}#ndSignError{color:#b42318;font-size:13px;margin-top:8px}</style></head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
@@ -11184,14 +11184,11 @@ const ND_SAM_EMAIL='samchin6006@gmail.com';
 const ND_WENDY_EMAIL='yokewong0327@gmail.com';
 async function ndSpecialSalaryOutlets(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
-  if(email===ND_SAM_EMAIL) return ['Eco Botanic','Nusa Bestari'];
-  if(email!==ND_WENDY_EMAIL) return [];
-  // The RPC must check auth.uid(), Malaysian current date and roster server-side.
-  // Fail closed if the database migration is not installed.
-  const {data,error}=await salaryDb.rpc('nd_wendy_salary_outlets_today');
-  if(error){console.warn('Wendy roster salary access unavailable:',error.message);return [];}
-  return (Array.isArray(data)?data:[]).map(x=>String(typeof x==='string'?x:x.outlet||'').trim())
-    .filter(x=>x==='Eco Botanic'||x==='Nusa Bestari');
+  if(email===ND_SAM_EMAIL)return ['Eco Botanic','Nusa Bestari'];
+  // Duty access is an independent roster, never hygiene/monthly roster.
+  const {data,error}=await salaryDb.rpc('nd_salary_duty_my_outlets');
+  if(error){console.warn('Salary duty access unavailable:',error.message);return [];}
+  return (data||[]).map(x=>String(x.outlet||'')).filter(x=>['Eco Botanic','Nusa Bestari'].includes(x));
 }
 function ndRestrictGlobalSalaryAccess(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
@@ -13220,51 +13217,69 @@ function assertRecordEditable(dateValue){
   return true;
 }
 
+/* Signed salary receipt: backend RPC is the only path to DONE. */
 async function toggleSalaryPayment(type,empId){
-  if(!assertRecordEditable(monthDate())) return;
-
+  if(!assertRecordEditable(monthDate()))return;
   const isSeven=Number(type)===7;
   const snap=isSeven?snapshotFor(empId):commissionSnapshotFor(empId);
-  if(!snap){
-    alert(`Please confirm ${isSeven?"7th":"14th"} payroll first.`);
-    return;
+  const employee=(typeof salaryEmployees!=='undefined' && Array.isArray(salaryEmployees)?salaryEmployees:[]).find(e=>Number(e.id)===Number(empId));
+  if(!snap){alert('Confirm payroll first.');return;}
+  if(snap.payment_done){return;}
+  if(ndSalaryIsHeld(type,empId)){alert('Release On Hold first.');return;}
+  const name=employee?.name||'Employee #'+empId;
+  const outlet=employee?.outlet||'';
+  const net=Number(snap.net_pay);
+  if(!outlet||!Number.isFinite(net)||net<0){alert('Missing branch or confirmed Net Pay.');return;}
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const {data:roster,error:rosterError}=await salaryDb.rpc('nd_salary_duty_branch_today',{p_outlet:outlet});
+  if(rosterError){alert('Cannot verify salary duty: '+rosterError.message);return;}
+  const names=[...new Set((roster||[]).map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
+  if(!names.length){alert('No Salary Duty staff authorized for this branch today.');return;}
+  let modal=document.getElementById('ndSignedPaymentModal');
+  if(!modal){
+    modal=document.createElement('div');modal.id='ndSignedPaymentModal';
+    modal.innerHTML=`<div class="nd-sign-dialog" role="dialog" aria-modal="true" aria-label="Salary payment confirmation">
+      <h2>Salary Payment Confirmation</h2><div id="ndSignDetails"></div>
+      <label for="ndSignPic">Person In Charge · 当天值班负责人</label><select id="ndSignPic"></select>
+      <label>Employee Signature · 员工签名</label>
+      <canvas id="ndSignCanvas" width="720" height="240" aria-label="Employee handwritten signature"></canvas>
+      <button type="button" id="ndSignClear" class="btn">Clear Signature</button>
+      <label class="nd-sign-check"><input type="checkbox" id="ndSignAck"> 我确认已收到上述薪水 / I acknowledge receipt of the salary shown above.</label>
+      <div id="ndSignError" role="alert"></div>
+      <div class="nd-sign-actions"><button type="button" class="btn" id="ndSignCancel">Cancel</button><button type="button" class="btn" id="ndSignConfirm">Confirm Payment DONE</button></div>
+    </div>`;
+    document.body.appendChild(modal);
   }
-
-  // One-way action: once DONE, never allow undo from the app.
-  if(Boolean(snap.payment_done)) return;
-
-  const ok=confirm(
-    `Confirm ${isSeven?"7th":"14th"} salary has been paid? Once marked DONE, it cannot be undone.`
-  );
-  if(!ok) return;
-
-  const table=isSeven?"payroll_snapshot":"payroll_commission_snapshot";
-  const {data:{session}}=await salaryDb.auth.getSession();
-  const email=String(session?.user?.email||"").toLowerCase();
-
-  if(email===ND_WENDY_EMAIL){
-    const {error}=await salaryDb.rpc('nd_wendy_mark_salary_paid',{
-      p_salary_type:type,p_employee_id:empId,p_salary_month:monthDate()
-    });
-    if(error){alert('Payment denied: '+error.message);return;}
-    await refreshSalaryStayHere();
-    return;
-  }
-  const {error}=await salaryDb.from(table)
-    .update({
-      payment_done:true,
-      payment_done_at:new Date().toISOString(),
-      payment_done_by:email
-    })
-    .eq("employee_id",empId)
-    .eq("salary_month",monthDate());
-
-  if(error){
-    alert("Payment status update failed: "+error.message);
-    return;
-  }
-
-  await refreshSalaryStayHere();
+  const escapeHtml=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  modal.querySelector('#ndSignDetails').innerHTML=`<p><b>Employee:</b> ${escapeHtml(name)}</p><p><b>Branch:</b> ${escapeHtml(outlet)}</p><p><b>Salary:</b> ${isSeven?'7th':'14th'} · ${escapeHtml(monthDate())}</p><p><b>Net Pay:</b> <strong>RM ${net.toFixed(2)}</strong></p>`;
+  const pic=modal.querySelector('#ndSignPic');pic.innerHTML=names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  const canvas=modal.querySelector('#ndSignCanvas'),ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='#182d26';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
+  let drawing=false,hasInk=false;
+  function pos(ev){const r=canvas.getBoundingClientRect();return {x:(ev.clientX-r.left)*canvas.width/r.width,y:(ev.clientY-r.top)*canvas.height/r.height};}
+  canvas.onpointerdown=ev=>{drawing=true;canvas.setPointerCapture(ev.pointerId);const p=pos(ev);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+.1,p.y+.1);ctx.stroke();hasInk=true;};
+  canvas.onpointermove=ev=>{if(!drawing)return;const p=pos(ev);ctx.lineTo(p.x,p.y);ctx.stroke();};
+  canvas.onpointerup=canvas.onpointercancel=()=>{drawing=false;};
+  modal.querySelector('#ndSignClear').onclick=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);hasInk=false;};
+  modal.querySelector('#ndSignAck').checked=false;
+  const err=modal.querySelector('#ndSignError');err.textContent='';
+  modal.classList.add('open');
+  const close=()=>{modal.classList.remove('open');};
+  modal.querySelector('#ndSignCancel').onclick=close;
+  modal.querySelector('#ndSignConfirm').onclick=async()=>{
+    if(!hasInk||!modal.querySelector('#ndSignAck').checked){err.textContent='Signature and receipt confirmation required.';return;}
+    const btn=modal.querySelector('#ndSignConfirm');btn.disabled=true;err.textContent='Saving...';
+    try{
+      const {error}=await salaryDb.rpc('nd_confirm_signed_salary_payment',{
+        p_salary_type:Number(type),p_employee_id:Number(empId),p_salary_month:monthDate(),
+        p_signature:canvas.toDataURL('image/png'),p_person_in_charge:pic.value,
+        p_acknowledged:true
+      });
+      if(error)throw error;
+      close();await refreshSalaryStayHere();
+    }catch(ex){err.textContent='Payment NOT marked DONE: '+String(ex.message||ex);}
+    finally{btn.disabled=false;}
+  };
 }
 async function reset7th(empId){
   if(!isGlobalAdmin){alert("No Confirm permission.");return;}
@@ -15190,7 +15205,7 @@ async function exportSalaryPayslipCategory(mode){
 
     // Only successfully generated/downloaded payslips are marked DONE.
     if(completed.length){
-      await markExportedSalaryJobsDone(completed);
+      /* Signed receipt required: exporting cannot automatically mark DONE. */
       await refreshSalaryStayHere();
     }
 
@@ -30769,6 +30784,39 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   });
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
+<style id="nd-duty-style">#ndDutyAdminBtn{position:fixed;right:18px;bottom:20px;z-index:1400;background:#244b39;color:white;border:0;border-radius:14px;padding:12px 18px;box-shadow:0 6px 20px #0003;cursor:pointer}#ndDutyAdminModal{display:none;position:fixed;inset:0;background:#0009;z-index:22000;align-items:center;justify-content:center;padding:14px}#ndDutyAdminModal.open{display:flex}#ndDutyAdminModal .nd-duty-dialog{background:white;border-radius:16px;padding:22px;width:min(620px,100%);max-height:90vh;overflow:auto}#ndDutyAdminModal input,#ndDutyAdminModal select{margin:4px 0 10px}#ndDutyAdminModal .nd-duty-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #eee;padding:10px 0}#ndDutyAdminModal .nd-duty-line button{margin-left:auto}</style>
+<script id="nd-duty-management-v1">
+(function(){
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+async function listDuty(){
+ const d=document.getElementById('ndDutyList'); if(!d)return;
+ const {data,error}=await salaryDb.rpc('nd_salary_duty_admin_list');
+ if(error){d.textContent='Cannot load: '+error.message;return;}
+ d.innerHTML=(data||[]).map(r=>`<div class="nd-duty-line"><span><b>${esc(r.staff_name)}</b> · ${esc(r.email)}<br>${esc(r.outlet)} · ${esc(r.duty_date)}</span><button class="btn" data-duty-remove="${Number(r.id)}">Remove</button></div>`).join('')||'No salary duty assignments';
+ d.querySelectorAll('[data-duty-remove]').forEach(b=>b.onclick=async()=>{
+   if(!confirm('Remove salary duty access?'))return;
+   const {error}=await salaryDb.rpc('nd_salary_duty_remove',{p_id:Number(b.dataset.dutyRemove)});
+   if(error)alert(error.message);else await listDuty();
+ });
+}
+async function openDuty(){
+ let m=document.getElementById('ndDutyAdminModal');
+ if(!m){m=document.createElement('div');m.id='ndDutyAdminModal';m.innerHTML=`<div class="nd-duty-dialog" role="dialog" aria-modal="true"><h2>Salary Duty Access · 薪水值班授权</h2><p>独立薪水值班，不关联卫生值班或 Monthly Roster。</p><label>Staff Name</label><input id="ndDutyName" placeholder="Employee name"><label>Login Email</label><input id="ndDutyEmail" type="email" placeholder="name@example.com"><label>Branch</label><select id="ndDutyOutlet"><option>Eco Botanic</option><option>Nusa Bestari</option></select><label>Duty Date</label><input id="ndDutyDate" type="date"><div style="display:flex;gap:8px"><button class="btn" id="ndDutySave">+ Add Duty Staff</button><button class="btn" id="ndDutyClose">Close</button></div><p id="ndDutyError" role="alert"></p><h3>Authorized Duty Staff</h3><div id="ndDutyList"></div></div>`;document.body.appendChild(m);m.querySelector('#ndDutyClose').onclick=()=>m.classList.remove('open');m.querySelector('#ndDutySave').onclick=async()=>{
+ const name=m.querySelector('#ndDutyName').value.trim(),email=m.querySelector('#ndDutyEmail').value.trim(),outlet=m.querySelector('#ndDutyOutlet').value,date=m.querySelector('#ndDutyDate').value;
+ if(!name||!email||!date){m.querySelector('#ndDutyError').textContent='Name, email and date required';return;}
+ const {error}=await salaryDb.rpc('nd_salary_duty_add',{p_staff_name:name,p_email:email,p_outlet:outlet,p_duty_date:date});
+ m.querySelector('#ndDutyError').textContent=error?error.message:'Saved';if(!error)await listDuty();
+ };}
+ m.querySelector('#ndDutyDate').value=today();m.classList.add('open');await listDuty();
+}
+function sync(){const salary=document.getElementById('salaryPage');if(!salary)return;
+ let b=document.getElementById('ndDutyAdminBtn');if(!b){b=document.createElement('button');b.id='ndDutyAdminBtn';b.textContent='+ Salary Duty Staff';b.onclick=openDuty;document.body.appendChild(b);}
+ b.style.display=(document.body.dataset.ndVisiblePage==='salary'&&typeof isGlobalAdmin!=='undefined'&&isGlobalAdmin)?'block':'none';
+}
+document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});});
 })();
 </script>
 </body>
