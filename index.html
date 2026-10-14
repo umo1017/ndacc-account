@@ -4006,7 +4006,40 @@ table tbody tr:hover{background:#f3f7f9!important}
 #ndPettyTopupReminder .nd-petty-total{font-size:32px;font-weight:900;color:#294b62;margin:15px 0}
 #ndPettyTopupReminder .nd-petty-understood{width:100%;background:#294b62;color:#fff;border:0;border-radius:12px;padding:13px;cursor:pointer;font-weight:800;margin-top:15px}
 </style>
-<style id="nd-signed-payment-css">#ndSignedPaymentModal{display:none;position:fixed;inset:0;background:#0009;z-index:20000;align-items:center;justify-content:center;padding:14px}#ndSignedPaymentModal.open{display:flex}.nd-sign-dialog{background:#fff;border-radius:18px;width:min(540px,100%);max-height:95vh;overflow:auto;padding:22px;box-shadow:0 16px 60px #0003}.nd-sign-dialog h2{font-size:21px;margin:0 0 12px}.nd-sign-dialog p{margin:8px 0}.nd-sign-dialog label{display:block;font-weight:700;margin:12px 0 6px}.nd-sign-dialog canvas{width:100%;height:160px;touch-action:none;border:1px solid #bbb;border-radius:10px;background:#fff}.nd-sign-check{display:flex!important;gap:8px;align-items:flex-start}.nd-sign-check input{width:20px;flex:none}.nd-sign-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}.nd-sign-actions button:last-child{background:#1b4734;color:white}#ndSignError{color:#b42318;font-size:13px;margin-top:8px}</style></head>
+<style id="nd-signed-payment-css">#ndSignedPaymentModal{display:none;position:fixed;inset:0;background:#0009;z-index:20000;align-items:center;justify-content:center;padding:14px}#ndSignedPaymentModal.open{display:flex}.nd-sign-dialog{background:#fff;border-radius:18px;width:min(540px,100%);max-height:95vh;overflow:auto;padding:22px;box-shadow:0 16px 60px #0003}.nd-sign-dialog h2{font-size:21px;margin:0 0 12px}.nd-sign-dialog p{margin:8px 0}.nd-sign-dialog label{display:block;font-weight:700;margin:12px 0 6px}.nd-sign-dialog canvas{width:100%;height:160px;touch-action:none;border:1px solid #bbb;border-radius:10px;background:#fff}.nd-sign-check{display:flex!important;gap:8px;align-items:flex-start}.nd-sign-check input{width:20px;flex:none}.nd-sign-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}.nd-sign-actions button:last-child{background:#1b4734;color:white}#ndSignError{color:#b42318;font-size:13px;margin-top:8px}</style><style id="nd-desktop-horizontal-scroll-fix-20261014">
+/* Horizontal scrolling for desktop and laptop wide tables. */
+@media (min-width: 761px) {
+  html, body { overflow-x: auto !important; }
+  #salaryPage, #rosterPage, #ordersPage, #settlementPage,
+  #settingsPage, #bonusPage, #appView, #socialPage {
+    overflow-x: auto !important;
+    overscroll-behavior-x: auto;
+  }
+  .table-wrap, .salary-table-wrap, .roster-table-wrap,
+  .history-table-wrap, .orders-list-wrap, .settlement-table-wrap,
+  #salaryPage [class*="table-wrap"], #rosterPage [class*="table-wrap"] {
+    overflow-x: auto !important;
+    max-width: 100% !important;
+    scrollbar-width: auto;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y !important;
+  }
+  .table-wrap > table, .salary-table-wrap > table,
+  .roster-table-wrap > table, .history-table-wrap > table,
+  .orders-list-wrap > table, .settlement-table-wrap > table {
+    width: max-content !important;
+    min-width: 100% !important;
+    max-width: none !important;
+  }
+  .table-wrap::-webkit-scrollbar, .salary-table-wrap::-webkit-scrollbar,
+  .roster-table-wrap::-webkit-scrollbar, .history-table-wrap::-webkit-scrollbar,
+  .orders-list-wrap::-webkit-scrollbar { height: 12px; }
+  .table-wrap::-webkit-scrollbar-thumb, .salary-table-wrap::-webkit-scrollbar-thumb,
+  .roster-table-wrap::-webkit-scrollbar-thumb, .history-table-wrap::-webkit-scrollbar-thumb,
+  .orders-list-wrap::-webkit-scrollbar-thumb { background: #b9b9b9; border-radius: 8px; }
+}
+</style>
+</head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
@@ -11183,11 +11216,11 @@ window.openMonthlyRosterPage=function(ev){
 /* ND salary branch access: server-authorized, never grant Global to SAM/Wendy. */
 const ND_SAM_EMAIL='samchin6006@gmail.com';
 const ND_WENDY_EMAIL='yokewong0327@gmail.com';
-const ND_FULL_PAYMENT_EMAILS=['umo1017@gmail.com','mars8381@gmail.com'];
+const ND_FULL_PAYMENT_EMAILS=['umo1017@gmail.com','mars83002566@gmail.com'];
 function ndHasFullPaymentAccess(){return ND_FULL_PAYMENT_EMAILS.includes(String(currentSalaryUserEmail||'').trim().toLowerCase());}
 async function ndSpecialSalaryOutlets(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
-  if(email===ND_SAM_EMAIL||email==='mars8381@gmail.com')return ['Eco Botanic','Nusa Bestari'];
+  if(ND_FULL_PAYMENT_EMAILS.includes(email))return ['Eco Botanic','Nusa Bestari'];
   // Duty access is an independent roster, never hygiene/monthly roster.
   const {data,error}=await salaryDb.rpc('nd_salary_duty_my_outlets');
   if(error){console.warn('Salary duty access unavailable:',error.message);return [];}
@@ -11195,7 +11228,7 @@ async function ndSpecialSalaryOutlets(){
 }
 function ndRestrictGlobalSalaryAccess(){
   const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
-  if(email===ND_SAM_EMAIL||email===ND_WENDY_EMAIL||email==='mars8381@gmail.com'){
+  if(email===ND_SAM_EMAIL||email===ND_WENDY_EMAIL){
     accessibleSalaryOutlets=(accessibleSalaryOutlets||[]).filter(x=>x!=='Global');
   }
 }
@@ -13221,6 +13254,7 @@ function assertRecordEditable(dateValue){
 }
 
 /* Signed salary receipt: backend RPC is the only path to DONE. */
+window.ND_PAYMENT_BUILD='DUTY-BRANCH-ONLY-20261014';
 async function toggleSalaryPayment(type,empId){
   if(!assertRecordEditable(monthDate()))return;
   const isSeven=Number(type)===7;
@@ -13239,8 +13273,7 @@ async function toggleSalaryPayment(type,empId){
   if(paymentSessionError||!paymentSession?.user?.email){alert('Login required to confirm payment.');return;}
   const operatorEmail=String(paymentSession.user.email).trim().toLowerCase();
   const fullPaymentOperator=ND_FULL_PAYMENT_EMAILS.includes(operatorEmail);
-  const samPaymentOperator=operatorEmail==='samchin6006@gmail.com';
-  if(fullPaymentOperator||samPaymentOperator){
+  if(fullPaymentOperator){
     // Signed-in account is the PIC; SQL independently validates this identity.
     names=[operatorEmail];
   }else{
