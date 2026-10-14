@@ -8441,6 +8441,7 @@ function ndOpenUnifiedCashHistory(type){
 <div class="roster-toolbar">
 <div class="field"><label>Month</label><input id="rosterMonth" type="month"/></div>
 <button class="btn" id="rosterRefreshBtn" type="button">Refresh</button>
+<button class="btn" id="ndDutyRosterBtn" type="button" style="display:none;background:#244b39;color:#fff;border-color:#244b39">+ Salary Duty Staff / 新增薪水值班员工</button>
 <span class="helper" id="rosterSyncState">Cloud roster</span>
 </div>
 <div class="roster-branch-tabs" id="rosterOutletTabs" style="margin-top:12px"></div>
@@ -8461,7 +8462,7 @@ function ndOpenUnifiedCashHistory(type){
 <input id="rosterNameDate" type="hidden"/>
 <div class="field" style="margin-top:14px">
 <label>Name</label>
-<input id="rosterNameInput" placeholder="Enter staff name"/>
+<select id="rosterNameInput"><option value="">Select duty staff / 选择值班员工</option></select>
 </div>
 <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
 <button class="btn" id="saveRosterNameBtn" type="button">Save</button>
@@ -18318,13 +18319,22 @@ function renderRoster(){
   </div>
   ${renderCleaningCalendar(rosterActiveOutlet,m,year,month,days,firstDow)}`;
 }
-function openRosterNameEditor(outlet,date){
+async function openRosterNameEditor(outlet,date){
+  const picker=document.getElementById("rosterNameInput");
+  picker.innerHTML='<option value="">Select duty staff / 选择值班员工</option>';
+  let people=(typeof rosterCleaningEmployees!=="undefined" && Array.isArray(rosterCleaningEmployees))?rosterCleaningEmployees:[];
+  if(!people.length){const r=await rosterDb().from("employees").select("id,name,outlet,last_working_date").eq("outlet",outlet).order("name");if(!r.error)people=r.data||[];}
+  const names=[...new Set(people.filter(e=>String(e.outlet||"").trim()===outlet && !(typeof rosterStaffHasLeft==="function" && rosterStaffHasLeft(e))).map(e=>String(e.name||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const selected=rosterDisplayName(outlet,date);
+  if(selected&&!names.includes(selected))names.unshift(selected);
+  for(const name of names){const o=document.createElement("option");o.value=name;o.textContent=name;picker.appendChild(o);}
+
   const defaultName=rosterDefaultName(outlet,date);
   document.getElementById("rosterNameOutlet").value=outlet;
   document.getElementById("rosterNameDate").value=date;
   document.getElementById("rosterNameTitle").textContent=`${outlet} · ${date}`;
   document.getElementById("rosterNameDefault").textContent=defaultName?`Default: ${defaultName}`:"";
-  document.getElementById("rosterNameInput").value=rosterDisplayName(outlet,date);
+  picker.value=selected;
   document.getElementById("rosterNameMsg").textContent="";
   document.getElementById("rosterNameModal").classList.add("open");
   setTimeout(()=>document.getElementById("rosterNameInput")?.focus(),100);
@@ -30786,7 +30796,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
-<style id="nd-duty-style">#ndDutyAdminBtn{position:fixed;right:18px;bottom:20px;z-index:1400;background:#244b39;color:white;border:0;border-radius:14px;padding:12px 18px;box-shadow:0 6px 20px #0003;cursor:pointer}#ndDutyAdminModal{display:none;position:fixed;inset:0;background:#0009;z-index:22000;align-items:center;justify-content:center;padding:14px}#ndDutyAdminModal.open{display:flex}#ndDutyAdminModal .nd-duty-dialog{background:white;border-radius:16px;padding:22px;width:min(620px,100%);max-height:90vh;overflow:auto}#ndDutyAdminModal input,#ndDutyAdminModal select{margin:4px 0 10px}#ndDutyAdminModal .nd-duty-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #eee;padding:10px 0}#ndDutyAdminModal .nd-duty-line button{margin-left:auto}</style>
+<style id="nd-duty-style">#ndDutyAdminBtn{display:none!important}#ndDutyAdminModal{display:none;position:fixed;inset:0;background:#0009;z-index:22000;align-items:center;justify-content:center;padding:14px}#ndDutyAdminModal.open{display:flex}#ndDutyAdminModal .nd-duty-dialog{background:white;border-radius:16px;padding:22px;width:min(620px,100%);max-height:90vh;overflow:auto}#ndDutyAdminModal input,#ndDutyAdminModal select{margin:4px 0 10px}#ndDutyAdminModal .nd-duty-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #eee;padding:10px 0}#ndDutyAdminModal .nd-duty-line button{margin-left:auto}</style>
 <script id="nd-duty-management-v1">
 (function(){
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -30804,17 +30814,29 @@ async function listDuty(){
 }
 async function openDuty(){
  let m=document.getElementById('ndDutyAdminModal');
- if(!m){m=document.createElement('div');m.id='ndDutyAdminModal';m.innerHTML=`<div class="nd-duty-dialog" role="dialog" aria-modal="true"><h2>Salary Duty Access · 薪水值班授权</h2><p>独立薪水值班，不关联卫生值班或 Monthly Roster。</p><label>Staff Name</label><input id="ndDutyName" placeholder="Employee name"><label>Login Email</label><input id="ndDutyEmail" type="email" placeholder="name@example.com"><label>Branch</label><select id="ndDutyOutlet"><option>Eco Botanic</option><option>Nusa Bestari</option></select><label>Duty Date</label><input id="ndDutyDate" type="date"><div style="display:flex;gap:8px"><button class="btn" id="ndDutySave">+ Add Duty Staff</button><button class="btn" id="ndDutyClose">Close</button></div><p id="ndDutyError" role="alert"></p><h3>Authorized Duty Staff</h3><div id="ndDutyList"></div></div>`;document.body.appendChild(m);m.querySelector('#ndDutyClose').onclick=()=>m.classList.remove('open');m.querySelector('#ndDutySave').onclick=async()=>{
+ if(!m){m=document.createElement('div');m.id='ndDutyAdminModal';m.innerHTML=`<div class="nd-duty-dialog" role="dialog" aria-modal="true"><h2>Salary Duty Access · 薪水值班授权</h2><p>独立薪水值班，不关联卫生值班或 Monthly Roster。</p><label>Staff Name / 选择员工</label><select id="ndDutyName"><option value="">Select employee</option></select><label>Login Email</label><input id="ndDutyEmail" type="email" placeholder="name@example.com"><label>Branch</label><select id="ndDutyOutlet"><option>Eco Botanic</option><option>Nusa Bestari</option></select><label>Duty Date</label><input id="ndDutyDate" type="date"><div style="display:flex;gap:8px"><button class="btn" id="ndDutySave">+ Add Duty Staff</button><button class="btn" id="ndDutyClose">Close</button></div><p id="ndDutyError" role="alert"></p><h3>Authorized Duty Staff</h3><div id="ndDutyList"></div></div>`;document.body.appendChild(m);m.querySelector('#ndDutyClose').onclick=()=>m.classList.remove('open');m.querySelector('#ndDutySave').onclick=async()=>{
  const name=m.querySelector('#ndDutyName').value.trim(),email=m.querySelector('#ndDutyEmail').value.trim(),outlet=m.querySelector('#ndDutyOutlet').value,date=m.querySelector('#ndDutyDate').value;
  if(!name||!email||!date){m.querySelector('#ndDutyError').textContent='Name, email and date required';return;}
  const {error}=await salaryDb.rpc('nd_salary_duty_add',{p_staff_name:name,p_email:email,p_outlet:outlet,p_duty_date:date});
  m.querySelector('#ndDutyError').textContent=error?error.message:'Saved';if(!error)await listDuty();
  };}
+ const picker=m.querySelector('#ndDutyName');
+ const fillPeople=async()=>{
+   const outlet=m.querySelector('#ndDutyOutlet').value;
+   picker.innerHTML='<option value="">Select employee / 选择员工</option>';
+   const {data,error}=await salaryDb.from('employees').select('id,name,outlet,last_working_date').eq('outlet',outlet).order('name');
+   if(error){m.querySelector('#ndDutyError').textContent='Unable to load employees: '+error.message;return;}
+   for(const e of data||[]){if(!e.name)continue;const opt=document.createElement('option');opt.value=e.name;opt.textContent=e.name;picker.appendChild(opt);}
+ };
+ m.querySelector('#ndDutyOutlet').onchange=fillPeople;
+ await fillPeople();
  m.querySelector('#ndDutyDate').value=today();m.classList.add('open');await listDuty();
 }
-function sync(){const salary=document.getElementById('salaryPage');if(!salary)return;
- let b=document.getElementById('ndDutyAdminBtn');if(!b){b=document.createElement('button');b.id='ndDutyAdminBtn';b.textContent='+ Salary Duty Staff';b.onclick=openDuty;document.body.appendChild(b);}
- b.style.display=(document.body.dataset.ndVisiblePage==='salary'&&typeof isGlobalAdmin!=='undefined'&&isGlobalAdmin)?'block':'none';
+function sync(){
+ const b=document.getElementById('ndDutyRosterBtn');if(!b)return;
+ const admin=(typeof isGlobalAdmin!=='undefined' && !!isGlobalAdmin);
+ b.style.display=(document.body.dataset.ndVisiblePage==='roster'&&admin)?'inline-flex':'none';
+ b.onclick=openDuty;
 }
 document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});});
 })();
