@@ -11179,6 +11179,26 @@ window.openMonthlyRosterPage=function(ev){
 };
 
 
+/* ND salary branch access: server-authorized, never grant Global to SAM/Wendy. */
+const ND_SAM_EMAIL='samchin6006@gmail.com';
+const ND_WENDY_EMAIL='yokewong0327@gmail.com';
+async function ndSpecialSalaryOutlets(){
+  const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
+  if(email===ND_SAM_EMAIL) return ['Eco Botanic','Nusa Bestari'];
+  if(email!==ND_WENDY_EMAIL) return [];
+  // The RPC must check auth.uid(), Malaysian current date and roster server-side.
+  // Fail closed if the database migration is not installed.
+  const {data,error}=await salaryDb.rpc('nd_wendy_salary_outlets_today');
+  if(error){console.warn('Wendy roster salary access unavailable:',error.message);return [];}
+  return (Array.isArray(data)?data:[]).map(x=>String(typeof x==='string'?x:x.outlet||'').trim())
+    .filter(x=>x==='Eco Botanic'||x==='Nusa Bestari');
+}
+function ndRestrictGlobalSalaryAccess(){
+  const email=String(currentSalaryUserEmail||'').trim().toLowerCase();
+  if(email===ND_SAM_EMAIL||email===ND_WENDY_EMAIL){
+    accessibleSalaryOutlets=(accessibleSalaryOutlets||[]).filter(x=>x!=='Global');
+  }
+}
 async function loadSalaryBranches(){
   // Load the user's salary access independently from salary_outlets.
   // This prevents the Salary menu from disappearing just because salary_outlets
@@ -11275,6 +11295,8 @@ async function loadSalaryBranches(){
     )];
   }
 
+  accessibleSalaryOutlets=[...new Set([...accessibleSalaryOutlets,...await ndSpecialSalaryOutlets()])];
+  ndRestrictGlobalSalaryAccess();
   populateOutletSelects();
   updateSalaryNavVisibility();
 }
@@ -12139,25 +12161,15 @@ function renderSevenTable(emps){
   </div>`;
 }
 
-/* Payment hold is stored in the corresponding payroll snapshot in Supabase. */
-function ndSalaryIsHeld(day,employeeId){
-  const snap=Number(day)===7?snapshotFor(employeeId):commissionSnapshotFor(employeeId);
-  return Boolean(snap?.payment_on_hold);
+/* Salary payment hold: device-local until a server-side hold column is provisioned. */
+function ndSalaryHoldKey(day,employeeId){
+  const month=(document.getElementById('salaryMonth')||{}).value||'';
+  return 'nd_salary_payment_hold_v1:'+month+':'+day+':'+employeeId;
 }
+function ndSalaryIsHeld(day,employeeId){return localStorage.getItem(ndSalaryHoldKey(day,employeeId))==='1';}
 function ndSalaryHoldButton(day,employeeId){
   const held=ndSalaryIsHeld(day,employeeId);
   return `<button type="button" class="btn nd-salary-hold-btn ${held?'held':''}" data-salary-hold-day="${day}" data-salary-hold-employee="${employeeId}" aria-pressed="${held}">${held?'On Hold ✓':'On Hold'}</button>`;
-}
-async function ndSalarySetHold(day,employeeId,held){
-  const snap=Number(day)===7?snapshotFor(employeeId):commissionSnapshotFor(employeeId);
-  if(!snap){alert('Confirm payroll first.');return;}
-  if(snap.payment_done){alert('Payment is already DONE and locked.');return;}
-  const table=Number(day)===7?'payroll_snapshot':'payroll_commission_snapshot';
-  const {error}=await salaryDb.from(table).update({payment_on_hold:held})
-    .eq('employee_id',employeeId).eq('salary_month',monthDate()).eq('payment_done',false)
-    .select('employee_id');
-  if(error){alert('On Hold sync failed: '+error.message+'\nRun the supplied SQL migration if the column is missing.');return;}
-  await refreshSalaryStayHere();
 }
 function renderFourteenTable(emps){
   if(!emps.length) return '';
@@ -13065,11 +13077,17 @@ document.addEventListener("click",(ev)=>{
   const holdBtn=ev.target.closest('[data-salary-hold-day]');
   if(holdBtn){
     ev.preventDefault();ev.stopPropagation();
-    if(holdBtn.disabled)return;
     const day=Number(holdBtn.dataset.salaryHoldDay);
     const emp=Number(holdBtn.dataset.salaryHoldEmployee);
-    holdBtn.disabled=true;
-    ndSalarySetHold(day,emp,!ndSalaryIsHeld(day,emp)).finally(()=>{if(holdBtn.isConnected)holdBtn.disabled=false;});
+    const key=ndSalaryHoldKey(day,emp);
+    if(ndSalaryIsHeld(day,emp))localStorage.removeItem(key);
+    else localStorage.setItem(key,'1');
+    const held=ndSalaryIsHeld(day,emp);
+    holdBtn.textContent=held?'On Hold ✓':'On Hold';
+    holdBtn.classList.toggle('held',held);
+    holdBtn.setAttribute('aria-pressed',String(held));
+    const payBtn=holdBtn.parentElement.querySelector('[data-payment7],[data-payment14]');
+    if(payBtn){payBtn.disabled=held;payBtn.title=held?'Release On Hold first':'';}
     return;
   }
   const b7=ev.target.closest("[data-payment7]");
@@ -13214,7 +13232,6 @@ async function toggleSalaryPayment(type,empId){
 
   // One-way action: once DONE, never allow undo from the app.
   if(Boolean(snap.payment_done)) return;
-  if(Boolean(snap.payment_on_hold)){alert("Release On Hold first.");return;}
 
   const ok=confirm(
     `Confirm ${isSeven?"7th":"14th"} salary has been paid? Once marked DONE, it cannot be undone.`
@@ -13225,6 +13242,14 @@ async function toggleSalaryPayment(type,empId){
   const {data:{session}}=await salaryDb.auth.getSession();
   const email=String(session?.user?.email||"").toLowerCase();
 
+  if(email===ND_WENDY_EMAIL){
+    const {error}=await salaryDb.rpc('nd_wendy_mark_salary_paid',{
+      p_salary_type:type,p_employee_id:empId,p_salary_month:monthDate()
+    });
+    if(error){alert('Payment denied: '+error.message);return;}
+    await refreshSalaryStayHere();
+    return;
+  }
   const {error}=await salaryDb.from(table)
     .update({
       payment_done:true,
