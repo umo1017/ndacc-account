@@ -31154,3 +31154,61 @@ async function open(){el('ndAdvanceModal').classList.add('open');el('ndAdvanceDa
   }
 }
 </style>
+
+<style id="nd-salary-scroll-actual-fix-v3">
+@media (min-width: 701px) {
+  #salaryPage, #salaryPage.active { overflow-x:visible!important; }
+  #salaryPage .salary-shell, #salaryPage #salaryContent, #salaryPage .salary-card {min-width:0!important;max-width:100%!important;}
+  #salaryPage .salary-table-wrap, #salaryPage .table-wrap, #salaryPage .nd-payroll-scroll-v3 {
+    width:100%!important; max-width:100%!important; min-width:0!important;
+    overflow-x:scroll!important; overflow-y:hidden!important;
+    scrollbar-width:auto!important; scrollbar-color:#547e6c #e8ede8!important;
+    overscroll-behavior-x:contain!important; touch-action:pan-x pan-y!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  #salaryPage .salary-table-wrap::-webkit-scrollbar, #salaryPage .nd-payroll-scroll-v3::-webkit-scrollbar{height:13px!important;display:block!important}
+  #salaryPage .salary-table-wrap::-webkit-scrollbar-thumb, #salaryPage .nd-payroll-scroll-v3::-webkit-scrollbar-thumb{background:#547e6c!important;border-radius:10px!important}
+  #salaryPage .salary-table-wrap>table, #salaryPage .nd-payroll-scroll-v3>table{width:max-content!important;min-width:1600px!important;max-width:none!important}
+}
+#ndSalaryScrollControlV3{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin:6px 0 12px;padding:8px 10px;border:1px solid #d9e4dc;border-radius:12px;background:#eff6f0;color:#204a3b;font-size:12px;font-weight:700}
+#ndSalaryScrollControlV3 button{border:1px solid #9db6a8;background:white;color:#204a3b;padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:800}
+#ndSalaryScrollControlV3 button:active{background:#d5e8da}
+</style>
+<script id="nd-salary-scroll-actual-fix-v3-script">
+(function(){
+  let busy=false;
+  function setup(){
+    if(busy)return;busy=true;
+    try{
+      const page=document.getElementById('salaryPage');if(!page)return;
+      const tables=[...page.querySelectorAll('table')].filter(t=>t.offsetWidth>0 || t.getClientRects().length);
+      tables.forEach(t=>{
+        let w=t.parentElement;if(!w)return;
+        if(!w.classList.contains('salary-table-wrap')&&!w.classList.contains('table-wrap')&&!w.classList.contains('nd-payroll-scroll-v3')){
+          const div=document.createElement('div');div.className='nd-payroll-scroll-v3';w.insertBefore(div,t);div.appendChild(t);w=div;
+        }
+        w.style.setProperty('overflow-x','scroll','important');
+        w.style.setProperty('max-width','100%','important');
+      });
+      const content=document.getElementById('salaryContent')||page.querySelector('.salary-shell');
+      if(content&&!document.getElementById('ndSalaryScrollControlV3')){
+        const bar=document.createElement('div');bar.id='ndSalaryScrollControlV3';
+        bar.innerHTML='<span>Payroll table: scroll left / right</span><button type="button" data-direction="-1">← Left</button><button type="button" data-direction="1">Right →</button>';
+        content.insertBefore(bar,content.firstChild);
+        bar.addEventListener('click',e=>{
+          const btn=e.target.closest('button[data-direction]');if(!btn)return;
+          const wrappers=[...page.querySelectorAll('.salary-table-wrap,.table-wrap,.nd-payroll-scroll-v3')].filter(w=>w.scrollWidth>w.clientWidth+20&&w.getClientRects().length);
+          if(!wrappers.length)return;
+          const target=wrappers.find(w=>{const r=w.getBoundingClientRect();return r.top>=0&&r.top<innerHeight})||wrappers[0];
+          target.scrollBy({left:Number(btn.dataset.direction)*Math.max(300,target.clientWidth*.7),behavior:'smooth'});
+        });
+      }
+    }finally{busy=false;}
+  }
+  document.addEventListener('DOMContentLoaded',()=>{setup();setTimeout(setup,800);setTimeout(setup,2200)});
+  document.addEventListener('click',e=>{if(e.target.closest('#sidebarSalary,#salaryPage .salary-view-btn,#salaryPage button'))setTimeout(setup,200)},true);
+  window.addEventListener('resize',()=>setTimeout(setup,120));
+  const mo=new MutationObserver(()=>{if(document.body?.dataset.ndVisiblePage==='salary')setTimeout(setup,100)});
+  document.addEventListener('DOMContentLoaded',()=>{const c=document.getElementById('salaryContent');if(c)mo.observe(c,{childList:true,subtree:false})});
+})();
+</script>
