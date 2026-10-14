@@ -10333,10 +10333,15 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate()){
      salaryOverrideHas(empId,t,"total_commission",salaryMonth)) &&
     !salaryOverrideHas(empId,t,"net_pay",salaryMonth)
   ){
-    c.net_pay=+Number(c.commission||0).toFixed(2);
+    c.net_pay=+(Number(c.commission||0)+Number(c.seventh_deduction_refund||0)).toFixed(2);
   }
-  c.total_income=Number(c.net_pay||c.commission||0);
-  c.has_payslip=Number(c.commission||0)>0;
+  // Explicit Net Pay overrides always win, including an intentional RM 0.00.
+  // Never replace a saved manual value with an automatic recalculation.
+  if(salaryOverrideHas(empId,t,"net_pay",salaryMonth)){
+    c.net_pay=salaryOverrideValue(empId,t,"net_pay",c.net_pay,salaryMonth);
+  }
+  c.total_income=Number(c.net_pay??c.commission??0);
+  c.has_payslip=Number(c.net_pay||0)>0;
   return c;
 }
 
@@ -10569,7 +10574,9 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
 
   // Existing referral / bonus fields remain additional 14th income,
   // but a non-positive commission does not produce a 14th payslip.
-  const totalIncome=+commission.toFixed(2);
+  // Reimburse the 7th manual Deduction on the 14th (not statutory EPF/SOCSO/EIS/PCB).
+  const seventhDeductionRefund = Math.max(0, Number(snapshot?.manual_deduction || 0));
+  const totalIncome=+(commission + seventhDeductionRefund).toFixed(2);
 
   return {
     commission_a:commissionA,
@@ -10588,6 +10595,7 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
     employer_eis:employerEis,
     total_employer_cost:totalEmployerCost,
     raw_commission:rawCommission,
+    seventh_deduction_refund:seventhDeductionRefund,
     commission,
     total_income:totalIncome,
     net_pay:totalIncome,
@@ -12159,7 +12167,7 @@ function renderSevenTable(emps){
       <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${snap
         ? (snap.payment_done
-            ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>`
+            ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button> <button class="btn" type="button" data-view-signed-receipt="14:${e.id}">View Signed Receipt</button> <button class="btn" type="button" data-view-signed-receipt="7:${e.id}">View Signed Receipt</button>`
             : `${ndSalaryHoldButton(7,e.id)} <button class="btn payment-done-btn pending" type="button" data-payment7="${e.id}" ${ndSalaryIsHeld(7,e.id)?'disabled title="Release On Hold first"':''}>Payment — DONE</button>`)
         : `<span class="helper">Confirm first</span>`}</td>
     </tr>`;
@@ -12254,7 +12262,7 @@ function renderFourteenTable(emps){
           w_bonus:Number(cs.w_bonus||0)
         },snapshotFor(e.id),threeBonus)
       : calculate14th({...m,w_bonus:ndWBonusForEmployee(e)},snapshotFor(e.id),threeBonus);
-    const c=applyFourteenManualOverrides(e,{...(cs||{}),...base14,three_month_bonus:threeBonus});
+    const c=cs?.payment_done===true ? {...cs} : applyFourteenManualOverrides(e,{...(cs||{}),...base14,three_month_bonus:threeBonus});
     const a=Number(c.commission_a||0);
     const b=Number(c.commission_b||0);
     const customer=Number(c.customer_referral||0);
@@ -13136,7 +13144,30 @@ function bindSalaryTableActions(){
 
 
 
-document.addEventListener("click",(ev)=>{
+document.addEventListener("click",async(ev)=>{
+  const viewBtn=ev.target.closest('[data-view-signed-receipt]');
+  if(viewBtn){
+    ev.preventDefault();ev.stopPropagation();
+    const [type,id]=String(viewBtn.dataset.viewSignedReceipt||'').split(':').map(Number);
+    if(![7,14].includes(type)||!Number.isSafeInteger(id)||id<=0)return;
+    viewBtn.disabled=true;
+    try{
+      const {data,error}=await salaryDb.rpc('nd_get_signed_salary_receipt',{
+        p_salary_type:type,p_employee_id:id,p_salary_month:monthDate()
+      });
+      if(error)throw error;
+      if(!data)throw Error('Signed receipt not found or access denied.');
+      ndShowSignedPaymentReceipt({
+        employee:data.employee_name,branch:data.outlet,
+        salaryType:Number(data.salary_type)===7?'7th':'14th',
+        month:data.salary_month,netPay:Number(data.net_pay).toFixed(2),
+        pic:data.person_in_charge,signature:data.signature_data,
+        confirmedAt:data.confirmed_at?new Date(data.confirmed_at).toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'}):'—'
+      });
+    }catch(e){alert('Unable to view signed receipt: '+String(e.message||e));}
+    finally{viewBtn.disabled=false;}
+    return;
+  }
   const holdBtn=ev.target.closest('[data-salary-hold-day]');
   if(holdBtn){
     ev.preventDefault();ev.stopPropagation();
@@ -13352,11 +13383,65 @@ async function toggleSalaryPayment(type,empId){
         p_acknowledged:true
       });
       if(error)throw error;
+      const signedReceipt={employee:name,branch:outlet,salaryType:isSeven?'7th':'14th',month:monthDate(),netPay:net.toFixed(2),pic:pic.value,signature:canvas.toDataURL('image/png'),confirmedAt:new Date().toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'})};
       close();await refreshSalaryStayHere();
+      ndShowSignedPaymentReceipt(signedReceipt);
     }catch(ex){err.textContent='Payment NOT marked DONE: '+String(ex.message||ex);}
     finally{btn.disabled=false;}
   };
 }
+/* Payment DONE: show the signed receipt immediately after the RPC succeeds.
+   The database remains the authoritative archive; this temporary viewer does not
+   grant direct access to private receipt rows or store signatures in localStorage. */
+function ndShowSignedPaymentReceipt(r){
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let overlay=document.getElementById('ndSignedReceiptViewer');
+  if(!overlay){
+    overlay=document.createElement('div');overlay.id='ndSignedReceiptViewer';
+    overlay.style.cssText='position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.58);display:flex;align-items:center;justify-content:center;padding:16px';
+    document.body.appendChild(overlay);
+  }
+  if(!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(String(r.signature||'')))throw Error('Invalid saved signature image');
+  overlay.innerHTML=`<section role="dialog" aria-modal="true" aria-label="Signed salary payment receipt" style="width:min(760px,100%);max-height:95vh;overflow:auto;background:white;border-radius:16px;padding:24px;color:#18231d;font-family:Arial,sans-serif">
+    <div id="ndSignedReceiptDocument" style="border:1px solid #ddd;padding:24px;background:#fff">
+      <div style="font-size:20px;font-weight:800;letter-spacing:.07em">NATURE'S DAO</div>
+      <h2 style="margin:12px 0 4px">SIGNED SALARY PAYMENT RECEIPT</h2>
+      <p style="color:#287044;font-weight:700">Payment — DONE</p>
+      <table style="width:100%;border-collapse:collapse"><tbody>
+        <tr><th>Employee</th><td>${esc(r.employee)}</td></tr>
+        <tr><th>Branch</th><td>${esc(r.branch)}</td></tr>
+        <tr><th>Salary Type</th><td>${esc(r.salaryType)}</td></tr>
+        <tr><th>Salary Month</th><td>${esc(r.month)}</td></tr>
+        <tr><th>Net Pay</th><td>RM ${esc(r.netPay)}</td></tr>
+        <tr><th>Person In Charge</th><td>${esc(r.pic)}</td></tr>
+        <tr><th>Confirmed At (MYT)</th><td>${esc(r.confirmedAt)}</td></tr>
+      </tbody></table>
+      <p style="margin-top:22px;font-weight:700">Employee Signature</p>
+      <div style="border-bottom:1px solid #999;min-height:110px"><img alt="Employee signature" src="${esc(r.signature)}" style="width:100%;max-width:460px;height:105px;object-fit:contain;object-position:left center"></div>
+      <p style="font-size:12px">I acknowledge receipt of the salary shown above.</p>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px">
+      <button type="button" class="btn" id="ndSignedReceiptPdf">Save Signed PDF</button>
+      <button type="button" class="btn" id="ndSignedReceiptClose">Close</button>
+    </div>
+  </section>`;
+  overlay.style.display='flex';
+  overlay.querySelector('#ndSignedReceiptClose').onclick=()=>{overlay.style.display='none';overlay.innerHTML='';};
+  overlay.querySelector('#ndSignedReceiptPdf').onclick=async()=>{
+    const button=overlay.querySelector('#ndSignedReceiptPdf');button.disabled=true;
+    try{
+      if(!window.html2canvas||!window.jspdf?.jsPDF)throw Error('PDF library is unavailable');
+      const node=overlay.querySelector('#ndSignedReceiptDocument');
+      const shot=await window.html2canvas(node,{backgroundColor:'#ffffff',scale:2});
+      const pdf=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+      const width=190,height=shot.height*width/shot.width;
+      pdf.addImage(shot.toDataURL('image/png'),'PNG',10,10,width,Math.min(height,277));
+      pdf.save(`Nature_Dao_Signed_Salary_${r.salaryType}_${r.month}.pdf`);
+    }catch(e){alert('Unable to create signed PDF: '+(e.message||e));}
+    finally{button.disabled=false;}
+  };
+}
+
 async function reset7th(empId){
   if(!isGlobalAdmin){alert("No Confirm permission.");return;}
   if(!confirm("Reset confirmed 7th payroll?")) return;
@@ -14238,6 +14323,27 @@ function payslipLine(label,value){
 
 window.currentPayslipStaff=null;
 
+async function ndRefreshPayslipSource(empId){
+  const month=monthKey()+"-01";
+  const year=month.slice(0,4);
+  const [seven,fourteen,overrides,ytd]=await Promise.all([
+    salaryDb.from("payroll_snapshot").select("*").eq("employee_id",empId).eq("salary_month",month).maybeSingle(),
+    salaryDb.from("payroll_commission_snapshot").select("*").eq("employee_id",empId).eq("salary_month",month).maybeSingle(),
+    salaryDb.from("salary_manual_overrides").select("*").eq("employee_id",empId).gte("salary_month",year+"-01-01").lte("salary_month",month),
+    salaryDb.from("payroll_snapshot").select("*").eq("employee_id",empId).gte("salary_month",year+"-01-01").lte("salary_month",month)
+  ]);
+  const error=seven.error||fourteen.error||overrides.error||ytd.error;
+  if(error) throw new Error(error.message||"Payslip sync failed");
+  salarySnapshots=(salarySnapshots||[]).filter(x=>Number(x.employee_id)!==Number(empId));
+  if(seven.data) salarySnapshots.push(seven.data);
+  salaryCommissionSnapshots=(salaryCommissionSnapshots||[]).filter(x=>Number(x.employee_id)!==Number(empId));
+  if(fourteen.data) salaryCommissionSnapshots.push(fourteen.data);
+  salaryManualOverrides=(salaryManualOverrides||[]).filter(x=>Number(x.employee_id)!==Number(empId));
+  salaryManualOverrides.push(...(overrides.data||[]));
+  salaryYtdSnapshots=(salaryYtdSnapshots||[]).filter(x=>Number(x.employee_id)!==Number(empId));
+  salaryYtdSnapshots.push(...(ytd.data||[]));
+}
+
 async function openPayslip(empId,type){
   const selectedEmp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   window.currentPayslipStaff=selectedEmp ? {
@@ -14251,8 +14357,10 @@ async function openPayslip(empId,type){
   }
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId)); if(!e) return;
   if(Number(type)===14 && !(await ndRequireCommissionBranch(e.outlet)))return false;
+  try{ await ndRefreshPayslipSource(Number(empId)); }
+  catch(err){ alert("Payslip sync failed: "+(err.message||err)); return false; }
   if(type===7){
-    const rawS=snapshotFor(empId); const s=rawS?applySevenManualOverrides(e,normalizedSevenSnapshot(e,rawS)):rawS;
+    const rawS=snapshotFor(empId); const s=rawS?(rawS.payment_done===true ? rawS : applySevenManualOverrides(e,normalizedSevenSnapshot(e,rawS))):rawS;
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
@@ -14340,20 +14448,23 @@ async function openPayslip(empId,type){
       w_bonus:Number(rawC.w_bonus||0)
     },sevenSnapshot,threeBonus);
 
-    const c=applyFourteenManualOverrides(e,{...rawC,...recalculated,three_month_bonus:threeBonus});
+    // Use the same source precedence as the 14th Salary table.
+    // Saved manual Net Pay wins over the automatic refund calculation.
+    // Payment DONE always uses the immutable confirmed snapshot.
+    const c=rawC.payment_done===true
+      ? {...rawC}
+      : applyFourteenManualOverrides(e,{...rawC,...recalculated,three_month_bonus:threeBonus});
+    if(rawC.payment_done!==true){
+      c.total_income=Number(c.net_pay??0);
+    }
 
-    // Commission already comes from Total Commission after deducting the 7th
-    // employer cost. Do not add referral/bonus/3-bonus a second time.
-    c.total_income=Number(c.commission||0);
-    c.net_pay=c.total_income;
-
-    if(Number(c.commission||0)<=0){
+    if(Number(c.net_pay||0)<=0){
       alert("Commission is RM 0.00. No 14th payslip.");
       return false;
     }
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${e.name||""}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}${payslipLine("W-Bonus (included)",c.w_bonus||0)}<div style="height:180px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div style="height:190px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}${rawC.payment_done===true ? "" : payslipLine("7th Deduction Refund (+)",recalculated.seventh_deduction_refund)}${rawC.payment_done===true ? "" : (Math.abs(Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0))>0.005 ? payslipLine("Manual Net Pay Adjustment",Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0)) : "")}${payslipLine("W-Bonus (included)",c.w_bonus||0)}<div style="height:180px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div style="height:190px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
 <div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
@@ -18887,10 +18998,11 @@ async function refreshOrdersVisibility(force=false){
     const {data:{session}}=await ordersDb().auth.getSession();
     ordersCurrentEmail=String(session?.user?.email||"").trim().toLowerCase();
   }
-  const isUmo=ordersCurrentEmail==="umo1017@gmail.com";
+  // Orders: all authenticated staff can view and manage both branches.
+  // Database RLS must independently enforce authenticated access.
   const allowed=!!ordersCurrentEmail;
-  window.canViewOrders=!!allowed;
-  window.canManageOrders=(isUmo || ordersCurrentEmail===String(ORDERS_OWNER_EMAIL||"").trim().toLowerCase());
+  window.canViewOrders=allowed;
+  window.canManageOrders=allowed;
   window.ordersPermissionLoaded=true;
   if(btn)btn.style.display=allowed?"":"none";
   return !!allowed;
