@@ -8039,18 +8039,18 @@ return `<div class="history-date-card">
       if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||!ndVerifyEligible(r.settlement_date))continue;
       for(const [field,label,amountFn] of ndVerifyItems){
         const amount=amountFn(r),status=(r.payment_statuses||{})[field]||'';
-        if(amount>0 && status!=='accepted')q.push({kind:'payment',row:r,field,label,amount,status});
+        if(amount>0 && !['accepted','adjust'].includes(String(status).toLowerCase()))q.push({kind:'payment',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|'+field,row:r,field,label,amount,status});
       }
       (Array.isArray(r.petty_entries)?r.petty_entries:[]).forEach((e,i)=>{
         if(e?.type!=='out'||Number(e.amount||0)<=0)return;
-        if(!e.receipt?.processed_at)q.push({kind:'petty',row:r,entry:e,index:i,label:'Petty Cash Expense',amount:Number(e.amount||0),status:'pending'});
+        if(!e.receipt?.processed_at)q.push({kind:'petty',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|petty|'+i,row:r,entry:e,index:i,label:'Petty Cash Expense',amount:Number(e.amount||0),status:'pending'});
       });
     }
     for(const r of cashRemittances||[]){
       if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||!ndVerifyEligible(r.remittance_date))continue;
-      if(Number(r.amount||0)>0 && String(r.status||'pending')==='pending')q.push({kind:'remittance',row:r,label:'Transfer to Bank',amount:Number(r.amount||0),status:'pending'});
+      if(Number(r.amount||0)>0 && String(r.status||'pending')==='pending')q.push({kind:'remittance',key:String(r.branch)+'|'+String(r.remittance_date)+'|remittance|'+String(r.id),row:r,label:'Transfer to Bank',amount:Number(r.amount||0),status:'pending'});
     }
-    return q.sort((a,b)=>String(a.row.settlement_date||a.row.remittance_date).localeCompare(String(b.row.settlement_date||b.row.remittance_date)));
+    return q.sort((a,b)=>String(a.row.settlement_date||a.row.remittance_date).localeCompare(String(b.row.settlement_date||b.row.remittance_date)) || String(a.row.branch).localeCompare(String(b.row.branch)) || String(a.key).localeCompare(String(b.key)));
   }
   function ndVerifyModal(){
     let m=document.getElementById('ndUmoVerifyModal');if(m)return m;
@@ -8101,18 +8101,21 @@ return `<div class="history-date-card">
       const idx=ndVerifyPage*6+i,day=x.row.settlement_date||x.row.remittance_date;
       const receipt=x.kind==='petty'||x.kind==='remittance';
       const actions=x.kind==='petty' ? '<button class="mini correct" data-nd-action="processed" data-index="'+idx+'">Mark Processed</button>' : '<button class="mini correct" data-nd-action="accepted" data-index="'+idx+'">Correct</button><button class="mini error" data-nd-action="adjust" data-index="'+idx+'">Error</button>';
-      return '<div style="border:1px solid #e6e3da;border-radius:12px;padding:12px;margin-bottom:8px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>'+escHtml(x.label)+'</strong><strong>'+money(x.amount)+'</strong></div><div class="helper">'+escHtml(day)+' · '+escHtml(x.row.branch)+'</div><div class="inline-actions" style="margin-top:8px">'+(receipt?'<button class="mini" data-nd-action="receipt" data-index="'+idx+'">View Receipt</button>':'')+actions+'</div></div>';
+      return '<div style="border:1px solid #e6e3da;border-radius:12px;padding:12px;margin-bottom:8px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>'+escHtml(day)+' · '+escHtml(x.label)+'</strong><strong>'+money(x.amount)+'</strong></div><div class="helper">'+escHtml(x.row.branch)+' · Separate verification for this date</div><div class="inline-actions" style="margin-top:8px">'+(receipt?'<button class="mini" data-nd-action="receipt" data-index="'+idx+'">View Receipt</button>':'')+actions+'</div></div>';
     }).join('')||'<div class="helper">All eligible records verified.</div>';
     if(!ndVerifyQueue.length)m.classList.remove('open');
   }
   async function ndVerifyCheck(){
     if(ndVerifyBusy||String(currentUserEmail||'').toLowerCase()!=='umo1017@gmail.com')return;
-    const clock=ndVerifyMalaysiaNow();if(ndVerifyDismissed===clock.ymd)return;
-    const m=ndVerifyModal();if(m.classList.contains('open'))return;
+    const clock=ndVerifyMalaysiaNow();if(ndVerifyDismissed===clock.ymd && !document.getElementById('ndUmoVerifyModal')?.classList.contains('open'))return;
+    const m=ndVerifyModal();
     const ok=await fetchRows();if(!ok)return;
-    ndVerifyQueue=ndVerifyBuildQueue();if(!ndVerifyQueue.length)return;
+    ndVerifyQueue=ndVerifyBuildQueue();
+    if(!ndVerifyQueue.length){m.classList.remove('open');return;}
+    if(m.classList.contains('open')){ndVerifyRender();return;}
     ndVerifyPage=0;ndVerifyRender();m.classList.add('open');
   }
+  // Refresh from History while the popup is open, so externally verified items disappear.
   setInterval(()=>{ndVerifyCheck().catch(console.warn)},60000);
   setTimeout(()=>{ndVerifyCheck().catch(console.warn)},8000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)ndVerifyCheck().catch(console.warn)});
