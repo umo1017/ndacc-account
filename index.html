@@ -4100,11 +4100,20 @@ table tbody tr:hover{background:#f3f7f9!important}
 #salaryPayslipPrint .ref-total-line{background:#edf3ee!important;color:#244d3c!important}
 @media print{#salaryPayslipPrint .payslip-sheet,#salaryPayslipPrint .payslip-sheet *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
 </style>
+<style id="nd-netpay-total-visible-fix">
+/* Align summary totals directly below Cash / Bank Transfer / TNG. */
+.salary-table tr.netpay-summary-row[data-netpay-summary] {display:table-row!important;visibility:visible!important;}
+.salary-table tr.netpay-summary-row[data-netpay-summary] .netpay-method-total {
+  font-weight:900!important;color:#173e2c!important;background:#edf6ef!important;
+  font-variant-numeric:tabular-nums!important;
+}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
 <button class="sidebar-btn active" id="sidebarDaily" type="button">Daily Settlement</button>
+<button class="sidebar-btn" id="sidebarAnnouncements" type="button">Announcements <span id="ndAnnSidebarCount"></span></button>
 <button class="sidebar-btn" id="sidebarRoster" type="button">Monthly Roster</button>
 <button class="sidebar-btn" id="sidebarSalary" type="button">Salary</button>
 <button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
@@ -10859,6 +10868,8 @@ function closeCurrentMainPage(){
 }
 
 function showDaily(){
+ document.getElementById("ndAnnouncementsPage")?.style.setProperty("display","none");
+ document.getElementById("sidebarAnnouncements")?.classList.remove("active");
   try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
   try{ rememberPreviousMainPage("daily"); }catch(_){}
   window.activeMainPage="daily";
@@ -11515,6 +11526,8 @@ async function loadSalaryBranches(){
 
 function populateOutletSelects(){
   const names=[...new Set([...accessibleSalaryOutlets,"Collaboration"])].sort((a,b)=>{
+    if(a==="Collaboration") return -1;
+    if(b==="Collaboration") return 1;
     if(a==="Global") return 1;
     if(b==="Global") return -1;
     return String(a).localeCompare(String(b));
@@ -12478,7 +12491,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="19" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="17" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -14475,9 +14488,12 @@ document.addEventListener("click",ev=>{
 document.addEventListener("change",ev=>{if(ev.target?.id==="ndResignBranch")ndResignationUpdateEmployees();});
 
 function renderStaffList(){
-  const staffOutlets=isGlobalAdmin
-    ? salaryBranches.map(b=>b.name)
-    : [...new Set((accessibleSalaryOutlets||[]).filter(x=>x && x!=="Global"))];
+  const staffOutlets=[...new Set([
+    ...(isGlobalAdmin ? salaryBranches.map(b=>b.name) : (accessibleSalaryOutlets||[]).filter(x=>x && x!=="Global")),
+    "Collaboration"
+  ])].filter(x=>x && x!=="Global").sort((a,b)=>
+    a==="Collaboration"?-1:b==="Collaboration"?1:String(a).localeCompare(String(b))
+  );
 
   byId("staffListContent").innerHTML=staffOutlets.map(outlet=>{
     const rows=salaryEmployees.filter(e=>e.outlet===outlet).sort(salaryStaffSort);
@@ -31666,6 +31682,51 @@ el.innerHTML=`<div class="outlet-title"><h3>COLLABORATION — ${escapeHTML(month
 async function save(tr,markDone){if(busy||!admin()||!db())return;const id=Number(tr.dataset.collabId),e=(typeof salaryEmployees!=='undefined'?salaryEmployees:[]).find(x=>Number(x.id)===id);if(!e||e.outlet!=='Collaboration')return;const existing=rows.find(r=>Number(r.employee_id)===id);if(existing?.payment_done)return;const amount=markDone?Number(existing?.amount):Number(tr.querySelector('.nd-collab-amount')?.value);if(!Number.isFinite(amount)||amount<0||(!markDone&&tr.querySelector('.nd-collab-amount')?.value==='')){alert('Enter a valid payment amount.');return;}if(markDone&&!confirm('Confirm Payment DONE? This payment will be permanently locked.'))return;const method=markDone?existing?.payment_method:tr.querySelector('.nd-collab-method')?.value;busy=true;try{const payload={employee_id:id,salary_month:month()+'-01',amount,payment_method:method,payment_done:!!markDone};const res=await db().from('nd_collaboration_payments').upsert(payload,{onConflict:'employee_id,salary_month'});if(res.error)throw res.error;await load();}catch(err){alert('Save failed: '+(err.message||err));}finally{busy=false;}}
 document.addEventListener('click',e=>{const btn=e.target.closest('.nd-collab-save,.nd-collab-done');if(!btn)return;const tr=btn.closest('tr[data-collab-id]');if(tr)save(tr,btn.classList.contains('nd-collab-done'));});
 window.ndCollabRender=function(){const el=box();if(!el)return;const key=month();if(key!==lastKey){show('Loading collaboration payments...');load();}else draw();};
+})();
+</script>
+<style id="nd-ann-css">
+#ndAnnouncementsPage{display:none;min-height:100vh;padding:24px;background:var(--bg)}
+body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{display:block!important}
+body[data-nd-visible-page="announcements"] #appView,body[data-nd-visible-page="announcements"] #salaryPage,body[data-nd-visible-page="announcements"] #rosterPage,body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
+.nd-ann-panel{background:white;border:1px solid var(--line);border-radius:15px;padding:16px;margin:12px 0}.nd-ann-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.nd-ann-buttons button{border:1px solid #ddd;background:#fff;border-radius:10px;padding:9px 12px;cursor:pointer}.nd-ann-buttons button.selected{background:#284f40;color:white}.nd-ann-pill{display:inline-block;border-radius:12px;background:#b42318;color:white;font-size:11px;padding:2px 6px;margin-left:5px}.nd-ann-muted{color:#777;font-size:12px}.nd-ann-unread{border-left:4px solid #b58a2b}.nd-ann-text{white-space:pre-wrap;overflow-wrap:anywhere}.nd-ann-daily{margin:12px 0;padding:12px;border:1px solid #b58a2b;border-radius:12px;background:#fff9ed;cursor:pointer}
+#ndAnnEditor[hidden]{display:none!important}#ndAnnContent{width:100%;min-height:110px;border:1px solid var(--line);border-radius:12px;padding:10px}
+@media(max-width:700px){#ndAnnouncementsPage{padding:65px 12px 20px}}
+</style>
+<section id="ndAnnouncementsPage" class="sidebar-offset"><div style="max-width:1100px;margin:auto">
+<div class="topbar"><h2>Announcements</h2><button class="btn" id="ndAnnClose" type="button">Close</button></div>
+<div class="nd-ann-buttons"><button id="ndAnnPrev" type="button">◀</button><input type="month" id="ndAnnMonth" style="max-width:190px"><button id="ndAnnNext" type="button">▶</button><span id="ndAnnMonthUnread" class="nd-ann-muted"></span></div>
+<div class="nd-ann-buttons" id="ndAnnTabs"><button data-cat="all" class="selected">All</button><button data-cat="promotion">Promotions</button><button data-cat="treatment">New Treatments</button><button data-cat="policy">Policies</button></div>
+<div id="ndAnnEditor" class="nd-ann-panel" hidden><h3 id="ndAnnEditHeading">New Announcement</h3><label>Category</label><select id="ndAnnCategory"><option value="promotion">Promotions</option><option value="treatment">New Treatments</option><option value="policy">Policies</option></select><label>Title</label><input id="ndAnnTitle" maxlength="160"><label>Content</label><textarea id="ndAnnContent" maxlength="10000"></textarea><div class="actions" style="margin-top:10px"><button class="btn" id="ndAnnSave" type="button">Publish</button><button class="btn" id="ndAnnCancel" type="button">Cancel Edit</button></div></div>
+<div id="ndAnnStatus" role="status"></div><div id="ndAnnList"></div></div></section>
+<script id="nd-ann-feature">
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id), db=()=>window.salaryDb;
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const monthOf=v=>{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit'}).formatToParts(new Date(v));return p.find(x=>x.type==='year').value+'-'+p.find(x=>x.type==='month').value;};
+const thisMonth=()=>{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit'}).formatToParts(new Date());return p.find(x=>x.type==='year').value+'-'+p.find(x=>x.type==='month').value;};
+let items=[],reads=new Map(),userId=null,admin=false,editing=null,cat='all',loading=false;
+const unread=r=>!reads.has(r.id)||new Date(reads.get(r.id)).getTime()<new Date(r.updated_at).getTime();
+const month=()=> $('ndAnnMonth').value||thisMonth();
+function isGlobal(){const b=document.querySelector('#dailyBranchToggle .branch-btn.active')?.dataset.branch||localStorage.getItem('nd_daily_branch_v1')||'';return /global/i.test(String(b));}
+function notice(s){$('ndAnnStatus').textContent=s||'';}
+function badge(n){return n?`<span class="nd-ann-pill">${n}</span>`:'';}
+function render(){
+ const m=month(),current=items.filter(r=>monthOf(r.created_at)===m),selected=current.filter(r=>cat==='all'||r.category===cat),unreadMonth=current.filter(unread).length;
+ $('ndAnnMonthUnread').textContent=unreadMonth+' unread this month';
+ $('ndAnnSidebarCount').innerHTML=badge(items.filter(r=>monthOf(r.created_at)===thisMonth()&&unread(r)).length);
+ $('ndAnnTabs').querySelectorAll('[data-cat]').forEach(b=>{const c=b.dataset.cat;b.classList.toggle('selected',cat===c);const n=current.filter(r=>(c==='all'||r.category===c)&&unread(r)).length;b.innerHTML=({all:'All',promotion:'Promotions',treatment:'New Treatments',policy:'Policies'})[c]+badge(n);});
+ $('ndAnnList').innerHTML=selected.map(r=>`<article class="nd-ann-panel ${unread(r)?'nd-ann-unread':''}"><div class="nd-ann-muted">${esc(({promotion:'Promotions',treatment:'New Treatments',policy:'Policies'})[r.category])} · ${esc(new Date(r.updated_at).toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'}))}</div><h3>${esc(r.title)} ${unread(r)?badge('NEW'):''}</h3><div class="nd-ann-text">${esc(r.content)}</div><div class="actions" style="margin-top:12px"><button class="mini" data-ann-open="${r.id}">Mark as Read</button>${admin?`<button class="mini" data-ann-edit="${r.id}">Edit</button><button class="mini" data-ann-delete="${r.id}">Delete</button>`:''}</div></article>`).join('')||'<div class="nd-ann-panel">No announcements for this month.</div>';
+ const mount=$('ndAnnDailyMount');if(mount){const n=items.filter(unread).length;mount.hidden=isGlobal()||n===0;mount.innerHTML=n?`<strong>Announcements ${badge(n)}</strong><div class="nd-ann-muted">New or updated announcements. Open to read.</div>`:'';}
+}
+async function load(){if(loading||!db())return;loading=true;try{const [a,b]=await Promise.all([db().from('nd_announcements').select('id,category,title,content,created_at,updated_at,active').eq('active',true).order('updated_at',{ascending:false}).limit(1000),db().from('nd_announcement_reads').select('announcement_id,read_at').eq('user_id',userId)]);if(a.error)throw a.error;if(b.error)throw b.error;items=a.data||[];reads=new Map((b.data||[]).map(r=>[r.announcement_id,r.read_at]));notice('');render();}catch(e){notice('Announcements unavailable: '+(e.message||e));}finally{loading=false;}}
+async function auth(){if(!db())return;const {data,error}=await db().auth.getUser();if(error||!data?.user)return;userId=data.user.id;admin=['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(data.user.email||'').toLowerCase());$('ndAnnEditor').hidden=!admin;await load();}
+function show(){window.activeMainPage='announcements';document.body.dataset.ndVisiblePage='announcements';$('appView')?.classList.add('hidden');$('ndAnnouncementsPage').style.display='block';document.querySelectorAll('.sidebar-btn.active').forEach(x=>x.classList.remove('active'));$('sidebarAnnouncements').classList.add('active');$('mainSidebar')?.classList.remove('open');load();}
+function close(){ $('ndAnnouncementsPage').style.display='none';$('sidebarAnnouncements').classList.remove('active');if(typeof showDaily==='function')showDaily();document.body.dataset.ndVisiblePage='daily';}
+async function save(){if(!admin)return;const title=$('ndAnnTitle').value.trim(),content=$('ndAnnContent').value.trim(),category=$('ndAnnCategory').value;if(!title||!content)return notice('Title and Content are required.');const payload={title,content,category};const q=editing?db().from('nd_announcements').update(payload).eq('id',editing):db().from('nd_announcements').insert(payload);const {error}=await q;if(error)return notice(error.message);editing=null;$('ndAnnTitle').value='';$('ndAnnContent').value='';$('ndAnnEditHeading').textContent='New Announcement';await load();}
+async function markRead(id){const r=items.find(x=>x.id===id);if(!r||!userId)return;const {error}=await db().from('nd_announcement_reads').upsert({announcement_id:id,user_id:userId,read_at:new Date().toISOString()},{onConflict:'announcement_id,user_id'});if(error)return notice(error.message);reads.set(id,new Date().toISOString());render();}
+function setup(){if(!$('sidebarAnnouncements'))return;$('ndAnnMonth').value=thisMonth();$('sidebarAnnouncements').addEventListener('click',show);$('ndAnnClose').addEventListener('click',close);$('ndAnnSave').addEventListener('click',save);$('ndAnnCancel').addEventListener('click',()=>{editing=null;$('ndAnnTitle').value='';$('ndAnnContent').value='';$('ndAnnEditHeading').textContent='New Announcement';});$('ndAnnMonth').addEventListener('change',render);for(const [id,step] of [['ndAnnPrev',-1],['ndAnnNext',1]])$(id).addEventListener('click',()=>{const [y,m]=month().split('-').map(Number);const d=new Date(Date.UTC(y,m-1+step,1));$('ndAnnMonth').value=d.toISOString().slice(0,7);render();});$('ndAnnTabs').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(b){cat=b.dataset.cat;render();}});$('ndAnnList').addEventListener('click',async e=>{const b=e.target.closest('[data-ann-open],[data-ann-edit],[data-ann-delete]');if(!b)return;const id=Number(b.dataset.annOpen||b.dataset.annEdit||b.dataset.annDelete);const r=items.find(x=>x.id===id);if(!r)return;if(b.hasAttribute('data-ann-open'))return markRead(id);if(!admin)return;if(b.hasAttribute('data-ann-edit')){editing=id;$('ndAnnCategory').value=r.category;$('ndAnnTitle').value=r.title;$('ndAnnContent').value=r.content;$('ndAnnEditHeading').textContent='Edit Announcement';window.scrollTo(0,0);}else if(confirm('Delete announcement?')){const {error}=await db().from('nd_announcements').update({active:false}).eq('id',id);if(error)notice(error.message);else load();}});const mount=document.createElement('div');mount.id='ndAnnDailyMount';mount.className='nd-ann-daily';mount.hidden=true;mount.addEventListener('click',show);$('appView')?.prepend(mount);$('dailyBranchToggle')?.addEventListener('click',()=>setTimeout(render,80));auth();setInterval(()=>{if(!document.hidden&&userId)load();},60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden&&userId)load();});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
 </body>
