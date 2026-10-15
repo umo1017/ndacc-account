@@ -4166,6 +4166,36 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
 #ndAnnouncementsPage #ndAnnEditor[hidden],#ndAnnDailyMount[hidden]{display:none!important}
 #ndAnnouncementsPage .nd-ann-empty{padding:22px 16px;text-align:center;color:#68766d}
 </style>
+<style id="nd-salary-mobile-layout-20261015">
+/* Mobile-only layout. Keep COLLABORATION first via existing root.prepend logic. */
+@media(max-width:700px){
+ #salaryPage{width:100%!important;max-width:100%!important;min-width:0!important;padding-left:10px!important;padding-right:10px!important;box-sizing:border-box!important;overflow-x:clip!important}
+ #salaryPage .salary-card{min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;padding:14px 12px!important}
+ #salaryPage .salary-toolbar{display:flex!important;flex-wrap:wrap!important;align-items:stretch!important;gap:8px!important;min-width:0!important;width:100%!important}
+ #salaryPage .salary-toolbar>.field:has(#salaryMonth){flex:0 0 100%!important;width:100%!important;max-width:100%!important;min-width:0!important}
+ #salaryPage #salaryMonth{width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box!important;min-height:44px!important}
+ #salaryPage .salary-toolbar>button{flex:1 1 auto!important;min-width:0!important;max-width:100%!important;white-space:normal!important;line-height:1.2!important;min-height:40px!important;padding:9px 12px!important}
+ #salaryPage .salary-view-tabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:8px!important;padding:3px 0 9px!important;-webkit-overflow-scrolling:touch;scrollbar-width:thin;max-width:100%!important}
+ #salaryPage .salary-view-tabs>.salary-view-btn{flex:0 0 auto!important;white-space:nowrap!important;min-height:44px!important;padding:10px 14px!important}
+ #salaryPage #salaryOutletRoot{min-width:0!important;max-width:100%!important;width:100%!important}
+ #salaryPage #salaryOutletRoot>.salary-card{min-width:0!important;max-width:100%!important}
+ #salaryPage .salary-table-wrap,#salaryPage .table-wrap{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior-x:contain}
+ #salaryPage .salary-table{width:max-content!important;max-width:none!important}
+ #salaryPage .salary-table th:first-child,#salaryPage .salary-table td:first-child{position:sticky!important;left:0!important;z-index:2;min-width:130px!important;max-width:175px!important}
+ #salaryPage .salary-table th:first-child{z-index:3}
+ #ndCollaborationSalary{order:-1!important}
+ #ndCollaborationSalary .salary-table{min-width:690px!important}
+ #ndCollaborationSalary .salary-table tfoot th,#ndCollaborationSalary .salary-table tfoot td{font-size:12px!important;white-space:nowrap!important}
+}
+</style>
+<style id="nd-daily-history-weekday-verification">
+/* Daily Settlement History: persisted verification state tint. */
+.history-two-row td.nd-verified-correct{background:#e4f5ec!important;box-shadow:inset 0 0 0 1px #a5d7bc}
+.history-two-row td.nd-verified-error{background:#fce9e7!important;box-shadow:inset 0 0 0 1px #e7b2ac}
+.history-two-row td.nd-verified-correct .mini.correct{background:#167454!important;color:#fff!important;border-color:#167454!important}
+.history-two-row td.nd-verified-error .mini.error{background:#ae382e!important;color:#fff!important;border-color:#ae382e!important}
+.nd-history-weekday{font-size:.85em;font-weight:700;color:#54675e}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -5897,6 +5927,17 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       const tngReview=dailyTngReviewState(rows);
       const reviewLabel=tngReview==="accepted"?"✓ Correct":tngReview==="adjust"?"✕ Error":"Pending";
 
+      // Calendar-only date: UTC avoids timezone shifting the weekday.
+      const dateParts=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date));
+      const weekday=dateParts ? (()=>{
+        const y=Number(dateParts[1]),m=Number(dateParts[2]),d=Number(dateParts[3]);
+        const dt=new Date(Date.UTC(y,m-1,d));
+        return dt.getUTCFullYear()===y && dt.getUTCMonth()===m-1 && dt.getUTCDate()===d
+          ? ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getUTCDay()] : '';
+      })() : '';
+      const reviewClass=state=>state==='accepted'?'nd-verified-correct':state==='adjust'?'nd-verified-error':'';
+      const fieldReviewClass=(r,field)=>reviewClass((r.payment_statuses||{})[field]||'');
+
       const realRowCount=ordered.length;
       const tngCell=(()=>{
         if(tngTotal<=0) return money(0);
@@ -5909,7 +5950,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       })();
 
       const branchRows=ordered.map((r,index)=>{
-        const mergedTng=index===0 ? `<td rowspan="${realRowCount}" style="vertical-align:middle">${tngCell}</td>` : "";
+        const mergedTng=index===0 ? `<td rowspan="${realRowCount}" class="${reviewClass(tngReview)}" style="vertical-align:middle">${tngCell}</td>` : "";
         if(r._missing){
           return `<tr>
             <td><strong>${escHtml(r.branch)}</strong></td>
@@ -5927,14 +5968,14 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
         return `<tr>
           <td><strong>${escHtml(r.branch)}</strong></td>
           <td>${escHtml(r.staff||'-')}</td>
-          <td>${paymentHistoryCell(r,"visa_master")}</td>
+          <td class="${fieldReviewClass(r,"visa_master")}">${paymentHistoryCell(r,"visa_master")}</td>
           ${mergedTng}
-          <td>${paymentHistoryCell(r,"cash")}</td>
-          <td>${paymentHistoryCell(r,"bank_transfer")}</td>
-          <td>${paymentHistoryCell(r,"tips")}</td>
-          <td>${paymentHistoryCell(r,"alipay")}</td>
-          <td>${paymentHistoryCell(r,"online_card")}</td>
-          <td>${paymentHistoryCell(r,"amex")}</td>
+          <td class="${fieldReviewClass(r,"cash")}">${paymentHistoryCell(r,"cash")}</td>
+          <td class="${fieldReviewClass(r,"bank_transfer")}">${paymentHistoryCell(r,"bank_transfer")}</td>
+          <td class="${fieldReviewClass(r,"tips")}">${paymentHistoryCell(r,"tips")}</td>
+          <td class="${fieldReviewClass(r,"alipay")}">${paymentHistoryCell(r,"alipay")}</td>
+          <td class="${fieldReviewClass(r,"online_card")}">${paymentHistoryCell(r,"online_card")}</td>
+          <td class="${fieldReviewClass(r,"amex")}">${paymentHistoryCell(r,"amex")}</td>
           <td>${bedFeeHistoryCell(r)}</td>
           <td>${dailyProofHistoryCell(r,"card")}</td>
           <td>${dailyProofHistoryCell(r,"tng")}</td>
@@ -5946,7 +5987,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
         </tr>`;
       }).join("");
 return `<div class="history-date-card">
-        <div class="history-date-title">${escHtml(date)}</div>
+        <div class="history-date-title">${escHtml(date)}${weekday ? ` <span class="nd-history-weekday">· ${weekday}</span>` : ""}</div>
         <div class="history-two-row">
           <table>
             <thead>
