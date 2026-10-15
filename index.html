@@ -7420,14 +7420,16 @@ return `<div class="history-date-card">
     const statuses={...(record.payment_statuses||{})};
     statuses[field]=status;
 
-    const {error}=await db
+    const {data:verifiedRow,error}=await db
       .from("daily_settlements")
       .update({payment_statuses:statuses})
-      .eq("id",id);
+      .eq("id",id)
+      .select('id,payment_statuses').maybeSingle();
 
-    if(error){
-      alert("Update failed: "+error.message);
-      return;
+    if(error || !verifiedRow || String((verifiedRow.payment_statuses||{})[field])!==String(status)){
+      const msg=error?.message||'History verification was not saved. Check database permissions.';
+      alert("Update failed: "+msg);
+      throw new Error(msg);
     }
 
     await fetchRows();
@@ -8066,7 +8068,7 @@ return `<div class="history-date-card">
       if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||String(r.settlement_date||'')<'2026-10-01'||!ndVerifyEligible(r.settlement_date))continue;
       for(const [field,label,amountFn] of ndVerifyItems){
         const amount=amountFn(r),status=(r.payment_statuses||{})[field]||'';
-        if(amount>0 && !['accepted','adjust'].includes(String(status).toLowerCase()))q.push({kind:'payment',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|'+field,row:r,field,label,amount,status});
+        if(amount>0 && !['accepted','adjust'].includes(String(status).trim().toLowerCase()))q.push({kind:'payment',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|'+field,row:r,field,label,amount,status});
       }
       (Array.isArray(r.petty_entries)?r.petty_entries:[]).forEach((e,i)=>{
         // Petty Cash Expense reminders start on 14 Oct 2026; earlier history stays untouched.
@@ -8104,7 +8106,7 @@ return `<div class="history-date-card">
         if(item.kind==='payment')await setPaymentStatus(item.row.id,item.field,action);
         else if(item.kind==='remittance')await setCashRemittanceStatus(item.row.id,action==='accepted'?'verified':'rejected');
         else if(item.kind==='petty')await ndSetPettyHistoryVerification(item.row.id,item.index,action);
-        await fetchRows();renderCombinedHistory();ndVerifyQueue=ndVerifyBuildQueue();ndVerifyRender();
+        await ndVerifyCheck();renderCombinedHistory();
       }catch(err){alert('Verification failed: '+(err?.message||err));}
       finally{ndVerifyBusy=false;btn.disabled=false;}
     });
@@ -8132,10 +8134,22 @@ return `<div class="history-date-card">
     if(!ndVerifyQueue.length)m.classList.remove('open');
   }
   async function ndVerifyCheck(){
-    if(ndVerifyBusy||String(currentUserEmail||'').toLowerCase()!=='umo1017@gmail.com')return;
+    if(String(currentUserEmail||'').toLowerCase()!=='umo1017@gmail.com')return;
     const clock=ndVerifyMalaysiaNow();if(ndVerifyDismissed===clock.ymd && !document.getElementById('ndUmoVerifyModal')?.classList.contains('open'))return;
     const m=ndVerifyModal();
+    // Re-read authoritative History records directly. Never build a reminder from
+    // a stale cached row or a partial/unconfirmed history refresh.
     const ok=await fetchRows();if(!ok)return;
+    const [dailyLatest,remittanceLatest]=await Promise.all([
+      db.from('daily_settlements').select('id,settlement_date,branch,visa,master,tng,bank_transfer,tips,alipay,online_card,amex,bed_fee,payment_statuses,petty_entries').gte('settlement_date','2026-10-01').order('settlement_date',{ascending:false}).limit(5000),
+      db.from('cash_remittances').select('*').gte('remittance_date','2026-10-01').order('remittance_date',{ascending:false}).limit(5000)
+    ]);
+    if(dailyLatest.error||remittanceLatest.error){
+      console.error('Verification History refresh failed',dailyLatest.error||remittanceLatest.error);
+      return; // Do not show stale pending items when History cannot be read.
+    }
+    allRows=(dailyLatest.data||[]);
+    cashRemittances=(remittanceLatest.data||[]);
     ndVerifyQueue=ndVerifyBuildQueue();
     if(!ndVerifyQueue.length){m.classList.remove('open');return;}
     if(m.classList.contains('open')){ndVerifyRender();return;}
