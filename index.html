@@ -4221,6 +4221,28 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
 @media(max-width:1050px){.nd-petty-fields{grid-template-columns:minmax(0,1fr) minmax(135px,.65fr)}.nd-petty-receipt{grid-column:1}.nd-petty-compact .petty-action-wrap{grid-column:2}}
 @media(max-width:580px){.nd-petty-compact{padding:12px!important}.nd-petty-head{align-items:flex-start;gap:8px}.nd-petty-balance{width:100%;justify-content:space-between}.nd-petty-fields{grid-template-columns:minmax(0,1fr) minmax(105px,.62fr);gap:9px}.nd-petty-receipt{grid-column:1 / -1}.nd-petty-compact .petty-action-wrap{grid-column:1 / -1}.nd-petty-compact #addPettyBtn{width:100%}.nd-petty-compact #pettyReceiptFileBtn{width:auto;min-width:160px}}
 </style>
+<script id="nd-login-page-memory-fix-20261016">
+/* Fresh password login starts at Daily; refresh retains this tab's current page. */
+(function(){
+  const keys=["nd_last_page_v2","nd_last_page_v3"];
+  function freshLogin(){
+    for(const key of keys){try{localStorage.removeItem(key);sessionStorage.removeItem(key);}catch(_){}}
+    try{sessionStorage.removeItem("nd_scroll_v2");}catch(_){}
+    window.activeMainPage="daily";
+  }
+  document.addEventListener("submit",function(e){
+    if(e.target && e.target.closest("#authView")) freshLogin();
+  },true);
+  document.addEventListener("click",function(e){
+    const button=e.target && e.target.closest && e.target.closest("#loginBtn, #signupBtn");
+    if(button && button.closest("#authView")) freshLogin();
+  },true);
+  /* Clear tab page memory after sign-out, without changing normal refresh. */
+  document.addEventListener("click",function(e){
+    if(e.target && e.target.closest && e.target.closest("#logoutBtn, #salaryLogoutBtn, #rosterLogoutBtn, #ordersLogoutBtn")) freshLogin();
+  },true);
+})();
+</script>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -4693,7 +4715,7 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
       const dailyNav=document.getElementById("sidebarDaily");
       if(dailyNav) dailyNav.style.display="";
 
-      window.activeMainPage=window.activeMainPage||localStorage.getItem("nd_last_page_v2")||"daily";
+      window.activeMainPage=window.activeMainPage||sessionStorage.getItem("nd_last_page_v2")||"daily";
       $("appView").classList.add("sidebar-offset");
       $("appView").classList.remove("hidden");
 
@@ -4738,7 +4760,7 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
     if(res.error){authMessage(res.error.message,true);return;}
 
     // Preserve the user's last authorized page; login no longer forces Daily Settlement.
-    try{window.activeMainPage=localStorage.getItem("nd_last_page_v2")||"daily";}catch(_){window.activeMainPage="daily";}
+    try{window.activeMainPage=sessionStorage.getItem("nd_last_page_v2")||"daily";}catch(_){window.activeMainPage="daily";}
 
     try{ await showSession(); }catch(err){ console.error("Session init failed:",err); }
     setTimeout(()=>{
@@ -11107,7 +11129,7 @@ function updateSalaryNavVisibility(){
 
   // If access was removed while user is on Salary, return to Daily.
   if(false && !canViewSalary && window.activeMainPage==="salary"){
-    try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
+    try{sessionStorage.setItem("nd_last_page_v2","daily");}catch(_){}
     try{showDaily();}catch(_){}
   }
 }
@@ -11207,7 +11229,7 @@ function showDaily(){
   try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
   try{ rememberPreviousMainPage("daily"); }catch(_){}
   window.activeMainPage="daily";
-  try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
+  try{sessionStorage.setItem("nd_last_page_v2","daily");}catch(_){}
 
   const salary=byId("salaryPage");
   const roster=byId("rosterPage");
@@ -11249,7 +11271,7 @@ function showSalary(){
   rememberPreviousMainPage("salary");
   
   window.activeMainPage="salary";
-  try{localStorage.setItem("nd_last_page_v2","salary");}catch(_){}
+  try{sessionStorage.setItem("nd_last_page_v2","salary");}catch(_){}
   byId("rosterPage")?.classList.remove("active","sidebar-offset");
   byId("settingsPage")?.classList.remove("active","sidebar-offset");
   byId("settlementPage")?.classList.remove("active","sidebar-offset");
@@ -11450,8 +11472,8 @@ async function ownerRemoveOrderViewAccess(email){
 
 async function showSettings(){
   try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
-  try{window.activeMainPage="settings"; localStorage.setItem("nd_last_page_v2","settings");}catch(_){}
-  try{localStorage.setItem("nd_last_page_v2","settings");}catch(_){}
+  try{window.activeMainPage="settings"; sessionStorage.setItem("nd_last_page_v2","settings");}catch(_){}
+  try{sessionStorage.setItem("nd_last_page_v2","settings");}catch(_){}
   try{
     document.querySelectorAll("#settingsAccordion .settings-section.open")
       .forEach(x=>x.classList.remove("open"));
@@ -11460,7 +11482,7 @@ async function showSettings(){
   rememberPreviousMainPage("settings");
   
   window.activeMainPage="settings";
-  try{localStorage.setItem("nd_last_page_v2","settings");}catch(_){}
+  try{sessionStorage.setItem("nd_last_page_v2","settings");}catch(_){}
   byId("appView").classList.add("hidden");
   byId("salaryPage").classList.remove("active","sidebar-offset");
   byId("rosterPage")?.classList.remove("active","sidebar-offset");
@@ -11673,7 +11695,7 @@ async function showRoster(){
   try{rememberPreviousMainPage("roster");}catch(_){}
   
   window.activeMainPage="roster";
-  try{localStorage.setItem("nd_last_page_v2","roster");}catch(_){}
+  try{sessionStorage.setItem("nd_last_page_v2","roster");}catch(_){}
   const app=document.getElementById("appView");
   const salary=document.getElementById("salaryPage");
   const roster=document.getElementById("rosterPage");
@@ -15137,21 +15159,21 @@ async function openPayslip(empId,type){
 
 async function initialize(){
   try{
-    window.activeMainPage=localStorage.getItem("nd_last_page_v2")||window.activeMainPage||"daily";
+    window.activeMainPage=sessionStorage.getItem("nd_last_page_v2")||window.activeMainPage||"daily";
   }catch(_){
-    window.activeMainPage=window.activeMainPage||localStorage.getItem("nd_last_page_v2")||"daily";
+    window.activeMainPage=window.activeMainPage||sessionStorage.getItem("nd_last_page_v2")||"daily";
   }
   const now=new Date();
   byId("salaryMonth").value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
 
-  byId("sidebarDaily").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){} showDaily();};
-  byId("sidebarSalary").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","salary");}catch(_){} showSalary();};
-  byId("sidebarRoster").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","roster");}catch(_){} showRoster();};
-  byId("sidebarSettlement").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","settlement");}catch(_){} showSettlement();};
-  byId("sidebarOrders").onclick=async()=>{try{localStorage.setItem("nd_last_page_v2","orders");}catch(_){} try{closeMobileSidebar();}catch(_){} await showOrders();};
-  byId("sidebarSettings").onclick=()=>{try{localStorage.setItem("nd_last_page_v2","settings");}catch(_){} showSettings();};
+  byId("sidebarDaily").onclick=()=>{try{sessionStorage.setItem("nd_last_page_v2","daily");}catch(_){} showDaily();};
+  byId("sidebarSalary").onclick=()=>{try{sessionStorage.setItem("nd_last_page_v2","salary");}catch(_){} showSalary();};
+  byId("sidebarRoster").onclick=()=>{try{sessionStorage.setItem("nd_last_page_v2","roster");}catch(_){} showRoster();};
+  byId("sidebarSettlement").onclick=()=>{try{sessionStorage.setItem("nd_last_page_v2","settlement");}catch(_){} showSettlement();};
+  byId("sidebarOrders").onclick=async()=>{try{sessionStorage.setItem("nd_last_page_v2","orders");}catch(_){} try{closeMobileSidebar();}catch(_){} await showOrders();};
+  byId("sidebarSettings").onclick=()=>{try{sessionStorage.setItem("nd_last_page_v2","settings");}catch(_){} showSettings();};
   byId("settingsLogoutBtn").onclick=async()=>{
-    try{localStorage.removeItem("nd_last_page_v2");}catch(_){}
+    try{sessionStorage.removeItem("nd_last_page_v2");}catch(_){}
     await salaryDb.auth.signOut();
     location.reload();
   };
@@ -15474,7 +15496,7 @@ const b7cash=ev.target.closest("#export7CashBtn");
 byId("salaryLogoutBtn").onclick=async()=>{
     
     salaryUnlocked=false;
-    try{localStorage.removeItem("nd_last_page_v2");}catch(_){}
+    try{sessionStorage.removeItem("nd_last_page_v2");}catch(_){}
     await salaryDb.auth.signOut();
     location.reload();
   };
@@ -16216,12 +16238,12 @@ document.addEventListener("DOMContentLoaded",()=>{
     try{
       const current=String(window.activeMainPage||"");
       const valid=["daily","roster","salary","settlement","orders","settings"];
-      const stored=localStorage.getItem(PAGE_KEY);
+      const stored=sessionStorage.getItem(PAGE_KEY);
       // During startup several async modules can temporarily expose "daily".
       // Never overwrite an already valid saved page with a transient value.
       if(valid.includes(current)){
         if(current!=="daily" || !valid.includes(stored) || stored==="daily"){
-          localStorage.setItem(PAGE_KEY,current);
+          sessionStorage.setItem(PAGE_KEY,current);
         }
       }
       const m=document.getElementById("salaryMonth");
@@ -16241,7 +16263,7 @@ document.addEventListener("DOMContentLoaded",()=>{
       const {data:{session}}=await window.salaryDb.auth.getSession();
       if(!session) return;
 
-      const savedPage=localStorage.getItem(PAGE_KEY)||"daily";
+      const savedPage=sessionStorage.getItem(PAGE_KEY)||"daily";
       window.activeMainPage=savedPage;
       const savedMonth=localStorage.getItem(MONTH_KEY);
       const savedRosterMonth=localStorage.getItem(ROSTER_MONTH_KEY);
@@ -16372,22 +16394,22 @@ document.addEventListener("DOMContentLoaded",()=>{
 
   document.addEventListener("click",(e)=>{
     if(e.target.closest("#sidebarSalary")){
-      try{ localStorage.setItem(PAGE_KEY,"salary"); }catch(_){}
+      try{ sessionStorage.setItem(PAGE_KEY,"salary"); }catch(_){}
     }
     if(e.target.closest("#sidebarDaily")){
-      try{ localStorage.setItem(PAGE_KEY,"daily"); }catch(_){}
+      try{ sessionStorage.setItem(PAGE_KEY,"daily"); }catch(_){}
     }
     if(e.target.closest("#sidebarRoster")){
-      try{ localStorage.setItem(PAGE_KEY,"roster"); }catch(_){}
+      try{ sessionStorage.setItem(PAGE_KEY,"roster"); }catch(_){}
     }
     if(e.target.closest("#sidebarSettlement")){
-      try{ localStorage.setItem(PAGE_KEY,"settlement"); }catch(_){}
+      try{ sessionStorage.setItem(PAGE_KEY,"settlement"); }catch(_){}
     }
     if(e.target.closest("#sidebarOrders")){
-      try{ localStorage.setItem(PAGE_KEY,"orders"); }catch(_){}
+      try{ sessionStorage.setItem(PAGE_KEY,"orders"); }catch(_){}
     }
     if(e.target.closest("#sidebarSettings")){
-      try{ localStorage.setItem(PAGE_KEY,"settings"); }catch(_){}
+      try{ sessionStorage.setItem(PAGE_KEY,"settings"); }catch(_){}
     }
   });
 
@@ -16420,7 +16442,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   let ndRestoreDone=false;
   async function stableRestoreState(){
     if(ndRestoreDone) return;
-    const saved=localStorage.getItem(PAGE_KEY)||"daily";
+    const saved=sessionStorage.getItem(PAGE_KEY)||"daily";
     for(let attempt=0;attempt<8;attempt++){
       try{
         const {data:{session}}=await window.salaryDb.auth.getSession();
@@ -17037,7 +17059,7 @@ async function refreshSettlementAccess(){
     window.canViewSettlement=settlementAccess;
 
     if(!settlementAccess && window.activeMainPage==="settlement"){
-      try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
+      try{sessionStorage.setItem("nd_last_page_v2","daily");}catch(_){}
       try{showDaily();}catch(_){}
     }
 
@@ -18524,15 +18546,15 @@ async function addSettlementAdmin(){
 }
 async function showSettlement(){
   try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
-  try{localStorage.setItem("nd_last_page_v2","settlement");}catch(_){}
+  try{sessionStorage.setItem("nd_last_page_v2","settlement");}catch(_){}
   if(!(await refreshSettlementAccess())){
-    try{localStorage.setItem("nd_last_page_v2","daily");}catch(_){}
+    try{sessionStorage.setItem("nd_last_page_v2","daily");}catch(_){}
     if(typeof showDaily==="function") showDaily();
     return;
   }
 
   window.activeMainPage="settlement";
-  try{localStorage.setItem("nd_last_page_v2","settlement");}catch(_){}
+  try{sessionStorage.setItem("nd_last_page_v2","settlement");}catch(_){}
 
   document.getElementById("appView")?.classList.add("hidden");
   document.getElementById("salaryPage")?.classList.remove("active","sidebar-offset");
@@ -18574,7 +18596,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   setTimeout(()=>refreshSettlementAccess(),150);
 
   document.getElementById("settlementLogoutBtn")?.addEventListener("click",async()=>{
-    try{localStorage.removeItem("nd_last_page_v2");}catch(_){}
+    try{sessionStorage.removeItem("nd_last_page_v2");}catch(_){}
     await settlementDb().auth.signOut();
     location.reload();
   });
@@ -19288,7 +19310,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.getElementById("useRosterDefaultBtn")?.addEventListener("click",useRosterDefault);
   document.getElementById("rosterNameInput")?.addEventListener("keydown",e=>{if(e.key==="Enter")saveRosterName();});
   document.getElementById("rosterLogoutBtn")?.addEventListener("click",async()=>{
-    try{localStorage.removeItem("nd_last_page_v2");}catch(_){}
+    try{sessionStorage.removeItem("nd_last_page_v2");}catch(_){}
     await rosterDb().auth.signOut();
     location.reload();
   });
@@ -19486,7 +19508,7 @@ document.addEventListener("click",(ev)=>{
   ];
   for(const [selector,page] of pairs){
     if(ev.target.closest(selector)){
-      try{localStorage.setItem("nd_last_page_v2",page);}catch(_){}
+      try{sessionStorage.setItem("nd_last_page_v2",page);}catch(_){}
       break;
     }
   }
@@ -19510,7 +19532,7 @@ document.addEventListener("click",e=>{
     if(e.target.closest?.("#"+id)){
       try{
         window.activeMainPage=page;
-        localStorage.setItem("nd_last_page_v2",page);
+        sessionStorage.setItem("nd_last_page_v2",page);
       }catch(_){}
       break;
     }
@@ -19546,7 +19568,7 @@ async function ndForceLogoutDeletedAccount(){
 
     if(data?.email){
       ndAccountWasForcedOut=true;
-      try{localStorage.removeItem("nd_last_page_v2");}catch(_){}
+      try{sessionStorage.removeItem("nd_last_page_v2");}catch(_){}
       try{sessionStorage.clear();}catch(_){}
       await client.auth.signOut();
       location.reload();
@@ -20119,8 +20141,8 @@ async function showOrders(){
 
   try{
     window.activeMainPage="orders";
-    localStorage.setItem("nd_last_page_v2","orders");
-    localStorage.setItem("nd_last_page_v3","orders");
+    sessionStorage.setItem("nd_last_page_v2","orders");
+    sessionStorage.setItem("nd_last_page_v3","orders");
   }catch(_){}
 
   document.getElementById("appView")?.classList.add("hidden");
@@ -20225,7 +20247,7 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
     if(!valid.has(page)) return;
     try{
       window.activeMainPage=page;
-      localStorage.setItem(KEY,page);
+      sessionStorage.setItem(KEY,page);
     }catch(_){}
   }
   document.addEventListener("click",function(e){
@@ -20662,8 +20684,8 @@ table{
     if(!valid.has(page)) return;
     window.activeMainPage=page;
     try{
-      localStorage.setItem(KEY,page);
-      localStorage.setItem(OLDKEY,page);
+      sessionStorage.setItem(KEY,page);
+      sessionStorage.setItem(OLDKEY,page);
     }catch(_){}
   }
 
@@ -20875,10 +20897,10 @@ document.addEventListener("click",async function(e){
   document.addEventListener("click",e=>{
     const map={sidebarDaily:"daily",sidebarRoster:"roster",sidebarSalary:"salary",sidebarSettlement:"settlement",sidebarOrders:"orders",sidebarSocial:"social",sidebarSettings:"settings"};
     for(const [id,page] of Object.entries(map)){
-      if(e.target.closest?.("#"+id)){try{localStorage.setItem(KEY,page);window.activeMainPage=page;}catch(_){} break;}
+      if(e.target.closest?.("#"+id)){try{sessionStorage.setItem(KEY,page);window.activeMainPage=page;}catch(_){} break;}
     }
   },true);
-  window.addEventListener("pagehide",()=>{try{if(valid.has(window.activeMainPage))localStorage.setItem(KEY,window.activeMainPage);}catch(_){}});
+  window.addEventListener("pagehide",()=>{try{if(valid.has(window.activeMainPage))sessionStorage.setItem(KEY,window.activeMainPage);}catch(_){}});
 })();
 </script>
 
@@ -23840,7 +23862,7 @@ html,body{max-width:100%;overflow-x:hidden!important}
 
   function saveOrdersState(){
     try{
-      localStorage.setItem(PAGE_KEY,"orders");
+      sessionStorage.setItem(PAGE_KEY,"orders");
       sessionStorage.setItem(PAGE_KEY,"orders");
       localStorage.setItem(MODE_KEY,String(window.ordersMode||ordersMode||"manage"));
       const b=document.getElementById("ordersBranch")?.value;
@@ -25967,8 +25989,8 @@ Bed Fee: Amlee / + merchant / database memory checked.
   async function showReceiptPage(){
     window.activeMainPage="ai_receipt";
     try{
-      localStorage.setItem("nd_last_page_v2","ai_receipt");
-      localStorage.setItem("nd_last_page_v3","ai_receipt");
+      sessionStorage.setItem("nd_last_page_v2","ai_receipt");
+      sessionStorage.setItem("nd_last_page_v3","ai_receipt");
     }catch(_){}
     document.body.dataset.ndVisiblePage="ai_receipt";
     ["appView","rosterPage","salaryPage","bonusPage","settlementPage","ordersPage","settingsPage","socialPage"]
@@ -26101,8 +26123,8 @@ Bed Fee: Amlee / + merchant / database memory checked.
   function remember(page){
     if(!pages[page] || !navIsAuthorized(page)) return false;
     try{
-      localStorage.setItem(KEY,page);
-      localStorage.setItem(KEY3,page);
+      sessionStorage.setItem(KEY,page);
+      sessionStorage.setItem(KEY3,page);
       window.activeMainPage=page;
     }catch(_){}
     return true;
@@ -26126,7 +26148,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
 
   async function restoreAfterPermissions(){
     let wanted="daily";
-    try{wanted=localStorage.getItem(KEY3)||localStorage.getItem(KEY)||"daily"}catch(_){}
+    try{wanted=sessionStorage.getItem(KEY3)||sessionStorage.getItem(KEY)||"daily"}catch(_){}
 
     /* Permission loaders are asynchronous. Wait briefly for nav visibility to settle.
        Never open the remembered protected page while it is hidden. */
@@ -26145,8 +26167,8 @@ Bed Fee: Amlee / + merchant / database memory checked.
                    Object.keys(pages).find(navIsAuthorized);
     if(fallback){
       try{
-        localStorage.setItem(KEY,fallback);
-        localStorage.setItem(KEY3,fallback);
+        sessionStorage.setItem(KEY,fallback);
+        sessionStorage.setItem(KEY3,fallback);
       }catch(_){}
       await openAuthorized(fallback);
     }
@@ -27018,7 +27040,7 @@ input,select,textarea,button,a{
  function showBonus(){
    if(!canOpenBonus()){if(typeof showDaily==="function")showDaily();return;}
    window.activeMainPage="bonus";
-   try{localStorage.setItem("nd_last_page_v2","bonus");localStorage.setItem("nd_last_page_v3","bonus");}catch(_){}
+   try{sessionStorage.setItem("nd_last_page_v2","bonus");sessionStorage.setItem("nd_last_page_v3","bonus");}catch(_){}
    ["appView","salaryPage","rosterPage","settlementPage","ordersPage","settingsPage"].forEach(id=>{
      const p=$(id);if(!p)return;p.classList.remove("active","sidebar-offset");if(id==="appView")p.classList.add("hidden");
    });
@@ -30491,7 +30513,7 @@ window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
    await ndLoadBrands();
    window.activeMainPage="social";
    document.body.setAttribute("data-nd-visible-page","social");
-   try{localStorage.setItem("nd_last_page_v2","social")}catch(_){}
+   try{sessionStorage.setItem("nd_last_page_v2","social")}catch(_){}
    ["appView","salaryPage","rosterPage","bonusPage","settlementPage","ordersPage","settingsPage"].forEach(id=>{
      const e=$(id);if(!e)return;if(id==="appView")e.classList.add("hidden");else{e.classList.remove("active","sidebar-offset");e.style.display="none"}
    });
@@ -31704,7 +31726,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     document.getElementById('salaryPage')?.classList.remove('active');
     document.getElementById('sidebarSalary')?.classList.add('active');
     document.getElementById('sidebarBonus')?.classList.remove('active');
-    try{localStorage.setItem('nd_last_page_v2','salary');localStorage.setItem('nd_last_page_v3','bonus');}catch(_){}
+    try{sessionStorage.setItem('nd_last_page_v2','salary');sessionStorage.setItem('nd_last_page_v3','bonus');}catch(_){}
   },true);
   bonusTabs.addEventListener('click',function(e){
     const b=e.target.closest('[data-nd-salary-mode]');if(!b)return;
@@ -31720,7 +31742,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     document.body.dataset.ndVisiblePage='salary';
     if(typeof window.setSalaryViewMode==='function')window.setSalaryViewMode(mode);
     else document.getElementById(mode==='7th'?'salaryView7Btn':'salaryView14Btn')?.click();
-    try{localStorage.setItem('nd_last_page_v3','salary');}catch(_){}
+    try{sessionStorage.setItem('nd_last_page_v3','salary');}catch(_){}
   });
   const nav=document.getElementById('sidebarBonus');
   if(nav)nav.style.setProperty('display','none','important');
@@ -31936,28 +31958,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
 @media(max-width:600px){#ndAdvanceModal .nd-dialog>div:first-child{margin:-15px -15px 17px;padding:16px}#ndAdvanceModal .nd-dialog>div:first-child h2{font-size:16px}}
 </style>
 
-<style id="nd-announcements-click-repair-20261016">
-body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;position:relative!important;z-index:5!important}
-#mainSidebar #sidebarAnnouncements{pointer-events:auto!important;cursor:pointer!important;position:relative;z-index:2}
-</style>
-<script id="nd-announcements-click-repair-20261016">
-(function(){
-  'use strict';
-  function openAnnouncements(e){
-    const button=e.target && e.target.closest && e.target.closest('#sidebarAnnouncements');
-    if(!button)return;
-    // Intercept before legacy sidebar navigation listeners can switch pages back.
-    if(typeof window.ndOpenAnnouncements!=='function')return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    window.ndOpenAnnouncements();
-  }
-  document.addEventListener('click',openAnnouncements,true);
-  document.addEventListener('keydown',function(e){
-    if((e.key==='Enter'||e.key===' ') && document.activeElement?.id==='sidebarAnnouncements')openAnnouncements(e);
-  },true);
-})();
-</script>
+
 </body></html>`;
   w.document.open();w.document.write(html);w.document.close();
  }
@@ -32311,6 +32312,28 @@ function close(){if(!active)return;active=false;root.hidden=true;tab.classList.r
 tab.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();if(active){close();return}open()},true);
 document.querySelectorAll('#salaryViewTabs button:not(#ndStaffPerformanceBtn)').forEach(b=>b.addEventListener('click',close,true));
 const page=$('salaryPage');if(page){const observer=new MutationObserver(()=>{if(active&&page.style.display==='none')close()});observer.observe(page,{attributes:true,attributeFilter:['style']})}
+})();
+</script>
+<style id="nd-announcements-click-repair-20261016">
+body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;position:relative!important;z-index:5!important}
+#mainSidebar #sidebarAnnouncements{pointer-events:auto!important;cursor:pointer!important;position:relative;z-index:2}
+</style>
+<script id="nd-announcements-click-repair-20261016">
+(function(){
+  'use strict';
+  function openAnnouncements(e){
+    const button=e.target && e.target.closest && e.target.closest('#sidebarAnnouncements');
+    if(!button)return;
+    // Intercept before legacy sidebar navigation listeners can switch pages back.
+    if(typeof window.ndOpenAnnouncements!=='function')return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    window.ndOpenAnnouncements();
+  }
+  document.addEventListener('click',openAnnouncements,true);
+  document.addEventListener('keydown',function(e){
+    if((e.key==='Enter'||e.key===' ') && document.activeElement?.id==='sidebarAnnouncements')openAnnouncements(e);
+  },true);
 })();
 </script>
 </body>
