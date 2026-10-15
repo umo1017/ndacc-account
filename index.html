@@ -8007,6 +8007,106 @@ return `<div class="history-date-card">
     }
   });
 
+
+  /* UMO verification queue: shares History's actual payment_statuses and remittance status. */
+  const ndVerifyItems=[['visa_master','VISA / MASTER',r=>Number(r.visa||0)+Number(r.master||0)],['tng','TNG',r=>Number(r.tng||0)],['bank_transfer','Bank Transfer',r=>Number(r.bank_transfer||0)],['tips','Tips',r=>Number(r.tips||0)],['alipay','ZFB / ALIPAY',r=>Number(r.alipay||0)],['online_card','Online Credit Card',r=>Number(r.online_card||0)],['amex','AMEX',r=>Number(r.amex||0)],['bed_fee','Bed Fee',r=>Number(r.bed_fee||0)]];
+  let ndVerifyPage=0,ndVerifyQueue=[],ndVerifyBusy=false,ndVerifyDismissed='';
+  function ndVerifyEligible(date){
+    const now=new Date();if(now.getHours()<22)return false;
+    const ymd=today();if(!date||date>=ymd)return false;
+    const dt=new Date(date+'T12:00:00');if(!Number.isFinite(dt.getTime()))return false;
+    const day=dt.getDay(),nowDay=now.getDay();
+    // Friday-Sunday held until Monday 22:00; old unverified records remain pending.
+    if(day===5||day===6||day===0){
+      const monday=new Date(dt);monday.setDate(dt.getDate()+((8-day)%7));
+      const mondayIso=monday.getFullYear()+'-'+String(monday.getMonth()+1).padStart(2,'0')+'-'+String(monday.getDate()).padStart(2,'0');
+      if(ymd<mondayIso)return false;
+    }
+    return true;
+  }
+  function ndVerifyBuildQueue(){
+    const q=[];
+    for(const r of allRows||[]){
+      if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||!ndVerifyEligible(r.settlement_date))continue;
+      for(const [field,label,amountFn] of ndVerifyItems){
+        const amount=amountFn(r),status=(r.payment_statuses||{})[field]||'';
+        if(amount>0 && status!=='accepted')q.push({kind:'payment',row:r,field,label,amount,status});
+      }
+      (Array.isArray(r.petty_entries)?r.petty_entries:[]).forEach((e,i)=>{
+        if(e?.type!=='out'||Number(e.amount||0)<=0)return;
+        if(!e.receipt?.processed_at)q.push({kind:'petty',row:r,entry:e,index:i,label:'Petty Cash Expense',amount:Number(e.amount||0),status:'pending'});
+      });
+    }
+    for(const r of cashRemittances||[]){
+      if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||!ndVerifyEligible(r.remittance_date))continue;
+      if(Number(r.amount||0)>0 && String(r.status||'pending')==='pending')q.push({kind:'remittance',row:r,label:'Transfer to Bank',amount:Number(r.amount||0),status:'pending'});
+    }
+    return q.sort((a,b)=>String(a.row.settlement_date||a.row.remittance_date).localeCompare(String(b.row.settlement_date||b.row.remittance_date)));
+  }
+  function ndVerifyModal(){
+    let m=document.getElementById('ndUmoVerifyModal');if(m)return m;
+    m=document.createElement('div');m.id='ndUmoVerifyModal';m.className='salary-modal';m.style.zIndex='20020';
+    m.innerHTML='<div class="salary-dialog" style="width:min(800px,96vw);max-height:88dvh"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Daily Settlement Verification</h3><div class="helper">Eco Botanic · Nusa Bestari · History Synced</div></div><button type="button" class="mini" id="ndVerifyLater">Later</button></div><div id="ndVerifyCount" class="helper" style="margin:12px 0"></div><div id="ndVerifyList"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><button type="button" class="btn" id="ndVerifyPrev">Previous</button><span id="ndVerifyPages" class="helper"></span><button type="button" class="btn" id="ndVerifyNext">Next</button></div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#ndVerifyLater').onclick=()=>{ndVerifyDismissed=today();m.classList.remove('open')};
+    m.querySelector('#ndVerifyPrev').onclick=()=>{ndVerifyPage=Math.max(0,ndVerifyPage-1);ndVerifyRender()};
+    m.querySelector('#ndVerifyNext').onclick=()=>{ndVerifyPage++;ndVerifyRender()};
+    m.addEventListener('click',async ev=>{
+      const btn=ev.target.closest('button[data-nd-action]');if(!btn||ndVerifyBusy)return;
+      const item=ndVerifyQueue[Number(btn.dataset.index)];if(!item)return;
+      const action=btn.dataset.ndAction;
+      if(action==='receipt'){
+        if(item.kind==='remittance')await openCashRemittanceReceipt(item.row);
+        else if(item.kind==='petty')await openPettyReceipt(item.entry.receipt);
+        return;
+      }
+      if(!confirm('Confirm '+(action==='accepted'?'Correct':action==='adjust'?'Error':'Processed')+' for '+item.label+'?'))return;
+      ndVerifyBusy=true;btn.disabled=true;
+      try{
+        if(item.kind==='payment')await setPaymentStatus(item.row.id,item.field,action);
+        else if(item.kind==='remittance')await setCashRemittanceStatus(item.row.id,action==='accepted'?'verified':'rejected');
+        else if(item.kind==='petty'){
+          const ok=await markPettyReceiptProcessed(item.row.id,item.index);
+          if(!ok)throw new Error('Receipt processing could not be saved.');
+        }
+        await fetchRows();renderCombinedHistory();ndVerifyQueue=ndVerifyBuildQueue();ndVerifyRender();
+      }catch(err){alert('Verification failed: '+(err?.message||err));}
+      finally{ndVerifyBusy=false;btn.disabled=false;}
+    });
+    return m;
+  }
+  async function openPettyReceipt(receipt){
+    if(!receipt?.path){alert('No receipt available.');return;}
+    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300);
+    if(error||!data?.signedUrl){alert('Unable to open receipt: '+(error?.message||'Unknown error'));return;}
+    window.open(data.signedUrl,'_blank','noopener');
+  }
+  function ndVerifyRender(){
+    const m=ndVerifyModal(),pages=Math.max(1,Math.ceil(ndVerifyQueue.length/6));ndVerifyPage=Math.min(ndVerifyPage,pages-1);
+    m.querySelector('#ndVerifyCount').textContent=ndVerifyQueue.length+' pending items';
+    m.querySelector('#ndVerifyPages').textContent=(ndVerifyPage+1)+' / '+pages;
+    m.querySelector('#ndVerifyPrev').disabled=ndVerifyPage===0;
+    m.querySelector('#ndVerifyNext').disabled=ndVerifyPage>=pages-1;
+    const slice=ndVerifyQueue.slice(ndVerifyPage*6,(ndVerifyPage+1)*6);
+    m.querySelector('#ndVerifyList').innerHTML=slice.map((x,i)=>{
+      const idx=ndVerifyPage*6+i,day=x.row.settlement_date||x.row.remittance_date;
+      const receipt=x.kind==='petty'||x.kind==='remittance';
+      const actions=x.kind==='petty' ? '<button class="mini correct" data-nd-action="processed" data-index="'+idx+'">Mark Processed</button>' : '<button class="mini correct" data-nd-action="accepted" data-index="'+idx+'">Correct</button><button class="mini error" data-nd-action="adjust" data-index="'+idx+'">Error</button>';
+      return '<div style="border:1px solid #e6e3da;border-radius:12px;padding:12px;margin-bottom:8px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>'+escHtml(x.label)+'</strong><strong>'+money(x.amount)+'</strong></div><div class="helper">'+escHtml(day)+' · '+escHtml(x.row.branch)+'</div><div class="inline-actions" style="margin-top:8px">'+(receipt?'<button class="mini" data-nd-action="receipt" data-index="'+idx+'">View Receipt</button>':'')+actions+'</div></div>';
+    }).join('')||'<div class="helper">All eligible records verified.</div>';
+    if(!ndVerifyQueue.length)m.classList.remove('open');
+  }
+  async function ndVerifyCheck(){
+    if(ndVerifyBusy||String(currentUserEmail||'').toLowerCase()!=='umo1017@gmail.com')return;
+    const now=new Date();if(now.getHours()<22||ndVerifyDismissed===today())return;
+    const m=ndVerifyModal();if(m.classList.contains('open'))return;
+    const ok=await fetchRows();if(!ok)return;
+    ndVerifyQueue=ndVerifyBuildQueue();if(!ndVerifyQueue.length)return;
+    ndVerifyPage=0;ndVerifyRender();m.classList.add('open');
+  }
+  setInterval(()=>{ndVerifyCheck().catch(console.warn)},60000);
+  setTimeout(()=>{ndVerifyCheck().catch(console.warn)},8000);
+
   showSession();
 $("closeDailyOrderModal")?.addEventListener("click",()=>$("dailyOrderModal").classList.remove("open"));
 $("dailyOrderSaveBtn")?.addEventListener("click",()=>saveDailyOrderRecord(false));
@@ -8369,9 +8469,21 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
     <div class="nd-cash-history-tabs" role="tablist" aria-label="Cash history type">
       <button type="button" id="ndCashBankTab" class="btn active" onclick="ndOpenUnifiedCashHistory('bank')">Cash Transfer to Bank</button>
       <button type="button" id="ndCashWithdrawalTab" class="btn" onclick="ndOpenUnifiedCashHistory('withdrawal')">Cash Withdrawal</button>
+      <button type="button" id="ndCashPettyTab" class="btn" onclick="ndOpenUnifiedCashHistory('petty')">Cash to Petty Cash History</button>
     </div>
     <div id="ndCashBankPanel"></div>
     <div id="ndCashWithdrawalPanel" style="display:none"></div>
+    <div id="ndCashPettyPanel" style="display:none">
+      <div class="salary-card" style="box-shadow:none">
+        <div class="salary-toolbar" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+          <div class="field"><label>Month</label><input type="month" id="ndCashPettyMonth" /></div>
+          <div class="field"><label>Branch</label><select id="ndCashPettyBranch"><option value="all">Both Branches</option><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option></select></div>
+          <button class="btn" type="button" id="ndCashPettyRefresh">Refresh</button>
+        </div>
+        <div id="ndCashPettySummary" class="helper" style="padding:10px 0"></div>
+      </div>
+      <div id="ndCashPettyRows" class="table-wrap" style="overflow-x:auto"></div>
+    </div>
   </div>
 </div>
 <style>
@@ -8393,22 +8505,71 @@ function ndInitUnifiedCashHistory(){
 }
 function ndOpenUnifiedCashHistory(type){
   ndInitUnifiedCashHistory();
-  const isBank=type!=='withdrawal';
+  const isBank=type==='bank';
+  const isWithdrawal=type==='withdrawal';
+  const isPetty=type==='petty';
   document.getElementById('ndCashBankPanel').style.display=isBank?'':'none';
-  document.getElementById('ndCashWithdrawalPanel').style.display=isBank?'none':'';
+  document.getElementById('ndCashWithdrawalPanel').style.display=isWithdrawal?'':'none';
+  document.getElementById('ndCashPettyPanel').style.display=isPetty?'':'none';
   document.getElementById('ndCashBankTab').classList.toggle('active',isBank);
-  document.getElementById('ndCashWithdrawalTab').classList.toggle('active',!isBank);
+  document.getElementById('ndCashWithdrawalTab').classList.toggle('active',isWithdrawal);
+  document.getElementById('ndCashPettyTab').classList.toggle('active',isPetty);
   document.getElementById('unifiedCashHistoryModal').classList.add('open');
   if(isBank){
     const m=document.getElementById('cashRemittanceHistoryMonth');
     if(m&&!m.value)m.value=(document.getElementById('settlementDate')?.value||new Date().toISOString().slice(0,10)).slice(0,7);
     if(typeof renderCashRemittanceHistory==='function')renderCashRemittanceHistory();
-  }else{
+  }else if(isWithdrawal){
     const m=document.getElementById('cashWithdrawalHistoryMonth');
     if(m&&!m.value)m.value=(document.getElementById('reviewMonth')?.value||new Date().toISOString().slice(0,7));
     if(typeof renderCashWithdrawalMonthlyHistory==='function')renderCashWithdrawalMonthlyHistory();
+  }else if(isPetty){
+    const m=document.getElementById('ndCashPettyMonth');
+    if(m&&!m.value)m.value=(document.getElementById('settlementDate')?.value||new Date().toISOString().slice(0,10)).slice(0,7);
+    ndRenderCashPettyHistory();
   }
 }
+const ndPettyHistEscape=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let ndPettyHistorySeq=0;
+async function ndRenderCashPettyHistory(){
+  const root=document.getElementById('ndCashPettyRows');
+  const summary=document.getElementById('ndCashPettySummary');
+  if(!root||!summary)return;
+  const seq=++ndPettyHistorySeq;
+  const ym=document.getElementById('ndCashPettyMonth')?.value;
+  const branch=document.getElementById('ndCashPettyBranch')?.value||'all';
+  if(!/^\d{4}-\d{2}$/.test(ym||'')){root.textContent='Select a month.';return;}
+  root.textContent='Loading cash to petty cash history…';
+  try{
+    const client=window.supabase.createClient('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');
+    const next=new Date(ym+'-01T12:00:00');next.setMonth(next.getMonth()+1);
+    const until=next.getFullYear()+'-'+String(next.getMonth()+1).padStart(2,'0')+'-01';
+    let query=client.from('daily_settlements').select('id,settlement_date,branch,staff,petty_entries').gte('settlement_date',ym+'-01').lt('settlement_date',until).in('branch',['Eco Botanic','Nusa Bestari']).order('settlement_date',{ascending:false}).limit(1000);
+    if(branch!=='all')query=query.eq('branch',branch);
+    const {data,error}=await query;
+    if(seq!==ndPettyHistorySeq)return;
+    if(error)throw error;
+    const entries=[];
+    for(const row of data||[]){
+      const list=Array.isArray(row.petty_entries)?row.petty_entries:[];
+      list.forEach((item,index)=>{
+        if(item?.type!=='in'||!(item.transfer_to_petty===true||item.transfer_to_petty==='true'||item.reason==='Cash Withdrawal to Petty Cash'))return;
+        const amount=Number(item.amount);
+        if(!Number.isFinite(amount)||amount<0)return;
+        entries.push({date:row.settlement_date,branch:row.branch,staff:row.staff||'',amount,created:item.created_at||'',index});
+      });
+    }
+    entries.sort((a,b)=>b.date.localeCompare(a.date)||b.created.localeCompare(a.created));
+    const sum=(b)=>entries.filter(x=>x.branch===b).reduce((a,x)=>a+x.amount,0);
+    const money=(n)=>'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+    summary.textContent=`Eco Botanic: ${money(sum('Eco Botanic'))}   |   Nusa Bestari: ${money(sum('Nusa Bestari'))}   |   ${entries.length} Top Up Records`;
+    root.innerHTML=entries.length?`<table><thead><tr><th>Date</th><th>Branch</th><th>Staff</th><th>Amount</th><th>Top Up Time</th></tr></thead><tbody>${entries.map(x=>`<tr><td>${ndPettyHistEscape(x.date)}</td><td>${ndPettyHistEscape(x.branch)}</td><td>${ndPettyHistEscape(x.staff||'—')}</td><td><strong>${money(x.amount)}</strong></td><td>${ndPettyHistEscape(x.created?new Date(x.created).toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'}):'—')}</td></tr>`).join('')}</tbody></table>`:'<div class="helper" style="padding:16px">No Cash to Petty Cash records for this month.</div>';
+  }catch(e){if(seq===ndPettyHistorySeq){root.textContent='Unable to load history: '+(e?.message||e);summary.textContent='';}}
+}
+document.getElementById('ndCashPettyMonth')?.addEventListener('change',ndRenderCashPettyHistory);
+document.getElementById('ndCashPettyBranch')?.addEventListener('change',ndRenderCashPettyHistory);
+document.getElementById('ndCashPettyRefresh')?.addEventListener('click',ndRenderCashPettyHistory);
+
 </script>
 <div class="salary-modal" id="cashRemittanceHistoryModal">
 <div class="salary-dialog" style="width:min(1100px,96vw)">
