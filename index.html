@@ -4196,6 +4196,31 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
 .history-two-row td.nd-verified-error .mini.error{background:#ae382e!important;color:#fff!important;border-color:#ae382e!important}
 .nd-history-weekday{font-size:.85em;font-weight:700;color:#54675e}
 </style>
+<style id="nd-zero-automatic-verification">
+/* Zero or absent amount: visual cyan status only, no verification action or database update. */
+.history-two-row td.nd-verified-empty{background:#dff7f6!important;box-shadow:inset 0 0 0 1px #9bdcd8}
+.nd-zero-auto{display:inline-block;padding:5px 9px;border-radius:8px;background:#dff7f6;color:#147b79;font-weight:700}
+.history-two-row td.nd-verified-empty .nd-zero-auto{background:transparent;padding:0}
+</style>
+<style id="nd-petty-compact-layout-v1">
+.nd-petty-compact{padding:16px 18px!important}
+.nd-petty-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+.nd-petty-head h3{margin:0!important;font-size:18px}
+.nd-petty-balance{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:700;color:var(--muted,#667085)}
+.nd-petty-balance input{width:145px!important;max-width:145px;min-height:37px!important;padding:7px 9px!important;text-align:right;font-weight:800;background:#fff}
+.nd-petty-fields{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(135px,.75fr) minmax(190px,1.15fr) auto;gap:12px;align-items:end}
+.nd-petty-field{min-width:0}.nd-petty-field>label{display:block;margin:0 0 5px;font-size:12px;font-weight:700}
+.nd-petty-field input:not([type=file]),.nd-petty-field .money-wrap{width:100%;max-width:none;min-height:43px}
+.nd-petty-upload-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.nd-petty-compact #pettyReceiptFileBtn{min-height:43px;padding:7px 10px;max-width:100%}
+.nd-petty-compact #pettyReceiptSelected{margin:3px 0 0!important;min-height:15px;font-size:11px}
+.nd-petty-compact .petty-action-wrap{margin:0;align-self:end}
+.nd-petty-compact #addPettyBtn{min-height:43px;min-width:115px;padding:8px 12px;white-space:nowrap}
+.nd-petty-history-table{margin-top:12px!important}
+.nd-petty-history-table table{margin:0}
+@media(max-width:1050px){.nd-petty-fields{grid-template-columns:minmax(0,1fr) minmax(135px,.65fr)}.nd-petty-receipt{grid-column:1}.nd-petty-compact .petty-action-wrap{grid-column:2}}
+@media(max-width:580px){.nd-petty-compact{padding:12px!important}.nd-petty-head{align-items:flex-start;gap:8px}.nd-petty-balance{width:100%;justify-content:space-between}.nd-petty-fields{grid-template-columns:minmax(0,1fr) minmax(105px,.62fr);gap:9px}.nd-petty-receipt{grid-column:1 / -1}.nd-petty-compact .petty-action-wrap{grid-column:1 / -1}.nd-petty-compact #addPettyBtn{width:100%}.nd-petty-compact #pettyReceiptFileBtn{width:auto;min-width:160px}}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -4427,37 +4452,21 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
     <div id="cashRemittanceMyHistory" class="table-wrap"><div class="helper">Loading history...</div></div>
   </div>
 </div>
-<div class="card span12" style="background:var(--soft)">
-<h3 style="margin-top:0" id="pettyInOutTitle">Petty Cash Expense</h3>
-<div style="display:grid;gap:10px">
-<div class="petty-row petty-type-receipt-row">
-<div class="petty-inline-receipt">
-  <input id="pettyReceiptCamera" type="file" accept="image/*" capture="environment" style="display:none"/>
-  <input id="pettyReceiptFile" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none"/>
-  <button class="btn" id="pettyReceiptFileBtn" type="button">+ Add Photo / File</button>
-  <button class="btn" id="pettyReceiptCameraBtn" type="button" style="display:none">Take Photo</button>
-  <button class="mini" id="pettyReceiptClearBtn" type="button" style="display:none">Clear</button>
-  <div class="helper" id="pettyReceiptSelected" style="margin-top:5px">No receipt selected</div>
-</div>
-<input type="hidden" id="pettyType" value="out"/>
-</div>
-<div class="petty-row">
-<label for="pettyReason"></label>
-<input id="pettyReason" placeholder="Reason" required="required" type="text"/>
-</div>
-<div class="petty-row">
-<label for="pettyAmount"></label>
-<div class="money-wrap"><span class="rm-prefix">RM</span><input id="pettyAmount" min="0" step="0.01" type="number" value=""/></div>
-</div>
-</div>
-<div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" style="width:100%;margin-top:12px" type="button">Submit</button></div>
-<div class="table-wrap" style="margin-top:10px">
-<table><thead><tr><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th></th></tr></thead><tbody id="pettyBody"></tbody></table>
-</div>
-<div style="margin-top:14px">
-<label>Petty Cash </label>
-<input id="pettyRemaining" readonly="" type="text"/>
-</div>
+<div class="card span12 nd-petty-compact" style="background:var(--soft)">
+  <div class="nd-petty-head"><h3 id="pettyInOutTitle">Petty Cash Expense</h3><div class="nd-petty-balance"><span>Available Balance</span><input id="pettyRemaining" readonly="" type="text" aria-label="Petty Cash Balance"/></div></div>
+  <div class="nd-petty-fields">
+    <div class="nd-petty-field nd-petty-reason"><label for="pettyReason">Reason</label><input id="pettyReason" placeholder="Enter expense reason" required="required" type="text"/></div>
+    <div class="nd-petty-field nd-petty-amount"><label for="pettyAmount">Amount</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="pettyAmount" min="0" step="0.01" type="number" value=""/></div></div>
+    <div class="nd-petty-field nd-petty-receipt"><label>Receipt</label><div class="petty-inline-receipt">
+      <input id="pettyReceiptCamera" type="file" accept="image/*" capture="environment" style="display:none"/>
+      <input id="pettyReceiptFile" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display:none"/>
+      <div class="nd-petty-upload-actions"><button class="btn" id="pettyReceiptFileBtn" type="button">+ Add Photo / File</button><button class="btn" id="pettyReceiptCameraBtn" type="button" style="display:none">Take Photo</button><button class="mini" id="pettyReceiptClearBtn" type="button" style="display:none">Clear</button></div>
+      <div class="helper" id="pettyReceiptSelected">No receipt selected</div>
+    </div></div>
+    <input type="hidden" id="pettyType" value="out"/>
+    <div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" type="button">Submit Expense</button></div>
+  </div>
+  <div class="table-wrap nd-petty-history-table"><table><thead><tr><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th></th></tr></thead><tbody id="pettyBody"></tbody></table></div>
 </div>
 <div class="card span12" style="padding:0;border:0;background:transparent;box-shadow:none">
 <button class="btn" id="dailySubmitBtn" style="width:100%;min-height:58px;font-size:17px;font-weight:800" type="button">Submit Daily Settlement</button>
@@ -5936,11 +5945,11 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
           ? ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getUTCDay()] : '';
       })() : '';
       const reviewClass=state=>state==='accepted'?'nd-verified-correct':state==='adjust'?'nd-verified-error':'';
-      const fieldReviewClass=(r,field)=>reviewClass((r.payment_statuses||{})[field]||'');
+      const fieldReviewClass=(r,field)=>{const value=field==="visa_master"?Number(r.visa||0)+Number(r.master||0):Number(r[field]||0);return value<=0?"nd-verified-empty":reviewClass((r.payment_statuses||{})[field]||'');};
 
       const realRowCount=ordered.length;
       const tngCell=(()=>{
-        if(tngTotal<=0) return money(0);
+        if(tngTotal<=0) return `<span class="nd-zero-auto">${money(0)}</span>`;
         const badge=tngReview==="accepted" ? `<div class="helper" style="color:#087f72">✓ Correct</div>`
           : tngReview==="adjust" ? `<div class="helper" style="color:#b42318">✕ Error</div>` : "";
         return `<strong>${money(tngTotal)}</strong>${badge}<div class="inline-actions" style="margin-top:5px">
@@ -5950,7 +5959,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       })();
 
       const branchRows=ordered.map((r,index)=>{
-        const mergedTng=index===0 ? `<td rowspan="${realRowCount}" class="${reviewClass(tngReview)}" style="vertical-align:middle">${tngCell}</td>` : "";
+        const mergedTng=index===0 ? `<td rowspan="${realRowCount}" class="${tngTotal<=0?'nd-verified-empty':reviewClass(tngReview)}" style="vertical-align:middle">${tngCell}</td>` : "";
         if(r._missing){
           return `<tr>
             <td><strong>${escHtml(r.branch)}</strong></td>
@@ -6267,10 +6276,16 @@ return `<div class="history-date-card">
       .reduce((sum,e)=>sum+(Number(e.amount)||0),0);
   }
   function ndPettyReminderHide(){ $("ndPettyTopupReminder")?.classList.remove("nd-open"); }
-  function ndPettyReminderShow(){
+  function ndPettyReminderShow(justSaved=false){
     const date=$("settlementDate")?.value||today();
     if(date!==today())return ndPettyReminderHide();
-    const total=ndPettySavedTotal(currentBranch,date);
+    // After a successful save, the current form is authoritative: allRows can
+    // still contain the previous snapshot until the cloud refresh finishes.
+    const entries=Array.isArray(pettyEntries)?pettyEntries:[];
+    const formTotal=entries.filter(e=>e && e.type==="in" &&
+      (e.transfer_to_petty===true || e.reason==="Cash Withdrawal to Petty Cash"))
+      .reduce((sum,e)=>sum+(Number(e.amount)||0),0);
+    const total=justSaved ? formTotal : ndPettySavedTotal(currentBranch,date);
     if(total<=0)return ndPettyReminderHide();
     const key=`nd-petty-ack:${currentBranch}:${date}:${total.toFixed(2)}`;
     if(sessionStorage.getItem(key)==="1")return ndPettyReminderHide();
@@ -6717,7 +6732,7 @@ return `<div class="history-date-card">
     const saved=sync && sync.classList.contains("ok");
 
     if(saved){
-      ndPettyReminderShow();
+      ndPettyReminderShow(true);
       dailyDirty=false;
       if(btn) btn.textContent="Saved ✓";
       if(state){
@@ -7563,7 +7578,7 @@ return `<div class="history-date-card">
   function paymentHistoryCell(r,field){
     if(field==="visa_master"){
       const total=Number(r.visa||0)+Number(r.master||0);
-      if(total<=0) return money(0);
+      if(total<=0) return `<span class="nd-zero-auto">${money(0)}</span>`;
       const state=(r.payment_statuses||{}).visa_master||"";
       const badge=state==="accepted" ? `<div class="helper" style="color:#087f72">✓ Correct</div>`
         : state==="adjust" ? `<div class="helper" style="color:#b42318">✕ Error</div>` : "";
@@ -7574,7 +7589,7 @@ return `<div class="history-date-card">
     }
 
     const value=Number(r[field]||0);
-    if(value<=0) return money(0);
+    if(value<=0) return `<span class="nd-zero-auto">${money(0)}</span>`;
     const state=(r.payment_statuses||{})[field]||"";
     const badge=state==="accepted" ? `<div class="helper" style="color:#087f72">✓ Correct</div>`
       : state==="adjust" ? `<div class="helper" style="color:#b42318">✕ Error</div>` : "";
@@ -31506,8 +31521,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <h3 id="ndPettyTopupReminderTitle" style="margin:7px 0 8px">Petty Cash Top Up Reminder</h3>
 <div id="ndPettyReminderBranchDate" class="helper"></div><div class="helper" style="margin-top:14px">Today's Petty Cash Top Up</div>
 <div id="ndPettyTopupReminderAmount" class="nd-petty-total">RM 0.00</div>
-<div class="helper">当天分行已充值 Petty Cash</div>
-<button type="button" class="nd-petty-understood" id="ndPettyReminderUnderstood">我已清楚 · Understood</button></div></div>
+<div class="helper">Petty Cash top-up saved for this branch today.</div>
+<button type="button" class="nd-petty-understood" id="ndPettyReminderUnderstood">Understood</button></div></div>
 <style id="nd-target-bonus-tab-style">
 #bonusPage.nd-target-only .bonus-shell > .bonus-card:not(.nd-bonus-filter-card){display:none!important}
 #bonusPage.nd-target-only #targetBonusSection{display:block!important}
