@@ -6276,7 +6276,8 @@ return `<div class="history-date-card">
       .reduce((sum,e)=>sum+(Number(e.amount)||0),0);
   }
   function ndPettyReminderHide(){ $("ndPettyTopupReminder")?.classList.remove("nd-open"); }
-  function ndPettyReminderShow(justSaved=false){
+  function ndPettyReminderShow(justSaved=false){ return; // Superseded by company-wide account acknowledgement
+
     const date=$("settlementDate")?.value||today();
     if(date!==today())return ndPettyReminderHide();
     // After a successful save, the current form is authoritative: allRows can
@@ -32247,5 +32248,92 @@ const page=$('salaryPage');if(page){const observer=new MutationObserver(()=>{if(
  document.addEventListener('change',e=>{if(e.target?.id==='empOutlet'||e.target?.id==='editEmpOutlet')sync();});
  document.addEventListener('click',e=>{if(e.target.closest('#openStaffModal,#addStaffBtn,#editStaffModal'))queueMicrotask(sync);});
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sync);else sync();
+})();
+</script>
+
+
+<style id="nd-petty-global-ack-css">
+#ndPettyGlobalAck{position:fixed;inset:0;z-index:999999;background:rgba(9,29,25,.65);display:none;align-items:center;justify-content:center;padding:16px}
+#ndPettyGlobalAck.nd-show{display:flex}
+#ndPettyGlobalAck .nd-ga-panel{background:#fffdf7;color:#193b32;width:min(450px,100%);border-radius:18px;padding:24px;box-shadow:0 20px 70px #0005;font-family:inherit}
+#ndPettyGlobalAck .nd-ga-title{font-size:21px;font-weight:800;margin-bottom:5px}
+#ndPettyGlobalAck .nd-ga-sub{font-size:13px;color:#6a786e;margin-bottom:18px}
+#ndPettyGlobalAck .nd-ga-row{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid #e6e8e1;font-size:15px}
+#ndPettyGlobalAck .nd-ga-total{font-weight:800;background:#e9f4ed;padding:14px;border-radius:11px;margin:17px 0;display:flex;justify-content:space-between}
+#ndPettyGlobalAck button{width:100%;border:0;border-radius:10px;background:#215d47;color:white;padding:14px;font-weight:800;cursor:pointer;font-size:15px}
+#ndPettyGlobalAck button:disabled{opacity:.6;cursor:wait}
+#ndPettyGlobalAck .nd-ga-error{color:#ae3333;font-size:12px;margin-top:10px;min-height:16px}
+</style>
+<div id="ndPettyGlobalAck" role="dialog" aria-modal="true" aria-labelledby="ndPettyGlobalAckTitle">
+ <div class="nd-ga-panel">
+  <div class="nd-ga-title" id="ndPettyGlobalAckTitle">Petty Cash Top Up Notice</div>
+  <div class="nd-ga-sub">Today: <span id="ndGaDate"></span> · All branches</div>
+  <div class="nd-ga-row"><span>Eco Botanic</span><strong id="ndGaEco">RM 0.00</strong></div>
+  <div class="nd-ga-row"><span>Nusa Bestari</span><strong id="ndGaNusa">RM 0.00</strong></div>
+  <div class="nd-ga-total"><span>Total Petty Cash In</span><span id="ndGaTotal">RM 0.00</span></div>
+  <button type="button" id="ndGaUnderstood">I Understand / 我已了解</button>
+  <div id="ndGaError" class="nd-ga-error" aria-live="polite"></div>
+ </div>
+</div>
+<script id="nd-petty-global-ack-v1">
+(()=>{
+ 'use strict';
+ const el=id=>document.getElementById(id);
+ const panel=el('ndPettyGlobalAck'), btn=el('ndGaUnderstood');
+ let busy=false,active=null, db=null, userId=null, retry=0;
+ const fmt=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const getDb=()=>{
+   if(typeof salaryDb!=='undefined' && salaryDb)return salaryDb;
+   if(typeof db!=='undefined' && db)return db;
+   return null;
+ };
+ const close=()=>{panel.classList.remove('nd-show');active=null;};
+ async function check(){
+   if(busy||panel.classList.contains('nd-show'))return;
+   db=getDb();if(!db)return;
+   busy=true;
+   try{
+     const auth=await db.auth.getUser();
+     userId=auth.data?.user?.id;
+     if(!userId){close();return;}
+     const r=await db.rpc('nd_petty_topup_daily_summary');
+     if(r.error){if(retry++<2)console.warn('Petty top-up notice:',r.error.message);return;}
+     const rows=Array.isArray(r.data)?r.data:[];
+     const eco=Number(rows.find(x=>x.branch==='Eco Botanic')?.amount||0);
+     const nusa=Number(rows.find(x=>x.branch==='Nusa Bestari')?.amount||0);
+     const day=rows[0]?.day;
+     if(!day||eco+nusa<=0){close();return;}
+     // Snapshot signature changes if either branch's amount changes.
+     const signature=String(day)+'|'+eco.toFixed(2)+'|'+nusa.toFixed(2);
+     const ack=await db.from('nd_petty_topup_ack').select('signature').eq('user_id',userId).eq('signature',signature).maybeSingle();
+     if(ack.error){console.warn('Petty acknowledgement lookup:',ack.error.message);return;}
+     if(ack.data)return;
+     active={signature,day,userId};
+     el('ndGaDate').textContent=day;
+     el('ndGaEco').textContent=fmt(eco);
+     el('ndGaNusa').textContent=fmt(nusa);
+     el('ndGaTotal').textContent=fmt(eco+nusa);
+     el('ndGaError').textContent='';
+     panel.classList.add('nd-show');
+   }catch(e){console.warn('Petty top-up notice:',e)}finally{busy=false;}
+ }
+ btn.addEventListener('click',async()=>{
+   if(!active||!db)return;
+   btn.disabled=true;el('ndGaError').textContent='';
+   try{
+     const {error}=await db.from('nd_petty_topup_ack').upsert({user_id:active.userId,signature:active.signature,acknowledged_at:new Date().toISOString()},{onConflict:'user_id,signature'});
+     if(error)throw error;
+     close();
+     setTimeout(check,1500);
+   }catch(e){el('ndGaError').textContent='Unable to save acknowledgement. Please try again.';console.warn(e)}
+   finally{btn.disabled=false;}
+ });
+ // All signed-in accounts check independently, including after login and tab focus.
+ setInterval(check,20000);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)check();});
+ window.addEventListener('focus',check);
+ window.addEventListener('nd-petty-topup-saved',check);
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(check,2200));
+ else setTimeout(check,2200);
 })();
 </script>
