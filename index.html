@@ -4271,6 +4271,16 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
 #cashRemittanceCard .cash-remittance-submit-wrap{grid-column:auto}
 }
 </style>
+<style id="nd-salary-layout-and-collaboration-fix-20261016">
+#salaryPage{position:relative!important;height:auto!important;min-height:100vh!important;max-height:none!important;overflow-y:auto!important}
+#salaryPage #salaryOutletRoot{display:flex;flex-direction:column;gap:14px;min-width:0;width:100%;max-width:100%}
+#salaryPage #salaryOutletRoot>.salary-card{flex:0 0 auto;min-width:0;max-width:100%;box-sizing:border-box}
+#salaryPage #ndCollaborationSalary{order:-1;margin:0 0 4px!important}
+#salaryPage .nd-commission-submit-bar{justify-content:flex-end!important;position:static!important;order:50;gap:12px!important}
+#salaryPage .nd-commission-submit-bar #commissionSubmitBtn{width:auto;max-width:100%;white-space:normal}
+#salaryPage .salary-table-wrap{overflow-x:auto!important;overscroll-behavior-x:contain}
+@media(max-width:700px){#salaryPage .nd-commission-submit-bar{justify-content:stretch!important}#salaryPage .nd-commission-submit-bar #commissionSubmitBtn{width:100%}}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -8112,10 +8122,16 @@ return `<div class="history-date-card">
   }
   function ndVerifyBuildQueue(){
     const q=[];
+    const reviewedTngDates=new Set((allRows||[]).filter(r=>['accepted','adjust'].includes(String(r.payment_statuses?.tng_daily_total_review||'').trim().toLowerCase())).map(r=>String(r.settlement_date||'')));
     for(const r of allRows||[]){
       if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||String(r.settlement_date||'')<'2026-10-01'||!ndVerifyEligible(r.settlement_date))continue;
       for(const [field,label,amountFn] of ndVerifyItems){
-        const amount=amountFn(r),status=(r.payment_statuses||{})[field]||'';
+        if(field==='tng' && reviewedTngDates.has(String(r.settlement_date||'')))continue;
+        const amount=amountFn(r),statuses=r.payment_statuses||{};
+        // History's TNG daily-total review is stored separately from the per-row TNG status.
+        // Both Correct and Error are completed reviews and must never be reminded again.
+        const status=field==='tng' && ['accepted','adjust'].includes(String(statuses.tng_daily_total_review||'').trim().toLowerCase())
+          ? statuses.tng_daily_total_review : (statuses[field]||'');
         if(amount>0 && !['accepted','adjust'].includes(String(status).trim().toLowerCase()))q.push({kind:'payment',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|'+field,row:r,field,label,amount,status});
       }
       (Array.isArray(r.petty_entries)?r.petty_entries:[]).forEach((e,i)=>{
@@ -13333,7 +13349,7 @@ function renderSalary(){
     });
 
   const commissionSubmitBar = salaryViewMode==="14th"
-    ? `<div class="salary-card" style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    ? `<div class="salary-card nd-commission-submit-bar" style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
          <button class="btn" id="commissionSubmitBtn" type="button">Submit Commission Changes</button>
          <span class="helper ${commissionPendingChanges.size?"bad":"ok"}" id="commissionSubmitState">${commissionPendingChanges.size?`Unsaved Changes · ${commissionPendingChanges.size} Staff`:"Saved ✓"}</span>
        </div>`
@@ -13463,7 +13479,7 @@ function renderSalary(){
     </div>`;
   }
 
-  byId("salaryOutletRoot").innerHTML=commissionSubmitBar+branchCards+branchTotalCard+globalCard;
+  byId("salaryOutletRoot").innerHTML=branchCards+commissionSubmitBar+branchTotalCard+globalCard;
   if(typeof ndCollabRender === "function") ndCollabRender();
 
   if(salaryViewMode!=="total"){
@@ -14602,6 +14618,7 @@ async function updateStaff(){
   byId("editStaffModal").classList.remove("open");
   await refreshSalaryStayHere();
   renderStaffList();
+  window.ndCollabStaffChanged?.();
   
 }
 
@@ -31985,6 +32002,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
 </style>
 
 
+
 </body></html>`;
   w.document.open();w.document.write(html);w.document.close();
  }
@@ -32228,6 +32246,9 @@ el.innerHTML=`<div class="outlet-title"><h3>COLLABORATION — ${escapeHTML(month
 async function save(tr,markDone){if(busy||!admin()||!db())return;const id=Number(tr.dataset.collabId),e=(typeof salaryEmployees!=='undefined'?salaryEmployees:[]).find(x=>Number(x.id)===id);if(!e||String(e.outlet||'').trim().toLowerCase()!=='collaboration')return;const existing=rows.find(r=>Number(r.employee_id)===id);if(existing?.payment_done)return;const amount=markDone?Number(existing?.amount):Number(tr.querySelector('.nd-collab-amount')?.value);if(markDone&&(!existing||existing.amount==null||!existing.payment_method)){alert('Save a valid payment before marking Payment DONE.');return;}if(!Number.isFinite(amount)||amount<0||(!markDone&&tr.querySelector('.nd-collab-amount')?.value==='')){alert('Enter a valid payment amount.');return;}if(markDone&&!confirm('Confirm Payment DONE? This payment will be permanently locked.'))return;const method=markDone?existing?.payment_method:tr.querySelector('.nd-collab-method')?.value;if(!['Cash','Bank Transfer','TNG'].includes(method)){alert('Select a valid payment method.');return;}busy=true;const actionButtons=Array.from(tr.querySelectorAll('.nd-collab-save,.nd-collab-done'));actionButtons.forEach(b=>b.disabled=true);const status=document.getElementById('ndCollabStatus');if(status)status.textContent='Saving payment...';try{const payload={employee_id:id,salary_month:month()+'-01',amount,payment_method:method,payment_done:!!markDone};const res=await db().from('nd_collaboration_payments').upsert(payload,{onConflict:'employee_id,salary_month'});if(res.error)throw res.error;await load(true);}catch(err){alert('Save failed: '+(err.message||err));}finally{busy=false;actionButtons.forEach(b=>{if(b.isConnected)b.disabled=false;});const currentStatus=document.getElementById('ndCollabStatus');if(currentStatus&&currentStatus.textContent==='Saving payment...')currentStatus.textContent='';}}
 document.addEventListener('click',e=>{const btn=e.target.closest('.nd-collab-save,.nd-collab-done');if(!btn)return;const tr=btn.closest('tr[data-collab-id]');if(tr)save(tr,btn.classList.contains('nd-collab-done'));});
 window.ndCollabRender=function(){const el=box();if(!el)return;const key=month();if(key!==lastKey){show('Loading collaboration payments...');if(loadingKey!==key)load();}else draw();};
+// After a staff record changes outlet, refresh the collaboration roster even if
+// the payment month has not changed. The employee list comes from Salary state.
+window.ndCollabStaffChanged=function(){if(document.getElementById('salaryOutletRoot'))window.ndCollabRender();};
 })();
 </script>
 <style id="nd-ann-css">
@@ -32360,6 +32381,34 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{display:block!im
   document.addEventListener('keydown',function(e){
     if((e.key==='Enter'||e.key===' ') && document.activeElement?.id==='sidebarAnnouncements')openAnnouncements(e);
   },true);
+})();
+</script>
+
+<style id="nd-roster-color-refresh-20261016">
+#rosterPage .roster-calendar-card{background:linear-gradient(135deg,#f5f9ff,#fdfaff)!important;border:1px solid #d8e4f5!important}
+#rosterPage .roster-cal-day{background:#fff!important;border:1px solid #dbe5f1!important;border-radius:11px!important}
+#rosterPage .roster-cal-day:nth-child(even){background:#f4f8ff!important}
+#rosterPage .roster-cal-day:hover{box-shadow:0 3px 12px #44628a20!important;border-color:#9bb5d5!important}
+#rosterPage .roster-name{border-radius:7px!important;font-weight:750!important;transition:background-color .15s,color .15s}
+</style>
+<script id="nd-roster-name-palette-20261016">
+(function(){
+  const palette=[['#e5f1ff','#20518a'],['#fce7f1','#8c315b'],['#e4f6ed','#236548'],['#fff1d9','#875d1c'],['#eee9ff','#5e409b'],['#dff5f6','#1c6872'],['#ffeae1','#995039'],['#e9f0d9','#506d25']];
+  function apply(){
+    document.querySelectorAll('#rosterPage .roster-calendar-grid .roster-name').forEach(el=>{
+      const name=(el.textContent||'').trim().replace(/\s+/g,' ').toLowerCase();
+      if(!name)return;
+      let hash=0;for(let i=0;i<name.length;i++)hash=((hash*31)+name.charCodeAt(i))>>>0;
+      const [bg,fg]=palette[hash%palette.length];
+      if(el.style.backgroundColor!==bg){el.style.setProperty('background-color',bg,'important');el.style.setProperty('color',fg,'important');}
+    });
+  }
+  function init(){
+    const root=document.querySelector('#rosterPage .roster-calendar-grid');if(!root)return;
+    apply();let scheduled=false;
+    new MutationObserver(()=>{if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;apply();});}).observe(root,{childList:true,subtree:true,characterData:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
 </body>
