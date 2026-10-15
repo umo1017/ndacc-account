@@ -5946,7 +5946,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
           ? ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getUTCDay()] : '';
       })() : '';
       const reviewClass=state=>state==='accepted'?'nd-verified-correct':state==='adjust'?'nd-verified-error':'';
-      const fieldReviewClass=(r,field)=>{const value=field==="visa_master"?Number(r.visa||0)+Number(r.master||0):Number(r[field]||0);return value<=0?"nd-verified-empty":reviewClass((r.payment_statuses||{})[field]||'');};
+      const fieldReviewClass=(r,field)=>{const value=field==="visa_master"?Number(r.visa||0)+Number(r.master||0):Number(r[field]||0);return value<=0?"nd-verified-empty":reviewClass(field==="cash"?"accepted":((r.payment_statuses||{})[field]||''));};
 
       const realRowCount=ordered.length;
       const tngCell=(()=>{
@@ -5988,7 +5988,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
           <td class="${fieldReviewClass(r,"amex")}">${paymentHistoryCell(r,"amex")}</td>
           <td>${bedFeeHistoryCell(r)}</td>
           <td>${dailyProofHistoryCell(r,"card")}</td>
-          <td>${dailyProofHistoryCell(r,"tng")}</td>
+          
           <td>${money(r.grand_total)}</td>
           <td>${money(r.cash_withdrawal)}</td>
           <td>${money(r.petty_net)}</td>
@@ -6005,7 +6005,7 @@ return `<div class="history-date-card">
                 <th>Branch</th><th>Staff</th><th>VISA / MASTER</th>
                 <th>TNG</th><th>CASH</th><th>Bank Transfer</th><th>Tips</th>
                 <th>ALIPAY</th><th>Online Card</th><th>AMEX</th><th>Bed Fee</th>
-                <th>Card Proof</th><th>TNG Proof</th><th>Grand Total</th>
+                <th>Card Proof</th><th>Grand Total</th>
                 <th>Cash Withdrawal</th><th>Petty Cash</th><th>Status</th><th>Order</th>
               </tr>
             </thead>
@@ -6650,6 +6650,8 @@ return `<div class="history-date-card">
       }
     }
 
+    // CASH is automatically accepted; no manual review is required.
+    statuses.cash="accepted";
     p.payment_statuses=statuses;
     const {data,error}=await db.from("daily_settlements").upsert(p,{onConflict:"settlement_date,branch"}).select().single();
     if(error){$("syncState").textContent="Save failed: "+error.message;$("syncState").className="bad";return;}
@@ -7406,6 +7408,7 @@ return `<div class="history-date-card">
   }
 
   async function setPaymentStatus(id,field,status){
+    if(field==="cash")return; // CASH is auto-verified.
     if(!canViewDailyHistory){
       alert("History access is not enabled for this account.");
       return;
@@ -7599,6 +7602,10 @@ return `<div class="history-date-card">
   }
 
   function paymentHistoryCell(r,field){
+    if(field==="cash") {
+      const value=Number(r.cash||0);
+      return value<=0 ? `<span class="nd-zero-auto">${money(0)}</span>` : `${money(value)}<div class="helper" style="color:#087f72">✓ Auto Correct</div>`;
+    }
     if(field==="visa_master"){
       const total=Number(r.visa||0)+Number(r.master||0);
       if(total<=0) return `<span class="nd-zero-auto">${money(0)}</span>`;
