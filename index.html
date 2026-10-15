@@ -32507,6 +32507,53 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{display:block!im
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
+<style id="nd-staff-finance-page-css">
+#ndStaffFinancePage{display:none;position:fixed;inset:0;z-index:8500;background:#f6f8f5;overflow:auto;-webkit-overflow-scrolling:touch;padding:20px 18px 55px;box-sizing:border-box;color:#243e32}
+#ndStaffFinancePage.nd-open{display:block}
+#ndStaffFinancePage .nd-finance-inner{max-width:1240px;margin:auto}
+#ndStaffFinancePage .nd-finance-header{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+#ndStaffFinancePage .nd-finance-header h2{margin:0;font-size:24px}
+#ndStaffFinancePage .nd-finance-nav{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px}
+#ndStaffFinancePage .nd-finance-nav .salary-view-btn{display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap;padding:12px 15px;border-radius:11px;border:1px solid #b7c9bd;background:white;color:#244b38;font-weight:700;cursor:pointer}
+#ndStaffFinancePage #ndStaffDeductionsMount,#ndStaffFinancePage #ndStaffPerformancePanel,#ndStaffFinancePage #ndAdvanceSalaryHistoryMount{max-width:100%;overflow-x:auto}
+#ndStaffFinancePage #ndAdvanceDailyHistoryCard{width:100%;box-sizing:border-box}
+@media(max-width:650px){#ndStaffFinancePage{padding:16px 12px 40px}#ndStaffFinancePage .nd-finance-header h2{font-size:21px}#ndStaffFinancePage .nd-finance-nav .salary-view-btn{flex:1 1 44%;white-space:normal}}
+</style>
+<div id="ndStaffFinancePage" aria-label="Staff Finance">
+<div class="nd-finance-inner">
+<div class="nd-finance-header"><h2>Staff Finance</h2><button type="button" class="btn" id="ndStaffFinanceClose">← Back to Salary</button></div>
+<div class="nd-finance-nav" id="ndStaffFinanceNav"></div>
+<div id="ndStaffFinanceModules"></div>
+</div></div>
+<script id="nd-staff-finance-page-script">
+(function(){
+'use strict';
+function init(){
+ const page=document.getElementById('ndStaffFinancePage');
+ const nav=document.getElementById('ndStaffFinanceNav');
+ const modules=document.getElementById('ndStaffFinanceModules');
+ if(!page||!nav||!modules)return;
+ const salary=document.getElementById('salaryPage');
+ const tabs=document.getElementById('salaryViewTabs');
+ if(!salary||!tabs)return;
+ const btnIds=['ndStaffPerformanceBtn','ndDeductionsBtn','ndAdvanceBtn','ndAdvanceHistoryBtn'];
+ const mountIds=['ndStaffDeductionsMount','ndAdvanceSalaryHistoryMount','ndStaffPerformancePanel'];
+ btnIds.forEach(id=>{const el=document.getElementById(id);if(el)nav.appendChild(el)});
+ mountIds.forEach(id=>{const el=document.getElementById(id);if(el)modules.appendChild(el)});
+ const history=document.getElementById('ndAdvanceDailyHistoryCard');
+ if(history)modules.appendChild(history);
+ const launch=document.createElement('button');launch.type='button';launch.id='ndStaffFinanceLaunch';launch.className='salary-view-btn';launch.textContent='Staff Finance';tabs.appendChild(launch);
+ const close=()=>{page.classList.remove('nd-open');document.body.style.removeProperty('--nd-finance-open');};
+ launch.addEventListener('click',()=>{page.classList.add('nd-open');page.scrollTop=0;});
+ document.getElementById('ndStaffFinanceClose').addEventListener('click',close);
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&page.classList.contains('nd-open'))close()});
+ // Salary navigation and its permissions remain the authority; this is only a new visual page.
+ const observer=new MutationObserver(()=>{if(document.body.dataset.ndVisiblePage!=='salary')close()});
+ observer.observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
 </body>
 </html>
 
