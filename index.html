@@ -4541,6 +4541,11 @@ body[data-nd-visible-page="salary"] .nd-collab-payment-grand-total{background:#e
  #salaryPage .salary-view-tabs .salary-view-btn{padding:9px 12px!important;font-size:12px!important}
 }
 </style>
+<style id="nd-collab-unified-payroll-20261016">
+/* Full payroll uses the existing branch salary tables and save handlers. */
+#salaryPage .salary-table td:first-child,#salaryPage .salary-table th:first-child{min-width:116px;max-width:180px;white-space:normal!important;overflow-wrap:anywhere}
+#salaryPage .salary-table td:first-child .employee-edit-cell{white-space:normal!important}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -5163,30 +5168,28 @@ body[data-nd-visible-page="salary"] .nd-collab-payment-grand-total{background:#e
   const CASH_REMITTANCE_MAX_BYTES=15*1024*1024;
   let pendingCashRemittanceFile=null;
 
-  function verifiedCashRemittanceTotal(branch,cutoffDate="",beforeDate=""){
+  // Deduplicate bank-transfer records by their persisted ID. A pending or
+  // rejected transfer never reduces cash; a verified transfer reduces it once.
+  function ndVerifiedTransfers(branch,cutoffDate="",beforeDate=""){
     const target=String(branch||"").trim();
-    const cutoff=String(cutoffDate||"").trim();
-    const before=String(beforeDate||"").trim();
-    return (cashRemittances||[])
-      .filter(x=>{
-        if(String(x.branch||"").trim()!==target) return false;
-        if(String(x.status||"")!=="verified") return false;
-        const d=String(x.remittance_date||"");
-        if(cutoff && d>cutoff) return false;
-        if(before && d>=before) return false;
-        return true;
-      })
-      .reduce((s,x)=>s+Number(x.amount||0),0);
+    const seen=new Set();
+    return (cashRemittances||[]).filter(x=>{
+      if(String(x.branch||"").trim()!==target || String(x.status||"").toLowerCase()!=="verified")return false;
+      const d=String(x.remittance_date||"");
+      if(cutoffDate&&d>cutoffDate)return false;
+      if(beforeDate&&d>=beforeDate)return false;
+      const id=x.id==null?null:String(x.id);
+      if(id!==null){if(seen.has(id))return false;seen.add(id);}
+      return true;
+    });
   }
-
+  function verifiedCashRemittanceTotal(branch,cutoffDate="",beforeDate=""){
+    return ndVerifiedTransfers(branch,cutoffDate,beforeDate)
+      .reduce((s,x)=>s+(Number(x.amount)||0),0);
+  }
   function verifiedCashRemittanceForDate(branch,date){
-    return (cashRemittances||[])
-      .filter(x=>
-        String(x.branch||"").trim()===String(branch||"").trim() &&
-        String(x.remittance_date||"")===String(date||"") &&
-        String(x.status||"")==="verified"
-      )
-      .reduce((s,x)=>s+Number(x.amount||0),0);
+    return ndVerifiedTransfers(branch,date).filter(x=>String(x.remittance_date||"")===String(date||""))
+      .reduce((s,x)=>s+(Number(x.amount)||0),0);
   }
 
   function refreshCashRemittanceFileUI(){
@@ -5534,18 +5537,25 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     return {cash,petty};
   }
 
+  function ndCashLedgerBreakdown(branch,sourceRows=allRows,cutoffDate=""){
+    const target=String(branch||"").trim(), cutoff=String(cutoffDate||"").trim();
+    const seen=new Set();
+    const rows=(sourceRows||[]).filter(r=>{
+      if(r._missing || String(r.branch||"").trim()!==target)return false;
+      const d=String(r.settlement_date||"");
+      if(cutoff && d>cutoff)return false;
+      // A settlement is unique per branch/date. Never count the same date twice
+      // if an old duplicated fetch or overlapping reload exists in memory.
+      if(seen.has(d))return false;
+      seen.add(d);return true;
+    });
+    const cash=rows.reduce((s,r)=>s+(Number(r.cash)||0),0);
+    const withdrawals=rows.reduce((s,r)=>s+(Number(r.cash_withdrawal)||0),0);
+    const transfers=verifiedCashRemittanceTotal(target,cutoff);
+    return {cash,withdrawals,transfers,balance:cash-withdrawals-transfers};
+  }
   function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
-    const target=String(branch||"").trim();
-    const cutoff=String(cutoffDate||"").trim();
-    return (sourceRows||[])
-      .filter(r=>{
-        if(r._missing) return false;
-        if(String(r.branch||"").trim()!==target) return false;
-        if(cutoff && String(r.settlement_date||"")>cutoff) return false;
-        return true;
-      })
-      .reduce((sum,r)=>sum+Number(r.cash||0)-Number(r.cash_withdrawal||0),0)
-      - verifiedCashRemittanceTotal(target,cutoff);
+    return ndCashLedgerBreakdown(branch,sourceRows,cutoffDate).balance;
   }
 
   function computedLatestBalancesByBranch(sourceRows=allRows){
@@ -8014,6 +8024,14 @@ return `<div class="history-date-card">
     balance+=(num("cash")-savedCash)-(num("cashWithdrawal")-savedWithdrawal);
 
     el.textContent=money(balance);
+    const breakdown=ndCashLedgerBreakdown(currentBranch,allRows,selectedDate);
+    const pendingCash=num("cash")-(existing?Number(existing.cash||0):0);
+    const pendingWithdrawal=num("cashWithdrawal")-(existing?Number(existing.cash_withdrawal||0):0);
+    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Cash withdrawn: ${money(breakdown.withdrawals+pendingWithdrawal)} | Verified bank transfers: ${money(breakdown.transfers)} | Remaining: ${money(balance)}`;
+    el.dataset.cashBreakdown=el.title;
+    let detail=document.getElementById("ndCashBalanceAudit");
+    if(!detail){detail=document.createElement("div");detail.id="ndCashBalanceAudit";detail.className="helper";detail.style.cssText="font-size:11px;line-height:1.6;margin-top:5px;white-space:normal";el.insertAdjacentElement("afterend",detail);}
+    detail.textContent=`Cash ${money(breakdown.cash+pendingCash)} − Withdrawal ${money(breakdown.withdrawals+pendingWithdrawal)} − Bank ${money(breakdown.transfers)}`;
   }
 
   function renderAll(){renderHistory();renderMonth();updateMonthTotal();updateTodayTotalCash();
@@ -12681,7 +12699,7 @@ async function loadSalaryData(){
   setTimeout(()=>{try{window.ndRefreshDailyBirthdayReminder?.(true);}catch(_){}},0);
 
       if(isPayrollManager) return true;
-      return e.outlet==="Collaboration" || accessibleSalaryOutlets.includes(e.outlet);
+      return accessibleSalaryOutlets.includes(e.outlet);
     })
     .sort((a,b)=>{
       const branchCompare=String(a.outlet||"").localeCompare(String(b.outlet||""));
@@ -13604,7 +13622,7 @@ function renderSalary(){
   renderSalaryViewButtons();
 
   const selectedMonth=monthKey();
-  const active=salaryEmployees.filter(e=>e.outlet!=="Collaboration" && salaryEmployeeVisibleInMonth(e,selectedMonth));
+  const active=salaryEmployees.filter(e=>salaryEmployeeVisibleInMonth(e,selectedMonth));
 
   const visibleOutlets=isGlobalAdmin
     ? [...new Set([
@@ -13614,7 +13632,7 @@ function renderSalary(){
     : [...accessibleSalaryOutlets];
 
   const branchNames=visibleOutlets
-    .filter((x,i,a)=>x && x!=="Collaboration" && a.indexOf(x)===i)
+    .filter((x,i,a)=>x && a.indexOf(x)===i)
     .sort((a,b)=>{
       if(a==="Global") return 1;
       if(b==="Global") return -1;
@@ -32481,81 +32499,10 @@ if(!attach())document.addEventListener('DOMContentLoaded',attach,{once:true});
 }
 </style>
 <script id="nd-collaboration-salary-v2">
-/* Collaboration is a separate payment ledger, never part of normal payroll. */
-(function(){
-const admins=new Set(['umo1017@gmail.com','mars83002566@gmail.com']);
-const escapeHTML=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
-let lastKey='', rows=[], busy=false, loadingKey='', loadSequence=0, collaborationEmployees=[], collaborationCommissions=[];
-function db(){return typeof salaryDb!=='undefined'?salaryDb:null;}
-function admin(){return admins.has(String(typeof currentSalaryUserEmail!=='undefined'?currentSalaryUserEmail:'').trim().toLowerCase());}
-function month(){return document.getElementById('salaryMonth')?.value||new Date().toISOString().slice(0,7);}
-function box(){let root=document.getElementById('salaryOutletRoot');if(!root)return null;let el=document.getElementById('ndCollaborationSalary');if(!el){el=document.createElement('section');el.id='ndCollaborationSalary';el.className='salary-card';el.style.margin='0 0 16px';root.prepend(el);}else if(root.firstElementChild!==el){root.prepend(el);}return el;}
-async function load(force=false){const client=db();if(!client){show('Payment data is unavailable. Please refresh and try again.');return;}const key=month();if(loadingKey===key&&!force)return;const seq=++loadSequence;loadingKey=key;try{const result=await client.from('nd_collaboration_payments').select('*').eq('salary_month',key+'-01').order('employee_id');if(seq!==loadSequence||month()!==key)return;if(result.error){lastKey='';rows=[];show('Cannot load collaboration payments: '+escapeHTML(result.error.message));return;}lastKey=key;rows=result.data||[];
-// Collaboration staff must be loaded from employees, not solely from the
-// Salary branch roster (which can be filtered by outlet permissions).
-const staffResult=await client.from('employees').select('*').ilike('outlet','collaboration').order('name');
-if(seq!==loadSequence||month()!==key)return;
-if(staffResult.error){collaborationEmployees=[];show('Cannot load collaboration staff: '+escapeHTML(staffResult.error.message));return;}
-collaborationEmployees=staffResult.data||[];
-const commRes=await client.from('employee_salary_monthly').select('employee_id,commission_a,commission_b,customer_referral,staff_referral,reward').eq('salary_month',key+'-01');
-if(seq!==loadSequence||month()!==key)return;
-if(commRes.error){collaborationCommissions=[];show('Cannot load collaboration commissions: '+escapeHTML(commRes.error.message));return;}
-collaborationCommissions=commRes.data||[];
-draw();}catch(err){if(seq===loadSequence&&month()===key){lastKey='';show('Cannot load collaboration payments: '+escapeHTML(err?.message||err));}}finally{if(seq===loadSequence)loadingKey='';}}
-function show(msg){const el=box();if(el)el.innerHTML='<h3>COLLABORATION</h3><div class="helper">'+msg+'</div>';}
-function draw(){const el=box();if(!el)return;const roster=[...collaborationEmployees,...(typeof salaryEmployees!=='undefined'?salaryEmployees:[])];
-const emps=[...new Map(roster.filter(e=>String(e.outlet||'').trim().toLowerCase()==='collaboration'&&(!window.salaryEmployeeVisibleInMonth||salaryEmployeeVisibleInMonth(e,month()))).map(e=>[Number(e.id),e])).values()].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
-const mapped=emps.map(e=>({employee:e,record:rows.find(r=>Number(r.employee_id)===Number(e.id)),comm:collaborationCommissions.find(r=>Number(r.employee_id)===Number(e.id))||{}}));
-const totals={Cash:0,'Bank Transfer':0,TNG:0};mapped.forEach(({employee:e,record:r})=>{let method=String(r?.payment_method||e.payment_method||'').toLowerCase();method=method.includes('cash')?'Cash':method.includes('tng')?'TNG':'Bank Transfer';totals[method]+=Number(r?.amount||0);});
-const total=Object.values(totals).reduce((a,b)=>a+b,0);
-el.innerHTML=`<div class="outlet-title"><h3>COLLABORATION — ${escapeHTML(month())}</h3></div>
-
-<div class="salary-table-wrap"><table class="salary-table compact"><thead><tr><th>Full Name</th><th>Commission A</th><th>Commission B</th><th>Customer Referral</th><th>Staff Referral</th><th>Bonus</th><th>Total Commission</th><th>Amount</th><th>Payment Method</th><th>Status</th><th>${admin()?'Action':'Total'}</th></tr></thead><tbody>${mapped.map(({employee:e,record:r,comm:c})=>{const done=!!r?.payment_done;const method=r?.payment_method||e.payment_method||'transfer';return `<tr data-collab-id="${Number(e.id)}"><td><strong>${escapeHTML(e.nickname||e.name)}</strong></td>${['commission_a','commission_b','customer_referral','staff_referral','reward'].map(f=>`<td>${admin()&&!done?`<input class="nd-collab-commission" data-comm-field="${f}" type="number" min="0" step="0.01" value="${Number(c[f]||0).toFixed(2)}"/>`:fmt(c[f])}</td>`).join('')}<td class="nd-collab-commission-total">${fmt(['commission_a','commission_b','customer_referral','staff_referral','reward'].reduce((sum,f)=>sum+Number(c[f]||0),0))}</td><td>${admin()&&!done?`<input class="nd-collab-amount" type="number" min="0" step="0.01" value="${r?.amount??''}" placeholder="Amount"/>`:fmt(r?.amount)}</td><td>${admin()&&!done?`<select class="nd-collab-method"><option value="Cash" ${/cash/i.test(method)?'selected':''}>Cash</option><option value="Bank Transfer" ${!/cash|tng/i.test(method)?'selected':''}>Bank Transfer</option><option value="TNG" ${/tng/i.test(method)?'selected':''}>TNG</option></select>`:escapeHTML(method)}</td><td>${done?'<span class="confirmed-pill">Payment DONE ✓</span>':'Pending'}</td>${admin()?`<td>${done?'<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>':`<button class="btn nd-collab-commission-save" type="button">Save Commission</button> <button class="btn nd-collab-save" type="button">Save Payment</button> <button class="btn payment-done-btn pending nd-collab-done" type="button" ${r?'':'disabled title="Save payment first"'}>Payment — DONE</button>`}</td>`:'<td>View only</td>'}</tr>`;}).join('')||`<tr><td colspan="11" class="helper">No collaboration staff for this month.</td></tr>`}</tbody></table></div><div class="helper" id="ndCollabStatus"></div>`;
-}
-async function save(tr,markDone){if(busy||!admin()||!db())return;const id=Number(tr.dataset.collabId),e=[...collaborationEmployees,...(typeof salaryEmployees!=='undefined'?salaryEmployees:[])].find(x=>Number(x.id)===id);if(!e||String(e.outlet||'').trim().toLowerCase()!=='collaboration')return;const existing=rows.find(r=>Number(r.employee_id)===id);if(existing?.payment_done)return;const amount=markDone?Number(existing?.amount):Number(tr.querySelector('.nd-collab-amount')?.value);if(markDone&&(!existing||existing.amount==null||!existing.payment_method)){alert('Save a valid payment before marking Payment DONE.');return;}if(!Number.isFinite(amount)||amount<0||(!markDone&&tr.querySelector('.nd-collab-amount')?.value==='')){alert('Enter a valid payment amount.');return;}if(markDone&&!confirm('Confirm Payment DONE? This payment will be permanently locked.'))return;const method=markDone?existing?.payment_method:tr.querySelector('.nd-collab-method')?.value;if(!['Cash','Bank Transfer','TNG'].includes(method)){alert('Select a valid payment method.');return;}busy=true;const actionButtons=Array.from(tr.querySelectorAll('.nd-collab-save,.nd-collab-done'));actionButtons.forEach(b=>b.disabled=true);const status=document.getElementById('ndCollabStatus');if(status)status.textContent='Saving payment...';try{if(!markDone){
-  const fields={};for(const inp of tr.querySelectorAll('[data-comm-field]')){
-    const v=Number(inp.value);if(!Number.isFinite(v)||v<0){alert('Enter valid commission amounts.');return;}
-    fields[inp.dataset.commField]=v;
-  }
-  const commSave=await db().from('employee_salary_monthly').upsert({employee_id:id,salary_month:month()+'-01',...fields},{onConflict:'employee_id,salary_month'});
-  if(commSave.error)throw commSave.error;
-}
-const payload={employee_id:id,salary_month:month()+'-01',amount,payment_method:method,payment_done:!!markDone};const res=await db().from('nd_collaboration_payments').upsert(payload,{onConflict:'employee_id,salary_month'});if(res.error)throw res.error;await load(true);}catch(err){alert('Save failed: '+(err.message||err));}finally{busy=false;actionButtons.forEach(b=>{if(b.isConnected)b.disabled=false;});const currentStatus=document.getElementById('ndCollabStatus');if(currentStatus&&currentStatus.textContent==='Saving payment...')currentStatus.textContent='';}}
-async function saveCommissionOnly(tr){
- if(busy||!admin()||!db())return;
- const id=Number(tr.dataset.collabId);
- const existing=rows.find(r=>Number(r.employee_id)===id);
- if(existing?.payment_done){alert('Payment DONE is locked.');return;}
- const fields={};
- for(const inp of tr.querySelectorAll('[data-comm-field]')){
-  const value=Number(inp.value);
-  if(!Number.isFinite(value)||value<0){alert('Enter valid commission amounts.');return;}
-  fields[inp.dataset.commField]=value;
- }
- const btn=tr.querySelector('.nd-collab-commission-save');
- busy=true;if(btn)btn.disabled=true;
- try{
-  const res=await db().from('employee_salary_monthly').upsert(
-   {employee_id:id,salary_month:month()+'-01',...fields},
-   {onConflict:'employee_id,salary_month'}
-  );
-  if(res.error)throw res.error;
-  await load(true);
- }catch(err){alert('Cannot save commission: '+(err?.message||err));}
- finally{busy=false;if(btn&&btn.isConnected)btn.disabled=false;}
-}
-document.addEventListener('click',e=>{
- const btn=e.target.closest('.nd-collab-commission-save');
- if(btn){const tr=btn.closest('tr[data-collab-id]');if(tr)saveCommissionOnly(tr);}
-});
-document.addEventListener('input',e=>{if(!e.target.matches('.nd-collab-commission'))return;const tr=e.target.closest('tr[data-collab-id]');if(!tr)return;const total=[...tr.querySelectorAll('.nd-collab-commission')].reduce((sum,x)=>sum+(Number(x.value)||0),0);const cell=tr.querySelector('.nd-collab-commission-total');if(cell)cell.textContent=fmt(total);});
-document.addEventListener('click',e=>{const btn=e.target.closest('.nd-collab-save,.nd-collab-done');if(!btn)return;const tr=btn.closest('tr[data-collab-id]');if(tr)save(tr,btn.classList.contains('nd-collab-done'));});
-window.ndCollabRender=function(){const el=box();if(!el)return;const key=month();if(key!==lastKey){show('Loading collaboration payments...');if(loadingKey!==key)load();}else draw();};
-// After a staff record changes outlet, refresh the collaboration roster even if
-// the payment month has not changed. The employee list comes from Salary state.
-window.ndCollabStaffChanged=async function(){if(document.getElementById('salaryOutletRoot'))await load(true);};
-})();
+/* Collaboration uses the same editable 7th / 14th payroll tables as other branches.
+   Legacy independent payment ledger intentionally disabled to prevent double payments. */
+window.ndCollabRender = function(){};
+window.ndCollabStaffChanged = function(){ if(typeof renderSalary === 'function') renderSalary(); };
 </script>
 <style id="nd-ann-css">
 #ndAnnouncementsPage{display:none;min-height:100vh;padding:24px;background:var(--bg)}
