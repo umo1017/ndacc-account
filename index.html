@@ -4159,6 +4159,13 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
 #sidebarAnnouncements,#ndAdvanceHistoryBtn{pointer-events:auto!important;touch-action:manipulation;cursor:pointer}
 @media(max-width:760px){#ndAnnouncementsPage{padding:68px 12px 26px!important}#ndAnnouncementsPage.sidebar-offset{margin-left:0!important;max-width:100%!important}}
 </style>
+<style id="nd-ann-promotion-click-fix-20261015">
+#ndAnnTabs{position:relative;z-index:3;display:flex;flex-wrap:wrap;gap:8px;pointer-events:auto!important}
+#ndAnnTabs button[data-cat]{position:relative;pointer-events:auto!important;cursor:pointer!important;touch-action:manipulation;min-height:42px;padding:9px 14px}
+#ndAnnTabs button[data-cat].selected{outline:2px solid #315f49;outline-offset:1px}
+#ndAnnouncementsPage #ndAnnEditor[hidden],#ndAnnDailyMount[hidden]{display:none!important}
+#ndAnnouncementsPage .nd-ann-empty{padding:22px 16px;text-align:center;color:#68766d}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -6228,7 +6235,7 @@ return `<div class="history-date-card">
     if(sessionStorage.getItem(key)==="1")return ndPettyReminderHide();
     ndPettyReminderKey=key;
     $("ndPettyReminderBranchDate").textContent=`${currentBranch} · ${date}`;
-    $("ndPettyReminderAmount").textContent=money(total);
+    $("ndPettyTopupReminderAmount").textContent=money(total);
     $("ndPettyTopupReminder")?.classList.add("nd-open");
   }
   $("ndPettyReminderClose")?.addEventListener("click",ndPettyReminderHide);
@@ -13367,9 +13374,23 @@ function bindSalaryTableActions(){
       await refreshSalaryStayHere();
     };
   });
-  document.querySelectorAll("[data-confirm7]").forEach(btn=>btn.onclick=()=>confirm7th(Number(btn.dataset.confirm7)));
+  // Prevent rapid duplicate payroll confirmations without changing salary calculations.
+async function ndGuardSalaryConfirm(btn, action){
+  if(btn.disabled || btn.dataset.ndConfirmBusy==='1') return;
+  btn.dataset.ndConfirmBusy='1';
+  btn.disabled=true;
+  const previousLabel=btn.textContent;
+  btn.textContent='Saving...';
+  try { await action(); }
+  catch(err){ console.error('Salary confirmation failed',err); alert('Confirm failed: '+String(err?.message||err)); }
+  finally {
+    delete btn.dataset.ndConfirmBusy;
+    if(btn.isConnected){btn.disabled=false;btn.textContent=previousLabel;}
+  }
+}
+document.querySelectorAll("[data-confirm7]").forEach(btn=>btn.onclick=()=>ndGuardSalaryConfirm(btn,()=>confirm7th(Number(btn.dataset.confirm7))));
   // Reset clicks handled by persistent delegated listener.
-  document.querySelectorAll("[data-confirm14]").forEach(btn=>btn.onclick=()=>confirm14th(Number(btn.dataset.confirm14)));
+  document.querySelectorAll("[data-confirm14]").forEach(btn=>btn.onclick=()=>ndGuardSalaryConfirm(btn,()=>confirm14th(Number(btn.dataset.confirm14))));
   // Reset clicks handled by persistent delegated listener.
   // Payment clicks handled by delegated listener so they continue to work after re-render.
   document.querySelectorAll("[data-payslip7]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip7),7));
@@ -13379,6 +13400,7 @@ function bindSalaryTableActions(){
 
 
 // Salary Reset uses one persistent delegated handler. It works after table redraws.
+const ndSalaryResetPending = new Set();
 document.addEventListener('click',function(ev){
   const target=ev.target instanceof Element?ev.target:null;
   const btn=target?.closest('[data-reset7],[data-reset14]');
@@ -13389,10 +13411,17 @@ document.addEventListener('click',function(ev){
   const seven=btn.hasAttribute('data-reset7');
   const id=Number(seven?btn.dataset.reset7:btn.dataset.reset14);
   if(!Number.isSafeInteger(id)||id<=0)return;
+  const resetType=seven?'7':'14';
+  const resetKey=resetType+':'+id+':'+monthDate();
+  if(ndSalaryResetPending.has(resetKey))return;
+  ndSalaryResetPending.add(resetKey);
   btn.disabled=true;
-  Promise.resolve(ndResetSalaryToAutomatic(id,seven?'7':'14'))
+  Promise.resolve().then(()=>ndResetSalaryToAutomatic(id,resetType))
     .catch(e=>alert('Reset failed: '+String(e?.message||e)))
-    .finally(()=>{if(btn.isConnected)btn.disabled=false;});
+    .finally(()=>{
+      ndSalaryResetPending.delete(resetKey);
+      if(btn.isConnected)btn.disabled=false;
+    });
 },true);
 
 document.addEventListener("click",async(ev)=>{
@@ -13634,11 +13663,20 @@ async function toggleSalaryPayment(type,empId){
   modal.querySelector('#ndSignAck').checked=false;
   const err=modal.querySelector('#ndSignError');err.textContent='';
   modal.classList.add('open');
-  const close=()=>{modal.classList.remove('open');};
-  modal.querySelector('#ndSignCancel').onclick=close;
-  modal.querySelector('#ndSignConfirm').onclick=async()=>{
+  // Keep the confirmation dialog stable while a payroll write is in progress.
+  // This prevents the user from closing/reopening it and submitting another payment.
+  const confirmButton=modal.querySelector('#ndSignConfirm');
+  const cancelButton=modal.querySelector('#ndSignCancel');
+  confirmButton.disabled=false;
+  cancelButton.disabled=false;
+  let paymentSaving=false;
+  const close=()=>{if(!paymentSaving)modal.classList.remove('open');};
+  cancelButton.onclick=close;
+  confirmButton.onclick=async()=>{
+    if(paymentSaving)return;
     if(cashPayment&&(!hasInk||!modal.querySelector('#ndSignAck').checked)){err.textContent='Signature and receipt confirmation required for Cash.';return;}
-    const btn=modal.querySelector('#ndSignConfirm');btn.disabled=true;err.textContent='Saving...';
+    paymentSaving=true;
+    const btn=confirmButton;btn.disabled=true;cancelButton.disabled=true;err.textContent='Saving...';
     try{
       const {error}=await salaryDb.rpc('nd_confirm_signed_salary_payment',{
         p_salary_type:Number(type),p_employee_id:Number(empId),p_salary_month:monthDate(),
@@ -13647,11 +13685,11 @@ async function toggleSalaryPayment(type,empId){
       });
       if(error)throw error;
       const signedReceipt=cashPayment?{employee:name,branch:outlet,salaryType:isSeven?'7th':'14th',month:monthDate(),netPay:net.toFixed(2),pic:pic.value,signature:canvas.toDataURL('image/png'),confirmedAt:new Date().toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'})}:null;
-      close();
+      modal.classList.remove('open');
       if(signedReceipt)ndShowSignedPaymentReceipt(signedReceipt);
       try{await refreshSalaryStayHere();}catch(refreshError){console.error("Salary refresh after signed payment:",refreshError);}
     }catch(ex){err.textContent='Payment NOT marked DONE: '+String(ex.message||ex);}
-    finally{btn.disabled=false;}
+    finally{paymentSaving=false;btn.disabled=false;cancelButton.disabled=false;}
   };
 }
 /* Payment DONE: show the signed receipt immediately after the RPC succeeds.
@@ -15997,33 +16035,60 @@ document.addEventListener("DOMContentLoaded",()=>{
  
 
 
+ let ndBonusDeductionAdding=false;
+ const ndBonusDeductionDeleting=new Set();
  async function addBonusDeduction(){
-   if(!canEditStaffBonus()) return;
+   if(!canEditStaffBonus() || ndBonusDeductionAdding) return;
    const reason=String($("bonusDeductionReason")?.value||"").trim();
-   const amount=Math.max(0,Number($("bonusDeductionAmount")?.value||0));
+   const rawAmount=String($("bonusDeductionAmount")?.value||"").trim();
    if(!reason){alert("Please enter deduction reason.");return;}
-   if(amount<=0){alert("Please enter deduction amount.");return;}
-
-   const payload={
-     bonus_month:bonusMonthDate(),
-     branch:bonusBranch,
-     reason,
-     amount:Number(amount.toFixed(2)),
-     created_by:currentBonusEmail()
-   };
-   const {error}=await salaryDb.from("branch_bonus_deductions").insert(payload);
-   if(error){alert("Deduction save failed: "+error.message);return;}
-   if($("bonusDeductionReason")) $("bonusDeductionReason").value="";
-   if($("bonusDeductionAmount")) $("bonusDeductionAmount").value="";
-   await loadBonus();
+   if(!/^(?:\d+)(?:\.\d{1,2})?$/.test(rawAmount)){
+     alert("Enter a valid deduction amount (up to 2 decimal places).");return;
+   }
+   const amount=Number(rawAmount);
+   if(!Number.isFinite(amount)||amount<=0){alert("Please enter a positive deduction amount.");return;}
+   const originalMonth=bonusMonthDate();
+   const originalBranch=bonusBranch;
+   const button=$("bonusDeductionSaveBtn");
+   ndBonusDeductionAdding=true;
+   const previousLabel=button?.textContent;
+   if(button){button.disabled=true;button.textContent="Saving...";}
+   try{
+     const {error}=await salaryDb.from("branch_bonus_deductions").insert({
+       bonus_month:originalMonth,
+       branch:originalBranch,
+       reason,
+       amount:Number(amount.toFixed(2)),
+       created_by:currentBonusEmail()
+     });
+     if(error) throw error;
+     if(bonusMonthDate()===originalMonth && bonusBranch===originalBranch){
+       if($("bonusDeductionReason")?.value===reason) $("bonusDeductionReason").value="";
+       if(String($("bonusDeductionAmount")?.value||"").trim()===rawAmount) $("bonusDeductionAmount").value="";
+       await loadBonus();
+     }
+   }catch(err){alert("Deduction save failed: "+(err?.message||String(err)));}
+   finally{
+     ndBonusDeductionAdding=false;
+     if(button?.isConnected){button.disabled=false;button.textContent=previousLabel;}
+   }
  }
 
  async function deleteBonusDeduction(id){
    if(!canEditStaffBonus()) return;
+   const numericId=Number(id);
+   if(!Number.isSafeInteger(numericId)||numericId<=0||ndBonusDeductionDeleting.has(numericId))return;
    if(!confirm("Delete this bonus deduction?")) return;
-   const {error}=await salaryDb.from("branch_bonus_deductions").delete().eq("id",Number(id));
-   if(error){alert("Delete failed: "+error.message);return;}
-   await loadBonus();
+   const originalMonth=bonusMonthDate();
+   const originalBranch=bonusBranch;
+   ndBonusDeductionDeleting.add(numericId);
+   try{
+     const {error}=await salaryDb.from("branch_bonus_deductions")
+       .delete().eq("id",numericId).eq("bonus_month",originalMonth).eq("branch",originalBranch);
+     if(error) throw error;
+     if(bonusMonthDate()===originalMonth && bonusBranch===originalBranch) await loadBonus();
+   }catch(err){alert("Delete failed: "+(err?.message||String(err)));}
+   finally{ndBonusDeductionDeleting.delete(numericId);}
  }
 
  document.addEventListener("DOMContentLoaded",()=>{
@@ -26397,7 +26462,7 @@ input,select,textarea,button,a{
  document.addEventListener('DOMContentLoaded',()=>{
   if(!ensure())return;
   const visible=()=>{const p=$('bonusPage');return !!p&&(p.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus');};
-  let timer=0,lastAuto=0,lastSignature='';
+  let timer=0,lastAuto=0,lastSignature='',refreshInFlight=false,pendingRefresh=false;
   const schedule=(force=false)=>{
     if(!visible())return;
     const signature=branch()+'|'+month();
@@ -26405,7 +26470,18 @@ input,select,textarea,button,a{
     if(signature!==lastSignature){lastSignature=signature;loadedBranch='';loadedMonth='';selectedWeek=null;force=true;}
     if(!force&&Date.now()-lastAuto<12000)return;
     clearTimeout(timer);
-    timer=setTimeout(()=>{if(!visible())return;lastAuto=Date.now();refresh().catch(e=>{const el=$('tbSync');if(el)el.textContent='Unable to load: '+String(e?.message||e);});},120);
+    timer=setTimeout(async()=>{
+      if(!visible())return;
+      if(refreshInFlight){pendingRefresh=true;return;}
+      refreshInFlight=true;
+      lastAuto=Date.now();
+      try{await refresh();}
+      catch(e){const el=$('tbSync');if(el)el.textContent='Unable to load: '+String(e?.message||e);}
+      finally{
+        refreshInFlight=false;
+        if(pendingRefresh){pendingRefresh=false;schedule(true);}
+      }
+    },120);
   };
   const observer=new MutationObserver(()=>schedule(true));
   observer.observe($('bonusPage'),{attributes:true,attributeFilter:['class','style']});
@@ -26532,8 +26608,12 @@ input,select,textarea,button,a{
    try{
      const branch=String(bonusBranch||"").trim();
      if(!branch) throw new Error("Please select a branch.");
+     const selectionUnchanged=()=>String(bonusBranch||"").trim()===branch;
+     // Snapshot the draft before awaiting network operations.
+     // A branch switch must not save another branch's selections.
+     const draftSnapshot=new Set(bonusFixedExcludedDraft);
 
-     const wanted=[...bonusFixedExcludedDraft]
+     const wanted=[...draftSnapshot]
        .map(Number)
        .filter(id=>Number.isFinite(id) && id>0);
 
@@ -26543,6 +26623,7 @@ input,select,textarea,button,a{
        .eq("branch",branch);
 
      if(currentRes.error) throw currentRes.error;
+     if(!selectionUnchanged()) throw new Error("Branch changed during save. Nothing was changed; please retry.");
 
      const currentRows=currentRes.data||[];
      const currentIds=new Set(
@@ -26610,6 +26691,13 @@ input,select,textarea,button,a{
        );
      }
 
+     // Do not show a previous branch's saved exclusions on the newly selected branch.
+     if(!selectionUnchanged()){
+       if(state) state.textContent="Saved for previous branch. Refresh current branch.";
+       await loadBonus();
+       return;
+     }
+
      // Update the SAME local state that renderBonus() reads.
      bonusFixedExclusionRows=savedRows;
      bonusFixedExcludedIds=new Set(savedIds);
@@ -26668,9 +26756,12 @@ input,select,textarea,button,a{
  }
  window.showBonus=showBonus;
 
+ let bonusLoadSequence=0;
  async function loadBonus(){
    if(!$("bonusPage"))return;
+   const requestSequence=++bonusLoadSequence;
    await syncBonusAuth();
+   if(requestSequence!==bonusLoadSequence)return;
 
    const state=$("bonusSyncState");
    if(state)state.textContent="Loading...";
@@ -26683,6 +26774,7 @@ input,select,textarea,button,a{
 
    // Employees are the only required source.
    const empRes=await salaryDb.from("employees").select("*").order("outlet").order("name");
+   if(requestSequence!==bonusLoadSequence || monthBonus()!==m)return;
    if(empRes.error){
      if(state) state.textContent="Employee load failed: "+empRes.error.message;
      bonusEmployees=[];
@@ -26708,16 +26800,18 @@ input,select,textarea,button,a{
 
    const [settData,saveData,profileData,mgrData,fixedData,dedData,excludeData,dailyOutletData,salaryOutletData]=await Promise.all([
      safe(salaryDb.from("daily_settlements").select("branch,grand_total,settlement_date").gte("settlement_date",start).lt("settlement_date",end)),
-     safe(salaryDb.from("branch_bonus_monthly").select("*").eq("bonus_month",bonusMonthDate())),
+     safe(salaryDb.from("branch_bonus_monthly").select("*").eq("bonus_month",start)),
      safe(salaryDb.from("salary_manager_profiles").select("name,email,is_owner")),
-     safe(salaryDb.from("branch_bonus_manager_settings").select("*").eq("bonus_month",bonusMonthDate())),
+     safe(salaryDb.from("branch_bonus_manager_settings").select("*").eq("bonus_month",start)),
      safe(salaryDb.from("branch_bonus_fixed_settings").select("*")),
-     safe(salaryDb.from("branch_bonus_deductions").select("*").eq("bonus_month",bonusMonthDate()).order("created_at",{ascending:true})),
+     safe(salaryDb.from("branch_bonus_deductions").select("*").eq("bonus_month",start).order("created_at",{ascending:true})),
      safe(salaryDb.from("branch_bonus_fixed_exclusions").select("*")),
      safe(salaryDb.from("daily_outlets").select("name,is_active").eq("is_active",true)),
      safe(salaryDb.from("salary_outlets").select("name"))
    ]);
 
+   // Ignore responses from an older month/request before mutating shared Bonus state.
+   if(requestSequence!==bonusLoadSequence || monthBonus()!==m)return;
    bonusEmployees=(empRes.data||[]).filter(e=>isFullTimeBonusEmployee(e));
 
    bonusSaved={};
@@ -26832,7 +26926,7 @@ input,select,textarea,button,a{
      // A manually saved false remains unchecked.
      const target=r.target_achieved!==false;
      const mc=!!r.has_mc;
-     const fixedExcluded=false;
+     const fixedExcluded=bonusFixedExcludedIds.has(Number(e.id));
      const isManager=managerId>0 && Number(e.id)===managerId;
      const eligible=target&&!mc&&!isManager;
      return {e,target,mc,fixedExcluded,isManager,eligible};
@@ -26945,9 +27039,21 @@ input,select,textarea,button,a{
    }
 
    try{
-     const pct=Math.max(0,Number($("bonusManagerPct")?.value||0));
+     // Validate the original input before constructing a database payload.
+     // Number('') and Number('invalid') must not silently become a saved 0%.
+     const pctInput=String($("bonusManagerPct")?.value??"").trim();
+     const pct=Number(pctInput);
+     if(!pctInput || !Number.isFinite(pct) || pct<0 || pct>100){
+       throw new Error("Manager % must be a valid number between 0 and 100.");
+     }
      const managerId=Number($("bonusManagerEmployee")?.value||0);
+     if(!Number.isSafeInteger(managerId) || managerId<0){
+       throw new Error("Invalid manager selection.");
+     }
      const manager=bonusEmployees.find(e=>Number(e.id)===managerId);
+     if(managerId && !manager){
+       throw new Error("Selected manager is no longer available. Refresh and try again.");
+     }
 
      const payload={
        branch,
@@ -27002,17 +27108,18 @@ input,select,textarea,button,a{
        );
      }
 
-     fixedManagerSetting={
-       ...saved,
-       manager_employee_id:savedManagerId||null,
-       manager_percent:savedPct
-     };
-     managerSetting={manager_percent:savedPct};
-
-     if(state) state.textContent="Manager saved ✓";
+     if(String(bonusBranch||"").trim()===branch){
+       fixedManagerSetting={
+         ...saved,
+         manager_employee_id:savedManagerId||null,
+         manager_percent:savedPct
+       };
+       managerSetting={manager_percent:savedPct};
+       if(state) state.textContent="Manager saved ✓";
+     }
      if(btn) btn.textContent="Saved ✓";
 
-     if(reload) await loadBonus();
+     if(reload && String(bonusBranch||"").trim()===branch) await loadBonus();
      return true;
    }catch(err){
      console.error("Manager setting save failed:",err);
@@ -27042,13 +27149,25 @@ input,select,textarea,button,a{
    }
  }
 
+ let bonusSaveInFlight=false;
  async function saveBonus(){
+   if(bonusSaveInFlight)return;
+   bonusSaveInFlight=true;
+   const btn=$("bonusSaveBtn");
+   if(btn){btn.disabled=true;btn.textContent="Saving...";}
+   const saveMonth=bonusMonthDate();
+   const saveBranch=bonusBranch;
+   try{
    const state=$("bonusSyncState");
    const editStaff=canEditStaffBonus();
    if(!editStaff)return;
 
    const managerSaved=await saveBonusManagerSetting({reload:false,quiet:false});
    if(!managerSaved)return;
+   if(saveMonth!==bonusMonthDate() || saveBranch!==bonusBranch){
+     if(state)state.textContent="Selection changed. Please save again.";
+     return;
+   }
 
    // Save employee eligibility/results.
    if(editStaff){
@@ -27071,7 +27190,7 @@ input,select,textarea,button,a{
      const pool=Math.max(0,grossPool-deductionTotal);
      const each=eligibleCount?pool/eligibleCount:0;
      const rows=states.map(x=>({
-       bonus_month:bonusMonthDate(),branch:bonusBranch,employee_id:Number(x.e.id),employee_name:x.e.name||"",
+       bonus_month:saveMonth,branch:saveBranch,employee_id:Number(x.e.id),employee_name:x.e.name||"",
        branch_total:Number(bonusBranchTotal||0),bonus_pool:Number(pool||0),
        target_achieved:x.target,has_mc:x.mc,manager_selected:true,
        eligible:x.eligible,
@@ -27086,6 +27205,10 @@ input,select,textarea,button,a{
          : (bonusSaved[Number(x.e.id)]?.manual_bonus_override ?? null),
        updated_at:new Date().toISOString()
      }));
+     if(saveMonth!==bonusMonthDate() || saveBranch!==bonusBranch){
+       if(state)state.textContent="Selection changed. Please save again.";
+       return;
+     }
      if(rows.length){
        const {error}=await salaryDb.from("branch_bonus_monthly").upsert(rows,{onConflict:"bonus_month,branch,employee_id"});
        if(error){if(state)state.textContent="Save failed: "+error.message;return;}
@@ -27094,6 +27217,13 @@ input,select,textarea,button,a{
 
    if(state)state.textContent="Saved ✓";
    await loadBonus();
+   }catch(err){
+     console.error("Branch Bonus save failed:",err);
+     if(state)state.textContent="Save failed: "+String(err?.message||err);
+   }finally{
+     bonusSaveInFlight=false;
+     if(btn){btn.disabled=false;btn.textContent="Save Bonus";}
+   }
  }
 
  document.addEventListener("DOMContentLoaded",()=>{
@@ -27150,35 +27280,61 @@ $("bonusFixedExcludeList")?.addEventListener("change",e=>{
    });
    $("bonusMonth")?.addEventListener("change",loadBonus);
    // Branch buttons bind directly inside loadBonus() after every render.
+   const bonusEditInFlight=new Set();
    $("bonusStaffBody")?.addEventListener("click",async e=>{
      const btn=e.target.closest("[data-bonus-edit-amount]");
      if(!btn||!canEditStaffBonus())return;
      const id=Number(btn.dataset.bonusEditAmount||0);
+     if(!Number.isSafeInteger(id)||id<=0||bonusEditInFlight.has(id))return;
      const emp=bonusEmployees.find(x=>Number(x.id)===id);
      if(!emp)return;
+     const editMonth=bonusMonthDate();
+     const editBranch=bonusBranch;
      const saved=bonusSaved[id]||{};
      const current=saved.manual_bonus_override ?? saved.bonus_amount ?? 0;
      const raw=prompt(`Edit Bonus - ${emp.name||""}\nEnter amount (RM):`,Number(current||0).toFixed(2));
      if(raw===null)return;
-     const amount=Number(String(raw).replace(/[^0-9.-]/g,""));
-     if(!Number.isFinite(amount)||amount<0){alert("Please enter a valid amount.");return;}
-     const payload={
-       bonus_month:bonusMonthDate(),branch:bonusBranch,employee_id:id,employee_name:emp.name||"",
-       branch_total:Number(bonusBranchTotal||0),
-       bonus_pool:Math.max(0,Number(bonusBranchTotal||0)*0.01-(bonusDeductions||[]).reduce((s,r)=>s+Number(r.amount||0),0)),
-       target_achieved:saved.target_achieved!==false,
-       has_mc:!!saved.has_mc,
-       manager_selected:true,
-       eligible:saved.eligible!==false,
-       bonus_amount:Number(amount.toFixed(2)),
-       manual_bonus_override:Number(amount.toFixed(2)),
-       updated_at:new Date().toISOString()
-     };
-     const {error}=await salaryDb.from("branch_bonus_monthly").upsert(payload,{onConflict:"bonus_month,branch,employee_id"});
-     if(error){alert("Bonus update failed: "+error.message);return;}
-     bonusSaved[id]={...saved,...payload};
-     renderBonus();
-     const state=$("bonusSyncState");if(state)state.textContent="Bonus updated ✓";
+     const input=String(raw).trim();
+     if(!/^(?:\d+)(?:\.\d{1,2})?$/.test(input)){
+       alert("Please enter a valid amount with up to 2 decimal places.");return;
+     }
+     const amount=Number(input);
+     if(!Number.isFinite(amount)||amount<0||amount>999999999){alert("Please enter a valid amount.");return;}
+     if(editMonth!==bonusMonthDate()||editBranch!==bonusBranch){
+       alert("Selection changed. Please try again.");return;
+     }
+     bonusEditInFlight.add(id);
+     btn.disabled=true;
+     try{
+       const payload={
+         bonus_month:editMonth,branch:editBranch,employee_id:id,employee_name:emp.name||"",
+         branch_total:Number(bonusBranchTotal||0),
+         bonus_pool:Math.max(0,Number(bonusBranchTotal||0)*0.01-(bonusDeductions||[]).reduce((s,r)=>s+Number(r.amount||0),0)),
+         target_achieved:saved.target_achieved!==false,
+         has_mc:!!saved.has_mc,
+         manager_selected:true,
+         eligible:saved.eligible!==false,
+         bonus_amount:Number(amount.toFixed(2)),
+         manual_bonus_override:Number(amount.toFixed(2)),
+         updated_at:new Date().toISOString()
+       };
+       if(!salaryDb){alert("Database unavailable.");return;}
+       const {error}=await salaryDb.from("branch_bonus_monthly").upsert(payload,{onConflict:"bonus_month,branch,employee_id"});
+       if(error){alert("Bonus update failed: "+error.message);return;}
+       if(editMonth!==bonusMonthDate()||editBranch!==bonusBranch){
+         const state=$("bonusSyncState");if(state)state.textContent="Saved to previous selection. Refresh to view.";
+         return;
+       }
+       bonusSaved[id]={...saved,...payload};
+       renderBonus();
+       const state=$("bonusSyncState");if(state)state.textContent="Bonus updated ✓";
+     }catch(err){
+       console.error("Bonus edit failed:",err);
+       alert("Bonus update failed: "+String(err?.message||err));
+     }finally{
+       bonusEditInFlight.delete(id);
+       if(btn.isConnected)btn.disabled=false;
+     }
    });
    $("bonusStaffBody")?.addEventListener("change",e=>{
      if(!e.target.matches("[data-bonus-target],[data-bonus-mc]"))return;
@@ -31278,7 +31434,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   bonusTabs.addEventListener('click',function(e){
     const b=e.target.closest('[data-nd-salary-mode]');if(!b)return;
     const mode=b.dataset.ndSalaryMode;
-    if(mode==='bonus'){setTimeout(()=>window.ndSetBonusSubTab?.('bonus'),0);return;}
+    if(mode==='bonus'){window.ndSetBonusSubTab?.('bonus');return;}
     if(mode==='target'){window.ndSetBonusSubTab?.('target');return;}
     // Restore the exclusive-screen state before rendering the selected salary tab.
     // Otherwise #salaryPage remains hidden behind body[data-nd-visible-page=bonus].
@@ -31304,11 +31460,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
-<div id="ndPettyTopupReminder" role="dialog" aria-modal="true" aria-labelledby="ndPettyReminderTitle">
+<div id="ndPettyTopupReminder" role="dialog" aria-modal="true" aria-labelledby="ndPettyTopupReminderTitle">
 <div class="nd-petty-dialog"><button type="button" class="nd-petty-close" id="ndPettyReminderClose" aria-label="Close">×</button>
-<h3 id="ndPettyReminderTitle" style="margin:7px 0 8px">Petty Cash Top Up Reminder</h3>
+<h3 id="ndPettyTopupReminderTitle" style="margin:7px 0 8px">Petty Cash Top Up Reminder</h3>
 <div id="ndPettyReminderBranchDate" class="helper"></div><div class="helper" style="margin-top:14px">Today's Petty Cash Top Up</div>
-<div id="ndPettyReminderAmount" class="nd-petty-total">RM 0.00</div>
+<div id="ndPettyTopupReminderAmount" class="nd-petty-total">RM 0.00</div>
 <div class="helper">当天分行已充值 Petty Cash</div>
 <button type="button" class="nd-petty-understood" id="ndPettyReminderUnderstood">我已清楚 · Understood</button></div></div>
 <style id="nd-target-bonus-tab-style">
@@ -31341,12 +31497,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
    setTab('target');
   },true);
   bonus.addEventListener('click',()=>setTab('bonus'));
-  const tabs=document.getElementById('ndBonusSalaryTabs');
-  if(tabs)tabs.addEventListener('click',e=>{
-   const btn=e.target.closest('[data-nd-salary-mode]');
-   if(btn?.dataset.ndSalaryMode==='target')setTab('target');
-   else if(btn?.dataset.ndSalaryMode==='bonus')setTab('bonus');
-  });
+  // Bonus navigation is handled by nd-bonus-inside-salary-v1.
+  // Avoid a second handler on the same tab group.
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
@@ -31480,7 +31632,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function renderEmployees(){const branch=el('ndAdvanceBranch')?.value;const select=el('ndAdvanceEmployee');if(!select)return;const rows=allEmployees.filter(e=>String(e.outlet||'').trim()===branch);select.innerHTML='<option value="">Select employee</option>'+rows.map(e=>'<option value="'+Number(e.id)+'">'+esc(e.name)+'</option>').join('');if(!rows.length)status('No employees found for '+branch+'.');}
  function client(){return typeof salaryDb!=='undefined'?salaryDb:null;}
  async function load(){const branch=activeHistoryBranch(),request=++historyRequestSeq,db=client();if(!db){historyStatus('Salary connection is unavailable.');return;}historyStatus('Loading '+branch+' history...');const {data,error}=await db.rpc('nd_salary_advance_list',{p_outlet:branch});if(request!==historyRequestSeq||branch!==activeHistoryBranch())return;if(error){historyStatus('History unavailable: '+error.message);return;}loadedHistoryBranch=branch;history=Array.isArray(data)?data:[];renderHistory();}
- function syncHistoryBranch(){const branch=activeHistoryBranch();if(branch!==loadedHistoryBranch){history=[];renderHistory();load();}}
+ function syncHistoryBranch(){const card=el('ndAdvanceDailyHistoryCard');if(!card||getComputedStyle(card).display==='none')return;const branch=activeHistoryBranch();if(branch!==loadedHistoryBranch){history=[];renderHistory();load();}}
  function report(r){
   const w=window.open('','_blank');if(!w){alert('Allow pop-ups to view the signed report.');return;}
   const content=el('ndAdvanceConsent')?.textContent||'';
@@ -31544,8 +31696,8 @@ async function open(){el('ndAdvanceModal').classList.add('open');el('ndAdvanceDa
   if(!card)return;
   if(root)new MutationObserver(syncHistoryBranch).observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['class','data-branch']});
   document.addEventListener('click',e=>{if(e.target.closest('#dailyBranchToggle .branch-btn[data-branch]'))setTimeout(syncHistoryBranch,0);});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});
-  window.addEventListener('focus',()=>{if(!document.hidden)load();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&getComputedStyle(card).display!=='none')load();});
+  window.addEventListener('focus',()=>{if(!document.hidden&&getComputedStyle(card).display!=='none')load();});
   setInterval(()=>{if(!document.hidden&&document.body.dataset.ndVisiblePage==='salary'&&getComputedStyle(card).display!=='none')load();},30000);
   // Defer the potentially expensive query until Repayment History is opened.
  }
@@ -31646,7 +31798,7 @@ function note(message){const el=$('nddStatus');if(el)el.textContent=message}
 function options(arr,selected=''){return arr.map(o=>`<option value="${esc(o.value)}" ${String(o.value)===String(selected)?'selected':''}>${esc(o.label)}</option>`).join('')}
 function month(){return val('salaryMonth')||new Date().toISOString().slice(0,7)}
 function isAdmin(){return admins.includes(email)}
-function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3><button type="button" class="btn" id="nddClose">Close</button></div><div class="ndd-note">Incident amounts are proposed only. Salary deductions require independent legal review and approval. No automatic wage deduction occurs from this screen.</div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${isAdmin()?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Record</button><button class="btn" type="button" id="nddManage">Manage Reasons</button></div><div id="nddForm" style="display:none"><div class="ndd-grid"><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en+' / '+r.name_zh})),selectedReason)}</select></div><div><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div><div><label>Warning Letter Required</label><select id="nddWarning"><option value="true">Yes — Generate Automatically</option><option value="false">No — Record Only</option></select></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Chinese Name</label><input id="nddChinese"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Save Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Pending Approval · ${esc(mm)}</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Action</th></tr></thead><tbody>${records.filter(r=>r.review_status==='pending').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${isAdmin()?`<button class="mini" data-review="${r.id}">Approve / Reject</button>`:'Awaiting UMO / Mars'}</td></tr>`).join('')||'<tr><td colspan="5">No pending letters.</td></tr>'}</tbody></table></div><h4>Approved History · ${esc(mm)}</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Warning</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.some(r=>r.review_status==='approved')?records.filter(r=>r.review_status==='approved').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}<div class="helper">${esc(r.reason_zh)}</div></td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${r.warning_letter?'Yes':'No'}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${r.warning_letter?`<button class="mini" data-letter="${r.id}">Warning Letter</button>`:""} <button class="mini" data-fine="${r.id}">Fine Letter</button>${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="9">No records for this month.</td></tr>'}</tbody></table></div>`;
+function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3><button type="button" class="btn" id="nddClose">Close</button></div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${isAdmin()?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Record</button><button class="btn" type="button" id="nddManage">Manage Reasons</button></div><div id="nddForm" style="display:none"><div class="ndd-grid"><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en})),selectedReason)}</select></div><div><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div><div><label>Warning Letter Required</label><select id="nddWarning"><option value="true">Yes — Generate Automatically</option><option value="false">No — Record Only</option></select></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Save Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Pending Approval · ${esc(mm)}</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Action</th></tr></thead><tbody>${records.filter(r=>r.review_status==='pending').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${isAdmin()?`<button class="mini" data-review="${r.id}">Approve / Reject</button>`:'Awaiting UMO / Mars'}</td></tr>`).join('')||'<tr><td colspan="5">No pending letters.</td></tr>'}</tbody></table></div><h4>Approved History · ${esc(mm)}</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Warning</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.some(r=>r.review_status==='approved')?records.filter(r=>r.review_status==='approved').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${r.warning_letter?'Yes':'No'}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${r.warning_letter?`<button class="mini" data-letter="${r.id}">Warning Letter</button>`:""} <button class="mini" data-fine="${r.id}">Fine Letter</button>${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="9">No records for this month.</td></tr>'}</tbody></table></div>`;
 $('nddClose').onclick=close;
 if(isAdmin()){$('nddNew').onclick=()=>{$('nddForm').style.display='block';$('nddReasonsPanel').style.display='none';setAmount()};$('nddCancel').onclick=()=>{$('nddForm').style.display='none'};$('nddManage').onclick=()=>{$('nddReasonsPanel').style.display=$('nddReasonsPanel').style.display==='none'?'block':'none';renderReasons()};$('nddBranch').onchange=()=>{$('nddEmployee').innerHTML=options(people.filter(p=>p.outlet===val('nddBranch')).map(p=>({value:p.id,label:p.name})))};$('nddReason').onchange=setAmount;$('nddSave').onclick=saveRecord;$('nddSaveReason').onclick=saveReason}
 m.querySelectorAll('[data-fine]').forEach(b=>b.onclick=()=>fineLetter(records.find(r=>String(r.id)===b.dataset.fine)));
@@ -31659,8 +31811,8 @@ function nextMonth(m){const [y,mo]=m.split('-').map(Number);return (mo===12?y+1:
 async function open(){const m=mount();if(!m)return;active=true;m.style.display='block';$('salaryOutletRoot').style.display='none';$('ndAdvanceSalaryHistoryMount').style.display='none';try{await load()}catch(e){m.innerHTML='<h3>Staff Deductions</h3><p class="bad">'+esc(e.message)+'</p><button class="btn" id="nddClose">Close</button>';$('nddClose').onclick=close}}
 function close(){active=false;mount().style.display='none';$('salaryOutletRoot').style.display='';$('ndAdvanceSalaryHistoryMount').style.display=''}
 async function saveRecord(){const e=people.find(p=>String(p.id)===val('nddEmployee'));const r=reasons.find(x=>String(x.id)===val('nddReason'));if(!e||!r||!val('nddDate')){note('Select an employee, reason and date.');return}const payload={employee_id:e.id,employee_name:e.name,outlet:e.outlet,incident_date:val('nddDate'),reason_id:r.id,reason_en:r.name_en,reason_zh:r.name_zh,proposed_amount:Number(val('nddAmount')),warning_letter:val('nddWarning')==='true',details:r.name_en};const {error}=await db().from('nd_staff_incidents').insert(payload);if(error){note(error.message);return}await load();note('Submitted for UMO / Mars approval. Letters will appear in History only after approval.')}
-async function saveReason(){if(!val('nddEnglish').trim()||!val('nddChinese').trim()){note('Both names are required.');return}const {error}=await db().from('nd_deduction_reasons').insert({name_en:val('nddEnglish').trim(),name_zh:val('nddChinese').trim(),suggested_amount:Number(val('nddSuggested')||0)});if(error){note(error.message);return}await load();$('nddReasonsPanel').style.display='block';renderReasons()}
-function renderReasons(){const el=$('nddReasonsList');if(!el)return;el.innerHTML=reasons.map(r=>`<div style="padding:7px;border-bottom:1px solid #eee">${esc(r.name_en)} / ${esc(r.name_zh)} · RM ${Number(r.suggested_amount).toFixed(2)} <button class="mini" data-toggle="${r.id}">${r.active?'Disable':'Enable'}</button></div>`).join('');el.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{const r=reasons.find(x=>String(x.id)===b.dataset.toggle);const {error}=await db().from('nd_deduction_reasons').update({active:!r.active}).eq('id',r.id);if(error){note(error.message);return}await load();$('nddReasonsPanel').style.display='block';renderReasons()})}
+async function saveReason(){if(!val('nddEnglish').trim()){note('English Name is required.');return}const {error}=await db().from('nd_deduction_reasons').insert({name_en:val('nddEnglish').trim(),name_zh:val('nddEnglish').trim(),suggested_amount:Number(val('nddSuggested')||0)});if(error){note(error.message);return}await load();$('nddReasonsPanel').style.display='block';renderReasons()}
+function renderReasons(){const el=$('nddReasonsList');if(!el)return;el.innerHTML=reasons.map(r=>`<div style="padding:7px;border-bottom:1px solid #eee">${esc(r.name_en)} · RM ${Number(r.suggested_amount).toFixed(2)} <button class="mini" data-toggle="${r.id}">${r.active?'Disable':'Enable'}</button></div>`).join('');el.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{const r=reasons.find(x=>String(x.id)===b.dataset.toggle);const {error}=await db().from('nd_deduction_reasons').update({active:!r.active}).eq('id',r.id);if(error){note(error.message);return}await load();$('nddReasonsPanel').style.display='block';renderReasons()})}
 async function review(r){
  if(!r||r.review_status!=='pending'||!isAdmin())return;
  const choice=window.confirm('Approve this letter? Select Cancel to choose rejection.');
@@ -31733,12 +31885,12 @@ if(!attach())document.addEventListener('DOMContentLoaded',attach,{once:true});
 const admins=new Set(['umo1017@gmail.com','mars83002566@gmail.com']);
 const escapeHTML=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
-let lastKey='', rows=[], busy=false;
+let lastKey='', rows=[], busy=false, loadingKey='', loadSequence=0;
 function db(){return typeof salaryDb!=='undefined'?salaryDb:null;}
 function admin(){return admins.has(String(typeof currentSalaryUserEmail!=='undefined'?currentSalaryUserEmail:'').trim().toLowerCase());}
 function month(){return document.getElementById('salaryMonth')?.value||new Date().toISOString().slice(0,7);}
 function box(){let root=document.getElementById('salaryOutletRoot');if(!root)return null;let el=document.getElementById('ndCollaborationSalary');if(!el){el=document.createElement('section');el.id='ndCollaborationSalary';el.className='salary-card';el.style.margin='0 0 16px';root.prepend(el);}else if(root.firstElementChild!==el){root.prepend(el);}return el;}
-async function load(){const client=db();if(!client)return;const key=month();lastKey=key;const result=await client.from('nd_collaboration_payments').select('*').eq('salary_month',key+'-01').order('employee_id');if(lastKey!==key)return;if(result.error){rows=[];show('Cannot load collaboration payments: '+escapeHTML(result.error.message));return;}rows=result.data||[];draw();}
+async function load(force=false){const client=db();if(!client){show('Payment data is unavailable. Please refresh and try again.');return;}const key=month();if(loadingKey===key&&!force)return;const seq=++loadSequence;loadingKey=key;try{const result=await client.from('nd_collaboration_payments').select('*').eq('salary_month',key+'-01').order('employee_id');if(seq!==loadSequence||month()!==key)return;if(result.error){lastKey='';rows=[];show('Cannot load collaboration payments: '+escapeHTML(result.error.message));return;}lastKey=key;rows=result.data||[];draw();}catch(err){if(seq===loadSequence&&month()===key){lastKey='';show('Cannot load collaboration payments: '+escapeHTML(err?.message||err));}}finally{if(seq===loadSequence)loadingKey='';}}
 function show(msg){const el=box();if(el)el.innerHTML='<h3>COLLABORATION</h3><div class="helper">'+msg+'</div>';}
 function draw(){const el=box();if(!el)return;const emps=(typeof salaryEmployees!=='undefined'?salaryEmployees:[]).filter(e=>String(e.outlet||'').trim().toLowerCase()==='collaboration'&&(!window.salaryEmployeeVisibleInMonth||salaryEmployeeVisibleInMonth(e,month()))).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
 const mapped=emps.map(e=>({employee:e,record:rows.find(r=>Number(r.employee_id)===Number(e.id))}));
@@ -31748,9 +31900,9 @@ el.innerHTML=`<div class="outlet-title"><h3>COLLABORATION — ${escapeHTML(month
 
 <div class="salary-table-wrap"><table class="salary-table compact"><thead><tr><th>Full Name</th><th>Amount</th><th>Payment Method</th><th>Status</th><th>${admin()?'Action':'Total'}</th></tr></thead><tbody>${mapped.map(({employee:e,record:r})=>{const done=!!r?.payment_done;const method=r?.payment_method||e.payment_method||'transfer';return `<tr data-collab-id="${Number(e.id)}"><td><strong>${escapeHTML(e.name)}</strong></td><td>${admin()&&!done?`<input class="nd-collab-amount" type="number" min="0" step="0.01" value="${r?.amount??''}" placeholder="Amount"/>`:fmt(r?.amount)}</td><td>${admin()&&!done?`<select class="nd-collab-method"><option value="Cash" ${/cash/i.test(method)?'selected':''}>Cash</option><option value="Bank Transfer" ${!/cash|tng/i.test(method)?'selected':''}>Bank Transfer</option><option value="TNG" ${/tng/i.test(method)?'selected':''}>TNG</option></select>`:escapeHTML(method)}</td><td>${done?'Payment DONE':'Pending'}</td>${admin()?`<td>${done?'Locked':`<button class="btn nd-collab-save" type="button">Save</button> <button class="btn nd-collab-done" type="button" ${r?'':'disabled'}>Payment DONE</button>`}</td>`:'<td>—</td>'}</tr>`;}).join('')||`<tr><td colspan="5" class="helper">No collaboration staff for this month.</td></tr>`}</tbody><tfoot><tr class="nd-collab-summary-values"><th scope="row">TOTAL</th><td><span class="nd-collab-method-label">Cash</span>${fmt(totals.Cash)}</td><td><span class="nd-collab-method-label">Bank Transfer</span>${fmt(totals['Bank Transfer'])}</td><td><span class="nd-collab-method-label">TNG</span>${fmt(totals.TNG)}</td><td><span class="nd-collab-method-label">Total</span><strong>${fmt(total)}</strong></td></tr></tfoot></table></div><div class="helper" id="ndCollabStatus"></div>`;
 }
-async function save(tr,markDone){if(busy||!admin()||!db())return;const id=Number(tr.dataset.collabId),e=(typeof salaryEmployees!=='undefined'?salaryEmployees:[]).find(x=>Number(x.id)===id);if(!e||e.outlet!=='Collaboration')return;const existing=rows.find(r=>Number(r.employee_id)===id);if(existing?.payment_done)return;const amount=markDone?Number(existing?.amount):Number(tr.querySelector('.nd-collab-amount')?.value);if(!Number.isFinite(amount)||amount<0||(!markDone&&tr.querySelector('.nd-collab-amount')?.value==='')){alert('Enter a valid payment amount.');return;}if(markDone&&!confirm('Confirm Payment DONE? This payment will be permanently locked.'))return;const method=markDone?existing?.payment_method:tr.querySelector('.nd-collab-method')?.value;busy=true;try{const payload={employee_id:id,salary_month:month()+'-01',amount,payment_method:method,payment_done:!!markDone};const res=await db().from('nd_collaboration_payments').upsert(payload,{onConflict:'employee_id,salary_month'});if(res.error)throw res.error;await load();}catch(err){alert('Save failed: '+(err.message||err));}finally{busy=false;}}
+async function save(tr,markDone){if(busy||!admin()||!db())return;const id=Number(tr.dataset.collabId),e=(typeof salaryEmployees!=='undefined'?salaryEmployees:[]).find(x=>Number(x.id)===id);if(!e||String(e.outlet||'').trim().toLowerCase()!=='collaboration')return;const existing=rows.find(r=>Number(r.employee_id)===id);if(existing?.payment_done)return;const amount=markDone?Number(existing?.amount):Number(tr.querySelector('.nd-collab-amount')?.value);if(markDone&&(!existing||existing.amount==null||!existing.payment_method)){alert('Save a valid payment before marking Payment DONE.');return;}if(!Number.isFinite(amount)||amount<0||(!markDone&&tr.querySelector('.nd-collab-amount')?.value==='')){alert('Enter a valid payment amount.');return;}if(markDone&&!confirm('Confirm Payment DONE? This payment will be permanently locked.'))return;const method=markDone?existing?.payment_method:tr.querySelector('.nd-collab-method')?.value;if(!['Cash','Bank Transfer','TNG'].includes(method)){alert('Select a valid payment method.');return;}busy=true;const actionButtons=Array.from(tr.querySelectorAll('.nd-collab-save,.nd-collab-done'));actionButtons.forEach(b=>b.disabled=true);const status=document.getElementById('ndCollabStatus');if(status)status.textContent='Saving payment...';try{const payload={employee_id:id,salary_month:month()+'-01',amount,payment_method:method,payment_done:!!markDone};const res=await db().from('nd_collaboration_payments').upsert(payload,{onConflict:'employee_id,salary_month'});if(res.error)throw res.error;await load(true);}catch(err){alert('Save failed: '+(err.message||err));}finally{busy=false;actionButtons.forEach(b=>{if(b.isConnected)b.disabled=false;});const currentStatus=document.getElementById('ndCollabStatus');if(currentStatus&&currentStatus.textContent==='Saving payment...')currentStatus.textContent='';}}
 document.addEventListener('click',e=>{const btn=e.target.closest('.nd-collab-save,.nd-collab-done');if(!btn)return;const tr=btn.closest('tr[data-collab-id]');if(tr)save(tr,btn.classList.contains('nd-collab-done'));});
-window.ndCollabRender=function(){const el=box();if(!el)return;const key=month();if(key!==lastKey){show('Loading collaboration payments...');load();}else draw();};
+window.ndCollabRender=function(){const el=box();if(!el)return;const key=month();if(key!==lastKey){show('Loading collaboration payments...');if(loadingKey!==key)load();}else draw();};
 })();
 </script>
 <style id="nd-ann-css">
@@ -31783,18 +31935,18 @@ function badge(n){return n?`<span class="nd-ann-pill">${n}</span>`:'';}
 function render(){
  const m=month(),current=items.filter(r=>monthOf(r.created_at)===m),selected=current.filter(r=>cat==='all'||r.category===cat),unreadMonth=current.filter(unread).length;
  $('ndAnnMonthUnread').textContent=unreadMonth+' unread this month';
- $('ndAnnSidebarCount').innerHTML=badge(items.filter(r=>monthOf(r.created_at)===thisMonth()&&unread(r)).length);
+ const sidebarCount=$('ndAnnSidebarCount');if(sidebarCount)sidebarCount.innerHTML=badge(items.filter(r=>monthOf(r.created_at)===thisMonth()&&unread(r)).length);
  $('ndAnnTabs').querySelectorAll('[data-cat]').forEach(b=>{const c=b.dataset.cat;b.classList.toggle('selected',cat===c);const n=current.filter(r=>(c==='all'||r.category===c)&&unread(r)).length;b.innerHTML=({all:'All',promotion:'Promotions',treatment:'New Treatments',policy:'Policies'})[c]+badge(n);});
- $('ndAnnList').innerHTML=selected.map(r=>`<article class="nd-ann-panel ${unread(r)?'nd-ann-unread':''}"><div class="nd-ann-muted">${esc(({promotion:'Promotions',treatment:'New Treatments',policy:'Policies'})[r.category])} · ${esc(new Date(r.updated_at).toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'}))}</div><h3>${esc(r.title)} ${unread(r)?badge('NEW'):''}</h3><div class="nd-ann-text">${esc(r.content)}</div><div class="actions" style="margin-top:12px"><button class="mini" data-ann-open="${r.id}">Mark as Read</button>${admin?`<button class="mini" data-ann-edit="${r.id}">Edit</button><button class="mini" data-ann-delete="${r.id}">Delete</button>`:''}</div></article>`).join('')||'<div class="nd-ann-panel">No announcements for this month.</div>';
+ $('ndAnnList').innerHTML=selected.map(r=>`<article class="nd-ann-panel ${unread(r)?'nd-ann-unread':''}"><div class="nd-ann-muted">${esc(({promotion:'Promotions',treatment:'New Treatments',policy:'Policies'})[r.category])} · ${esc(new Date(r.updated_at).toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'}))}</div><h3>${esc(r.title)} ${unread(r)?badge('NEW'):''}</h3><div class="nd-ann-text">${esc(r.content)}</div><div class="actions" style="margin-top:12px"><button class="mini" data-ann-open="${r.id}">Mark as Read</button>${admin?`<button class="mini" data-ann-edit="${r.id}">Edit</button><button class="mini" data-ann-delete="${r.id}">Delete</button>`:''}</div></article>`).join('')||`<div class="nd-ann-panel nd-ann-empty">No ${cat==='promotion'?'promotions':cat==='treatment'?'new treatments':cat==='policy'?'policies':'announcements'} for this month.</div>`;
  const mount=$('ndAnnDailyMount');if(mount){const n=items.filter(unread).length;mount.hidden=isGlobal()||n===0;mount.innerHTML=n?`<strong>Announcements ${badge(n)}</strong><div class="nd-ann-muted">New or updated announcements. Open to read.</div>`:'';}
 }
-async function load(){if(loading||!db())return;loading=true;try{const [a,b]=await Promise.all([db().from('nd_announcements').select('id,category,title,content,created_at,updated_at,active').eq('active',true).order('updated_at',{ascending:false}).limit(1000),db().from('nd_announcement_reads').select('announcement_id,read_at').eq('user_id',userId)]);if(a.error)throw a.error;if(b.error)throw b.error;items=a.data||[];reads=new Map((b.data||[]).map(r=>[r.announcement_id,r.read_at]));notice('');render();}catch(e){notice('Announcements unavailable: '+(e.message||e));}finally{loading=false;}}
-async function auth(){if(!db())return;const {data,error}=await db().auth.getUser();if(error||!data?.user){notice("Please sign in to view announcements.");return;}userId=data.user.id;admin=['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(data.user.email||'').toLowerCase());$('ndAnnEditor').hidden=!admin;await load();}
-function show(){window.activeMainPage='announcements';document.body.dataset.ndVisiblePage='announcements';$('appView')?.classList.add('hidden');$('ndAnnouncementsPage').style.display='block';document.querySelectorAll('.sidebar-btn.active').forEach(x=>x.classList.remove('active'));$('sidebarAnnouncements').classList.add('active');$('mainSidebar')?.classList.remove('open');if(!userId)auth();else load();}
-function close(){ $('ndAnnouncementsPage').style.display='none';$('sidebarAnnouncements').classList.remove('active');if(typeof showDaily==='function')showDaily();document.body.dataset.ndVisiblePage='daily';}
+async function load(){if(loading)return;if(!db()){notice('Announcements connection is unavailable.');return;}if(!userId)return;loading=true;try{const [a,b]=await Promise.all([db().from('nd_announcements').select('id,category,title,content,created_at,updated_at,active').eq('active',true).order('updated_at',{ascending:false}).limit(1000),db().from('nd_announcement_reads').select('announcement_id,read_at').eq('user_id',userId)]);if(a.error)throw a.error;if(b.error)throw b.error;items=a.data||[];reads=new Map((b.data||[]).map(r=>[r.announcement_id,r.read_at]));notice('');render();}catch(e){notice('Announcements unavailable: '+(e.message||e));}finally{loading=false;}}
+async function auth(){if(!db()){notice('Announcements connection is unavailable.');return;}const {data,error}=await db().auth.getUser();if(error||!data?.user){notice("Please sign in to view announcements.");return;}userId=data.user.id;admin=['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(data.user.email||'').toLowerCase());$('ndAnnEditor').hidden=!admin;if(document.body.dataset.ndVisiblePage==='announcements')await load();}
+function show(){window.activeMainPage='announcements';document.body.dataset.ndVisiblePage='announcements';$('appView')?.classList.add('hidden');$('ndAnnouncementsPage').style.display='block';document.querySelectorAll('.sidebar-btn.active').forEach(x=>x.classList.remove('active'));$('sidebarAnnouncements')?.classList.add('active');$('mainSidebar')?.classList.remove('open');if(!userId)auth();else load();}
+function close(){ $('ndAnnouncementsPage').style.display='none';$('sidebarAnnouncements')?.classList.remove('active');if(typeof showDaily==='function')showDaily();document.body.dataset.ndVisiblePage='daily';}
 async function save(){if(!admin)return;const title=$('ndAnnTitle').value.trim(),content=$('ndAnnContent').value.trim(),category=$('ndAnnCategory').value;if(!title||!content)return notice('Title and Content are required.');const payload={title,content,category};const q=editing?db().from('nd_announcements').update(payload).eq('id',editing):db().from('nd_announcements').insert(payload);const {error}=await q;if(error)return notice(error.message);editing=null;$('ndAnnTitle').value='';$('ndAnnContent').value='';$('ndAnnEditHeading').textContent='New Announcement';await load();}
-async function markRead(id){const r=items.find(x=>x.id===id);if(!r||!userId)return;const {error}=await db().from('nd_announcement_reads').upsert({announcement_id:id,user_id:userId,read_at:new Date().toISOString()},{onConflict:'announcement_id,user_id'});if(error)return notice(error.message);reads.set(id,new Date().toISOString());render();}
-function setup(){if(!$('sidebarAnnouncements'))return;$('ndAnnMonth').value=thisMonth();$('sidebarAnnouncements').addEventListener('click',e=>{e.preventDefault();e.stopPropagation();show();});$('ndAnnClose').addEventListener('click',close);$('ndAnnSave').addEventListener('click',save);$('ndAnnCancel').addEventListener('click',()=>{editing=null;$('ndAnnTitle').value='';$('ndAnnContent').value='';$('ndAnnEditHeading').textContent='New Announcement';});$('ndAnnMonth').addEventListener('change',render);for(const [id,step] of [['ndAnnPrev',-1],['ndAnnNext',1]])$(id).addEventListener('click',()=>{const [y,m]=month().split('-').map(Number);const d=new Date(Date.UTC(y,m-1+step,1));$('ndAnnMonth').value=d.toISOString().slice(0,7);render();});$('ndAnnTabs').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(b){cat=b.dataset.cat;render();}});$('ndAnnList').addEventListener('click',async e=>{const b=e.target.closest('[data-ann-open],[data-ann-edit],[data-ann-delete]');if(!b)return;const id=Number(b.dataset.annOpen||b.dataset.annEdit||b.dataset.annDelete);const r=items.find(x=>x.id===id);if(!r)return;if(b.hasAttribute('data-ann-open'))return markRead(id);if(!admin)return;if(b.hasAttribute('data-ann-edit')){editing=id;$('ndAnnCategory').value=r.category;$('ndAnnTitle').value=r.title;$('ndAnnContent').value=r.content;$('ndAnnEditHeading').textContent='Edit Announcement';window.scrollTo(0,0);}else if(confirm('Delete announcement?')){const {error}=await db().from('nd_announcements').update({active:false}).eq('id',id);if(error)notice(error.message);else load();}});const mount=document.createElement('div');mount.id='ndAnnDailyMount';mount.className='nd-ann-daily';mount.hidden=true;mount.addEventListener('click',show);$('appView')?.prepend(mount);$('dailyBranchToggle')?.addEventListener('click',()=>setTimeout(render,80));auth();setInterval(()=>{if(!document.hidden&&userId)load();},60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden&&userId)load();});}
+async function markRead(id){const r=items.find(x=>String(x.id)===String(id));if(!r||!userId)return;const {error}=await db().from('nd_announcement_reads').upsert({announcement_id:id,user_id:userId,read_at:new Date().toISOString()},{onConflict:'announcement_id,user_id'});if(error)return notice(error.message);reads.set(id,new Date().toISOString());render();}
+function setup(){if(!$('sidebarAnnouncements'))return;$('ndAnnMonth').value=thisMonth();$('sidebarAnnouncements').addEventListener('click',e=>{e.preventDefault();e.stopPropagation();show();});$('ndAnnClose').addEventListener('click',close);$('ndAnnSave').addEventListener('click',save);$('ndAnnCancel').addEventListener('click',()=>{editing=null;$('ndAnnTitle').value='';$('ndAnnContent').value='';$('ndAnnEditHeading').textContent='New Announcement';});$('ndAnnMonth').addEventListener('change',render);for(const [id,step] of [['ndAnnPrev',-1],['ndAnnNext',1]])$(id).addEventListener('click',()=>{const [y,m]=month().split('-').map(Number);const d=new Date(Date.UTC(y,m-1+step,1));$('ndAnnMonth').value=d.toISOString().slice(0,7);render();});$('ndAnnTabs').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(b){e.preventDefault();cat=b.dataset.cat;render();}});$('ndAnnList').addEventListener('click',async e=>{const b=e.target.closest('[data-ann-open],[data-ann-edit],[data-ann-delete]');if(!b)return;const id=String(b.dataset.annOpen||b.dataset.annEdit||b.dataset.annDelete);const r=items.find(x=>String(x.id)===id);if(!r)return;if(b.hasAttribute('data-ann-open'))return markRead(id);if(!admin)return;if(b.hasAttribute('data-ann-edit')){editing=id;$('ndAnnEditor').hidden=false;$('ndAnnCategory').value=r.category;$('ndAnnTitle').value=r.title;$('ndAnnContent').value=r.content;$('ndAnnEditHeading').textContent='Edit Announcement';window.scrollTo(0,0);}else if(confirm('Delete announcement?')){const {error}=await db().from('nd_announcements').update({active:false}).eq('id',id);if(error)notice(error.message);else load();}});const mount=document.createElement('div');mount.id='ndAnnDailyMount';mount.className='nd-ann-daily';mount.hidden=true;mount.addEventListener('click',show);$('appView')?.prepend(mount);$('dailyBranchToggle')?.addEventListener('click',()=>setTimeout(render,80));auth();setInterval(()=>{if(!document.hidden&&userId&&document.body.dataset.ndVisiblePage==='announcements')load();},60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden&&userId&&document.body.dataset.ndVisiblePage==='announcements')load();});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
