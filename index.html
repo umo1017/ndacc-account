@@ -8668,9 +8668,9 @@ function ndOpenUnifiedCashHistory(type){
 }
 .settlement-expense-head,
 .settlement-expense-row{
-  min-width:900px;
+  min-width:760px;
   display:grid;
-  grid-template-columns:minmax(210px,1.35fr) 125px 150px 90px 150px 120px;
+  grid-template-columns:minmax(210px,1.35fr) 125px 90px 150px 120px;
   gap:12px;
   align-items:center;
 }
@@ -8693,6 +8693,7 @@ function ndOpenUnifiedCashHistory(type){
   min-width:0;
 }
 .settlement-payment-date{
+  display:none!important;
   width:100%;
   min-width:165px;
 }
@@ -8782,12 +8783,11 @@ function ndOpenUnifiedCashHistory(type){
 </div>
 <div class="salary-card">
 <div class="outlet-title"><div style="display:flex;align-items:center;gap:8px"><strong>Monthly Expenses</strong><span class="branch-chip">FIXED</span></div><span id="settlementExpenseTotal">RM 0.00</span></div>
-<div class="settlement-scroll-note">← Swipe sideways · Payment Date 只需设定一次，每个月自动沿用 →</div>
+<div class="settlement-scroll-note">← Swipe sideways to view expense details →</div>
 <div id="settlementExpenseForm" style="margin-top:10px">
 <div class="settlement-expense-head">
   <div>Expense</div>
   <div>Amount</div>
-  <div>Payment Date</div>
   <div>Status</div>
   <div>Payment Details</div>
   <div>Payment</div>
@@ -10825,6 +10825,7 @@ async function renderSalaryManagers(){
 }
 
 function setSidebarActive(page){
+  if(page!=="announcements"){document.body.dataset.ndVisiblePage=page;document.getElementById("ndAnnouncementsPage")?.style.setProperty("display","none");document.getElementById("sidebarAnnouncements")?.classList.remove("active");}
   byId("sidebarDaily").classList.toggle("active",page==="daily");
   byId("sidebarSalary").classList.toggle("active",page==="salary");
   byId("sidebarRoster")?.classList.toggle("active",page==="roster");
@@ -31687,7 +31688,7 @@ window.ndCollabRender=function(){const el=box();if(!el)return;const key=month();
 <style id="nd-ann-css">
 #ndAnnouncementsPage{display:none;min-height:100vh;padding:24px;background:var(--bg)}
 body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{display:block!important}
-body[data-nd-visible-page="announcements"] #appView,body[data-nd-visible-page="announcements"] #salaryPage,body[data-nd-visible-page="announcements"] #rosterPage,body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
+body[data-nd-visible-page="announcements"] #appView,body[data-nd-visible-page="announcements"] #salaryPage,body[data-nd-visible-page="announcements"] #rosterPage,body[data-nd-visible-page="announcements"] #socialPage,body[data-nd-visible-page="announcements"] #settingsPage,body[data-nd-visible-page="announcements"] #settlementPage{display:none!important}
 .nd-ann-panel{background:white;border:1px solid var(--line);border-radius:15px;padding:16px;margin:12px 0}.nd-ann-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.nd-ann-buttons button{border:1px solid #ddd;background:#fff;border-radius:10px;padding:9px 12px;cursor:pointer}.nd-ann-buttons button.selected{background:#284f40;color:white}.nd-ann-pill{display:inline-block;border-radius:12px;background:#b42318;color:white;font-size:11px;padding:2px 6px;margin-left:5px}.nd-ann-muted{color:#777;font-size:12px}.nd-ann-unread{border-left:4px solid #b58a2b}.nd-ann-text{white-space:pre-wrap;overflow-wrap:anywhere}.nd-ann-daily{margin:12px 0;padding:12px;border:1px solid #b58a2b;border-radius:12px;background:#fff9ed;cursor:pointer}
 #ndAnnEditor[hidden]{display:none!important}#ndAnnContent{width:100%;min-height:110px;border:1px solid var(--line);border-radius:12px;padding:10px}
 @media(max-width:700px){#ndAnnouncementsPage{padding:65px 12px 20px}}
@@ -31720,8 +31721,8 @@ function render(){
  const mount=$('ndAnnDailyMount');if(mount){const n=items.filter(unread).length;mount.hidden=isGlobal()||n===0;mount.innerHTML=n?`<strong>Announcements ${badge(n)}</strong><div class="nd-ann-muted">New or updated announcements. Open to read.</div>`:'';}
 }
 async function load(){if(loading||!db())return;loading=true;try{const [a,b]=await Promise.all([db().from('nd_announcements').select('id,category,title,content,created_at,updated_at,active').eq('active',true).order('updated_at',{ascending:false}).limit(1000),db().from('nd_announcement_reads').select('announcement_id,read_at').eq('user_id',userId)]);if(a.error)throw a.error;if(b.error)throw b.error;items=a.data||[];reads=new Map((b.data||[]).map(r=>[r.announcement_id,r.read_at]));notice('');render();}catch(e){notice('Announcements unavailable: '+(e.message||e));}finally{loading=false;}}
-async function auth(){if(!db())return;const {data,error}=await db().auth.getUser();if(error||!data?.user)return;userId=data.user.id;admin=['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(data.user.email||'').toLowerCase());$('ndAnnEditor').hidden=!admin;await load();}
-function show(){window.activeMainPage='announcements';document.body.dataset.ndVisiblePage='announcements';$('appView')?.classList.add('hidden');$('ndAnnouncementsPage').style.display='block';document.querySelectorAll('.sidebar-btn.active').forEach(x=>x.classList.remove('active'));$('sidebarAnnouncements').classList.add('active');$('mainSidebar')?.classList.remove('open');load();}
+async function auth(){if(!db())return;const {data,error}=await db().auth.getUser();if(error||!data?.user){notice("Please sign in to view announcements.");return;}userId=data.user.id;admin=['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(data.user.email||'').toLowerCase());$('ndAnnEditor').hidden=!admin;await load();}
+function show(){window.activeMainPage='announcements';document.body.dataset.ndVisiblePage='announcements';$('appView')?.classList.add('hidden');$('ndAnnouncementsPage').style.display='block';document.querySelectorAll('.sidebar-btn.active').forEach(x=>x.classList.remove('active'));$('sidebarAnnouncements').classList.add('active');$('mainSidebar')?.classList.remove('open');if(!userId)auth();else load();}
 function close(){ $('ndAnnouncementsPage').style.display='none';$('sidebarAnnouncements').classList.remove('active');if(typeof showDaily==='function')showDaily();document.body.dataset.ndVisiblePage='daily';}
 async function save(){if(!admin)return;const title=$('ndAnnTitle').value.trim(),content=$('ndAnnContent').value.trim(),category=$('ndAnnCategory').value;if(!title||!content)return notice('Title and Content are required.');const payload={title,content,category};const q=editing?db().from('nd_announcements').update(payload).eq('id',editing):db().from('nd_announcements').insert(payload);const {error}=await q;if(error)return notice(error.message);editing=null;$('ndAnnTitle').value='';$('ndAnnContent').value='';$('ndAnnEditHeading').textContent='New Announcement';await load();}
 async function markRead(id){const r=items.find(x=>x.id===id);if(!r||!userId)return;const {error}=await db().from('nd_announcement_reads').upsert({announcement_id:id,user_id:userId,read_at:new Date().toISOString()},{onConflict:'announcement_id,user_id'});if(error)return notice(error.message);reads.set(id,new Date().toISOString());render();}
