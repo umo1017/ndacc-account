@@ -4294,6 +4294,39 @@ body.logged-in #salaryPage [class*="table-wrap"]{display:block!important;width:1
 body.logged-in #salaryPage table{width:max-content!important;min-width:100%!important;max-width:none!important}
 @media(max-width:760px){body.logged-in #salaryPage .salary-shell{min-width:0!important;width:100%!important}}
 </style>
+<style id="nd-salary-full-page-scroll-corrected-20261016">
+/* Keep the full Salary layout; move the entire page horizontally and vertically. */
+html,body{overflow-y:auto!important;overscroll-behavior-y:auto!important}
+#salaryPage,#salaryPage.active{
+  box-sizing:border-box!important;
+  overflow-x:auto!important;overflow-y:visible!important;
+  height:auto!important;max-height:none!important;
+  -webkit-overflow-scrolling:touch!important;
+  touch-action:pan-x pan-y!important;
+}
+#salaryPage .salary-shell,#salaryPage #salaryContent{
+  width:max-content!important;min-width:1200px!important;max-width:none!important;
+  overflow:visible!important;height:auto!important;max-height:none!important;
+}
+#salaryPage .salary-card{max-width:none!important}
+#salaryPage .table-wrap,#salaryPage .salary-table-wrap,
+#salaryPage [class*="table-wrap"]{
+  overflow:visible!important;max-width:none!important;width:auto!important;
+}
+#salaryPage table{width:max-content!important;max-width:none!important;table-layout:auto!important}
+@media(min-width:901px){
+  #salaryPage,#salaryPage.active{
+    margin-left:190px!important;width:calc(100vw - 190px)!important;
+    max-width:calc(100vw - 190px)!important;min-width:0!important;
+  }
+}
+@media(max-width:900px){
+  #salaryPage,#salaryPage.active{
+    margin-left:0!important;width:100vw!important;max-width:100vw!important;
+    min-width:0!important;
+  }
+}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -8110,7 +8143,7 @@ return `<div class="history-date-card">
 
 
   /* UMO verification queue: shares History's actual payment_statuses and remittance status. */
-  const ndVerifyItems=[['visa_master','VISA / MASTER',r=>Number(r.visa||0)+Number(r.master||0)],['tng','TNG',r=>Number(r.tng||0)],['bank_transfer','Bank Transfer',r=>Number(r.bank_transfer||0)],['tips','Tips',r=>Number(r.tips||0)],['alipay','ZFB / ALIPAY',r=>Number(r.alipay||0)],['online_card','Online Credit Card',r=>Number(r.online_card||0)],['amex','AMEX',r=>Number(r.amex||0)],['bed_fee','Bed Fee',r=>Number(r.bed_fee||0)]];
+  const ndVerifyItems=[['visa_master','VISA / MASTER',r=>Number(r.visa||0)+Number(r.master||0)],['tng','TNG',r=>Number(r.tng||0)],['bank_transfer','Bank Transfer',r=>Number(r.bank_transfer||0)],['tips','Tips',r=>Number(r.tips||0)],['alipay','ZFB / ALIPAY',r=>Number(r.alipay||0)],['online_card','Online Credit Card',r=>Number(r.online_card||0)],['amex','AMEX',r=>Number(r.amex||0)]];
   let ndVerifyPage=0,ndVerifyQueue=[],ndVerifyBusy=false,ndVerifyDismissed='';
   function ndVerifyMalaysiaNow(){
     const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
@@ -8163,9 +8196,13 @@ return `<div class="history-date-card">
   function ndVerifyModal(){
     let m=document.getElementById('ndUmoVerifyModal');if(m)return m;
     m=document.createElement('div');m.id='ndUmoVerifyModal';m.className='salary-modal';m.style.zIndex='20020';
-    m.innerHTML='<div class="salary-dialog" style="width:min(800px,96vw);max-height:88dvh"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Daily Settlement Verification</h3><div class="helper">Eco Botanic · Nusa Bestari · History Synced</div></div><button type="button" class="mini" id="ndVerifyLater">Later</button></div><div id="ndVerifyCount" class="helper" style="margin:12px 0"></div><div id="ndVerifyList"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><button type="button" class="btn" id="ndVerifyPrev">Previous</button><span id="ndVerifyPages" class="helper"></span><button type="button" class="btn" id="ndVerifyNext">Next</button></div></div>';
+    m.innerHTML='<div class="salary-dialog" style="width:min(800px,96vw);max-height:88dvh"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Daily Settlement Verification</h3><div class="helper">Eco Botanic · Nusa Bestari · History Synced</div></div><button type="button" class="mini" id="ndVerifyLater">Close · Hide Today</button></div><div id="ndVerifyCount" class="helper" style="margin:12px 0"></div><div id="ndVerifyList"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><button type="button" class="btn" id="ndVerifyPrev">Previous</button><span id="ndVerifyPages" class="helper"></span><button type="button" class="btn" id="ndVerifyNext">Next</button></div></div>';
     document.body.appendChild(m);
-    m.querySelector('#ndVerifyLater').onclick=()=>{ndVerifyDismissed=ndVerifyMalaysiaNow().ymd;m.classList.remove('open')};
+    m.querySelector('#ndVerifyLater').onclick=()=>{
+      ndVerifyDismissed=ndVerifyMalaysiaNow().ymd;
+      try{localStorage.setItem('nd_verify_hide_today_v1',ndVerifyDismissed);}catch(_e){}
+      m.classList.remove('open');
+    };
     m.querySelector('#ndVerifyPrev').onclick=()=>{ndVerifyPage=Math.max(0,ndVerifyPage-1);ndVerifyRender()};
     m.querySelector('#ndVerifyNext').onclick=()=>{ndVerifyPage++;ndVerifyRender()};
     m.addEventListener('click',async ev=>{
@@ -8212,7 +8249,10 @@ return `<div class="history-date-card">
   }
   async function ndVerifyCheck(){
     if(String(currentUserEmail||'').toLowerCase()!=='umo1017@gmail.com')return;
-    const clock=ndVerifyMalaysiaNow();if(ndVerifyDismissed===clock.ymd && !document.getElementById('ndUmoVerifyModal')?.classList.contains('open'))return;
+    const clock=ndVerifyMalaysiaNow();
+    let hiddenDate=ndVerifyDismissed;
+    try{hiddenDate=localStorage.getItem('nd_verify_hide_today_v1')||hiddenDate;}catch(_e){}
+    if(hiddenDate===clock.ymd)return;
     const m=ndVerifyModal();
     // Re-read authoritative History records directly. Never build a reminder from
     // a stale cached row or a partial/unconfirmed history refresh.
@@ -32439,156 +32479,12 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{display:block!im
 </body>
 </html>
 
-<style id="desktop-wide-salary-final-fix">
-/* Desktop payroll: use the full browser width and keep columns readable.
-   Wide payroll tables scroll inside their own card instead of shrinking text. */
-@media (min-width: 901px){
-  #salaryPage,
-  #salaryPage.active{
-    box-sizing:border-box!important;
-    width:calc(100vw - 190px)!important;
-    max-width:calc(100vw - 190px)!important;
-    min-width:0!important;
-    margin-left:190px!important;
-    margin-right:0!important;
-    padding:20px 24px 32px!important;
-    overflow-x:hidden!important;
-  }
 
-  #salaryPage .salary-shell,
-  #salaryPage #salaryContent{
-    width:100%!important;
-    min-width:0!important;
-    max-width:100%!important;
-  }
-
-  #salaryPage .salary-card{
-    width:100%!important;
-    min-width:0!important;
-    max-width:100%!important;
-    box-sizing:border-box!important;
-    padding:18px!important;
-  }
-
-  #salaryPage .salary-table-wrap,
-  #salaryPage .table-wrap,
-  #salaryPage [class*="table-wrap"],
-  #salaryPage [class*="tableWrap"]{
-    display:block!important;
-    width:100%!important;
-    min-width:0!important;
-    max-width:100%!important;
-    overflow-x:auto!important;
-    overflow-y:visible!important;
-    -webkit-overflow-scrolling:touch!important;
-    scrollbar-gutter:stable!important;
-  }
-
-  #salaryPage .salary-table,
-  #salaryPage .salary-table-wrap table,
-  #salaryPage table{
-    width:max-content!important;
-    min-width:1500px!important;
-    max-width:none!important;
-    table-layout:auto!important;
-  }
-
-  #salaryPage .salary-table.compact{
-    min-width:900px!important;
-  }
-
-  #salaryPage th,
-  #salaryPage td{
-    white-space:nowrap!important;
-    word-break:normal!important;
-    font-size:14px!important;
-    line-height:1.35!important;
-    padding:11px 12px!important;
-    vertical-align:middle!important;
-  }
-
-  #salaryPage th{
-    font-size:13px!important;
-    font-weight:800!important;
-  }
-
-  #salaryPage .salary-table input,
-  #salaryPage .salary-table select{
-    min-width:118px!important;
-    height:42px!important;
-    font-size:14px!important;
-  }
-
-  #salaryPage .salary-title{
-    font-size:27px!important;
-  }
-
-  #salaryPage .salary-top,
-  #salaryPage .salary-toolbar{
-    width:100%!important;
-  }
-}
-
-/* Wider desktop screens: keep almost all available space. */
-@media (min-width: 1400px){
-  #salaryPage,
-  #salaryPage.active{
-    padding-left:28px!important;
-    padding-right:28px!important;
-  }
-  #salaryPage .salary-table,
-  #salaryPage .salary-table-wrap table,
-  #salaryPage table{
-    min-width:1650px!important;
-  }
-}
-</style>
 
 <!-- BUTTON_AUDIT {'buttons_total': 188, 'buttons_enabled': 187, 'buttons_disabled_static': 1, 'buttons_without_detected_handler': [{'text': 'Settlement Administrators ⌄', 'id': None, 'data': {}}, {'text': 'Daily Settlement Outlets ⌄', 'id': None, 'data': {}}, {'text': 'Bed Fee Merchants ⌄', 'id': None, 'data': {}}, {'text': 'Monthly Roster Settings ⌄', 'id': None, 'data': {}}, {'text': 'Daily History Access ⌄', 'id': None, 'data': {}}, {'text': 'Order View Access ⌄', 'id': None, 'data': {}}, {'text': 'Salary Managers ⌄', 'id': None, 'data': {}}, {'text': 'Salary Branches ⌄', 'id': None, 'data': {}}, {'text': 'Salary Employee Report Access ⌄', 'id': None, 'data': {}}, {'text': 'Tax PCB Rules ⌄', 'id': None, 'data': {}}], 'js_errors': 0, 'duplicate_ids': 0} -->
 
 
-<style id="nd-desktop-horizontal-scroll-alignment-v1">
-/* Desktop: keep sidebar fixed and align every content page to its right edge. */
-@media (min-width:901px){
-  html,body{max-width:none!important;overflow-x:auto!important;}
-  #appView.sidebar-offset,
-  #salaryPage.sidebar-offset,#salaryPage.active,
-  #rosterPage.sidebar-offset,#rosterPage.active,
-  #settlementPage.sidebar-offset,#settlementPage.active,
-  #ordersPage.sidebar-offset,#ordersPage.active,
-  #settingsPage.sidebar-offset,#settingsPage.active,
-  #bonusPage.sidebar-offset,#bonusPage.active,
-  #aiReceiptPage.sidebar-offset,#aiReceiptPage.active,
-  #socialPage.sidebar-offset,#socialPage.active{
-    margin-left:190px!important;
-    margin-right:0!important;
-    width:calc(100% - 190px)!important;
-    max-width:calc(100% - 190px)!important;
-    min-width:0!important;
-    box-sizing:border-box!important;
-    padding-left:20px!important;
-    padding-right:20px!important;
-  }
-  #appView:not(.sidebar-offset){margin-left:190px!important;width:calc(100% - 190px)!important;max-width:calc(100% - 190px)!important;}
-  #salaryPage,#ordersPage,#rosterPage,#settlementPage,#settingsPage,#bonusPage,#aiReceiptPage,#socialPage,
-  #appView{overflow-x:auto!important;}
-  .salary-shell,.grid,.card,.salary-card,.roster-shell{min-width:0!important;}
-  .table-wrap,.salary-table-wrap,.orders-list-wrap,.history-table-wrap,.roster-table-wrap,
-  #salaryPage [class*="table-wrap"],#ordersPage [class*="table-wrap"]{
-    display:block;max-width:100%!important;min-width:0!important;
-    overflow-x:auto!important;overscroll-behavior-x:contain;
-    -webkit-overflow-scrolling:touch;
-  }
-  .table-wrap>table,.salary-table-wrap>table,.orders-list-wrap>table,
-  .history-table-wrap>table,.roster-table-wrap>table{
-    width:max-content!important;max-width:none!important;min-width:100%!important;
-  }
-  .table-wrap th,.table-wrap td,.salary-table-wrap th,.salary-table-wrap td,
-  .orders-list-wrap th,.orders-list-wrap td,.history-table-wrap th,.history-table-wrap td{
-    white-space:nowrap!important;
-  }
-}
-</style>
+
 
 <script id="nd-collaboration-fields-final-20261015">
 (function(){
