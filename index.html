@@ -7142,41 +7142,29 @@ return `<div class="history-date-card">
   }
 
   async function markPettyReceiptProcessed(rowId,entryIndex){
-    const id=Number(rowId||0);
-    const idx=Number(entryIndex);
-    if(!id || idx<0) return false;
-
-    let row=(allRows||[]).find(r=>Number(r.id)===id);
-    if(!row){
-      const {data,error}=await db.from("daily_settlements")
-        .select("id,petty_entries")
-        .eq("id",id)
-        .maybeSingle();
-      if(error || !data) return false;
-      row=data;
-    }
-
+    const id=Number(rowId||0),idx=Number(entryIndex);
+    if(!id||!Number.isInteger(idx)||idx<0)throw new Error("Invalid receipt record or entry index.");
+    // Always read the latest History record; never overwrite a stale petty_entries array.
+    const {data:row,error:readError}=await db.from("daily_settlements")
+      .select("id,petty_entries").eq("id",id).maybeSingle();
+    if(readError)throw new Error("Unable to read Petty Cash History: "+readError.message);
+    if(!row)throw new Error("Petty Cash History record not found (or access denied).");
     const entries=Array.isArray(row.petty_entries)
-      ? row.petty_entries.map(e=>({...e,receipt:e?.receipt?{...e.receipt}:e?.receipt}))
-      : [];
-
-    if(!entries[idx]?.receipt?.path) return false;
-    if(entries[idx].receipt.processed_at) return true;
-
-    entries[idx].receipt.processed_at=new Date().toISOString();
+      ?row.petty_entries.map(e=>({...e,receipt:e?.receipt?{...e.receipt}:e?.receipt})):[];
+    if(!entries[idx]||String(entries[idx].type)!=="out")throw new Error("Expense entry not found in History.");
+    if(!entries[idx].receipt?.path)throw new Error("Expense receipt is missing. Upload a receipt before marking it processed.");
+    if(entries[idx].receipt.processed_at)return true;
+    const stamp=new Date().toISOString();
+    entries[idx].receipt.processed_at=stamp;
     entries[idx].receipt.processed_by=currentUserEmail||"";
-
-    const {error}=await db.from("daily_settlements")
-      .update({petty_entries:entries})
-      .eq("id",id);
-
-    if(error){
-      console.warn("Unable to mark receipt processed:",error.message);
-      return false;
-    }
-
+    const {data:updated,error:writeError}=await db.from("daily_settlements")
+      .update({petty_entries:entries}).eq("id",id).select("id,petty_entries").maybeSingle();
+    if(writeError)throw new Error("Database rejected receipt verification: "+writeError.message);
+    if(!updated)throw new Error("Database did not save this receipt. Check daily_settlements UPDATE/SELECT RLS permissions for this account.");
+    const saved=Array.isArray(updated.petty_entries)?updated.petty_entries:[];
+    if(saved[idx]?.receipt?.processed_at!==stamp)throw new Error("Receipt verification was not persisted in History.");
     const local=(allRows||[]).find(r=>Number(r.id)===id);
-    if(local) local.petty_entries=entries;
+    if(local)local.petty_entries=saved;
     return true;
   }
 
@@ -8036,7 +8024,7 @@ return `<div class="history-date-card">
   function ndVerifyBuildQueue(){
     const q=[];
     for(const r of allRows||[]){
-      if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||!ndVerifyEligible(r.settlement_date))continue;
+      if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||String(r.settlement_date||'')<'2026-10-01'||!ndVerifyEligible(r.settlement_date))continue;
       for(const [field,label,amountFn] of ndVerifyItems){
         const amount=amountFn(r),status=(r.payment_statuses||{})[field]||'';
         if(amount>0 && !['accepted','adjust'].includes(String(status).toLowerCase()))q.push({kind:'payment',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|'+field,row:r,field,label,amount,status});
@@ -8047,7 +8035,7 @@ return `<div class="history-date-card">
       });
     }
     for(const r of cashRemittances||[]){
-      if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||!ndVerifyEligible(r.remittance_date))continue;
+      if(!['Eco Botanic','Nusa Bestari'].includes(r.branch)||String(r.remittance_date||'')<'2026-10-01'||!ndVerifyEligible(r.remittance_date))continue;
       if(Number(r.amount||0)>0 && String(r.status||'pending')==='pending')q.push({kind:'remittance',key:String(r.branch)+'|'+String(r.remittance_date)+'|remittance|'+String(r.id),row:r,label:'Transfer to Bank',amount:Number(r.amount||0),status:'pending'});
     }
     return q.sort((a,b)=>String(a.row.settlement_date||a.row.remittance_date).localeCompare(String(b.row.settlement_date||b.row.remittance_date)) || String(a.row.branch).localeCompare(String(b.row.branch)) || String(a.key).localeCompare(String(b.key)));
@@ -8076,7 +8064,7 @@ return `<div class="history-date-card">
         else if(item.kind==='remittance')await setCashRemittanceStatus(item.row.id,action==='accepted'?'verified':'rejected');
         else if(item.kind==='petty'){
           const ok=await markPettyReceiptProcessed(item.row.id,item.index);
-          if(!ok)throw new Error('Receipt processing could not be saved.');
+          if(!ok)throw new Error('Receipt processing could not be saved in History.');
         }
         await fetchRows();renderCombinedHistory();ndVerifyQueue=ndVerifyBuildQueue();ndVerifyRender();
       }catch(err){alert('Verification failed: '+(err?.message||err));}
