@@ -4708,6 +4708,7 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
         }
       }
 
+      if(currentUserEmail==='umo1017@gmail.com')setTimeout(()=>ndVerifyCheck().catch(console.warn),350);
       try{ applyCashWithdrawalAccess(); }catch(err){
         console.warn("Access UI init failed:",err);
       }
@@ -8011,18 +8012,26 @@ return `<div class="history-date-card">
   /* UMO verification queue: shares History's actual payment_statuses and remittance status. */
   const ndVerifyItems=[['visa_master','VISA / MASTER',r=>Number(r.visa||0)+Number(r.master||0)],['tng','TNG',r=>Number(r.tng||0)],['bank_transfer','Bank Transfer',r=>Number(r.bank_transfer||0)],['tips','Tips',r=>Number(r.tips||0)],['alipay','ZFB / ALIPAY',r=>Number(r.alipay||0)],['online_card','Online Credit Card',r=>Number(r.online_card||0)],['amex','AMEX',r=>Number(r.amex||0)],['bed_fee','Bed Fee',r=>Number(r.bed_fee||0)]];
   let ndVerifyPage=0,ndVerifyQueue=[],ndVerifyBusy=false,ndVerifyDismissed='';
+  function ndVerifyMalaysiaNow(){
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+    const x=Object.fromEntries(parts.map(p=>[p.type,p.value]));
+    return {ymd:x.year+'-'+x.month+'-'+x.day,hour:Number(x.hour)};
+  }
   function ndVerifyEligible(date){
-    const now=new Date();if(now.getHours()<22)return false;
-    const ymd=today();if(!date||date>=ymd)return false;
+    const clock=ndVerifyMalaysiaNow();
+    const ymd=clock.ymd;if(!date||date>=ymd)return false;
     const dt=new Date(date+'T12:00:00');if(!Number.isFinite(dt.getTime()))return false;
-    const day=dt.getDay(),nowDay=now.getDay();
+    const day=dt.getDay();
     // Friday-Sunday held until Monday 22:00; old unverified records remain pending.
     if(day===5||day===6||day===0){
       const monday=new Date(dt);monday.setDate(dt.getDate()+((8-day)%7));
       const mondayIso=monday.getFullYear()+'-'+String(monday.getMonth()+1).padStart(2,'0')+'-'+String(monday.getDate()).padStart(2,'0');
-      if(ymd<mondayIso)return false;
+      if(ymd<mondayIso || (ymd===mondayIso && clock.hour<22))return false;
     }
-    return true;
+    // Every other date becomes eligible at 22:00 on the next calendar day.
+    const due=new Date(dt);due.setDate(dt.getDate()+1);
+    const dueIso=due.getFullYear()+'-'+String(due.getMonth()+1).padStart(2,'0')+'-'+String(due.getDate()).padStart(2,'0');
+    return ymd>dueIso || (ymd===dueIso && clock.hour>=22);
   }
   function ndVerifyBuildQueue(){
     const q=[];
@@ -8048,7 +8057,7 @@ return `<div class="history-date-card">
     m=document.createElement('div');m.id='ndUmoVerifyModal';m.className='salary-modal';m.style.zIndex='20020';
     m.innerHTML='<div class="salary-dialog" style="width:min(800px,96vw);max-height:88dvh"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Daily Settlement Verification</h3><div class="helper">Eco Botanic · Nusa Bestari · History Synced</div></div><button type="button" class="mini" id="ndVerifyLater">Later</button></div><div id="ndVerifyCount" class="helper" style="margin:12px 0"></div><div id="ndVerifyList"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><button type="button" class="btn" id="ndVerifyPrev">Previous</button><span id="ndVerifyPages" class="helper"></span><button type="button" class="btn" id="ndVerifyNext">Next</button></div></div>';
     document.body.appendChild(m);
-    m.querySelector('#ndVerifyLater').onclick=()=>{ndVerifyDismissed=today();m.classList.remove('open')};
+    m.querySelector('#ndVerifyLater').onclick=()=>{ndVerifyDismissed=ndVerifyMalaysiaNow().ymd;m.classList.remove('open')};
     m.querySelector('#ndVerifyPrev').onclick=()=>{ndVerifyPage=Math.max(0,ndVerifyPage-1);ndVerifyRender()};
     m.querySelector('#ndVerifyNext').onclick=()=>{ndVerifyPage++;ndVerifyRender()};
     m.addEventListener('click',async ev=>{
@@ -8098,7 +8107,7 @@ return `<div class="history-date-card">
   }
   async function ndVerifyCheck(){
     if(ndVerifyBusy||String(currentUserEmail||'').toLowerCase()!=='umo1017@gmail.com')return;
-    const now=new Date();if(now.getHours()<22||ndVerifyDismissed===today())return;
+    const clock=ndVerifyMalaysiaNow();if(ndVerifyDismissed===clock.ymd)return;
     const m=ndVerifyModal();if(m.classList.contains('open'))return;
     const ok=await fetchRows();if(!ok)return;
     ndVerifyQueue=ndVerifyBuildQueue();if(!ndVerifyQueue.length)return;
@@ -8106,6 +8115,8 @@ return `<div class="history-date-card">
   }
   setInterval(()=>{ndVerifyCheck().catch(console.warn)},60000);
   setTimeout(()=>{ndVerifyCheck().catch(console.warn)},8000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)ndVerifyCheck().catch(console.warn)});
+  window.addEventListener('focus',()=>ndVerifyCheck().catch(console.warn));
 
   showSession();
 $("closeDailyOrderModal")?.addEventListener("click",()=>$("dailyOrderModal").classList.remove("open"));
