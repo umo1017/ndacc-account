@@ -4108,6 +4108,20 @@ table tbody tr:hover{background:#f3f7f9!important}
   font-variant-numeric:tabular-nums!important;
 }
 </style>
+<style id="nd-sidebar-refined-20261015">
+/* Menu visual refinement; preserve original IDs, visibility and handlers. */
+#mainSidebar{overflow-y:auto;overscroll-behavior:contain;gap:5px;padding:18px 11px 22px;background:#fbfaf7;border-right:1px solid #e5e6de}
+#mainSidebar .sidebar-brand{color:#29483b;font-size:18px;letter-spacing:.01em;border-bottom:1px solid #e4e7e0;margin-bottom:10px;padding:10px 9px 18px}
+#mainSidebar .sidebar-btn{flex-shrink:0;height:auto;min-height:43px;padding:11px 13px;border-radius:11px;font-size:13px;line-height:1.35;color:#43574c;font-weight:700;transition:background .15s ease;white-space:normal}
+#mainSidebar .sidebar-btn:hover{background:#edf2ed}
+#mainSidebar .sidebar-btn.active{background:#294b3d;color:#fff;box-shadow:0 3px 9px rgba(28,63,45,.12)}
+#mainSidebar #sidebarAnnouncements{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#mainSidebar #ndAnnSidebarCount:not(:empty){background:#b14c3c;color:#fff;border-radius:999px;padding:2px 7px;font-size:11px;min-width:21px;text-align:center}
+#mainSidebar #sidebarSettlement{margin-top:11px;border-top:1px solid #e5e8e2;border-radius:0;padding-top:18px}
+#mainSidebar #sidebarSalary{margin-top:11px;border-top:1px solid #e5e8e2;border-radius:0;padding-top:18px}
+#mainSidebar #sidebarSocial{margin-top:11px;border-top:1px solid #e5e8e2;border-radius:0;padding-top:18px}
+@media(max-width:760px){#mainSidebar{width:min(280px,82vw);padding-top:max(22px,env(safe-area-inset-top));box-shadow:6px 0 30px rgba(0,0,0,.07)}#mainSidebar .sidebar-btn{min-height:48px;font-size:14px}}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -4115,11 +4129,11 @@ table tbody tr:hover{background:#f3f7f9!important}
 <button class="sidebar-btn active" id="sidebarDaily" type="button">Daily Settlement</button>
 <button class="sidebar-btn" id="sidebarAnnouncements" type="button">Announcements <span id="ndAnnSidebarCount"></span></button>
 <button class="sidebar-btn" id="sidebarRoster" type="button">Monthly Roster</button>
-<button class="sidebar-btn" id="sidebarSalary" type="button">Salary</button>
-<button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
+<button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">Orders</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
 <button class="sidebar-btn" id="sidebarAiReceipt" style="display:none" type="button">Expenses</button>
-<button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">Orders</button>
+<button class="sidebar-btn" id="sidebarSalary" type="button">Salary</button>
+<button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
 <button class="sidebar-btn" id="sidebarSocial" style="display:none" type="button">Social Media</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Setting</button>
 </aside>
@@ -31682,10 +31696,10 @@ let lastKey='', rows=[], busy=false;
 function db(){return typeof salaryDb!=='undefined'?salaryDb:null;}
 function admin(){return admins.has(String(typeof currentSalaryUserEmail!=='undefined'?currentSalaryUserEmail:'').trim().toLowerCase());}
 function month(){return document.getElementById('salaryMonth')?.value||new Date().toISOString().slice(0,7);}
-function box(){let root=document.getElementById('salaryOutletRoot');if(!root)return null;let el=document.getElementById('ndCollaborationSalary');if(!el){el=document.createElement('section');el.id='ndCollaborationSalary';el.className='salary-card';el.style.marginTop='18px';root.appendChild(el);}return el;}
+function box(){let root=document.getElementById('salaryOutletRoot');if(!root)return null;let el=document.getElementById('ndCollaborationSalary');if(!el){el=document.createElement('section');el.id='ndCollaborationSalary';el.className='salary-card';el.style.margin='0 0 16px';root.prepend(el);}else if(root.firstElementChild!==el){root.prepend(el);}return el;}
 async function load(){const client=db();if(!client)return;const key=month();lastKey=key;const result=await client.from('nd_collaboration_payments').select('*').eq('salary_month',key+'-01').order('employee_id');if(lastKey!==key)return;if(result.error){rows=[];show('Cannot load collaboration payments: '+escapeHTML(result.error.message));return;}rows=result.data||[];draw();}
 function show(msg){const el=box();if(el)el.innerHTML='<h3>COLLABORATION</h3><div class="helper">'+msg+'</div>';}
-function draw(){const el=box();if(!el)return;const emps=(typeof salaryEmployees!=='undefined'?salaryEmployees:[]).filter(e=>e.outlet==='Collaboration'&&(!window.salaryEmployeeVisibleInMonth||salaryEmployeeVisibleInMonth(e,month())));
+function draw(){const el=box();if(!el)return;const emps=(typeof salaryEmployees!=='undefined'?salaryEmployees:[]).filter(e=>String(e.outlet||'').trim().toLowerCase()==='collaboration'&&(!window.salaryEmployeeVisibleInMonth||salaryEmployeeVisibleInMonth(e,month()))).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
 const mapped=emps.map(e=>({employee:e,record:rows.find(r=>Number(r.employee_id)===Number(e.id))}));
 const totals={Cash:0,'Bank Transfer':0,TNG:0};mapped.forEach(({employee:e,record:r})=>{let method=String(r?.payment_method||e.payment_method||'').toLowerCase();method=method.includes('cash')?'Cash':method.includes('tng')?'TNG':'Bank Transfer';totals[method]+=Number(r?.amount||0);});
 const total=Object.values(totals).reduce((a,b)=>a+b,0);
