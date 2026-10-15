@@ -4522,6 +4522,25 @@ body[data-nd-visible-page="salary"] .nd-collab-payment-grand-total{background:#e
  body #salaryPage.active .salary-title{font-size:20px!important;}
 }
 </style>
+<style id="nd-salary-mobile-controls-fit-20261016">
+/* Only Salary: compact the date and controls without restricting page-wide scrolling. */
+@media screen {
+ #salaryPage #salaryContent .salary-toolbar{display:flex!important;align-items:end!important;justify-content:flex-start!important;flex-wrap:wrap!important;gap:8px!important;width:auto!important;max-width:100%!important}
+ #salaryPage #salaryContent .salary-toolbar .field{flex:0 0 180px!important;width:180px!important;min-width:180px!important;max-width:180px!important}
+ #salaryPage #salaryMonth{display:block!important;width:180px!important;min-width:0!important;max-width:180px!important;height:42px!important;font-size:14px!important;padding:6px 8px!important;appearance:auto!important;-webkit-appearance:auto!important}
+ #salaryPage .salary-toolbar .btn{flex:0 0 auto!important;width:auto!important;min-width:0!important;max-width:none!important;padding:9px 12px!important;font-size:12px!important;white-space:nowrap!important}
+ #salaryPage .salary-view-tabs{display:flex!important;flex-wrap:wrap!important;justify-content:flex-start!important;align-items:center!important;gap:7px!important;width:auto!important;max-width:100%!important}
+ #salaryPage .salary-view-tabs .salary-view-btn{flex:0 0 auto!important;width:auto!important;min-width:0!important;max-width:none!important;padding:9px 13px!important;font-size:12px!important;line-height:1.25!important;white-space:nowrap!important}
+ #salaryPage #salaryViewTotalBtn:empty{display:none!important}
+ #salaryPage .salary-card:first-of-type{max-width:none!important}
+}
+@media screen and (max-width:760px){
+ #salaryPage #salaryContent .salary-toolbar .field{flex-basis:155px!important;width:155px!important;min-width:155px!important;max-width:155px!important}
+ #salaryPage #salaryMonth{width:155px!important;max-width:155px!important;font-size:13px!important}
+ #salaryPage .salary-toolbar .btn{padding:8px 10px!important;font-size:11px!important}
+ #salaryPage .salary-view-tabs .salary-view-btn{padding:9px 12px!important;font-size:12px!important}
+}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -32443,6 +32462,24 @@ if(!attach())document.addEventListener('DOMContentLoaded',attach,{once:true});
 #ndAdvanceModal #ndAdvanceClear{padding:8px 12px;font-size:12px}
 @media(max-width:600px){#ndAdvanceModal{padding:8px;z-index:30000}#ndAdvanceModal .nd-dialog{padding:15px;border-radius:15px;max-height:calc(100dvh - 16px)}#ndAdvanceModal .nd-fields{grid-template-columns:1fr 1fr;gap:9px}#ndAdvanceModal .nd-fields>div:first-child,#ndAdvanceModal .nd-fields>div:nth-child(2){grid-column:1/-1}#ndAdvanceModal .nd-consent{font-size:12px;line-height:1.5}#ndAdvanceModal h2{font-size:17px}#ndAdvanceModal input,#ndAdvanceModal select{font-size:14px;padding:9px}#ndAdvanceSign{height:110px}.nd-advance-history-tools{width:100%}.nd-advance-history-tools .btn{flex:1;min-width:125px;font-size:12px;padding:9px}}
 </style>
+<style id="nd-collab-mobile-compact-names-20261016">
+/* Keep full names accessible, but stop them stretching the whole payroll. */
+#ndCollaborationSalary .salary-table{table-layout:fixed!important;width:max-content!important;min-width:0!important}
+#ndCollaborationSalary .salary-table th:first-child,
+#ndCollaborationSalary .salary-table td:first-child{width:142px!important;min-width:142px!important;max-width:142px!important}
+#ndCollaborationSalary .salary-table td:first-child strong{display:block;white-space:normal!important;overflow-wrap:anywhere;word-break:break-word;line-height:1.35;font-size:12px}
+#ndCollaborationSalary .salary-table th:not(:first-child),
+#ndCollaborationSalary .salary-table td:not(:first-child){width:125px;min-width:105px}
+#ndCollaborationSalary .nd-collab-commission{width:92px!important;min-width:0!important;max-width:100%!important;padding:7px 5px!important;font-size:12px!important}
+#ndCollaborationSalary .nd-collab-amount{width:100px!important;min-width:0!important}
+#ndCollaborationSalary .nd-collab-save{white-space:nowrap}
+@media(max-width:700px){
+#ndCollaborationSalary .salary-table th:first-child,
+#ndCollaborationSalary .salary-table td:first-child{width:116px!important;min-width:116px!important;max-width:116px!important}
+#ndCollaborationSalary .salary-table td:first-child strong{font-size:11px}
+#ndCollaborationSalary .salary-table th,#ndCollaborationSalary .salary-table td{padding:7px 5px!important;font-size:11px!important}
+}
+</style>
 <script id="nd-collaboration-salary-v2">
 /* Collaboration is a separate payment ledger, never part of normal payroll. */
 (function(){
@@ -32474,7 +32511,7 @@ const totals={Cash:0,'Bank Transfer':0,TNG:0};mapped.forEach(({employee:e,record
 const total=Object.values(totals).reduce((a,b)=>a+b,0);
 el.innerHTML=`<div class="outlet-title"><h3>COLLABORATION — ${escapeHTML(month())}</h3></div>
 
-<div class="salary-table-wrap"><table class="salary-table compact"><thead><tr><th>Full Name</th><th>Commission A</th><th>Commission B</th><th>Customer Referral</th><th>Staff Referral</th><th>Bonus</th><th>Total Commission</th><th>Amount</th><th>Payment Method</th><th>Status</th><th>${admin()?'Action':'Total'}</th></tr></thead><tbody>${mapped.map(({employee:e,record:r,comm:c})=>{const done=!!r?.payment_done;const method=r?.payment_method||e.payment_method||'transfer';return `<tr data-collab-id="${Number(e.id)}"><td><strong>${escapeHTML(e.nickname||e.name)}</strong></td>${['commission_a','commission_b','customer_referral','staff_referral','reward'].map(f=>`<td>${admin()&&!done?`<input class="nd-collab-commission" data-comm-field="${f}" type="number" min="0" step="0.01" value="${Number(c[f]||0).toFixed(2)}"/>`:fmt(c[f])}</td>`).join('')}<td class="nd-collab-commission-total">${fmt(['commission_a','commission_b','customer_referral','staff_referral','reward'].reduce((sum,f)=>sum+Number(c[f]||0),0))}</td><td>${admin()&&!done?`<input class="nd-collab-amount" type="number" min="0" step="0.01" value="${r?.amount??''}" placeholder="Amount"/>`:fmt(r?.amount)}</td><td>${admin()&&!done?`<select class="nd-collab-method"><option value="Cash" ${/cash/i.test(method)?'selected':''}>Cash</option><option value="Bank Transfer" ${!/cash|tng/i.test(method)?'selected':''}>Bank Transfer</option><option value="TNG" ${/tng/i.test(method)?'selected':''}>TNG</option></select>`:escapeHTML(method)}</td><td>${done?'<span class="confirmed-pill">Payment DONE ✓</span>':'Pending'}</td>${admin()?`<td>${done?'<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>':`<button class="btn nd-collab-save" type="button">Save</button> <button class="btn payment-done-btn pending nd-collab-done" type="button" ${r?'':'disabled title="Save payment first"'}>Payment — DONE</button>`}</td>`:'<td>View only</td>'}</tr>`;}).join('')||`<tr><td colspan="11" class="helper">No collaboration staff for this month.</td></tr>`}</tbody><tfoot><tr class="nd-collab-summary-values"><th scope="row" colspan="7">TOTAL</th><td><span class="nd-collab-method-label">Cash</span>${fmt(totals.Cash)}</td><td><span class="nd-collab-method-label">Bank Transfer</span>${fmt(totals['Bank Transfer'])}</td><td><span class="nd-collab-method-label">TNG</span>${fmt(totals.TNG)}</td><td><span class="nd-collab-method-label">Total</span><strong>${fmt(total)}</strong></td></tr></tfoot></table></div><div class="nd-collab-payment-grand-total" style="margin-top:12px;padding:14px;border-top:2px solid #333;display:flex;justify-content:space-between;gap:12px;font-weight:900"><span>TOTAL PAYMENT</span><strong class="nd-collab-total-amount">${fmt(total)}</strong></div><div class="helper" id="ndCollabStatus"></div>`;
+<div class="salary-table-wrap"><table class="salary-table compact"><thead><tr><th>Full Name</th><th>Commission A</th><th>Commission B</th><th>Customer Referral</th><th>Staff Referral</th><th>Bonus</th><th>Total Commission</th><th>Amount</th><th>Payment Method</th><th>Status</th><th>${admin()?'Action':'Total'}</th></tr></thead><tbody>${mapped.map(({employee:e,record:r,comm:c})=>{const done=!!r?.payment_done;const method=r?.payment_method||e.payment_method||'transfer';return `<tr data-collab-id="${Number(e.id)}"><td><strong>${escapeHTML(e.nickname||e.name)}</strong></td>${['commission_a','commission_b','customer_referral','staff_referral','reward'].map(f=>`<td>${admin()&&!done?`<input class="nd-collab-commission" data-comm-field="${f}" type="number" min="0" step="0.01" value="${Number(c[f]||0).toFixed(2)}"/>`:fmt(c[f])}</td>`).join('')}<td class="nd-collab-commission-total">${fmt(['commission_a','commission_b','customer_referral','staff_referral','reward'].reduce((sum,f)=>sum+Number(c[f]||0),0))}</td><td>${admin()&&!done?`<input class="nd-collab-amount" type="number" min="0" step="0.01" value="${r?.amount??''}" placeholder="Amount"/>`:fmt(r?.amount)}</td><td>${admin()&&!done?`<select class="nd-collab-method"><option value="Cash" ${/cash/i.test(method)?'selected':''}>Cash</option><option value="Bank Transfer" ${!/cash|tng/i.test(method)?'selected':''}>Bank Transfer</option><option value="TNG" ${/tng/i.test(method)?'selected':''}>TNG</option></select>`:escapeHTML(method)}</td><td>${done?'<span class="confirmed-pill">Payment DONE ✓</span>':'Pending'}</td>${admin()?`<td>${done?'<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>':`<button class="btn nd-collab-commission-save" type="button">Save Commission</button> <button class="btn nd-collab-save" type="button">Save Payment</button> <button class="btn payment-done-btn pending nd-collab-done" type="button" ${r?'':'disabled title="Save payment first"'}>Payment — DONE</button>`}</td>`:'<td>View only</td>'}</tr>`;}).join('')||`<tr><td colspan="11" class="helper">No collaboration staff for this month.</td></tr>`}</tbody></table></div><div class="helper" id="ndCollabStatus"></div>`;
 }
 async function save(tr,markDone){if(busy||!admin()||!db())return;const id=Number(tr.dataset.collabId),e=[...collaborationEmployees,...(typeof salaryEmployees!=='undefined'?salaryEmployees:[])].find(x=>Number(x.id)===id);if(!e||String(e.outlet||'').trim().toLowerCase()!=='collaboration')return;const existing=rows.find(r=>Number(r.employee_id)===id);if(existing?.payment_done)return;const amount=markDone?Number(existing?.amount):Number(tr.querySelector('.nd-collab-amount')?.value);if(markDone&&(!existing||existing.amount==null||!existing.payment_method)){alert('Save a valid payment before marking Payment DONE.');return;}if(!Number.isFinite(amount)||amount<0||(!markDone&&tr.querySelector('.nd-collab-amount')?.value==='')){alert('Enter a valid payment amount.');return;}if(markDone&&!confirm('Confirm Payment DONE? This payment will be permanently locked.'))return;const method=markDone?existing?.payment_method:tr.querySelector('.nd-collab-method')?.value;if(!['Cash','Bank Transfer','TNG'].includes(method)){alert('Select a valid payment method.');return;}busy=true;const actionButtons=Array.from(tr.querySelectorAll('.nd-collab-save,.nd-collab-done'));actionButtons.forEach(b=>b.disabled=true);const status=document.getElementById('ndCollabStatus');if(status)status.textContent='Saving payment...';try{if(!markDone){
   const fields={};for(const inp of tr.querySelectorAll('[data-comm-field]')){
@@ -32485,6 +32522,33 @@ async function save(tr,markDone){if(busy||!admin()||!db())return;const id=Number
   if(commSave.error)throw commSave.error;
 }
 const payload={employee_id:id,salary_month:month()+'-01',amount,payment_method:method,payment_done:!!markDone};const res=await db().from('nd_collaboration_payments').upsert(payload,{onConflict:'employee_id,salary_month'});if(res.error)throw res.error;await load(true);}catch(err){alert('Save failed: '+(err.message||err));}finally{busy=false;actionButtons.forEach(b=>{if(b.isConnected)b.disabled=false;});const currentStatus=document.getElementById('ndCollabStatus');if(currentStatus&&currentStatus.textContent==='Saving payment...')currentStatus.textContent='';}}
+async function saveCommissionOnly(tr){
+ if(busy||!admin()||!db())return;
+ const id=Number(tr.dataset.collabId);
+ const existing=rows.find(r=>Number(r.employee_id)===id);
+ if(existing?.payment_done){alert('Payment DONE is locked.');return;}
+ const fields={};
+ for(const inp of tr.querySelectorAll('[data-comm-field]')){
+  const value=Number(inp.value);
+  if(!Number.isFinite(value)||value<0){alert('Enter valid commission amounts.');return;}
+  fields[inp.dataset.commField]=value;
+ }
+ const btn=tr.querySelector('.nd-collab-commission-save');
+ busy=true;if(btn)btn.disabled=true;
+ try{
+  const res=await db().from('employee_salary_monthly').upsert(
+   {employee_id:id,salary_month:month()+'-01',...fields},
+   {onConflict:'employee_id,salary_month'}
+  );
+  if(res.error)throw res.error;
+  await load(true);
+ }catch(err){alert('Cannot save commission: '+(err?.message||err));}
+ finally{busy=false;if(btn&&btn.isConnected)btn.disabled=false;}
+}
+document.addEventListener('click',e=>{
+ const btn=e.target.closest('.nd-collab-commission-save');
+ if(btn){const tr=btn.closest('tr[data-collab-id]');if(tr)saveCommissionOnly(tr);}
+});
 document.addEventListener('input',e=>{if(!e.target.matches('.nd-collab-commission'))return;const tr=e.target.closest('tr[data-collab-id]');if(!tr)return;const total=[...tr.querySelectorAll('.nd-collab-commission')].reduce((sum,x)=>sum+(Number(x.value)||0),0);const cell=tr.querySelector('.nd-collab-commission-total');if(cell)cell.textContent=fmt(total);});
 document.addEventListener('click',e=>{const btn=e.target.closest('.nd-collab-save,.nd-collab-done');if(!btn)return;const tr=btn.closest('tr[data-collab-id]');if(tr)save(tr,btn.classList.contains('nd-collab-done'));});
 window.ndCollabRender=function(){const el=box();if(!el)return;const key=month();if(key!==lastKey){show('Loading collaboration payments...');if(loadingKey!==key)load();}else draw();};
