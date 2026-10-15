@@ -6655,6 +6655,7 @@ return `<div class="history-date-card">
     renderAll();
     $("syncState").textContent="已保存到云端 ✓";
     $("syncState").className="ok";
+    window.dispatchEvent(new Event("nd-petty-topup-saved"));
   }
   let dailyDirty=false;
   function setDailyDirty(){
@@ -32267,7 +32268,7 @@ const page=$('salaryPage');if(page){const observer=new MutationObserver(()=>{if(
 <div id="ndPettyGlobalAck" role="dialog" aria-modal="true" aria-labelledby="ndPettyGlobalAckTitle">
  <div class="nd-ga-panel">
   <div class="nd-ga-title" id="ndPettyGlobalAckTitle">Petty Cash Top Up Notice</div>
-  <div class="nd-ga-sub">Today: <span id="ndGaDate"></span> · All branches</div>
+  <div class="nd-ga-sub">Date: <span id="ndGaDate"></span> · All branches</div>
   <div class="nd-ga-row"><span>Eco Botanic</span><strong id="ndGaEco">RM 0.00</strong></div>
   <div class="nd-ga-row"><span>Nusa Bestari</span><strong id="ndGaNusa">RM 0.00</strong></div>
   <div class="nd-ga-total"><span>Total Petty Cash In</span><span id="ndGaTotal">RM 0.00</span></div>
@@ -32303,8 +32304,9 @@ const page=$('salaryPage');if(page){const observer=new MutationObserver(()=>{if(
      const nusa=Number(rows.find(x=>x.branch==='Nusa Bestari')?.amount||0);
      const day=rows[0]?.day;
      if(!day||eco+nusa<=0){close();return;}
-     // Snapshot signature changes if either branch's amount changes.
-     const signature=String(day)+'|'+eco.toFixed(2)+'|'+nusa.toFixed(2);
+     // Snapshot signature changes when top-up entry amounts or identities change.
+     const version=rows.find(x=>x.branch==='Eco Botanic')?.version||rows.find(x=>x.branch==='Nusa Bestari')?.version||'';
+     const signature=String(day)+'|'+version;
      const ack=await db.from('nd_petty_topup_ack').select('signature').eq('user_id',userId).eq('signature',signature).maybeSingle();
      if(ack.error){console.warn('Petty acknowledgement lookup:',ack.error.message);return;}
      if(ack.data)return;
@@ -32332,7 +32334,7 @@ const page=$('salaryPage');if(page){const observer=new MutationObserver(()=>{if(
  setInterval(check,20000);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)check();});
  window.addEventListener('focus',check);
- window.addEventListener('nd-petty-topup-saved',check);
+ window.addEventListener('nd-petty-topup-saved',()=>setTimeout(check,350));
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(check,2200));
  else setTimeout(check,2200);
 })();
