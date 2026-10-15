@@ -6236,6 +6236,12 @@ return `<div class="history-date-card">
     </div>`;
 
     bindPettyReceiptButtons(root,receiptItems);
+    root.querySelectorAll('[data-nd-petty-history]').forEach(btn=>btn.addEventListener('click',async()=>{
+      if(!confirm('Confirm '+(btn.dataset.ndPettyHistory==='accepted'?'Correct':'Error')+' for this expense?'))return;
+      btn.disabled=true;
+      try{await ndSetPettyHistoryVerification(btn.dataset.row,btn.dataset.index,btn.dataset.ndPettyHistory)}
+      catch(err){alert('Verification failed: '+(err?.message||err));btn.disabled=false}
+    }));
   }
 
   async function renderHistoryAccessManager(){
@@ -7117,13 +7123,38 @@ return `<div class="history-date-card">
     }
   }
 
+  function ndPettyReviewed(entry){
+    return Boolean(entry?.receipt?.processed_at) || ['accepted','adjust'].includes(String(entry?.verification_status||'').toLowerCase());
+  }
+  async function ndSetPettyHistoryVerification(rowId,entryIndex,status){
+    if(!isSystemAdmin)throw new Error('Management verification only.');
+    const id=Number(rowId),idx=Number(entryIndex);
+    const {data:row,error:readError}=await db.from('daily_settlements').select('id,petty_entries').eq('id',id).maybeSingle();
+    if(readError||!row)throw new Error(readError?.message||'History record not found.');
+    const entries=Array.isArray(row.petty_entries)?structuredClone(row.petty_entries):[];
+    if(!entries[idx]||entries[idx].type!=='out')throw new Error('Expense history entry not found.');
+    entries[idx].verification_status=status;
+    entries[idx].verified_by=currentUserEmail;
+    entries[idx].verified_at=new Date().toISOString();
+    const {data:updated,error}=await db.from('daily_settlements').update({petty_entries:entries}).eq('id',id).select('id,petty_entries').maybeSingle();
+    if(error||!updated)throw new Error(error?.message||'History verification could not be saved.');
+    if(updated.petty_entries?.[idx]?.verification_status!==status)throw new Error('History verification did not persist.');
+    await fetchRows();
+    renderPettyCashMonthlyHistory();
+    try{renderCombinedHistory()}catch(_){}
+    ndVerifyQueue=ndVerifyBuildQueue();ndVerifyRender();
+    return true;
+  }
   function pettyReceiptHistoryCell(entry,rowId,entryIndex){
     const receipt=entry?.receipt;
+    const review=String(entry?.verification_status||'').toLowerCase();
+    const verified=ndPettyReviewed(entry);
+    const verificationHtml=String(entry?.type)==='out' ? `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:5px"><strong style="color:${review==='adjust'?'#b42318':verified?'#1f7a48':'#b7791f'}">${review==='adjust'?'Error':verified?'Correct':'Pending'}</strong>${isSystemAdmin?`<button class="mini correct" type="button" data-nd-petty-history="accepted" data-row="${Number(rowId)}" data-index="${Number(entryIndex)}">Correct</button><button class="mini error" type="button" data-nd-petty-history="adjust" data-row="${Number(rowId)}" data-index="${Number(entryIndex)}">Error</button>`:''}</div>` : '';
     if(entry?.receipt_expired_at && !receipt){
-      return '<span class="helper">Expired / Deleted</span>';
+      return '<span class="helper">Expired / Deleted</span>'+verificationHtml;
     }
-    if(!receipt?.path) return '<span class="helper">—</span>';
-    if(receiptIsExpired(receipt)) return '<span class="helper">Pending Auto Delete</span>';
+    if(!receipt?.path) return '<span class="helper">No Receipt</span>'+verificationHtml;
+    if(receiptIsExpired(receipt)) return '<span class="helper">Pending Auto Delete</span>'+verificationHtml;
 
     const name=escHtml(receipt.name||"Receipt");
     const processed=Boolean(receipt.processed_at);
@@ -7132,6 +7163,7 @@ return `<div class="history-date-card">
       : `<span class="helper" style="font-weight:800;color:#b7791f">Pending</span>`;
 
     return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      ${verificationHtml}
       ${status}
       <span class="helper" style="max-width:180px;overflow:hidden;text-overflow:ellipsis">${name}</span>
       <button type="button" class="mini" data-petty-receipt-view="${escHtml(receipt.path)}">View</button>
@@ -8030,8 +8062,10 @@ return `<div class="history-date-card">
         if(amount>0 && !['accepted','adjust'].includes(String(status).toLowerCase()))q.push({kind:'payment',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|'+field,row:r,field,label,amount,status});
       }
       (Array.isArray(r.petty_entries)?r.petty_entries:[]).forEach((e,i)=>{
+        // Petty Cash Expense reminders start on 14 Oct 2026; earlier history stays untouched.
+        if(String(r.settlement_date||'')<'2026-10-14')return;
         if(e?.type!=='out'||Number(e.amount||0)<=0)return;
-        if(!e.receipt?.processed_at)q.push({kind:'petty',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|petty|'+i,row:r,entry:e,index:i,label:'Petty Cash Expense',amount:Number(e.amount||0),status:'pending'});
+        if(!ndPettyReviewed(e))q.push({kind:'petty',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|petty|'+i,row:r,entry:e,index:i,label:'Petty Cash Expense',amount:Number(e.amount||0),status:'pending'});
       });
     }
     for(const r of cashRemittances||[]){
@@ -8057,15 +8091,12 @@ return `<div class="history-date-card">
         else if(item.kind==='petty')await openPettyReceipt(item.entry.receipt);
         return;
       }
-      if(!confirm('Confirm '+(action==='accepted'?'Correct':action==='adjust'?'Error':'Processed')+' for '+item.label+'?'))return;
+      if(!confirm('Confirm '+(action==='accepted'?'Correct':'Error')+' for '+item.label+'?'))return;
       ndVerifyBusy=true;btn.disabled=true;
       try{
         if(item.kind==='payment')await setPaymentStatus(item.row.id,item.field,action);
         else if(item.kind==='remittance')await setCashRemittanceStatus(item.row.id,action==='accepted'?'verified':'rejected');
-        else if(item.kind==='petty'){
-          const ok=await markPettyReceiptProcessed(item.row.id,item.index);
-          if(!ok)throw new Error('Receipt processing could not be saved in History.');
-        }
+        else if(item.kind==='petty')await ndSetPettyHistoryVerification(item.row.id,item.index,action);
         await fetchRows();renderCombinedHistory();ndVerifyQueue=ndVerifyBuildQueue();ndVerifyRender();
       }catch(err){alert('Verification failed: '+(err?.message||err));}
       finally{ndVerifyBusy=false;btn.disabled=false;}
@@ -8088,7 +8119,7 @@ return `<div class="history-date-card">
     m.querySelector('#ndVerifyList').innerHTML=slice.map((x,i)=>{
       const idx=ndVerifyPage*6+i,day=x.row.settlement_date||x.row.remittance_date;
       const receipt=x.kind==='petty'||x.kind==='remittance';
-      const actions=x.kind==='petty' ? '<button class="mini correct" data-nd-action="processed" data-index="'+idx+'">Mark Processed</button>' : '<button class="mini correct" data-nd-action="accepted" data-index="'+idx+'">Correct</button><button class="mini error" data-nd-action="adjust" data-index="'+idx+'">Error</button>';
+      const actions='<button class="mini correct" data-nd-action="accepted" data-index="'+idx+'">Correct</button><button class="mini error" data-nd-action="adjust" data-index="'+idx+'">Error</button>';
       return '<div style="border:1px solid #e6e3da;border-radius:12px;padding:12px;margin-bottom:8px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>'+escHtml(day)+' · '+escHtml(x.label)+'</strong><strong>'+money(x.amount)+'</strong></div><div class="helper">'+escHtml(x.row.branch)+' · Separate verification for this date</div><div class="inline-actions" style="margin-top:8px">'+(receipt?'<button class="mini" data-nd-action="receipt" data-index="'+idx+'">View Receipt</button>':'')+actions+'</div></div>';
     }).join('')||'<div class="helper">All eligible records verified.</div>';
     if(!ndVerifyQueue.length)m.classList.remove('open');
