@@ -31922,6 +31922,28 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
 @media(max-width:600px){#ndAdvanceModal .nd-dialog>div:first-child{margin:-15px -15px 17px;padding:16px}#ndAdvanceModal .nd-dialog>div:first-child h2{font-size:16px}}
 </style>
 
+<style id="nd-announcements-click-repair-20261016">
+body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;position:relative!important;z-index:5!important}
+#mainSidebar #sidebarAnnouncements{pointer-events:auto!important;cursor:pointer!important;position:relative;z-index:2}
+</style>
+<script id="nd-announcements-click-repair-20261016">
+(function(){
+  'use strict';
+  function openAnnouncements(e){
+    const button=e.target && e.target.closest && e.target.closest('#sidebarAnnouncements');
+    if(!button)return;
+    // Intercept before legacy sidebar navigation listeners can switch pages back.
+    if(typeof window.ndOpenAnnouncements!=='function')return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    window.ndOpenAnnouncements();
+  }
+  document.addEventListener('click',openAnnouncements,true);
+  document.addEventListener('keydown',function(e){
+    if((e.key==='Enter'||e.key===' ') && document.activeElement?.id==='sidebarAnnouncements')openAnnouncements(e);
+  },true);
+})();
+</script>
 </body></html>`;
   w.document.open();w.document.write(html);w.document.close();
  }
@@ -32205,6 +32227,7 @@ function render(){
 async function load(){if(loading)return;if(!db()){notice('Announcements connection is unavailable.');return;}if(!userId)return;loading=true;try{const [a,b]=await Promise.all([db().from('nd_announcements').select('id,category,title,content,created_at,updated_at,active').eq('active',true).order('updated_at',{ascending:false}).limit(1000),db().from('nd_announcement_reads').select('announcement_id,read_at').eq('user_id',userId)]);if(a.error)throw a.error;if(b.error)throw b.error;items=a.data||[];reads=new Map((b.data||[]).map(r=>[r.announcement_id,r.read_at]));notice('');render();}catch(e){notice('Announcements unavailable: '+(e.message||e));}finally{loading=false;}}
 async function auth(){if(!db()){notice('Announcements connection is unavailable.');return;}const {data,error}=await db().auth.getUser();if(error||!data?.user){notice("Please sign in to view announcements.");return;}userId=data.user.id;admin=['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(data.user.email||'').toLowerCase());$('ndAnnEditor').hidden=!admin;if(document.body.dataset.ndVisiblePage==='announcements')await load();}
 function show(){window.activeMainPage='announcements';document.body.dataset.ndVisiblePage='announcements';$('appView')?.classList.add('hidden');$('ndAnnouncementsPage').style.display='block';document.querySelectorAll('.sidebar-btn.active').forEach(x=>x.classList.remove('active'));$('sidebarAnnouncements')?.classList.add('active');$('mainSidebar')?.classList.remove('open');if(!userId)auth();else load();}
+window.ndOpenAnnouncements=show;
 function close(){ $('ndAnnouncementsPage').style.display='none';$('sidebarAnnouncements')?.classList.remove('active');if(typeof showDaily==='function')showDaily();document.body.dataset.ndVisiblePage='daily';}
 async function save(){if(!admin)return;const title=$('ndAnnTitle').value.trim(),content=$('ndAnnContent').value.trim(),category=$('ndAnnCategory').value;if(!title||!content)return notice('Title and Content are required.');const payload={title,content,category};const q=editing?db().from('nd_announcements').update(payload).eq('id',editing):db().from('nd_announcements').insert(payload);const {error}=await q;if(error)return notice(error.message);editing=null;$('ndAnnTitle').value='';$('ndAnnContent').value='';$('ndAnnEditHeading').textContent='New Announcement';await load();}
 async function markRead(id){const r=items.find(x=>String(x.id)===String(id));if(!r||!userId)return;const {error}=await db().from('nd_announcement_reads').upsert({announcement_id:id,user_id:userId,read_at:new Date().toISOString()},{onConflict:'announcement_id,user_id'});if(error)return notice(error.message);reads.set(id,new Date().toISOString());render();}
