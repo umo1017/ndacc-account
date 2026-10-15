@@ -4987,9 +4987,9 @@ body[data-nd-visible-page="announcements"] #socialPage{display:none!important}
     if(errorMessage){root.innerHTML=`<div class="bad" style="padding:10px">Unable to load records: ${escHtml(errorMessage)}</div>`;return;}
     const email=String(currentUserEmail||"").trim().toLowerCase();
     if(!email){root.innerHTML='<div class="helper">Please sign in to view your submissions.</div>';return;}
-    const rows=(cashRemittances||[]).filter(x=>String(x.branch||"").trim()===String(currentBranch||"").trim())
+    const rows=(cashRemittances||[]).filter(x=>String(x.branch||"").trim()===String(currentBranch||"").trim() && String(x.remittance_date||"").slice(0,10)===today())
       .sort((a,b)=>String(b.submitted_at||b.remittance_date||"").localeCompare(String(a.submitted_at||a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
-    if(!rows.length){root.innerHTML='<div class="helper" style="padding:10px">No submissions found for this branch.</div>';return;}
+    if(!rows.length){root.innerHTML='<div class="helper" style="padding:10px">No submissions for this branch today.</div>';return;}
     root.innerHTML=`<table style="min-width:620px"><thead><tr><th>Date</th><th>Branch</th><th>Amount</th><th>Receipt</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows.map(x=>{
       const status=String(x.status||"pending").toLowerCase();
       return `<tr><td>${escHtml(x.remittance_date||"")}</td><td>${escHtml(x.branch||"")}</td><td><strong>${money(x.amount)}</strong></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Submitted · Pending"}</span></td><td>${["pending","rejected"].includes(status) && String(x.submitted_by||"").trim().toLowerCase()===email?`<button class="mini error" type="button" data-my-remittance-delete="${Number(x.id)}">Delete</button>`:"—"}</td></tr>`;
