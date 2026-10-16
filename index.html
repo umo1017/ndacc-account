@@ -4452,7 +4452,15 @@ body[data-nd-visible-page="staff"] #ndStaffManagementActions button{display:inli
 <style id="nd-staff-final-visibility-20261016">body[data-nd-visible-page="staff"] #ndStaffManagementPage{display:block!important;visibility:visible!important;pointer-events:auto!important;opacity:1!important;min-height:220px!important}
 body[data-nd-visible-page="staff"] #ndStaffManagementActions{display:flex!important;gap:12px!important;flex-wrap:wrap!important}
 body[data-nd-visible-page="staff"] #ndStaffManagementActions button{display:inline-flex!important;cursor:pointer!important;pointer-events:auto!important}
-#sidebarStaff{cursor:pointer!important;pointer-events:auto!important}</style></head>
+#sidebarStaff{cursor:pointer!important;pointer-events:auto!important}</style><script id="nd-payslip-full-name-global-fix-20261016">
+/* Shared employee-name helper for payslip creation and PDF downloads.
+   Earlier helper was scoped inside a different payroll block. */
+window.ndEmployeeFullName = function(employee){
+  const value = String((employee && (employee.full_name || employee.name || employee.employee_name)) || 'Staff');
+  return value.replace(/\s+/g, ' ').trim() || 'Staff';
+};
+</script>
+</head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
 <div class="sidebar-brand">Nature's Dao</div>
@@ -4465,6 +4473,7 @@ body[data-nd-visible-page="staff"] #ndStaffManagementActions button{display:inli
 <button class="sidebar-btn" id="sidebarAiReceipt" style="display:none" type="button">Expenses</button>
 <button class="sidebar-btn" id="sidebarSalary" type="button">Salary</button>
 <button class="sidebar-btn" id="sidebarStaff" onclick="return window.ndOpenStaffManagement ? window.ndOpenStaffManagement(event) : false;" type="button">Staff</button>
+<button class="sidebar-btn" id="sidebarForms" type="button">Form</button>
 <button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
 <button class="sidebar-btn" id="sidebarSocial" style="display:none" type="button">Social Media</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Setting</button>
@@ -12033,7 +12042,7 @@ async function loadSalaryBranches(){
 }
 
 function populateOutletSelects(){
-  const names=[...new Set([...accessibleSalaryOutlets,"Collaboration"])].sort((a,b)=>{
+  const names=[...new Set([...accessibleSalaryOutlets,...(ndCanViewCollaboration()?["Collaboration"]:[])])].filter(x=>x!=="Collaboration"||ndCanViewCollaboration()).sort((a,b)=>{
     if(a==="Collaboration") return -1;
     if(b==="Collaboration") return 1;
     if(a==="Global") return 1;
@@ -13448,6 +13457,7 @@ function renderSalary(){
         ...salaryEmployees.map(e=>String(e.outlet||"")).filter(Boolean)
       ])]
     : [...accessibleSalaryOutlets];
+  if(!ndCanViewCollaboration()){const i=visibleOutlets.indexOf("Collaboration");if(i>=0)visibleOutlets.splice(i,1);}
 
   const branchNames=visibleOutlets
     .filter((x,i,a)=>x && a.indexOf(x)===i)
@@ -14945,7 +14955,11 @@ async function inlineEditEmployeeField(empId,fieldId){
   }catch(_){}
 }
 
+function ndCanViewCollaboration(){
+  return String(currentSalaryUserEmail||'').trim().toLowerCase()==='umo1017@gmail.com';
+}
 function canEditStaffRecord(e){
+  if(String(e?.outlet||'').trim()==='Collaboration' && !ndCanViewCollaboration()) return false;
   if(isGlobalAdmin) return true;
   if(!staffEditManager || !e) return false;
   const outlet=String(e.outlet||"").trim();
@@ -15052,7 +15066,7 @@ function renderStaffList(){
   const staffOutlets=[...new Set([
     ...(isGlobalAdmin ? salaryBranches.map(b=>b.name) : (accessibleSalaryOutlets||[]).filter(x=>x && x!=="Global")),
     ...(isGlobalAdmin || (accessibleSalaryOutlets||[]).includes("Collaboration") ? ["Collaboration"] : [])
-  ])].filter(x=>x && x!=="Global" && (isGlobalAdmin || (accessibleSalaryOutlets||[]).includes(x))).sort((a,b)=>
+  ])].filter(x=>x && x!=="Global" && (x!=="Collaboration" || ndCanViewCollaboration()) && (isGlobalAdmin || (accessibleSalaryOutlets||[]).includes(x))).sort((a,b)=>
     a==="Collaboration"?-1:b==="Collaboration"?1:String(a).localeCompare(String(b))
   );
 
@@ -16017,6 +16031,7 @@ function getVisibleSalaryBranchPaymentRows(){
         ...salaryEmployees.map(e=>String(e.outlet||"")).filter(Boolean)
       ])]
     : [...accessibleSalaryOutlets];
+  if(!ndCanViewCollaboration()){const i=visibleOutlets.indexOf("Collaboration");if(i>=0)visibleOutlets.splice(i,1);}
 
   return visibleOutlets.map(branch=>{
     const emps=active.filter(e=>e.outlet===branch);
@@ -31902,6 +31917,37 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
 
 
 
+
+<style id="nd-staff-records-inline-page-20261016">
+/* Staff records are an in-page section, not a popup. */
+body[data-nd-visible-page="staff"] #ndStaffManagementPage{display:block!important;max-width:1500px;margin:0 auto;padding:22px 20px 45px;min-height:100vh;box-sizing:border-box}
+#ndStaffManagementPage #staffListModal{display:block!important;position:static!important;inset:auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;background:transparent!important;padding:0!important;overflow:visible!important;z-index:auto!important;pointer-events:auto!important}
+#ndStaffManagementPage #staffListModal .salary-dialog{width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;margin:0!important;box-shadow:none!important;border:1px solid var(--line);border-radius:16px;background:white}
+#ndStaffManagementPage #closeStaffListModal{display:none!important}
+#ndStaffManagementPage #staffListContent{min-height:100px}
+#ndStaffManagementPage .salary-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media(max-width:760px){body[data-nd-visible-page="staff"] #ndStaffManagementPage{padding:70px 10px 28px}#ndStaffManagementPage #staffListModal .salary-dialog{padding:12px!important}}
+</style>
+<script id="nd-staff-records-inline-page-script-20261016">
+(function(){
+ function inlineRecords(){
+  var page=document.getElementById('ndStaffManagementPage');
+  var modal=document.getElementById('staffListModal');
+  if(!page||!modal)return;
+  if(modal.parentElement!==page)page.appendChild(modal);
+  modal.classList.add('open');
+  modal.setAttribute('aria-label','Staff Records');
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inlineRecords);
+ else inlineRecords();
+ window.addEventListener('click',function(e){
+  if(e.target.closest&&e.target.closest('#sidebarStaff')){
+   inlineRecords();
+   setTimeout(inlineRecords,0);
+  }
+ },true);
+})();
+</script>
 </body></html>`;
   w.document.open();w.document.write(html);w.document.close();
  }
@@ -32218,6 +32264,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #ndStaffPerformancePanel .sp-status{font-size:13px;min-height:20px;margin:8px 0}
 @media(max-width:600px){#ndStaffPerformancePanel .sp-card{padding:11px}#ndStaffPerformancePanel .sp-choices{grid-template-columns:1fr 1fr}#ndStaffPerformancePanel .sp-choice{font-size:12px;padding:7px}}
 </style>
+<style id="nd-records-date-filters-20261016">#ndStaffPerformancePanel #spFrom,#ndStaffPerformancePanel #spTo,#ndStaffPerformancePanel #spDate{min-width:145px;min-height:44px;color-scheme:light}#ndStaffPerformancePanel .sp-grid{align-items:end}#ndStaffPerformancePanel .sp-grid label{margin-bottom:6px}</style>
 <script id="nd-staff-performance-v1">
 (function(){'use strict';
 const $=id=>document.getElementById(id), root=$('ndStaffPerformancePanel'), tab=$('ndStaffPerformanceBtn');if(!root||!tab)return;
@@ -32231,14 +32278,14 @@ async function fetchPerformanceStaff(){const client=db();if(!client)return;try{c
 const currentEmail=()=>{try{return String(currentSalaryUserEmail||'').trim().toLowerCase()}catch(_){return ''}};
 const isAdmin=()=>['umo1017@gmail.com','mars83002566@gmail.com'].includes(currentEmail());
 function staffOptions(branch){return staffList().filter(e=>!branch||String(e.outlet||'').trim().toLowerCase()===branch.toLowerCase()).map(e=>`<option value="${safe(e.id)}">${safe(e.name||e.full_name||e.id)}</option>`).join('')}
-function html(){root.innerHTML=`<div class="sp-card"><div class="sp-head"><h3>Staff Performance</h3><button class="sp-btn" id="spReload" type="button">Refresh</button></div><div class="sp-grid"><div><label>Branch</label><select id="spBranch"><option>Eco Botanic</option><option>Nusa Bestari</option></select></div><div><label>Date</label><input type="date" id="spDate" value="${localToday()}"></div><div><label>Staff</label><select id="spStaff"><option value="">Select Staff</option></select></div><div><label>Customer Tel (Optional)</label><input id="spCustomer" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 0123456789" maxlength="30"></div></div><div class="sp-type"><button type="button" data-sp-type="complaint" class="active">Complaint / 投诉</button><button type="button" data-sp-type="compliment">Compliment / 好评</button></div><div class="sp-choices" id="spChoices"></div><button class="sp-btn" type="button" id="spSave">Save Record</button><div class="sp-status" id="spStatus" role="status"></div></div><div class="sp-card"><h3>Staff Summary</h3><div class="sp-grid"><div><label>Period</label><select id="spPeriod"><option value="all">All Time</option><option value="month">Selected Month</option></select></div><div><label>Staff Filter</label><select id="spFilterStaff"><option value="">All Staff</option></select></div></div><div id="spSummary"></div></div><div class="sp-card"><h3>Performance History</h3><div class="sp-grid"><div><label>Type</label><select id="spFilterType"><option value="">All Types</option><option value="complaint">Complaint</option><option value="compliment">Compliment</option></select></div></div><div id="spHistory"></div></div>`;
-$('spBranch').addEventListener('change',()=>{fillStaff();render()});$('spReload').addEventListener('click',async()=>{await fetchPerformanceStaff();await load()});$('spSave').addEventListener('click',save);$('spPeriod').addEventListener('change',render);$('spFilterStaff').addEventListener('change',render);$('spFilterType').addEventListener('change',render);$('spDate').addEventListener('change',render);
+function html(){root.innerHTML=`<div class="sp-card"><div class="sp-head"><h3>Staff Performance</h3><button class="sp-btn" id="spReload" type="button">Refresh</button></div><div class="sp-grid"><div><label>Branch</label><select id="spBranch"><option>Eco Botanic</option><option>Nusa Bestari</option></select></div><div><label>Date</label><input type="date" id="spDate" value="${localToday()}"></div><div><label>Staff</label><select id="spStaff"><option value="">Select Staff</option></select></div><div><label>Customer Tel (Optional)</label><input id="spCustomer" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 0123456789" maxlength="30"></div></div><div class="sp-type"><button type="button" data-sp-type="complaint" class="active">Complaint / 投诉</button><button type="button" data-sp-type="compliment">Compliment / 好评</button></div><div class="sp-choices" id="spChoices"></div><button class="sp-btn" type="button" id="spSave">Save Record</button><div class="sp-status" id="spStatus" role="status"></div></div><div class="sp-card"><h3>Staff Summary</h3><div class="sp-grid"><div><label>Period</label><select id="spPeriod"><option value="all">All Time</option><option value="month">Selected Month</option></select></div><div><label>History Date From</label><input type="date" id="spFrom"></div><div><label>History Date To</label><input type="date" id="spTo"></div><div><label>Staff Filter</label><select id="spFilterStaff"><option value="">All Staff</option></select></div></div><div id="spSummary"></div></div><div class="sp-card"><h3>Performance History</h3><div class="helper">Filter records by date range, branch, staff and type. Empty dates show all dates.</div><div class="sp-grid"><div><label>Type</label><select id="spFilterType"><option value="">All Types</option><option value="complaint">Complaint</option><option value="compliment">Compliment</option></select></div></div><div id="spHistory"></div></div>`;
+$('spBranch').addEventListener('change',()=>{fillStaff();render()});$('spReload').addEventListener('click',async()=>{await fetchPerformanceStaff();await load()});$('spSave').addEventListener('click',save);$('spPeriod').addEventListener('change',render);$('spFilterStaff').addEventListener('change',render);$('spFilterType').addEventListener('change',render);$('spFrom').addEventListener('change',render);$('spTo').addEventListener('change',render);$('spDate').addEventListener('change',render);
 root.querySelectorAll('[data-sp-type]').forEach(b=>b.addEventListener('click',()=>{type=b.dataset.spType;root.querySelectorAll('[data-sp-type]').forEach(x=>x.classList.toggle('active',x===b));choices()}));fillStaff();choices();}
 function fillStaff(){const branch=$('spBranch').value,old=$('spStaff').value;$('spStaff').innerHTML='<option value="">Select Staff</option>'+staffOptions(branch);if([...$('spStaff').options].some(o=>o.value===old))$('spStaff').value=old;
-const selected=$('spFilterStaff').value;$('spFilterStaff').innerHTML='<option value="">All Staff</option>'+staffList().map(e=>`<option value="${safe(e.id)}">${safe(e.name||e.id)}</option>`).join('');$('spFilterStaff').value=selected;}
+const selected=$('spFilterStaff').value;$('spFilterStaff').innerHTML='<option value="">All Staff</option>'+staffList().filter(e=>String(e.outlet||'').trim().toLowerCase()===branch.toLowerCase()).map(e=>`<option value="${safe(e.id)}">${safe(e.name||e.id)}</option>`).join('');if([...$('spFilterStaff').options].some(o=>o.value===selected))$('spFilterStaff').value=selected;else $('spFilterStaff').value='';}
 function choices(){$('spChoices').innerHTML=defs[type].map(([key,label])=>`<label class="sp-choice"><input type="checkbox" value="${key}"><span>${safe(label)}</span></label>`).join('')}
 function status(message,error=false){const el=$('spStatus');if(el){el.textContent=message;el.style.color=error?'#a52e27':'#17653d'}}
-function visibleRows(){const branch=$('spBranch').value,period=$('spPeriod').value,staff=$('spFilterStaff').value,month=$('spDate').value.slice(0,7),kind=$('spFilterType').value;return records.filter(r=>r.branch===branch&&(!staff||String(r.staff_id)===staff)&&(period==='all'||String(r.feedback_date).slice(0,7)===month)&&(!kind||r.feedback_type===kind))}
+function visibleRows(){const branch=$('spBranch').value,period=$('spPeriod').value,staff=$('spFilterStaff').value,month=$('spDate').value.slice(0,7),kind=$('spFilterType').value,from=$('spFrom').value,to=$('spTo').value;return records.filter(r=>r.branch===branch&&(!staff||String(r.staff_id)===staff)&&(period==='all'||String(r.feedback_date).slice(0,7)===month)&&(!from||String(r.feedback_date)>=from)&&(!to||String(r.feedback_date)<=to)&&(!kind||r.feedback_type===kind))}
 function render(){if(!$('spSummary'))return;const data=visibleRows(),counts=new Map();for(const r of data){const key=String(r.staff_id),v=counts.get(key)||{complaint:0,compliment:0,issues:{}};v[r.feedback_type]++;for(const issue of r.issue_codes||[])v.issues[issue]=(v.issues[issue]||0)+1;counts.set(key,v)}
 const employees=staffList().filter(e=>String(e.outlet||'').trim().toLowerCase()===$('spBranch').value.toLowerCase()&&(!$('spFilterStaff').value||String(e.id)===$('spFilterStaff').value));
 $('spSummary').innerHTML=`<div class="sp-table-wrap"><table><thead><tr><th>Staff</th><th>Complaints</th><th>Compliments</th><th>Issue Breakdown</th></tr></thead><tbody>${employees.map(e=>{const v=counts.get(String(e.id))||{complaint:0,compliment:0,issues:{}};const breakdown=Object.entries(v.issues).map(([k,n])=>`${safe(Object.values(defs).flat().find(a=>a[0]===k)?.[1]||k)}: ${n}`).join(' · ')||'—';return `<tr><td>${safe(e.name||e.id)}</td><td><span class="sp-count sp-bad">${v.complaint}</span></td><td><span class="sp-count sp-good">${v.compliment}</span></td><td>${breakdown}</td></tr>`}).join('')||'<tr><td colspan="4">No staff found.</td></tr>'}</tbody></table></div>`;
@@ -32507,6 +32554,55 @@ body[data-nd-visible-page="orders"] #ndAnnouncementsPage{display:none!important}
       document.getElementById('ndStaffFinancePage')?.classList.remove('nd-open');
     },80);
   });
+})();
+</script>
+<style id="nd-staff-forms-style">
+#ndStaffFormsPage{display:none;margin:20px 24px 30px 215px;padding:24px;background:#fff;border:1px solid #e6e5df;border-radius:18px;min-height:65vh}
+body[data-nd-visible-page="forms"] #ndStaffFormsPage{display:block!important}
+#ndStaffFormsPage .nd-form-tabs{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0}
+#ndStaffFormsPage .nd-form-tabs button{border:1px solid #d9ded9;background:white;border-radius:10px;padding:10px 17px;font-weight:700;cursor:pointer}
+#ndStaffFormsPage .nd-form-tabs button.active{background:#244f3e;color:white}
+#ndStaffFormsPage .nd-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+#ndStaffFormsPage .nd-form-field{display:flex;flex-direction:column;gap:5px}
+#ndStaffFormsPage .nd-form-field label{font-weight:700;color:#38483f}
+#ndStaffFormsPage textarea{width:100%;min-height:90px;border:1px solid #ddd;border-radius:10px;padding:10px;font:inherit}
+#ndStaffFormsPage .nd-form-panel{max-width:1000px}
+#ndStaffFormsPage .nd-form-status{margin:12px 0;color:#36584b;white-space:pre-wrap}
+#ndStaffFormsPage .nd-form-history{overflow-x:auto}
+#ndStaffFormsPage .nd-form-history table{min-width:680px}
+@media(max-width:900px){#ndStaffFormsPage{margin:14px;padding:16px}#ndStaffFormsPage .nd-form-grid{grid-template-columns:1fr}}
+</style>
+<section id="ndStaffFormsPage" aria-label="Staff Forms" hidden>
+<h2>Staff Forms</h2><div class="helper">Interview and Employment Contract Forms</div>
+<div class="nd-form-tabs"><button type="button" data-nd-form-tab="interview">Interview</button><button type="button" data-nd-form-tab="contract">Contract</button><button type="button" data-nd-form-tab="templates">Templates</button><button type="button" data-nd-form-tab="history">History</button></div>
+<div class="nd-form-panel" id="ndStaffFormContent"></div><div class="nd-form-status" id="ndStaffFormStatus" role="status"></div>
+</section>
+<script id="nd-staff-forms-module-20261016">
+(function(){'use strict';
+const $=id=>document.getElementById(id), TABLE='nd_staff_forms', ADMIN='umo1017@gmail.com';
+let tab='interview',userEmail='',db=null,templates={};
+const defaults={interview:[['Candidate Name','text'],['Phone','tel'],['Position Applied','text'],['Preferred Branch','text'],['Interview Date','date'],['Interviewer','text'],['Experience','textarea'],['Availability','text'],['Expected Salary (RM)','number'],['Assessment','textarea'],['Interview Result','select:Pending|Shortlisted|Accepted|Rejected']],contract:[['Employee Name','text'],['IC / Passport','text'],['Position','text'],['Branch','text'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation (Months)','number'],['Notice Period','text'],['Working Hours','text'],['Contract Terms','textarea'],['Employee Acknowledgement','textarea']]};
+function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function status(v){$('ndStaffFormStatus').textContent=v||''}
+function isAdmin(){return userEmail===ADMIN}
+function client(){if(!db){if(window.salaryDb?.from)db=window.salaryDb;else if(window.supabase?.createClient)db=window.supabase.createClient('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');}return db}
+async function identity(){try{const {data}=await client().auth.getUser();userEmail=String(data?.user?.email||'').toLowerCase()}catch(e){userEmail=''}return userEmail}
+function fieldsFor(type){return templates[type]||defaults[type]}
+function inputMarkup(label,type,i){let el;if(type==='textarea')el=`<textarea data-nd-field="${i}" required></textarea>`;else if(type.startsWith('select:'))el=`<select data-nd-field="${i}">${type.slice(7).split('|').map(x=>`<option>${escapeHtml(x)}</option>`).join('')}</select>`;else el=`<input data-nd-field="${i}" type="${escapeHtml(type)}" ${type==='number'?'step="0.01"':''} required>`;return `<div class="nd-form-field"><label>${escapeHtml(label)}</label>${el}</div>`}
+function show(next){if((next==='history'||next==='templates')&&!isAdmin())next='interview';tab=next;status('');document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.ndFormTab===tab);b.style.display=(['history','templates'].includes(b.dataset.ndFormTab)&&!isAdmin())?'none':''});const root=$('ndStaffFormContent');if(!root)return;
+if(tab==='history'){root.innerHTML='<h3>Form History</h3><div class="nd-form-history" id="ndFormHistoryList">Loading...</div>';loadHistory();return}
+if(tab==='templates'){root.innerHTML=`<h3>Form Templates</h3><p class="helper">One field per line: Field Name | text, date, number, tel, textarea, or select:Option1|Option2</p><label>Interview Template</label><textarea id="ndInterviewTemplate" style="min-height:240px"></textarea><label>Contract Template</label><textarea id="ndContractTemplate" style="min-height:280px"></textarea><div style="margin-top:12px"><button class="btn" id="ndSaveTemplates">Save Templates</button></div>`;['interview','contract'].forEach(t=>{$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value=fieldsFor(t).map(f=>f.join(' | ')).join('\n')});$('ndSaveTemplates').onclick=saveTemplates;return}
+const fields=fieldsFor(tab);root.innerHTML=`<h3>${tab==='interview'?'Interview Form':'Employment Contract Form'}</h3><form id="ndStaffEntryForm"><div class="nd-form-grid">${fields.map((f,i)=>inputMarkup(f[0],f[1],i)).join('')}</div><div style="margin-top:16px"><button class="btn" type="submit">Save ${tab==='interview'?'Interview':'Contract'}</button></div></form>`;$('ndStaffEntryForm').onsubmit=saveEntry;
+}
+async function saveEntry(e){e.preventDefault();const button=e.target.querySelector('[type=submit]');button.disabled=true;status('Saving...');try{await identity();if(!userEmail)throw Error('Please sign in again.');const values={};fieldsFor(tab).forEach((f,i)=>{values[f[0]]=e.target.querySelector(`[data-nd-field="${i}"]`)?.value||''});const branch=String(values['Preferred Branch']||values['Branch']||'Eco Botanic').trim();const fullName=String(values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');const formDate=values['Interview Date']||values['Start Date']||new Date().toISOString().slice(0,10);const {error}=await client().from(TABLE).insert({form_type:tab,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'});if(error)throw error;status('Saved successfully.');e.target.reset()}catch(err){status('Unable to save: '+err.message+'\nCheck that the staff forms database table and permissions have been installed.')}finally{button.disabled=false}}
+async function loadTemplates(){try{const {data,error}=await client().from('nd_staff_form_templates').select('form_type,fields').eq('is_active',true);if(error)throw error;(data||[]).forEach(r=>{if(defaults[r.form_type]&&Array.isArray(r.fields))templates[r.form_type]=r.fields})}catch(e){console.warn('[Staff Forms] templates:',e.message)}}
+async function saveTemplates(){if(!isAdmin())return;try{for(const t of ['interview','contract']){const raw=$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value;const fields=raw.split('\n').map(x=>{const at=x.indexOf(' | ');return at<0?null:[x.slice(0,at).trim(),x.slice(at+3).trim()]}).filter(x=>x&&x[0]&&x[1]);if(!fields.length)throw Error('Template must contain fields.');const {error}=await client().from('nd_staff_form_templates').upsert({form_type:t,template_name:t==='interview'?'Interview Template':'Contract Template',fields,updated_at:new Date().toISOString()},{onConflict:'form_type'});if(error)throw error;templates[t]=fields}status('Templates saved successfully.')}catch(e){status('Unable to save templates: '+e.message)}}
+async function loadHistory(){if(!isAdmin()){show('interview');return}try{const {data,error}=await client().from(TABLE).select('id,form_type,form_data,created_by,created_at,full_name,branch,form_date').order('created_at',{ascending:false}).limit(300);if(error)throw error;const rows=(data||[]).map(r=>`<tr><td>${escapeHtml(new Date(r.created_at).toLocaleString('en-MY'))}</td><td>${escapeHtml(r.form_type)}</td><td>${escapeHtml(r.full_name||r.form_data?.['Candidate Name']||r.form_data?.['Employee Name']||'')}</td><td>${escapeHtml(r.created_by)}</td><td><button class="btn" type="button" data-form-id="${escapeHtml(r.id)}">View</button></td></tr>`).join('');$('ndFormHistoryList').innerHTML=`<table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Submitted By</th><th>Action</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No records</td></tr>'}</tbody></table>`;$('ndFormHistoryList').onclick=e=>{const id=e.target.closest('[data-form-id]')?.dataset.formId;const r=(data||[]).find(x=>String(x.id)===id);if(!r)return;const detail=Object.entries(r.form_data||{}).map(([k,v])=>`${k}: ${v}`).join('\n');const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;background:#f7f8f6;padding:16px;border-radius:10px';pre.textContent=detail;$('ndFormHistoryList').prepend(pre)}}catch(e){$('ndFormHistoryList').textContent='Unable to load history: '+e.message}}
+async function openForms(e){if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';$('ndStaffFormsPage').hidden=false;document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));$('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');await identity();await loadTemplates();show('interview');return false}
+window.ndOpenStaffForms=openForms;
+window.addEventListener('click',e=>{if(e.target.closest?.('#sidebarForms'))openForms(e)},true);
+function init(){document.querySelectorAll('[data-nd-form-tab]').forEach(b=>b.addEventListener('click',()=>{if((b.dataset.ndFormTab==='history'||b.dataset.ndFormTab==='templates')&&!isAdmin())return;show(b.dataset.ndFormTab)}));const staff=$('sidebarStaff'),forms=$('sidebarForms');if(staff&&forms){staff.insertAdjacentElement('afterend',forms)} }
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
 </body>
