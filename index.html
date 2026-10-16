@@ -2,6 +2,30 @@
 
 <html lang="zh-CN">
 <head>
+<script id="nd-staff-click-early-fix-20261016">
+/* Capture Staff navigation before older sidebar listeners can redirect it. */
+(function(){
+  function showStaff(e){
+    var target=e.target&&e.target.closest&&e.target.closest('#sidebarStaff');
+    if(!target)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    var page=document.getElementById('ndStaffManagementPage');
+    if(!page)return;
+    var actions=document.getElementById('ndStaffManagementActions');
+    if(actions){['submitStaffBtn','staffListBtn'].forEach(function(id){var b=document.getElementById(id);if(b&&b.parentNode!==actions)actions.appendChild(b);});}
+    document.body.classList.remove('nd-records-visible');
+    document.getElementById('ndStaffFinancePage')?.classList.remove('nd-open');
+    document.body.dataset.ndVisiblePage='staff';
+    window.activeMainPage='staff';
+    page.style.display='block';
+    document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(function(b){b.classList.remove('active');});
+    target.classList.add('active');
+    document.getElementById('mainSidebar')?.classList.remove('open');
+    try{sessionStorage.setItem('nd_last_page_v2','staff');}catch(_){}
+  }
+  document.addEventListener('click',showStaff,true);
+})();
+</script>
 <script id="auth-first-paint-lock-v2">
 document.documentElement.classList.add("auth-pending");
 </script>
@@ -32747,8 +32771,6 @@ body[data-nd-visible-page]:not([data-nd-visible-page="staff"]) #ndStaffManagemen
    function openStaff(e){
      if(e){e.preventDefault();e.stopImmediatePropagation();}
      // Salary initializes staff permissions; switch to Staff only after that initialization.
-     if(typeof window.showSalary==='function')window.showSalary();
-     else if(typeof showSalary==='function')showSalary();
      document.body.classList.remove('nd-records-visible');
      byId('ndStaffFinancePage')?.classList.remove('nd-open');
      window.activeMainPage='staff';
