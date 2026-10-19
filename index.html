@@ -4514,6 +4514,16 @@ window.ndEmployeeFullName = function(employee){
   return value.replace(/\s+/g, ' ').trim() || 'Staff';
 };
 </script>
+<style id="nd-visa-installments-style">
+#appView .money-line>#ndVisaInstallments{grid-column:1/-1}
+.nd-visa-installments{margin-top:8px;width:100%;min-width:0;border:1px solid #dce5df;border-radius:9px;background:#f7faf8;padding:9px 10px;box-sizing:border-box}
+.nd-visa-installments summary{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;font-size:12px;font-weight:700;list-style:none;color:#244d3b}
+.nd-visa-installments summary::-webkit-details-marker{display:none}
+.nd-visa-installments[open] summary span{transform:rotate(180deg)}
+.nd-installment-grid{display:grid;grid-template-columns:1fr;gap:8px;margin:10px 0}
+.nd-installment-grid label{font-size:12px}
+.nd-visa-installments .helper{font-size:11px;line-height:1.4;margin-top:6px}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -4642,6 +4652,14 @@ window.ndEmployeeFullName = function(employee){
 <label for="visa">VISA / MASTER</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="visa" min="0" step="0.01" type="number" value=""/></div>
 <input id="master" type="hidden" value="0"/>
+<details id="ndVisaInstallments" class="nd-visa-installments">
+<summary>Installment Payments <span aria-hidden="true">▾</span></summary>
+<div class="nd-installment-grid">
+<div><label for="installment3">3 Months</label><div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="installment3" min="0" step="0.01" type="number" value=""/></div></div><div><label for="installment6">6 Months</label><div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="installment6" min="0" step="0.01" type="number" value=""/></div></div><div><label for="installment12">12 Months</label><div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="installment12" min="0" step="0.01" type="number" value=""/></div></div>
+</div><div class="helper">Installments are included in the VISA / MASTER total above.</div>
+<div class="helper" id="ndInstallmentBreakdownState" role="status"></div>
+</details>
+
 </div><div class="money-line">
 <label for="tng">TNG</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="tng" min="0" step="0.01" type="number" value=""/></div>
@@ -6616,7 +6634,19 @@ return `<div class="history-date-card">
     ndPettyReminderHide();
   });
 
+  function ndInstallmentsFromForm(){
+    return {installment_3:num('installment3'),installment_6:num('installment6'),installment_12:num('installment12')};
+  }
+  function ndInstallmentsFormTotal(){return Object.values(ndInstallmentsFromForm()).reduce((sum,n)=>sum+n,0);}
+  function ndRenderInstallmentBreakdown(){
+    const el=$('ndInstallmentBreakdownState');if(!el)return;
+    const total=num('visa'),parts=ndInstallmentsFormTotal();
+    const invalid=Math.round(parts*100)>Math.round(total*100);
+    el.textContent=invalid?'Installments cannot exceed the VISA / MASTER total.':'Regular card: '+money(total-parts)+' | Installments: '+money(parts);
+    el.style.color=invalid?'#b42318':'';
+  }
   function calc(){
+    ndRenderInstallmentBreakdown();
     let total=0;
     paymentIds.forEach(id=>total+=num(id));
     let pin=0,pout=0;
@@ -6748,6 +6778,8 @@ return `<div class="history-date-card">
     applyGlobalDailyFieldRules(currentBranch);
     applyCashierBalanceRule(date,currentBranch);
     paymentIds.forEach(id=>$(id).value="");
+    ['installment3','installment6','installment12'].forEach(id=>$(id).value='');
+    if($('ndVisaInstallments'))$('ndVisaInstallments').open=false;
     $("bedFeeMerchant").value="";
     $("cashWithdrawal").value="";
     const [pettyCarry,cashCarry]=await Promise.all([previousPetty(date),previousCashBalance(date)]);
@@ -6793,6 +6825,8 @@ return `<div class="history-date-card">
 
     $("visa").value=Number(r.visa||0)+Number(r.master||0);
     $("master").value=0;
+    [3,6,12].forEach(m=>$('installment'+m).value=r['installment_'+m]||'');
+    if($('ndVisaInstallments'))$('ndVisaInstallments').open=false;
     $("amex").value=r.amex||0;
     $("bedFee").value=r.bed_fee||0;
     const historicalMerchant=String(r.bed_fee_merchant||"").trim();
@@ -6829,6 +6863,10 @@ return `<div class="history-date-card">
   }
 
   function payload(){
+    if(Math.round(ndInstallmentsFormTotal()*100)>Math.round(num('visa')*100)){
+      alert('Installment amounts must be included in, and cannot exceed, the VISA / MASTER total.');
+      $('ndVisaInstallments').open=true;$('installment3').focus();return null;
+    }
     const bedFeeAmount=num("bedFee");
     const bedFeeMerchant=String($("bedFeeMerchant")?.value||"").trim();
     if(bedFeeAmount>0 && !bedFeeMerchant){
@@ -6856,6 +6894,7 @@ return `<div class="history-date-card">
       tng_settlement_receipt:String(currentBranch||"").trim()==="Global" ? null : currentDailyTngProof,
 
       visa:num("visa"),
+      ...ndInstallmentsFromForm(),
       master:0,
       amex:num("amex"),
       bed_fee:bedFeeAmount,
@@ -6942,7 +6981,9 @@ return `<div class="history-date-card">
           anyPaymentChanged=true;
         }
       }
-      if(anyPaymentChanged) delete statuses.grand_total;
+      const cardChanged=['visa','master','installment_3','installment_6','installment_12'].some(field=>Number(oldRow[field]||0)!==Number(p[field]||0));
+      if(cardChanged){delete statuses.visa_master;delete statuses.card_settlement_proof;}
+      if(anyPaymentChanged||cardChanged) delete statuses.grand_total;
     }
 
     // TNG Proof is automatically marked Verified once a TNG/eWallet proof exists.
@@ -7920,7 +7961,9 @@ return `<div class="history-date-card">
       const state=(r.payment_statuses||{}).visa_master||"";
       const badge=state==="accepted" ? `<div class="helper" style="color:#087f72">✓ Correct</div>`
         : state==="adjust" ? `<div class="helper" style="color:#b42318">✕ Error</div>` : "";
-      return `${money(total)}${badge}<div class="inline-actions" style="margin-top:5px">
+      const installmentTotal=[3,6,12].reduce((sum,m)=>sum+Number(r['installment_'+m]||0),0);
+      const breakdown=installmentTotal>0?`<details class="nd-visa-installments"><summary>Installments <span aria-hidden="true">▾</span></summary><div class="helper">${[3,6,12].map(m=>`${m} Months: ${money(r['installment_'+m]||0)}`).join('<br>')}</div><div class="helper">Included in card total</div></details>`:'';
+      return `${money(total)}${breakdown}${badge}<div class="inline-actions" style="margin-top:5px">
         <button type="button" class="mini correct" data-pay-status="${r.id}" data-pay-field="visa_master" data-pay-value="accepted">Correct</button>
         <button type="button" class="mini error" data-pay-status="${r.id}" data-pay-field="visa_master" data-pay-value="adjust">Error</button>
       </div>`;
@@ -8055,7 +8098,7 @@ return `<div class="history-date-card">
 
   function exportCsv(){
     const rows=allRows.filter(r=>r.branch===currentBranch);if(!rows.length){alert("目前没有记录");return;}
-    const cols=["settlement_date","branch","staff","cashier_balance","visa","master","amex","tng","cash","alipay","online_card","bank_transfer","tips","grand_total","cash_opening","cash_withdrawal","cash_balance","petty_net","status"];
+    const cols=["settlement_date","branch","staff","cashier_balance","visa","master","installment_3","installment_6","installment_12","amex","tng","cash","alipay","online_card","bank_transfer","tips","grand_total","cash_opening","cash_withdrawal","cash_balance","petty_net","status"];
     const lines=[cols.join(",")];rows.forEach(r=>lines.push(cols.map(k=>'"'+String(r[k]??"").replace(/"/g,'""')+'"').join(",")));
     const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="NatureDao_"+currentBranch+"_Settlement.csv";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   }
@@ -8646,6 +8689,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
 <input id="aiReceiptHistoryMonth" style="width:auto" type="month"/>
 <button class="btn" id="aiReceiptExportCsvBtn" type="button">Export CSV</button>
+<select id="aiReceiptPdfBranch" aria-label="Monthly PDF branch" style="width:auto"><option value="">Select PDF Branch</option><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option></select>
 <button class="btn" id="aiReceiptMonthlyPdfBtn" type="button">Monthly Receipts PDF</button>
 <a class="btn" id="aiReceiptMonthlyPdfDownload" hidden>Download PDF</a>
 <span class="helper" id="aiReceiptMonthlyPdfState" role="status" style="flex-basis:100%"></span>
@@ -26147,19 +26191,20 @@ Bed Fee: Amlee / + merchant / database memory checked.
       script.onerror=()=>reject(Error('Unable to load PDF library. Please retry.'));document.head.appendChild(script);
     }).catch(err=>{window.ndMonthlyPdfLibrary=null;throw err;});return window.ndMonthlyPdfLibrary;
   }
-  async function monthlyReceiptRows(client,ym){
+  async function monthlyReceiptRows(client,ym,branch){
+    if(!["Eco Botanic","Nusa Bestari"].includes(branch))throw Error("Select a PDF branch first.");
     if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym))throw Error('Select a valid month.');
     const [y,m]=ym.split('-').map(Number),start=ym+'-01',next=m===12?(y+1)+'-01-01':y+'-'+String(m+1).padStart(2,'0')+'-01';
     async function all(table,date,fields){
       const rows=[];for(let offset=0;;offset+=500){
-        const {data,error}=await client.from(table).select(fields).gte(date,start).lt(date,next).order('id',{ascending:true}).range(offset,offset+499);
+        const {data,error}=await client.from(table).select(fields).eq('branch',branch).gte(date,start).lt(date,next).order('id',{ascending:true}).range(offset,offset+499);
         if(error)throw Error(table+': '+error.message);rows.push(...(data||[]));if((data||[]).length<500)return rows;
       }
     }
     const [records,daily]=await Promise.all([all('ai_receipt_records','receipt_date','*'),all('daily_settlements','settlement_date','id,settlement_date,branch,petty_entries')]);
     const byRef=new Map();
-    for(const r of records)byRef.set(r.source_ref||'scan:'+r.id,{...r});
-    for(const row of daily)(Array.isArray(row.petty_entries)?row.petty_entries:[]).forEach((e,index)=>{
+    for(const r of records.filter(r=>r.branch===branch))byRef.set(r.source_ref||'scan:'+r.id,{...r});
+    for(const row of daily.filter(r=>r.branch===branch))(Array.isArray(row.petty_entries)?row.petty_entries:[]).forEach((e,index)=>{
       if(e?.type!=='out')return;
       const ref='daily_settlements:'+row.id+':petty:'+index;
       byRef.set(ref,{source_ref:ref,receipt_date:row.settlement_date,branch:row.branch,total_amount:Number(e.amount||0),source_type:'petty_cash',receipt_file:e.receipt||null});
@@ -26173,12 +26218,14 @@ Bed Fee: Amlee / + merchant / database memory checked.
     });}finally{URL.revokeObjectURL(url);}
   }
   async function buildMonthlyReceiptsPdf(client,ym,records,progress){
+    const branch=records[0]?.branch;
+    if(!['Eco Botanic','Nusa Bestari'].includes(branch)||records.some(r=>r.branch!==branch))throw Error('A monthly PDF must contain exactly one branch.');
     const {PDFDocument,StandardFonts,rgb}=await monthlyPdfLibrary(),pdf=await PDFDocument.create(),font=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
     const dark=rgb(.10,.23,.18),muted=rgb(.36,.41,.39),failures=[];
     const ascii=value=>String(value??'').replace(/[^\x20-\x7e]/g,'?');
     function text(page,value,x,y,size=11,strong=false){page.drawText(ascii(value),{x,y,size,font:strong?bold:font,color:dark});}
     let summary;
-    function summaryPage(){const page=pdf.addPage([595.28,841.89]);text(page,"NATURE'S DAO",32,805,19,true);text(page,'Monthly Expense Receipts | '+ym,32,779,13,true);text(page,'Includes records available to the signed-in account.',32,759,10);return page;}
+    function summaryPage(){const page=pdf.addPage([595.28,841.89]);text(page,"NATURE'S DAO",32,805,19,true);text(page,branch+' | '+ym,32,779,13,true);text(page,'Includes records available to the signed-in account.',32,759,10);return page;}
     summary=summaryPage();text(summary,'Expense records: '+records.length+' | Recorded total: '+money(records.reduce((n,r)=>n+Number(r.total_amount||0),0)),32,735,11,true);
     text(summary,'No.   Date          Branch                        Amount / Source',32,710,10,true);let y=689;
     records.forEach((r,i)=>{if(y<48){summary=summaryPage();y=725;}text(summary,String(i+1).padStart(3,'0')+'   '+r.receipt_date+'   '+String(r.branch||'-').slice(0,24).padEnd(24,' ')+'   '+money(r.total_amount),32,y,9);y-=15;});
@@ -26199,18 +26246,18 @@ Bed Fee: Amlee / + merchant / database memory checked.
       }catch(err){failures.push({number:i+1,message:String(err.message||err)});const page=info();text(page,'RECEIPT NOT INCLUDED',26,750,15,true);text(page,'Missing, expired or unreadable. Check the original expense record.',26,725,10);}
     }
     if(failures.length){const p=summaryPage();text(p,'INCOMPLETE: '+failures.length+' receipt(s) require attention.',32,725,13,true);text(p,'See the numbered receipt pages for missing attachments.',32,702,10);}
-    const pages=pdf.getPages();pages.forEach((page,i)=>page.drawText((i+1)+' / '+pages.length,{x:530,y:12,size:8,font,color:muted}));pdf.setTitle("Nature's Dao - Monthly Receipts - "+ym);pdf.setAuthor("Nature's Dao");
+    const pages=pdf.getPages();pages.forEach((page,i)=>page.drawText((i+1)+' / '+pages.length,{x:530,y:12,size:8,font,color:muted}));pdf.setTitle("Nature's Dao - "+branch+" - Monthly Receipts - "+ym);pdf.setAuthor("Nature's Dao");
     return {bytes:await pdf.save(),failures};
   }
   async function exportMonthlyReceiptsPdf(){
-    if(monthlyReceiptsBusy)return;monthlyReceiptsBusy=true;const btn=$('aiReceiptMonthlyPdfBtn'),state=$('aiReceiptMonthlyPdfState'),download=$('aiReceiptMonthlyPdfDownload'),ym=$('aiReceiptHistoryMonth')?.value||currentMonth();
-    btn.disabled=true;download.hidden=true;state.textContent='Loading all expense records...';
+    if(monthlyReceiptsBusy)return;monthlyReceiptsBusy=true;const btn=$('aiReceiptMonthlyPdfBtn'),state=$('aiReceiptMonthlyPdfState'),download=$('aiReceiptMonthlyPdfDownload'),ym=$('aiReceiptHistoryMonth')?.value||currentMonth(),branch=$('aiReceiptPdfBranch')?.value||'';
+    btn.disabled=true;download.hidden=true;state.textContent='Loading branch expense records...';
     try{
-      const client=dbClient(),records=await monthlyReceiptRows(client,ym);if(!records.length){state.textContent='No expense records for '+ym+'.';return;}
+      const client=dbClient(),records=await monthlyReceiptRows(client,ym,branch);if(!records.length){state.textContent='No expense records for '+branch+' / '+ym+'.';return;}
       const result=await buildMonthlyReceiptsPdf(client,ym,records,value=>state.textContent=value);
       if(monthlyReceiptsUrl)URL.revokeObjectURL(monthlyReceiptsUrl);monthlyReceiptsUrl=URL.createObjectURL(new Blob([result.bytes],{type:'application/pdf'}));
-      download.href=monthlyReceiptsUrl;download.download='Natures_Dao_Receipts_'+ym+(result.failures.length?'_INCOMPLETE':'')+'.pdf';download.hidden=false;
-      state.textContent=result.failures.length?'PDF ready with '+result.failures.length+' missing/unreadable receipt(s). Check the marked pages.':'PDF ready: '+records.length+' expense records. Save the monthly file using Download PDF.';
+      download.href=monthlyReceiptsUrl;download.download='Natures_Dao_'+branch.replace(/ /g,'_')+'_Receipts_'+ym+(result.failures.length?'_INCOMPLETE':'')+'.pdf';download.hidden=false;
+      state.textContent=result.failures.length?'PDF ready with '+result.failures.length+' missing/unreadable receipt(s). Check the marked pages.':'PDF ready: '+branch+' / '+ym+' / '+records.length+' expense records. Save the monthly file using Download PDF.';
       download.click();
     }catch(err){state.textContent='Unable to create PDF: '+(err.message||err);}finally{monthlyReceiptsBusy=false;btn.disabled=false;}
   }
@@ -26293,6 +26340,10 @@ Bed Fee: Amlee / + merchant / database memory checked.
     $("aiReceiptHistoryMonth")?.addEventListener("change",async()=>{await Promise.all([loadHistory(),loadReportSyncSummary()]);await loadClaimSummary();});
     $("aiReceiptExportCsvBtn")?.addEventListener("click",exportExpenseCsv);
     $("aiReceiptMonthlyPdfBtn")?.addEventListener("click",exportMonthlyReceiptsPdf);
+    ['aiReceiptPdfBranch','aiReceiptHistoryMonth'].forEach(id=>$(id)?.addEventListener('change',()=>{
+      const link=$('aiReceiptMonthlyPdfDownload');if(link)link.hidden=true;
+      const state=$('aiReceiptMonthlyPdfState');if(state&&!monthlyReceiptsBusy)state.textContent='';
+    }));
     $("aiReceiptMerchant")?.addEventListener("change",async()=>{
       await applySupplierMemory($("aiReceiptMerchant").value);
       await checkDuplicate();
