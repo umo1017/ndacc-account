@@ -5668,13 +5668,18 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     return true;
   }
 
+  const ND_PAYMENT_VERIFICATION_START="2026-09-01";
+  function ndPaymentRequiresVerification(r){
+    return !r._missing && String(r.settlement_date||"").slice(0,10)>=ND_PAYMENT_VERIFICATION_START;
+  }
+
   function renderHistoryUnverifiedKeyTotals(){
     const root=$("historyUnverifiedKeyTotals");
     if(!root) return;
     const rows=(allRows||[]).filter(r=>!r._missing);
 
     let visaMaster=0, tng=0;
-    rows.forEach(r=>{
+    rows.filter(ndPaymentRequiresVerification).forEach(r=>{
       const statuses=r.payment_statuses||{};
       const vm=Number(r.visa||0)+Number(r.master||0);
       if(vm>0 && !statuses.visa_master) visaMaster+=vm;
@@ -5713,7 +5718,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
         </div>
         <div class="salary-card nd-unverified-card">
           <div class="helper">Total Unverified</div>
-          <strong>${money(visaMaster+tng+withdrawalRemaining)}</strong>
+          <strong>${money(visaMaster+tng)}</strong>
         </div>
       </div>`;
   }
@@ -5748,11 +5753,11 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       ["cash_withdrawal","Cash Withdrawal"]
     ];
 
-    const reviewableFields=["visa_master","amex","bed_fee","cash","alipay","online_card","bank_transfer","tips"];
+    const reviewableFields=["visa_master","amex","bed_fee","alipay","online_card","bank_transfer","tips"];
 
     const pendingTotalFor=(branch)=>{
       let total=0;
-      rows.filter(r=>String(r.branch||"")===branch).forEach(r=>{
+      rows.filter(r=>String(r.branch||"")===branch && ndPaymentRequiresVerification(r)).forEach(r=>{
         const statuses=r.payment_statuses||{};
         reviewableFields.forEach(key=>{
           const value=key==="visa_master"
@@ -5964,7 +5969,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const pending=(allRows||[]).filter(r=>{
       const amount=Number(r.bed_fee||0);
       const state=(r.payment_statuses||{}).bed_fee||"";
-      return String(r.settlement_date||"")<=today() && amount>0 && state!=="accepted";
+      return ndPaymentRequiresVerification(r) && String(r.settlement_date||"")<=today() && amount>0 && state!=="accepted";
     });
 
     const byMerchant={};
@@ -6280,6 +6285,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
 
       const realRowCount=ordered.length;
       const tngCell=(()=>{
+        if(String(date)<ND_PAYMENT_VERIFICATION_START) return `<strong>${money(tngTotal)}</strong><div class="helper">Verification not required</div>`;
         if(tngTotal<=0) return `<span class="nd-zero-auto">${money(0)}</span>`;
         const badge=tngReview==="accepted" ? `<div class="helper" style="color:#087f72">✓ Correct</div>`
           : tngReview==="adjust" ? `<div class="helper" style="color:#b42318">✕ Error</div>` : "";
@@ -7861,6 +7867,7 @@ return `<div class="history-date-card">
 
 
   function bedFeeHistoryCell(r){
+    if(!ndPaymentRequiresVerification(r)) return `${money(r.bed_fee||0)}<div class="helper">Verification not required</div>`;
     const value=Number(r.bed_fee||0);
     const merchant=String(r.bed_fee_merchant||"").trim();
     if(value<=0) return merchant?`<div>${money(0)}</div><div class="helper">${escHtml(merchant)}</div>`:money(0);
@@ -7955,6 +7962,7 @@ return `<div class="history-date-card">
   }
 
   function paymentHistoryCell(r,field){
+    if(!ndPaymentRequiresVerification(r)) return `${money(field==="visa_master"?Number(r.visa||0)+Number(r.master||0):Number(r[field]||0))}<div class="helper">Verification not required</div>`;
     if(field==="cash") {
       const value=Number(r.cash||0);
       return value<=0 ? `<span class="nd-zero-auto">${money(0)}</span>` : `${money(value)}<div class="helper" style="color:#087f72">✓ Auto Correct</div>`;
@@ -14791,12 +14799,13 @@ window.ndStartInterviewEmployee=async function(row){
  await byId('submitStaffBtn').onclick();
  // New form has been reset. Copy only known fields; never guess salary or start date.
  const v=row.form_data||{};
- const map={empName:v['Candidate Name']||row.full_name,empNric:v['IC / Passport']||v['IC No'],empPhone:v['Phone']||v['Contact Number'],empEmail:v['Email Address'],empBirthday:v['Date of Birth'],empJoinDate:v['Start Date'],empOutlet:v['Preferred Branch']||row.branch,empBankName:v['Bank Name'],empBankAccount:v['Bank Account No'],empSocso:v['SOCSO No'],empEpf:v['KWSP (EPF) No']};
+ const map={empName:v['Full Name']||v['Candidate Name']||row.full_name,empNric:v['Passport No']||v['IC / Passport']||v['IC No'],empPhone:v['Phone']||v['Contact Number'],empEmail:v['Email Address'],empBirthday:v['Date of Birth'],empJoinDate:v['Start Date'],empOutlet:v['Preferred Branch']||row.branch,empBankName:v['Bank Name'],empBankAccount:v['Bank Account No'],empSocso:v['SOCSO No'],empEpf:v['KWSP (EPF) No']};
  const type=String(v['Employment Type']||'').toLowerCase().replace(/ /g,'_');
  if(['full_time','part_time'].includes(type))map.empEmploymentType=type;
  for(const [id,value]of Object.entries(map)){const el=byId(id);if(el)el.value=value==null?'':String(value)}
  const nationality=String(v['Nationality']||'').trim().toLowerCase();
- if(nationality)byId('empCategory').value=['malaysian','malaysia','malaysian citizen'].includes(nationality)?'local':'non_local';
+ if(v['Applicant Type'])byId('empCategory').value=v['Applicant Type'].startsWith('Local')?'local':'non_local';
+ else if(nationality)byId('empCategory').value=['malaysian','malaysia','malaysian citizen'].includes(nationality)?'local':'non_local';
  if(byId('empBirthdayNA'))byId('empBirthdayNA').checked=false;
  if(byId('empBirthday'))byId('empBirthday').disabled=false;
  updateSubmitEmploymentType();
@@ -32813,18 +32822,39 @@ body[data-nd-visible-page="forms"] #ndStaffFormsPage{display:block!important}
 const $=id=>document.getElementById(id), TABLE='nd_staff_forms', ADMIN='umo1017@gmail.com';
 let tab='interview',userEmail='',db=null,templates={};
 const defaults={interview:[["Candidate Name", "text"], ["IC / Passport", "text"], ["IC Photo Front", "file"], ["IC Photo Back", "file"], ["Date of Birth", "date"], ["Gender", "select:|Female|Male|Other"], ["Nationality", "text"], ["Marital Status", "select:|Single|Married|Divorced|Widowed"], ["Home Address", "textarea"], ["Phone", "tel"], ["Email Address", "email"], ["Emergency Contact Name", "text"], ["Emergency Contact Phone", "tel"], ["Spouse Name", "text"], ["Spouse IC No", "text"], ["Position Applied", "text"], ["Preferred Branch", "select:|Eco Botanic|Nusa Bestari"], ["Employment Type", "select:|Full Time|Part Time"], ["Start Date", "date"], ["Probation Period", "text"], ["Working Days", "number"], ["Working Hours", "text"], ["Rest Days", "number"], ["Bank Name", "text"], ["Bank Account No", "text"], ["KWSP (EPF) No", "text"], ["SOCSO No", "text"], ["EIS No", "text"], ["Employee Signature", "signature"], ["Signature Date", "date"], ["Administrative / Finance Signature", "signature"], ["Company Stamp", "file"], ["President Signature", "signature"], ["Interview Date", "date"], ["Interviewer", "text"], ["Experience", "textarea"], ["Availability", "text"], ["Expected Salary (RM)", "number"], ["Assessment", "textarea"], ["Interview Result", "select:Pending|Shortlisted|Accepted|Rejected"]],contract:[['Employee Name','text'],['IC / Passport','text'],['Position','text'],['Branch','text'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation (Months)','number'],['Notice Period','text'],['Working Hours','text'],['Contract Terms','textarea'],['Employee Acknowledgement','textarea']]};
+let interviewCategory='local';
+const interviewSections=[
+ ['SECTION A : EMPLOYEE INFORMATION', [['Full Name','text'],['IC No','text'],['IC Photo Front','file'],['IC Photo Back','file'],['Date of Birth','date'],['Gender','select:|Female|Male|Other'],['Nationality','text'],['Married Status','select:|Single|Married|Divorced|Widowed'],['Home Address','textarea'],['Contact Number','tel'],['Email Address','email']]],
+ ['SECTION B : EMERGENCY INFORMATION', [['Spouse Name','text'],['Spouse IC No','text']]],
+ ['SECTION C : EMPLOYMENT INFORMATION', [['Position','text'],['Department','text'],['Employment Type','select:|Full Time|Part Time'],['Start Date','date'],['Probation Period','text'],['Working Day','number'],['Working Hours','text'],['Rest Day','number']]],
+ ['SECTION D: BANK & STATUTORY INFORMATION', [['Bank Name','text'],['Bank Account No','text'],['KWSP (EPF) No','text'],['SOCSO No','text'],['EIS No','text']]],
+ ['SECTION E: SIGNATURES / COMPANY STAMPING', [['Employee Signature','signature'],['Date','date'],['Administrative / Finance Signature','signature'],['Company Stamp','file'],['President Signature','signature']]]
+];
+function interviewGroups(){return interviewSections.map(([title,fields])=>[title,fields.flatMap(f=>{
+ if(interviewCategory!=='non_local')return [f];
+ if(f[0]==='IC No')return [['Passport No','text'],['Passport Expiry Date','date']];
+ if(f[0]==='IC Photo Front')return [['Passport Photo','file']];
+ if(f[0]==='IC Photo Back')return [['Work Permit No','text'],['Work Permit Expiry Date','date'],['Work Permit Photo','file']];
+ if(f[0]==='Spouse IC No')return [['Spouse IC / Passport No','text']];
+ return [f];
+})])}
+function renderInterview(root){
+ let i=0;root.innerHTML=`<h3>Employee Interview Form</h3><div style="padding:16px;border:1px solid #ddd;border-radius:12px;margin:12px 0"><strong>NATURE'S DAO GLOBAL HOLDINGS SDN BHD</strong><div>Company Registration No.: 202501043436</div><div>Address: Unit 02-02, Level 2, CIMB Leadership Academy, No.3 Jalan Medini Utara 1, Medini Iskandar, 79200, Iskandar Puteri, JB</div></div><label for="ndInterviewCategory">Applicant Type</label><select id="ndInterviewCategory"><option value="local" ${interviewCategory==='local'?'selected':''}>Local (Malaysian)</option><option value="non_local" ${interviewCategory==='non_local'?'selected':''}>Non-local (Foreign National)</option></select><p class="helper">Complete available information. Leave unavailable or non-applicable fields blank. Full Name is required.</p><form id="ndStaffEntryForm">${interviewGroups().map(([title,fields])=>`<fieldset style="border:1px solid #ddd;border-radius:12px;padding:16px;margin:18px 0"><legend style="font-weight:700;color:#9a7426">${title}</legend><div class="nd-form-grid">${fields.map(f=>inputMarkup(f[0],f[1],i++)).join('')}</div></fieldset>`).join('')}<button class="btn" type="submit">Save Interview</button></form>`;
+ $('ndStaffEntryForm').onsubmit=saveEntry;initSignatures(root);
+ $('ndInterviewCategory').onchange=()=>{
+ const saved={};fieldsFor('interview').forEach(([label,kind],n)=>{const el=$('ndField'+n);saved[label]={kind,value:el?.value,files:el?.files,ink:el?.dataset.ink,data:kind==='signature'&&el?.dataset.ink?el.toDataURL():null}});
+ interviewCategory=$('ndInterviewCategory').value;renderInterview(root);
+ fieldsFor('interview').forEach(([label,kind],n)=>{const old=saved[label],el=$('ndField'+n);if(!old||!el)return;if(kind==='file'){if(old.files)el.files=old.files}else if(kind==='signature'&&old.data){const img=new Image();img.onload=()=>el.getContext('2d').drawImage(img,0,0);img.src=old.data;el.dataset.ink='1'}else if(kind!=='signature')el.value=old.value||''});
+ };
+}
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function status(v){$('ndStaffFormStatus').textContent=v||''}
 function isAdmin(){return userEmail===ADMIN}
 function client(){if(!db){if(window.salaryDb?.from)db=window.salaryDb;else if(window.supabase?.createClient)db=window.supabase.createClient('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');}return db}
 async function identity(){try{const {data}=await client().auth.getUser();userEmail=String(data?.user?.email||'').toLowerCase()}catch(e){userEmail=''}return userEmail}
-function fieldsFor(type){
- const custom=templates[type];if(type!=='interview')return custom||defaults[type];
- const fields=defaults.interview.map(f=>[...f]);
- for(const f of custom||[]){if(!fields.some(x=>x[0]===f[0]))fields.push(f)}return fields;
-}
+function fieldsFor(type){return type==='interview'?interviewGroups().flatMap(g=>g[1]):templates[type]||defaults[type];}
 function inputMarkup(label,type,i){
- const required=['Candidate Name','Phone','Preferred Branch'].includes(label)?' required':'';
+ const required=['Full Name'].includes(label)?' required':'';
  let el;const attr=`data-nd-field="${i}" id="ndField${i}"`;
  if(type==='file')el=`<input ${attr} type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG or WebP · Maximum 2 MB</small>`;
  else if(type==='signature')el=`<canvas ${attr} width="600" height="160" style="border:1px solid #ccc;border-radius:8px;width:100%;touch-action:none;background:white" aria-label="${escapeHtml(label)}"></canvas><button class="btn" type="button" data-clear-signature="${i}">Clear Signature</button>`;
@@ -32838,14 +32868,15 @@ function readFile(file){return new Promise((resolve,reject)=>{if(!/^image\/(jpeg
 function show(next){if((next==='history'||next==='templates')&&!isAdmin())next='interview';tab=next;status('');document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.ndFormTab===tab);b.style.display=(['history','templates'].includes(b.dataset.ndFormTab)&&!isAdmin())?'none':''});const root=$('ndStaffFormContent');if(!root)return;
 if(tab==='history'){root.innerHTML='<h3>Form History</h3><div class="nd-form-history" id="ndFormHistoryList">Loading...</div>';loadHistory();return}
 if(tab==='templates'){root.innerHTML=`<h3>Form Templates</h3><p class="helper">One field per line: Field Name | text, date, number, tel, textarea, or select:Option1|Option2</p><label>Interview Template</label><textarea id="ndInterviewTemplate" style="min-height:240px"></textarea><label>Contract Template</label><textarea id="ndContractTemplate" style="min-height:280px"></textarea><div style="margin-top:12px"><button class="btn" id="ndSaveTemplates">Save Templates</button></div>`;['interview','contract'].forEach(t=>{$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value=fieldsFor(t).map(f=>f.join(' | ')).join('\n')});$('ndSaveTemplates').onclick=saveTemplates;return}
+if(tab==='interview'){renderInterview(root);return}
 const fields=fieldsFor(tab);root.innerHTML=`<h3>${tab==='interview'?'Interview Form':'Employment Contract Form'}</h3><form id="ndStaffEntryForm"><div class="nd-form-grid">${fields.map((f,i)=>inputMarkup(f[0],f[1],i)).join('')}</div><div style="margin-top:16px"><button class="btn" type="submit">Save ${tab==='interview'?'Interview':'Contract'}</button></div></form>`;$('ndStaffEntryForm').onsubmit=saveEntry;initSignatures(root);
 }
 async function saveEntry(e){
  e.preventDefault();const form=e.target,button=form.querySelector('[type=submit]'),type=tab,fields=fieldsFor(type);button.disabled=true;status('Saving...');
- try{await identity();if(!userEmail)throw Error('Please sign in again.');const values={};
+ try{await identity();if(!userEmail)throw Error('Please sign in again.');const values=type==='interview'?{'Applicant Type':interviewCategory==='local'?'Local (Malaysian)':'Non-local (Foreign National)'}:{};
  for(let i=0;i<fields.length;i++){const [label,kind]=fields[i],el=form.querySelector(`[data-nd-field="${i}"]`);values[label]=kind==='file'?(el?.files?.[0]?await readFile(el.files[0]):''):kind==='signature'?(el?.dataset.ink?{name:label,data:el.toDataURL('image/png')}: ''):el?.value||''}
  const branch=String(values['Preferred Branch']||values['Branch']||'Eco Botanic').trim();
- const fullName=String(values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');
+ const fullName=String(values['Full Name']||values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');
  const formDate=values['Interview Date']||values['Start Date']||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
  const {error}=await client().from(TABLE).insert({form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'});if(error)throw error;
  if(form.isConnected){form.reset();form.querySelectorAll('[data-clear-signature]').forEach(b=>b.click())}status('Saved successfully.');
@@ -32874,7 +32905,7 @@ async function loadHistory(){
  const interviews=(data||[]).filter(r=>r.form_type==='interview').map(r=>String(r.id));let employees=[];
  if(interviews.length){const result=await client().from('employees').select('id,employee_no,source_interview_id').in('source_interview_id',interviews);if(result.error)throw result.error;employees=result.data||[]}
  if(!node?.isConnected)return;
- node.innerHTML=`<table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Submitted By</th><th>Action</th></tr></thead><tbody>${(data||[]).map(r=>{const employee=employees.find(x=>x.source_interview_id===String(r.id));return `<tr><td>${escapeHtml(new Date(r.created_at).toLocaleString('en-MY'))}</td><td>${escapeHtml(r.form_type)}</td><td>${escapeHtml(r.full_name||'')}</td><td>${escapeHtml(r.created_by)}</td><td><button class="btn" type="button" data-form-id="${escapeHtml(r.id)}">View</button> ${r.form_type==='interview'?(employee?`<span>Employee Created · ${escapeHtml(employee.employee_no||employee.id)}</span>`:`<button class="btn" type="button" data-hire-id="${escapeHtml(r.id)}">Become Employee</button>`):''}</td></tr>`}).join('')||'<tr><td colspan="5">No records</td></tr>'}</tbody></table>`;
+ node.innerHTML=`<table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Submitted By</th><th>Action</th></tr></thead><tbody>${(data||[]).map(r=>{const employee=employees.find(x=>x.source_interview_id===String(r.id));return `<tr><td>${escapeHtml(new Date(r.created_at).toLocaleString('en-MY'))}</td><td>${escapeHtml(r.form_type==='interview'?(r.form_data?.['Applicant Type']||'Interview'):r.form_type)}</td><td>${escapeHtml(r.full_name||'')}</td><td>${escapeHtml(r.created_by)}</td><td><button class="btn" type="button" data-form-id="${escapeHtml(r.id)}">View</button> ${r.form_type==='interview'?(employee?`<span>Employee Created · ${escapeHtml(employee.employee_no||employee.id)}</span>`:`<button class="btn" type="button" data-hire-id="${escapeHtml(r.id)}">Become Employee</button>`):''}</td></tr>`}).join('')||'<tr><td colspan="5">No records</td></tr>'}</tbody></table>`;
  node.onclick=e=>{const button=e.target.closest('[data-form-id],[data-hire-id]');if(!button)return;const row=(data||[]).find(r=>String(r.id)===(button.dataset.formId||button.dataset.hireId));if(!row)return;if(button.dataset.hireId)becomeEmployee(row,button);else showProfile(row.form_data,row.full_name+' · '+row.form_type)};
  }catch(e){if(node?.isConnected)node.textContent='Unable to load history: '+e.message}
 }
