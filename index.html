@@ -1,7 +1,27 @@
 <!DOCTYPE html>
 
 <html lang="zh-CN">
-<head><script id="nd-staff-navigation-single-source-20261016">(function(){
+<head>
+<script id="nd-receipt-preview-v1">
+(function(){
+ let dialog,lastFocus,oldOverflow;
+ function close(){if(!dialog.open)return;dialog.close();dialog.querySelector('[data-content]').replaceChildren();document.body.style.overflow=oldOverflow;lastFocus?.focus();}
+ window.ndReceiptPreview=function(url){
+  let parsed;try{parsed=new URL(url,location.href);if(!['https:','http:','blob:'].includes(parsed.protocol))throw Error();}catch(_){alert('Unable to preview receipt.');return;}
+  if(!dialog){
+   const style=document.createElement('style');style.textContent='#ndReceiptPreview{width:min(1100px,96vw);height:90vh;height:90dvh;max-height:96dvh;padding:0;border:0;border-radius:14px;background:#f2f4f3;color:#18372c;box-shadow:0 16px 60px #0006}#ndReceiptPreview::backdrop{background:#0009}#ndReceiptPreview .nd-rp-shell{height:100%;display:flex;flex-direction:column}#ndReceiptPreview header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:white;gap:12px}#ndReceiptPreview button{padding:9px 16px;cursor:pointer;border:1px solid #ccd6d0;border-radius:8px;background:white;color:#18372c}#ndReceiptPreview [data-content]{flex:1;min-height:0;overflow:auto;text-align:center;padding:8px}#ndReceiptPreview img{max-width:100%;height:auto;display:block;margin:auto}#ndReceiptPreview iframe{width:100%;height:100%;border:0;background:white}#ndReceiptPreview p{padding:8px}';document.head.appendChild(style);
+   dialog=document.createElement('dialog');dialog.id='ndReceiptPreview';dialog.setAttribute('aria-labelledby','ndReceiptPreviewTitle');dialog.innerHTML='<div class="nd-rp-shell"><header><strong id="ndReceiptPreviewTitle">Receipt Preview</strong><button type="button" autofocus>Close ×</button></header><div data-content></div></div>';document.body.appendChild(dialog);
+   dialog.querySelector('button').onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)close();}});
+  }
+  const content=dialog.querySelector('[data-content]');content.replaceChildren();
+  const pdf=/\.pdf$/i.test(parsed.pathname);const media=document.createElement(pdf?'iframe':'img');
+  if(pdf){media.title='Receipt PDF';const hint=document.createElement('p');hint.textContent='PDF preview: scroll inside the document to view all pages.';content.appendChild(hint);}else{media.alt='Receipt';media.onerror=()=>{content.replaceChildren();const message=document.createElement('p');message.textContent='Unable to display this receipt. Close and reopen to try again.';content.appendChild(message);};}
+  media.src=parsed.href;content.appendChild(media);
+  if(!dialog.open){lastFocus=document.activeElement;oldOverflow=document.body.style.overflow;document.body.style.overflow='hidden';dialog.showModal();}
+ };
+})();
+</script>
+<script id="nd-staff-navigation-single-source-20261016">(function(){
 'use strict';
 function id(k){return document.getElementById(k)}
 function openStaff(e){
@@ -5163,7 +5183,7 @@ window.ndEmployeeFullName = function(employee){
       alert("Unable to open receipt: "+(error?.message||"Unknown error"));
       return;
     }
-    window.open(data.signedUrl,"_blank","noopener");
+    window.ndReceiptPreview(data.signedUrl);
   }
 
   async function submitCashRemittance(){
@@ -6053,7 +6073,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       alert("Unable to open proof: "+(error?.message||"Unknown error"));
       return;
     }
-    window.open(data.signedUrl,"_blank","noopener");
+    window.ndReceiptPreview(data.signedUrl);
   }
 
   function dailyProofHistoryCell(row,kind){
@@ -7191,7 +7211,7 @@ return `<div class="history-date-card">
       alert("Unable to open file: "+(error?.message||"Unknown error"));
       return;
     }
-    window.open(data.signedUrl,"_blank","noopener");
+    window.ndReceiptPreview(data.signedUrl);
   }
 
   async function cleanupExpiredDailySettlementProofs(){
@@ -7359,7 +7379,7 @@ return `<div class="history-date-card">
       a.click();
       a.remove();
     }else{
-      window.open(data.signedUrl,"_blank","noopener");
+      window.ndReceiptPreview(data.signedUrl);
     }
   }
 
@@ -8372,7 +8392,7 @@ return `<div class="history-date-card">
     if(!receipt?.path){alert('No receipt available.');return;}
     const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300);
     if(error||!data?.signedUrl){alert('Unable to open receipt: '+(error?.message||'Unknown error'));return;}
-    window.open(data.signedUrl,'_blank','noopener');
+    window.ndReceiptPreview(data.signedUrl);
   }
   function ndVerifyRender(){
     const m=ndVerifyModal(),pages=Math.max(1,Math.ceil(ndVerifyQueue.length/6));ndVerifyPage=Math.min(ndVerifyPage,pages-1);
@@ -25731,7 +25751,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     const db=dbClient();
     const {data,error}=await db.storage.from("petty-receipts").createSignedUrl(receipt.path,300);
     if(error||!data?.signedUrl){alert("Unable to open receipt.");return;}
-    window.open(data.signedUrl,"_blank","noopener");
+    window.ndReceiptPreview(data.signedUrl);
   }
 
   function editRecord(r){
