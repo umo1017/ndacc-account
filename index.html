@@ -55,6 +55,19 @@
  };
 })();
 </script>
+<script id="nd-navigation-modal-cleanup">
+(function(){
+ window.addEventListener('click',function(event){
+  if(!event.target?.closest?.('#mainSidebar .sidebar-btn'))return;
+  document.querySelectorAll('.salary-modal.open').forEach(modal=>modal.classList.remove('open'));
+  document.querySelectorAll('dialog[open]').forEach(dialog=>{
+   const cancel=new Event('cancel',{cancelable:true});
+   if(dialog.dispatchEvent(cancel)&&dialog.open)dialog.close();
+  });
+  if(document.body.style.overflow==='hidden'&&!document.querySelector('dialog[open]'))document.body.style.removeProperty('overflow');
+ },true);
+})();
+</script>
 <script id="nd-staff-navigation-single-source-20261016">(function(){
 'use strict';
 function id(k){return document.getElementById(k)}
@@ -4792,6 +4805,7 @@ window.ndEmployeeFullName = function(employee){
 </div>
 </div>
 
+</div><!-- End Daily Settlement page: other pages and dialogs must be siblings. -->
 <div style="display:none"><span id="metricDate"></span><span id="metricGrandTotal"></span><span id="metricMonthTotal"></span><span id="metricPetty"></span></div>
 <script>
 (function(){
@@ -8585,6 +8599,7 @@ return `<div class="history-date-card">
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)ndVerifyCheck().catch(console.warn)});
   window.addEventListener('focus',()=>ndVerifyCheck().catch(console.warn));
 
+  Object.assign(window,{loadBedFeeMerchants,renderSettingsBedFeeMerchants,addSettingsBedFeeMerchant});
   showSession();
 $("closeDailyOrderModal")?.addEventListener("click",()=>$("dailyOrderModal").classList.remove("open"));
 $("dailyOrderSaveBtn")?.addEventListener("click",()=>saveDailyOrderRecord(false));
@@ -16452,6 +16467,18 @@ async function exportSalaryPayslipCategory(mode){
 }
 
 
+  if(byId("taxRulesBtn")) byId("taxRulesBtn").addEventListener("click",openTaxRules);
+  byId("closeTaxRulesModal")?.addEventListener("click",()=>byId("taxRulesModal").classList.remove("open"));
+  byId("taxRuleYear")?.addEventListener("change",e=>loadTaxRuleEditor(Number(e.target.value)||taxYearNow()));
+  byId("copyPrevTaxRulesBtn")?.addEventListener("click",async()=>{if(!isGlobalAdmin){alert("Cissi / Mars admin only.");return;}const y=Number(byId("taxRuleYear").value)||taxYearNow(),map=loadTaxRules(),ys=Object.keys(map).map(Number).filter(x=>x<y).sort((a,b)=>b-a),py=ys[0]||2026,prev=map[py]||DEFAULT_TAX_RULES[2026];const rule={...prev,year:y,updatedAt:`Copied from ${py} on ${new Date().toLocaleDateString()}`};const cr=await saveTaxRuleToCloud(y,rule);if(cr.error){byId("taxRuleMsg").textContent=cr.error.message;return;}map[y]=rule;saveTaxRulesMap(map);loadTaxRuleEditor(y);updateTaxRuleStatus();});
+  byId("resetTaxRulesBtn")?.addEventListener("click",async()=>{if(!isGlobalAdmin){alert("Cissi / Mars admin only.");return;}const rule={...DEFAULT_TAX_RULES[2026]};const rr=await saveTaxRuleToCloud(2026,rule);if(rr.error){byId("taxRuleMsg").textContent=rr.error.message;return;}const map=loadTaxRules();map[2026]=rule;saveTaxRulesMap(map);loadTaxRuleEditor(2026);updateTaxRuleStatus();});
+  byId("saveTaxRulesBtn")?.addEventListener("click",async()=>{if(!isGlobalAdmin){alert("Cissi / Mars admin only.");return;}try{const y=Number(byId("taxRuleYear").value)||taxYearNow();const r={year:y,nonResidentRate:Number(byId("taxRuleNonResidentRate").value||0)/100,individualRelief:Number(byId("taxRuleIndividualRelief").value||0),spouseNotWorkingRelief:Number(byId("taxRuleSpouseRelief").value||0),disabledIndividualRelief:Number(byId("taxRuleDisabledIndividual").value||0),disabledSpouseRelief:Number(byId("taxRuleDisabledSpouse").value||0),childU18Relief:Number(byId("taxRuleChildU18").value||0),childStudyRelief:Number(byId("taxRuleChildStudy").value||0),epfReliefCap:Number(byId("taxRuleEpfCap").value||0),rounding:Number(byId("taxRuleRounding").value||0.05),bands:taxBandsFromText(byId("taxRuleBands").value),updatedAt:`Updated ${new Date().toLocaleString()}`};const cloud=await saveTaxRuleToCloud(y,r);if(cloud.error){byId("taxRuleMsg").textContent=cloud.error.message;return;}const map=loadTaxRules();map[y]=r;saveTaxRulesMap(map);byId("taxRuleMsg").textContent=`Saved Tax / PCB rules for ${y} to cloud.`;updateTaxRuleStatus();}catch(err){byId("taxRuleMsg").textContent=err.message||String(err);}});
+  document.addEventListener("change",e=>{if(e.target&&e.target.id==="salaryMonth")updateTaxRuleStatus();});
+  setTimeout(updateTaxRuleStatus,0);
+
+
+Object.assign(window,{showDaily,showSalary,showRoster,showSettings,openTaxRules,ownerAddDailyOutlet,ownerAddSalaryManager,ownerAddSalaryBranch});
+
 })();
 
 
@@ -16717,62 +16744,6 @@ document.addEventListener("DOMContentLoaded",()=>{
  
 
 
- let ndBonusDeductionAdding=false;
- const ndBonusDeductionDeleting=new Set();
- async function addBonusDeduction(){
-   if(!canEditStaffBonus() || ndBonusDeductionAdding) return;
-   const reason=String($("bonusDeductionReason")?.value||"").trim();
-   const rawAmount=String($("bonusDeductionAmount")?.value||"").trim();
-   if(!reason){alert("Please enter deduction reason.");return;}
-   if(!/^(?:\d+)(?:\.\d{1,2})?$/.test(rawAmount)){
-     alert("Enter a valid deduction amount (up to 2 decimal places).");return;
-   }
-   const amount=Number(rawAmount);
-   if(!Number.isFinite(amount)||amount<=0){alert("Please enter a positive deduction amount.");return;}
-   const originalMonth=bonusMonthDate();
-   const originalBranch=bonusBranch;
-   const button=$("bonusDeductionSaveBtn");
-   ndBonusDeductionAdding=true;
-   const previousLabel=button?.textContent;
-   if(button){button.disabled=true;button.textContent="Saving...";}
-   try{
-     const {error}=await salaryDb.from("branch_bonus_deductions").insert({
-       bonus_month:originalMonth,
-       branch:originalBranch,
-       reason,
-       amount:Number(amount.toFixed(2)),
-       created_by:currentBonusEmail()
-     });
-     if(error) throw error;
-     if(bonusMonthDate()===originalMonth && bonusBranch===originalBranch){
-       if($("bonusDeductionReason")?.value===reason) $("bonusDeductionReason").value="";
-       if(String($("bonusDeductionAmount")?.value||"").trim()===rawAmount) $("bonusDeductionAmount").value="";
-       await loadBonus();
-     }
-   }catch(err){alert("Deduction save failed: "+(err?.message||String(err)));}
-   finally{
-     ndBonusDeductionAdding=false;
-     if(button?.isConnected){button.disabled=false;button.textContent=previousLabel;}
-   }
- }
-
- async function deleteBonusDeduction(id){
-   if(!canEditStaffBonus()) return;
-   const numericId=Number(id);
-   if(!Number.isSafeInteger(numericId)||numericId<=0||ndBonusDeductionDeleting.has(numericId))return;
-   if(!confirm("Delete this bonus deduction?")) return;
-   const originalMonth=bonusMonthDate();
-   const originalBranch=bonusBranch;
-   ndBonusDeductionDeleting.add(numericId);
-   try{
-     const {error}=await salaryDb.from("branch_bonus_deductions")
-       .delete().eq("id",numericId).eq("bonus_month",originalMonth).eq("branch",originalBranch);
-     if(error) throw error;
-     if(bonusMonthDate()===originalMonth && bonusBranch===originalBranch) await loadBonus();
-   }catch(err){alert("Delete failed: "+(err?.message||String(err)));}
-   finally{ndBonusDeductionDeleting.delete(numericId);}
- }
-
  document.addEventListener("DOMContentLoaded",()=>{
     setTimeout(()=>restoreState(),900);
   });
@@ -16806,15 +16777,6 @@ document.addEventListener("DOMContentLoaded",()=>{
       try{ localStorage.setItem(ROSTER_MONTH_KEY,e.target.value||""); }catch(_){}
     }
   });
-
-  if(byId("taxRulesBtn")) byId("taxRulesBtn").addEventListener("click",openTaxRules);
-  byId("closeTaxRulesModal")?.addEventListener("click",()=>byId("taxRulesModal").classList.remove("open"));
-  byId("taxRuleYear")?.addEventListener("change",e=>loadTaxRuleEditor(Number(e.target.value)||taxYearNow()));
-  byId("copyPrevTaxRulesBtn")?.addEventListener("click",async()=>{if(!isGlobalAdmin){alert("Cissi / Mars admin only.");return;}const y=Number(byId("taxRuleYear").value)||taxYearNow(),map=loadTaxRules(),ys=Object.keys(map).map(Number).filter(x=>x<y).sort((a,b)=>b-a),py=ys[0]||2026,prev=map[py]||DEFAULT_TAX_RULES[2026];const rule={...prev,year:y,updatedAt:`Copied from ${py} on ${new Date().toLocaleDateString()}`};const cr=await saveTaxRuleToCloud(y,rule);if(cr.error){byId("taxRuleMsg").textContent=cr.error.message;return;}map[y]=rule;saveTaxRulesMap(map);loadTaxRuleEditor(y);updateTaxRuleStatus();});
-  byId("resetTaxRulesBtn")?.addEventListener("click",async()=>{if(!isGlobalAdmin){alert("Cissi / Mars admin only.");return;}const rule={...DEFAULT_TAX_RULES[2026]};const rr=await saveTaxRuleToCloud(2026,rule);if(rr.error){byId("taxRuleMsg").textContent=rr.error.message;return;}const map=loadTaxRules();map[2026]=rule;saveTaxRulesMap(map);loadTaxRuleEditor(2026);updateTaxRuleStatus();});
-  byId("saveTaxRulesBtn")?.addEventListener("click",async()=>{if(!isGlobalAdmin){alert("Cissi / Mars admin only.");return;}try{const y=Number(byId("taxRuleYear").value)||taxYearNow();const r={year:y,nonResidentRate:Number(byId("taxRuleNonResidentRate").value||0)/100,individualRelief:Number(byId("taxRuleIndividualRelief").value||0),spouseNotWorkingRelief:Number(byId("taxRuleSpouseRelief").value||0),disabledIndividualRelief:Number(byId("taxRuleDisabledIndividual").value||0),disabledSpouseRelief:Number(byId("taxRuleDisabledSpouse").value||0),childU18Relief:Number(byId("taxRuleChildU18").value||0),childStudyRelief:Number(byId("taxRuleChildStudy").value||0),epfReliefCap:Number(byId("taxRuleEpfCap").value||0),rounding:Number(byId("taxRuleRounding").value||0.05),bands:taxBandsFromText(byId("taxRuleBands").value),updatedAt:`Updated ${new Date().toLocaleString()}`};const cloud=await saveTaxRuleToCloud(y,r);if(cloud.error){byId("taxRuleMsg").textContent=cloud.error.message;return;}const map=loadTaxRules();map[y]=r;saveTaxRulesMap(map);byId("taxRuleMsg").textContent=`Saved Tax / PCB rules for ${y} to cloud.`;updateTaxRuleStatus();}catch(err){byId("taxRuleMsg").textContent=err.message||String(err);}});
-  document.addEventListener("change",e=>{if(e.target&&e.target.id==="salaryMonth")updateTaxRuleStatus();});
-  setTimeout(updateTaxRuleStatus,0);
 
   let scrollTimer;
   window.addEventListener("scroll",()=>{
@@ -20508,6 +20470,8 @@ async function ndSavePurchaseChannel(){
  await ndRenderPurchaseChannels();
 }
 async function showOrders(){
+  document.body.dataset.ndVisiblePage='orders';
+
   const p=document.getElementById("ordersPage");
   if(!p)return;
 
@@ -20644,6 +20608,8 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
   window.addEventListener("beforeunload",function(){
     if(valid.has(window.activeMainPage)) savePage(window.activeMainPage);
   });
+Object.assign(window,{addSettlementAdmin,showSettlement,showOrders,refreshOrdersVisibility});
+
 })();
 </script>
 <script>
@@ -27117,6 +27083,63 @@ input,select,textarea,button,a{
  function moneyBonus(v){return "RM "+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
  function monthBonus(){return $("bonusMonth")?.value || ndLocalMonthISO();}
  function bonusMonthDate(){return monthBonus()+"-01";}
+ let ndBonusDeductionAdding=false;
+ const ndBonusDeductionDeleting=new Set();
+ async function addBonusDeduction(){
+   if(!canEditStaffBonus() || ndBonusDeductionAdding) return;
+   const reason=String($("bonusDeductionReason")?.value||"").trim();
+   const rawAmount=String($("bonusDeductionAmount")?.value||"").trim();
+   if(!reason){alert("Please enter deduction reason.");return;}
+   if(!/^(?:\d+)(?:\.\d{1,2})?$/.test(rawAmount)){
+     alert("Enter a valid deduction amount (up to 2 decimal places).");return;
+   }
+   const amount=Number(rawAmount);
+   if(!Number.isFinite(amount)||amount<=0){alert("Please enter a positive deduction amount.");return;}
+   const originalMonth=bonusMonthDate();
+   const originalBranch=bonusBranch;
+   const button=$("bonusDeductionSaveBtn");
+   ndBonusDeductionAdding=true;
+   const previousLabel=button?.textContent;
+   if(button){button.disabled=true;button.textContent="Saving...";}
+   try{
+     const {error}=await salaryDb.from("branch_bonus_deductions").insert({
+       bonus_month:originalMonth,
+       branch:originalBranch,
+       reason,
+       amount:Number(amount.toFixed(2)),
+       created_by:currentBonusEmail()
+     });
+     if(error) throw error;
+     if(bonusMonthDate()===originalMonth && bonusBranch===originalBranch){
+       if($("bonusDeductionReason")?.value===reason) $("bonusDeductionReason").value="";
+       if(String($("bonusDeductionAmount")?.value||"").trim()===rawAmount) $("bonusDeductionAmount").value="";
+       await loadBonus();
+     }
+   }catch(err){alert("Deduction save failed: "+(err?.message||String(err)));}
+   finally{
+     ndBonusDeductionAdding=false;
+     if(button?.isConnected){button.disabled=false;button.textContent=previousLabel;}
+   }
+ }
+
+ async function deleteBonusDeduction(id){
+   if(!canEditStaffBonus()) return;
+   const numericId=Number(id);
+   if(!Number.isSafeInteger(numericId)||numericId<=0||ndBonusDeductionDeleting.has(numericId))return;
+   if(!confirm("Delete this bonus deduction?")) return;
+   const originalMonth=bonusMonthDate();
+   const originalBranch=bonusBranch;
+   ndBonusDeductionDeleting.add(numericId);
+   try{
+     const {error}=await salaryDb.from("branch_bonus_deductions")
+       .delete().eq("id",numericId).eq("bonus_month",originalMonth).eq("branch",originalBranch);
+     if(error) throw error;
+     if(bonusMonthDate()===originalMonth && bonusBranch===originalBranch) await loadBonus();
+   }catch(err){alert("Delete failed: "+(err?.message||String(err)));}
+   finally{ndBonusDeductionDeleting.delete(numericId);}
+ }
+
+
  function currentBonusEmail(){
    return String(window.currentUserEmail||window.currentEmail||window.userEmail||"").trim().toLowerCase();
  }
@@ -27344,8 +27367,10 @@ input,select,textarea,button,a{
    }
  }
 
- function showBonus(){
+ async function showBonus(){
+   await syncBonusAuth();
    if(!canOpenBonus()){if(typeof showDaily==="function")showDaily();return;}
+   document.body.dataset.ndVisiblePage="bonus";
    window.activeMainPage="bonus";
    try{sessionStorage.setItem("nd_last_page_v2","bonus");sessionStorage.setItem("nd_last_page_v3","bonus");}catch(_){}
    ["appView","salaryPage","rosterPage","settlementPage","ordersPage","settingsPage"].forEach(id=>{
@@ -29456,7 +29481,7 @@ function monthKey(){
 })();
 
 
-window.addEventListener("pageshow",()=>refreshDailyBirthdayReminderLazy(true));
+window.addEventListener("pageshow",()=>window.ndRefreshDailyBirthdayReminder?.(true));
 
 /* ===== SIDEBAR CLOSE AFTER MENU SELECTION ===== */
 (function(){
@@ -31135,6 +31160,7 @@ window.addEventListener("resize",()=>{
 
 // Birthday NA option
 function syncBirthdayNA(prefix){
+  const byId=id=>document.getElementById(id);
   const isEdit=prefix==="edit";
   const cb=byId(isEdit?"editEmpBirthdayNA":"empBirthdayNA");
   const date=byId(isEdit?"editEmpBirthday":"empBirthday");
@@ -31942,7 +31968,7 @@ function setup(){if(!by('socialCalendar')||by('ndAiDetailOverlay'))return;const 
  const toolbar=by('socialCalendarFrame');if(toolbar)toolbar.parentNode.insertBefore(button,toolbar);
  refresh(true);
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{setup();load();});else{setup();load();}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
 <style id="nd-bonus-inside-salary-style">
