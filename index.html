@@ -4728,9 +4728,9 @@ window.ndEmployeeFullName = function(employee){
 </div>
 </div>
 </div>
-<div class="card span12 nd-petty-compact" style="background:var(--soft)">
+<div id="ndExpenseActionCard" class="card span12 nd-petty-compact" style="background:var(--soft)">
 <div class="nd-petty-head"><h3 id="pettyInOutTitle">Petty Cash Expense</h3><div class="nd-petty-balance"><span>Available Balance</span><input aria-label="Petty Cash Balance" id="pettyRemaining" readonly="" type="text"/></div></div>
-<div class="nd-petty-fields">
+<details class="nd-action-expand" id="ndExpenseExpand"><summary><span><strong>Add Expense</strong><small>Record a payment from petty cash</small></span><span class="nd-action-plus" aria-hidden="true">+</span></summary><div class="nd-petty-fields">
 <div class="nd-petty-field nd-petty-reason"><label for="pettyReason">Reason</label><input id="pettyReason" placeholder="Enter expense reason" required="required" type="text"/></div>
 <div class="nd-petty-field nd-petty-amount"><label for="pettyAmount">Amount</label><div class="money-wrap"><span class="rm-prefix">RM</span><input id="pettyAmount" min="0" step="0.01" type="number" value=""/></div></div>
 <div class="nd-petty-field nd-petty-receipt"><label>Receipt</label><div class="petty-inline-receipt">
@@ -4740,16 +4740,12 @@ window.ndEmployeeFullName = function(employee){
 <div class="helper" id="pettyReceiptSelected">No receipt selected</div>
 </div></div>
 <input id="pettyType" type="hidden" value="out"/>
-<div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" type="button">Submit Expense</button></div>
+<div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" type="button">Add Expense</button></div>
 </div>
-<div class="table-wrap nd-petty-history-table"><table><thead><tr><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th></th></tr></thead><tbody id="pettyBody"></tbody></table></div>
+</details><div class="table-wrap nd-petty-history-table"><table><thead><tr><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th></th></tr></thead><tbody id="pettyBody"></tbody></table></div>
 </div>
 <div class="card span12" id="cashRemittanceCard" style="background:#fff;border-color:#e1e5e2">
-<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-<div>
-<h3 style="margin:0">Cash Transfer to Bank</h3>
-</div>
-</div>
+<details class="nd-action-expand" id="ndTransferExpand"><summary><span><strong>Cash Transfer to Bank</strong><small>Submit a bank deposit with its receipt</small></span><span class="nd-action-plus" aria-hidden="true">+</span></summary>
 <div class="cash-remittance-entry">
 <div class="money-line">
 <label for="cashRemittanceAmount">Amount</label>
@@ -4763,13 +4759,13 @@ window.ndEmployeeFullName = function(employee){
 <div class="helper" id="cashRemittanceFileState" style="margin-top:5px">No receipt selected</div>
 </div>
 <div class="cash-remittance-submit-wrap">
-<button class="btn" id="cashRemittanceSubmitBtn" type="button">Submit Cash Transfer to Bank</button>
+<button class="btn" id="cashRemittanceSubmitBtn" type="button">Submit Transfer</button>
 <div class="helper" id="cashRemittanceSubmitState" style="margin-top:5px"></div>
 </div>
 </div>
-<div style="margin-top:16px;padding-top:14px;border-top:1px solid #bfd4e5">
+</details><div class="nd-submissions-section">
 <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-<strong>Today’s Submissions</strong>
+<strong>Today’s Submissions</strong><button type="button" class="mini" id="cashRemittanceTodayRefresh" aria-label="Refresh today’s submissions" title="Refresh">↻</button>
 </div>
 <div class="table-wrap" id="cashRemittanceMyHistory"><div class="helper">Loading history...</div></div>
 </div>
@@ -5288,8 +5284,11 @@ window.ndEmployeeFullName = function(employee){
         status:"pending",
         submitted_by:currentUserEmail||""
       };
-      const {error}=await db.from("cash_remittances").insert(payload);
+      const {data:savedRemittance,error}=await db.from("cash_remittances").insert(payload).select("*").single();
       if(error) throw new Error(error.message);
+      uploaded=null; // The saved record owns its receipt from this point.
+      cashRemittances=[savedRemittance,...cashRemittances.filter(x=>String(x.id)!==String(savedRemittance.id))];
+      renderMyCashRemittanceHistory();
 
       $("cashRemittanceAmount").value="";
       pendingCashRemittanceFile=null;
@@ -5306,9 +5305,25 @@ window.ndEmployeeFullName = function(employee){
       if(state){state.textContent="Submit failed";state.className="helper bad";}
       alert("Cash Transfer to Bank submit failed: "+(err?.message||err));
     }finally{
-      if(btn){btn.disabled=false;btn.textContent="Submit Cash Remittance";}
+      if(btn){btn.disabled=false;btn.textContent="Submit Transfer";}
     }
   }
+
+  function ndRemittanceBusinessDate(timestamp){
+    if(!timestamp)return '';
+    const value=new Date(timestamp);if(!Number.isFinite(value.getTime()))return '';
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(value);
+    const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day;
+  }
+  function ndIsTodaysRemittance(record,branch,day){
+    const submitted=ndRemittanceBusinessDate(record.submitted_at||record.created_at);
+    return String(record.branch||'').trim()===String(branch||'').trim()
+      && (submitted||String(record.remittance_date||'').slice(0,10))===day;
+  }
+  $('cashRemittanceTodayRefresh')?.addEventListener('click',async()=>{
+    const button=$('cashRemittanceTodayRefresh');button.disabled=true;
+    try{await fetchRows()}finally{button.disabled=false}
+  });
 
   function renderMyCashRemittanceHistory(errorMessage=""){
     const root=$("cashRemittanceMyHistory");
@@ -5316,7 +5331,8 @@ window.ndEmployeeFullName = function(employee){
     if(errorMessage){root.innerHTML=`<div class="bad" style="padding:10px">Unable to load records: ${escHtml(errorMessage)}</div>`;return;}
     const email=String(currentUserEmail||"").trim().toLowerCase();
     if(!email){root.innerHTML='<div class="helper">Please sign in to view your submissions.</div>';return;}
-    const rows=(cashRemittances||[]).filter(x=>String(x.branch||"").trim()===String(currentBranch||"").trim() && String(x.remittance_date||"").slice(0,10)===today())
+    const businessToday=ndRemittanceBusinessDate(new Date());
+    const rows=(cashRemittances||[]).filter(x=>ndIsTodaysRemittance(x,currentBranch,businessToday))
       .sort((a,b)=>String(b.submitted_at||b.remittance_date||"").localeCompare(String(a.submitted_at||a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
     if(!rows.length){root.innerHTML='<div class="helper" style="padding:10px">No submissions for this branch today.</div>';return;}
     root.innerHTML=`<table style="min-width:620px"><thead><tr><th>Date</th><th>Branch</th><th>Amount</th><th>Receipt</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows.map(x=>{
@@ -7713,7 +7729,7 @@ return `<div class="history-date-card">
         <td>${escHtml(e.reason||"-")}</td>
         <td>${money(e.amount)}</td>
         <td>${receiptState}</td>
-        <td><button type="button" class="mini" data-del="${i}">Delete</button></td>`;
+        <td><details class="nd-row-menu"><summary aria-label="Expense actions">⋯</summary><button type="button" class="mini" data-del="${i}">Delete</button></details></td>`;
       body.appendChild(tr);
     });
 
@@ -8083,7 +8099,7 @@ return `<div class="history-date-card">
     if(detail)detail.remove();
   }
 
-  function renderAll(){renderHistory();renderMonth();updateMonthTotal();updateTodayTotalCash();
+  function renderAll(){renderHistory();renderMonth();updateMonthTotal();updateTodayTotalCash();renderMyCashRemittanceHistory();
     const day=String($("settlementDate")?.value||"");
     const total=pettyEntries.filter(e=>e&&e.type==="in"&&(e.transfer_to_petty===true||e.reason==="Cash Withdrawal to Petty Cash")).reduce((sum,e)=>sum+(Number(e.amount)||0),0);
     window.ndDailyPettyReminderData={date:day,branch:currentBranch,amount:total,entry:(window.ndDailyPettyReminderData?.entry||0)};
@@ -32342,6 +32358,44 @@ function fineLetter(r){
  if(!r||r.review_status!=='approved'){alert('UMO / Mars approval required.');return;}
  const w=window.open('','_blank');if(!w){alert('Allow pop-ups to open the letter.');return;}
  const h=`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fine Letter</title><style>body{font-family:Arial,sans-serif;color:#20372c;max-width:780px;margin:48px auto;padding:35px;border-top:8px solid #234b3c}h1{letter-spacing:2px}p{line-height:1.8}button{padding:10px 18px}@media print{button{display:none}}</style></head><body><button onclick="print()">Print / Save PDF</button><h1>NATURE'S DAO</h1><h2>FINE LETTER — INTERNAL DISCIPLINARY RECORD</h2><p><b>Reference:</b> ND-FL-${esc(String(r.id).padStart(6,'0'))}</p><p><b>Employee:</b> ${esc(r.employee_name)}</p><p><b>Branch:</b> ${esc(r.outlet)}</p><p><b>Incident Date:</b> ${esc(r.incident_date)}</p><p><b>Reason:</b> ${esc(r.reason_en)}</p><p><b>Approved Proposed Amount:</b> RM ${Number(r.approved_amount||0).toFixed(2)}</p><p>This letter records an internal disciplinary decision. It does not authorize an automatic deduction from wages. Any wage deduction must be independently verified as lawful.</p><p><b>Status:</b> Approved by management</p>
+
+
+<style id="nd-daily-action-redesign">
+#ndExpenseActionCard,#cashRemittanceCard{padding:20px!important;border:1px solid #e0e7e3!important;border-radius:20px!important;box-shadow:0 3px 16px #173e2c05!important;background:#fff!important}
+#ndExpenseActionCard .nd-petty-head{margin-bottom:14px;align-items:center;gap:12px}
+#ndExpenseActionCard .nd-petty-head h3{font-size:18px!important;margin:0}
+#ndExpenseActionCard .nd-petty-balance{background:#f0f6f2;border-radius:10px;padding:8px 12px;min-width:110px}
+#ndExpenseActionCard .nd-petty-balance span{font-size:11px!important;text-transform:uppercase;letter-spacing:.04em}
+#ndExpenseActionCard #pettyRemaining{font-size:17px!important;padding:0!important;min-height:24px!important;background:transparent!important;border:0!important;text-align:right}
+.nd-action-expand>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;padding:8px 0;min-height:58px}
+.nd-action-expand>summary::-webkit-details-marker,.nd-row-menu>summary::-webkit-details-marker{display:none}
+.nd-action-expand>summary strong{display:block;font-size:17px;color:#263f36}
+.nd-action-expand>summary small{display:block;margin-top:5px;font-size:12px;color:#78847e;line-height:1.4;font-weight:400}
+.nd-action-plus{display:grid;place-items:center;width:32px;height:32px;background:#edf3ef;border-radius:50%;font-size:23px;font-weight:400;color:#476758;flex-shrink:0}
+.nd-action-expand[open]>summary .nd-action-plus{transform:rotate(45deg)}
+.nd-action-expand[open]>summary{margin-bottom:16px}
+#ndExpenseActionCard .nd-petty-fields{padding-top:0!important}
+#ndExpenseActionCard #addPettyBtn,#cashRemittanceCard #cashRemittanceSubmitBtn{width:auto!important;min-height:42px!important;padding:10px 22px!important;font-size:14px!important;background:#eaf1ed!important;color:#284d3d!important;border:1px solid #d1dfd7!important;border-radius:10px!important;box-shadow:none!important}
+#cashRemittanceCard .cash-remittance-submit-wrap{display:flex;flex-direction:column;align-items:flex-end}
+#cashRemittanceCard #cashRemittanceFileBtn,#ndExpenseActionCard #pettyReceiptFileBtn{min-height:44px!important;padding:10px 14px!important;font-size:13px!important;border-radius:10px!important;background:#f8faf9!important;border:1px dashed #cbd8cf!important;color:#4a6256!important}
+#cashRemittanceCard label,#ndExpenseActionCard label{font-size:13px!important}
+.nd-submissions-section{margin-top:16px;padding-top:16px;border-top:1px solid #e6ece8}
+.nd-submissions-section strong{font-size:14px}
+#cashRemittanceTodayRefresh{border:0!important;background:transparent!important;width:36px;min-height:36px!important;padding:4px!important;font-size:21px!important;color:#648073!important}
+#cashRemittanceMyHistory>.helper{font-size:13px!important;padding:12px 0!important}
+#ndExpenseActionCard .nd-petty-history-table{margin-top:14px;border:0!important;overflow:visible!important}
+#ndExpenseActionCard .nd-petty-history-table table{min-width:0!important;width:100%!important;table-layout:fixed}
+#ndExpenseActionCard .nd-petty-history-table th,#ndExpenseActionCard .nd-petty-history-table td{padding:12px 7px!important;font-size:12px!important;overflow-wrap:anywhere}
+#ndExpenseActionCard .nd-petty-history-table th:first-child,#ndExpenseActionCard .nd-petty-history-table td:first-child{display:none}
+#ndExpenseActionCard .nd-petty-history-table th:nth-child(2){width:35%}
+#ndExpenseActionCard .nd-petty-history-table th:nth-child(3){width:25%}
+#ndExpenseActionCard .nd-petty-history-table th:nth-child(4){width:25%}
+#ndExpenseActionCard .nd-petty-history-table th:last-child{width:15%}
+.nd-row-menu{position:relative}.nd-row-menu>summary{list-style:none;display:grid;place-items:center;min-height:36px;font-size:22px;cursor:pointer;border-radius:8px;color:#6c7c73}
+.nd-row-menu[open]>button{position:absolute;z-index:50;right:0;top:35px;padding:9px 16px!important;background:white!important;border:1px solid #e3d8d5!important;box-shadow:0 5px 20px #0002;color:#a44739!important;font-size:13px!important}
+.nd-daily-submit-panel #dailySubmitBtn{background:#284f3f!important;color:#fff!important;border-radius:14px!important;min-height:54px!important;font-size:16px!important;box-shadow:0 4px 12px #284f3f18!important}
+@media(max-width:700px){#ndExpenseActionCard,#cashRemittanceCard{padding:16px!important;border-radius:16px!important}#ndExpenseActionCard .nd-petty-fields{grid-template-columns:1fr!important}#ndExpenseActionCard .nd-petty-balance{max-width:145px}#cashRemittanceCard .cash-remittance-entry{display:grid!important;grid-template-columns:1fr!important;gap:16px!important}.nd-action-expand>summary strong{font-size:16px}.nd-action-expand>summary small{font-size:12px}}
+</style>
 
 </body></html>`;
  w.document.open();w.document.write(h);w.document.close();
