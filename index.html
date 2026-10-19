@@ -6,12 +6,21 @@
 (function(){
  let dialog,lastFocus,oldOverflow;
  function close(){if(!dialog.open)return;dialog.close();dialog.querySelector('[data-content]').replaceChildren();document.body.style.overflow=oldOverflow;lastFocus?.focus();}
- window.ndReceiptPreview=function(url){
+ window.ndReceiptPreview=function(url,context={}){
   let parsed;try{parsed=new URL(url,location.href);if(!['https:','http:','blob:'].includes(parsed.protocol))throw Error();}catch(_){alert('Unable to preview receipt.');return;}
   if(!dialog){
    const style=document.createElement('style');style.textContent='#ndReceiptPreview{width:min(1100px,96vw);height:90vh;height:90dvh;max-height:96dvh;padding:0;border:0;border-radius:14px;background:#f2f4f3;color:#18372c;box-shadow:0 16px 60px #0006}#ndReceiptPreview::backdrop{background:#0009}#ndReceiptPreview .nd-rp-shell{height:100%;display:flex;flex-direction:column}#ndReceiptPreview header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:white;gap:12px}#ndReceiptPreview button{padding:9px 16px;cursor:pointer;border:1px solid #ccd6d0;border-radius:8px;background:white;color:#18372c}#ndReceiptPreview [data-content]{flex:1;min-height:0;overflow:auto;text-align:center;padding:8px}#ndReceiptPreview img{max-width:100%;height:auto;display:block;margin:auto}#ndReceiptPreview iframe{width:100%;height:100%;border:0;background:white}#ndReceiptPreview p{padding:8px}';document.head.appendChild(style);
-   dialog=document.createElement('dialog');dialog.id='ndReceiptPreview';dialog.setAttribute('aria-labelledby','ndReceiptPreviewTitle');dialog.innerHTML='<div class="nd-rp-shell"><header><strong id="ndReceiptPreviewTitle">Receipt Preview</strong><button type="button" autofocus>Close ×</button></header><div data-content></div></div>';document.body.appendChild(dialog);
+   dialog=document.createElement('dialog');dialog.id='ndReceiptPreview';dialog.setAttribute('aria-labelledby','ndReceiptPreviewTitle');dialog.innerHTML='<div class="nd-rp-shell"><header><strong id="ndReceiptPreviewTitle">Receipt Preview</strong><button type="button" autofocus>Close ×</button></header><div data-content></div><footer data-review></footer></div>';document.body.appendChild(dialog);
    dialog.querySelector('button').onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)close();}});
+  }
+  const footer=dialog.querySelector('[data-review]');footer.replaceChildren();
+  footer.style.cssText='flex-shrink:0;padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));background:white;border-top:1px solid #dce3df;display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+  const amount=document.createElement('strong');amount.style.cssText='margin-right:auto;font-size:18px';amount.textContent='Amount: '+(context.amount!=null&&Number.isFinite(Number(context.amount))?'RM '+Number(context.amount).toFixed(2):'—');footer.appendChild(amount);
+  const status=document.createElement('span');status.setAttribute('role','status');status.textContent=context.status||'';footer.appendChild(status);
+  const controls=[];
+  if(typeof context.verify==='function')for(const [value,label,color] of [['accepted','Correct','#18754b'],['adjust','Error','#b42318']]){
+   const btn=document.createElement('button');btn.type='button';btn.textContent=label;btn.style.color=color;controls.push(btn);footer.appendChild(btn);
+   btn.onclick=async()=>{if(!confirm('Confirm '+label+' for this receipt?'))return;controls.forEach(b=>b.disabled=true);status.textContent='Saving...';try{const saved=await context.verify(value);if(saved===false){status.textContent='Not saved';return;}status.textContent=label+' ✓';}catch(err){status.textContent='Save failed';alert('Verification failed: '+(err?.message||err));}finally{controls.forEach(b=>b.disabled=false);}};
   }
   const content=dialog.querySelector('[data-content]');content.replaceChildren();
   const pdf=/\.pdf$/i.test(parsed.pathname);const media=document.createElement(pdf?'iframe':'img');
@@ -5173,6 +5182,20 @@ window.ndEmployeeFullName = function(employee){
     return d.getTime()<=Date.now();
   }
 
+
+  function ndReceiptReviewContext(receipt){
+    const path=receipt?.path;if(!path)return {};
+    for(const row of allRows||[]){
+      const entries=Array.isArray(row.petty_entries)?row.petty_entries:[];
+      const index=entries.findIndex(e=>e?.receipt?.path===path);
+      if(index>=0){const entry=entries[index];return {amount:entry.amount,status:entry.verification_status==='accepted'?'Correct':entry.verification_status==='adjust'?'Error':'Pending',verify:isSystemAdmin&&entry.type==='out'?async value=>{await ndSetPettyHistoryVerification(row.id,index,value);return true;}:null};}
+      for(const kind of ['card','tng'])if(row[kind==='card'?'card_settlement_receipt':'tng_settlement_receipt']?.path===path){
+        const field=kind==='card'?'card_settlement_proof':'tng_settlement_proof';
+        return {amount:kind==='card'?Number(row.visa||0)+Number(row.master||0)+Number(row.amex||0)+Number(row.online_card||0):row.tng,status:row.payment_statuses?.[field]==='accepted'?'Correct':row.payment_statuses?.[field]==='adjust'?'Error':'Pending',verify:isSystemAdmin?async value=>{await setDailyProofStatus(row.id,kind,value);return (allRows||[]).find(r=>Number(r.id)===Number(row.id))?.payment_statuses?.[field]===value;}:null};
+      }
+    }
+    return {};
+  }
   async function openCashRemittanceReceipt(item){
     if(!item?.receipt_path){
       alert("Receipt is no longer available.");
@@ -5183,7 +5206,7 @@ window.ndEmployeeFullName = function(employee){
       alert("Unable to open receipt: "+(error?.message||"Unknown error"));
       return;
     }
-    window.ndReceiptPreview(data.signedUrl);
+    window.ndReceiptPreview(data.signedUrl,{amount:item.amount,status:item.status||"pending",verify:isSystemAdmin&&String(item.status||"pending")==="pending"?async value=>{await setCashRemittanceStatus(item.id,value==="accepted"?"verified":"rejected");return (cashRemittances||[]).find(r=>Number(r.id)===Number(item.id))?.status===(value==="accepted"?"verified":"rejected");}:null});
   }
 
   async function submitCashRemittance(){
@@ -6073,7 +6096,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       alert("Unable to open proof: "+(error?.message||"Unknown error"));
       return;
     }
-    window.ndReceiptPreview(data.signedUrl);
+    window.ndReceiptPreview(data.signedUrl,ndReceiptReviewContext(receipt));
   }
 
   function dailyProofHistoryCell(row,kind){
@@ -7211,7 +7234,7 @@ return `<div class="history-date-card">
       alert("Unable to open file: "+(error?.message||"Unknown error"));
       return;
     }
-    window.ndReceiptPreview(data.signedUrl);
+    window.ndReceiptPreview(data.signedUrl,ndReceiptReviewContext(receipt));
   }
 
   async function cleanupExpiredDailySettlementProofs(){
@@ -7379,7 +7402,7 @@ return `<div class="history-date-card">
       a.click();
       a.remove();
     }else{
-      window.ndReceiptPreview(data.signedUrl);
+      window.ndReceiptPreview(data.signedUrl,ndReceiptReviewContext(receipt));
     }
   }
 
@@ -8392,7 +8415,7 @@ return `<div class="history-date-card">
     if(!receipt?.path){alert('No receipt available.');return;}
     const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300);
     if(error||!data?.signedUrl){alert('Unable to open receipt: '+(error?.message||'Unknown error'));return;}
-    window.ndReceiptPreview(data.signedUrl);
+    window.ndReceiptPreview(data.signedUrl,ndReceiptReviewContext(receipt));
   }
   function ndVerifyRender(){
     const m=ndVerifyModal(),pages=Math.max(1,Math.ceil(ndVerifyQueue.length/6));ndVerifyPage=Math.min(ndVerifyPage,pages-1);
@@ -21540,6 +21563,8 @@ html,body{max-width:100%;overflow-x:hidden!important}
   }
 
   function detectVisiblePage(){
+    const selected=document.body.dataset.ndVisiblePage||window.activeMainPage;
+    if(selected) return selected;
     const map={
       daily:"dailyPage",
       roster:"rosterPage",
@@ -23991,14 +24016,11 @@ html,body{max-width:100%;overflow-x:hidden!important}
 
   function saveOrdersState(){
     try{
-      sessionStorage.setItem(PAGE_KEY,"orders");
-      sessionStorage.setItem(PAGE_KEY,"orders");
       localStorage.setItem(MODE_KEY,String(window.ordersMode||ordersMode||"manage"));
       const b=document.getElementById("ordersBranch")?.value;
       if(b)localStorage.setItem(BRANCH_KEY,b);
       const m=document.getElementById("ordersMonth")?.value;
       if(m)localStorage.setItem(MONTH_KEY,m);
-      window.activeMainPage="orders";
     }catch(_){}
   }
 
@@ -25746,12 +25768,12 @@ Bed Fee: Amlee / + merchant / database memory checked.
     }
   }
 
-  async function openReceipt(receipt){
+  async function openReceipt(receipt,record){
     if(!receipt?.path){alert("No receipt file.");return;}
     const db=dbClient();
     const {data,error}=await db.storage.from("petty-receipts").createSignedUrl(receipt.path,300);
     if(error||!data?.signedUrl){alert("Unable to open receipt.");return;}
-    window.ndReceiptPreview(data.signedUrl);
+    window.ndReceiptPreview(data.signedUrl,{amount:record?.total_amount});
   }
 
   function editRecord(r){
@@ -25933,7 +25955,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     root.querySelectorAll("[data-receipt-view]").forEach(btn=>{
       btn.onclick=()=>{
         const row=rows.find(r=>Number(r.id)===Number(btn.dataset.receiptView));
-        if(row) openReceipt(row.receipt_file);
+        if(row) openReceipt(row.receipt_file,row);
       };
     });
 
