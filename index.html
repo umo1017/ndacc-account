@@ -32902,22 +32902,42 @@ const $=id=>document.getElementById(id), TABLE='nd_staff_forms', ADMIN='umo1017@
 let tab='interview',userEmail='',db=null,templates={};
 const defaults={interview:[["Candidate Name", "text"], ["IC / Passport", "text"], ["IC Photo Front", "file"], ["IC Photo Back", "file"], ["Date of Birth", "date"], ["Gender", "select:|Female|Male|Other"], ["Nationality", "text"], ["Marital Status", "select:|Single|Married|Divorced|Widowed"], ["Home Address", "textarea"], ["Phone", "tel"], ["Email Address", "email"], ["Emergency Contact Name", "text"], ["Emergency Contact Phone", "tel"], ["Spouse Name", "text"], ["Spouse IC No", "text"], ["Position Applied", "text"], ["Preferred Branch", "select:|Eco Botanic|Nusa Bestari"], ["Employment Type", "select:|Full Time|Part Time"], ["Start Date", "date"], ["Probation Period", "text"], ["Working Days", "number"], ["Working Hours", "text"], ["Rest Days", "number"], ["Bank Name", "text"], ["Bank Account No", "text"], ["KWSP (EPF) No", "text"], ["SOCSO No", "text"], ["EIS No", "text"], ["Employee Signature", "signature"], ["Signature Date", "date"], ["Administrative / Finance Signature", "signature"], ["Company Stamp", "file"], ["President Signature", "signature"], ["Interview Date", "date"], ["Interviewer", "text"], ["Experience", "textarea"], ["Availability", "text"], ["Expected Salary (RM)", "number"], ["Assessment", "textarea"], ["Interview Result", "select:Pending|Shortlisted|Accepted|Rejected"]],contract:[['Employee Name','text'],['IC / Passport','text'],['Position','text'],['Branch','text'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation (Months)','number'],['Notice Period','text'],['Working Hours','text'],['Contract Terms','textarea'],['Employee Acknowledgement','textarea']]};
 const ND_INTERVIEW_COMPANY_ADDRESS='Unit 02-02, Level 2, CIMB Leadership Academy, No. 3 Jalan Medini Utara 1, Medini Iskandar, 79200 Iskandar Puteri, Johor.';
-let interviewCategory='local';
+let interviewCategory='local',interviewBranchNames=['Eco Botanic','Nusa Bestari'];
+async function loadInterviewBranches(){
+ try{
+ const results=await Promise.allSettled([client().from('salary_outlets').select('name,is_global').order('id',{ascending:true}),client().from('daily_outlets').select('name,is_active').eq('is_active',true).order('id',{ascending:true})]);
+ const names=[];for(const result of results){if(result.status!=='fulfilled'||result.value.error||!Array.isArray(result.value.data))continue;for(const row of result.value.data){const name=String(row.name||'').trim();if(name&&name.toLowerCase()!=='global'&&!row.is_global&&row.is_active!==false&&!names.includes(name))names.push(name)}}
+ if(names.length)interviewBranchNames=names;
+ document.querySelectorAll('[data-nd-interview-branch]').forEach(select=>{const value=select.value;select.innerHTML='<option value="">Please select</option>'+interviewBranchNames.map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');if(value&&!interviewBranchNames.includes(value))select.add(new Option(value,value));select.value=value});
+ }catch(e){console.warn('[Interview] branches:',e.message)}
+}
 const interviewSections=[
- ['SECTION A : EMPLOYEE INFORMATION', [['Full Name','text'],['IC No','text'],['IC Photo Front','file'],['IC Photo Back','file'],['Date of Birth','date'],['Gender','select:|Female|Male|Other'],['Nationality','text'],['Married Status','select:|Single|Married|Divorced|Widowed'],['Home Address','textarea'],['Contact Number','tel'],['Email Address','email']]],
+ ['SECTION A : EMPLOYEE INFORMATION', [['Full Name','text'],['IC No','text'],['IC Photo Front','file'],['IC Photo Back','file'],['Date of Birth','date'],['Gender','select:|Female|Male|Other'],['Nationality','select:|China|Myanmar|Vietnam|Indonesia|Thailand'],['Married Status','select:|Single|Married|Divorced|Widowed'],['Home Address','textarea'],['Contact Number','tel'],['Email Address','email']]],
  ['SECTION B : EMERGENCY INFORMATION', [['Spouse Name','text'],['Spouse IC No','text']]],
- ['SECTION C : EMPLOYMENT INFORMATION', [['Branch','select:|Eco Botanic|Nusa Bestari'],['Department','select:|Therapist|Beautician|Manager|Front Desk|Other'],['Other Department','text'],['Employment Type','select:|Full Time|Part Time'],['Start Date','date'],['Probation Period','text'],['Working Day','number'],['Working Hours','text'],['Rest Day','number']]],
+ ['SECTION C : EMPLOYMENT INFORMATION', [['Branch','select:|Eco Botanic|Nusa Bestari'],['Department','select:|Therapist|Beautician|Manager|Front Desk|Other'],['Other Department','text'],['Employment Type','select:|Full Time|Part Time'],['Start Date','date'],['Probation Period','text'],['Working Day','number'],['Working Hours','text'],['Rest Day','select:|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday']]],
  ['SECTION D: BANK & STATUTORY INFORMATION', [['Payment Method','select:|Cash|Bank Transfer|TNG'],['Bank Name','text'],['Bank Account No','text'],['KWSP (EPF) No','text'],['SOCSO No','text'],['EIS No','text']]],
  ['SECTION E: SIGNATURES / COMPANY STAMPING', [['Employee Signature','signature'],['Date','date'],['Administrative / Finance Signature','signature'],['Company Stamp','file'],['President Signature','signature']]]
 ];
-function interviewGroups(){return interviewSections.map(([title,fields])=>[title,fields.flatMap(f=>{
- if(interviewCategory!=='non_local')return [f];
- if(f[0]==='IC No')return [['Passport No','text'],['Passport Expiry Date','date']];
- if(f[0]==='IC Photo Front')return [['Passport Photo','file']];
- if(f[0]==='IC Photo Back')return [['Work Permit No','text'],['Work Permit Expiry Date','date'],['Work Permit Photo','file']];
- if(f[0]==='Spouse IC No')return [['Spouse IC / Passport No','text']];
- return [f];
-})])}
+function interviewGroups(){return interviewSections.map(([title,fields])=>{
+ const mapped=fields.flatMap(f=>{
+  if(interviewCategory!=='non_local')return [f];
+  if(f[0]==='IC No')return [['Passport No','text']];
+  if(f[0]==='IC Photo Front')return [];
+  if(f[0]==='IC Photo Back')return [];
+  if(f[0]==='Spouse IC No')return [['Spouse IC / Passport No','text']];
+  return [f];
+ });
+ if(interviewCategory==='non_local'&&title.startsWith('SECTION A'))mapped.push(['Passport Expiry Date','date'],['Passport Photo Front','file'],['Passport Photo Back','file']);
+ return [title,mapped];
+})}
+function syncInterviewWorkingHours(root){
+ const field=label=>Array.from(root.querySelectorAll('.nd-form-field')).find(node=>node.querySelector('label')?.textContent===label)?.querySelector('input,select');
+ const branch=field('Branch'),hours=field('Working Hours');if(!branch||!hours)return;
+ const defaults={'eco botanic':'10am-10pm','nusa bestari':'1pm-1am','nusa botanic':'1pm-1am'};
+ let previousDefault=defaults[branch.value.trim().toLowerCase()]||'';
+ if(branch.ndWorkingHoursHandler)branch.removeEventListener('change',branch.ndWorkingHoursHandler);
+ branch.ndWorkingHoursHandler=()=>{const next=defaults[branch.value.trim().toLowerCase()]||'';if(!hours.value.trim()||(previousDefault&&hours.value===previousDefault))hours.value=next;previousDefault=next};branch.addEventListener('change',branch.ndWorkingHoursHandler);
+}
 function syncInterviewDepartment(root){
  const fields=fieldsFor('interview'),departmentIndex=fields.findIndex(f=>f[0]==='Department');
  const select=root.querySelector(`[data-nd-field="${departmentIndex}"]`),other=root.querySelector('[data-nd-other-department]');
@@ -32925,12 +32945,12 @@ function syncInterviewDepartment(root){
 }
 function renderInterview(root){
  let i=0;root.innerHTML=`<h3>Employee Interview Form</h3><div class="nd-interview-brand">${interviewLogoMarkup()}<div><strong>NATURE'S DAO GLOBAL HOLDINGS SDN BHD</strong><p>Company Registration No. 202501043436</p><label for="ndInterviewCompanyAddress">Company Address</label><textarea id="ndInterviewCompanyAddress" rows="3">${escapeHtml(ND_INTERVIEW_COMPANY_ADDRESS)}</textarea></div></div><label for="ndInterviewCategory">Applicant Type</label><select id="ndInterviewCategory"><option value="local" ${interviewCategory==='local'?'selected':''}>Local (Malaysian)</option><option value="non_local" ${interviewCategory==='non_local'?'selected':''}>Non-local (Foreign National)</option></select><form id="ndStaffEntryForm" class="nd-interview-row-layout">${interviewGroups().slice(0,4).map(([title,fields])=>`${(title.startsWith('SECTION C')||(interviewCategory==='non_local'&&title.startsWith('SECTION D')))?'<details class="nd-foreign-bank-details"><summary>'+escapeHtml(title)+' <span aria-hidden="true">›</span></summary>':''}<fieldset style="border:1px solid #ddd;border-radius:12px;padding:16px;margin:18px 0"><legend style="font-weight:700;color:#9a7426">${title}</legend><div class="nd-form-grid">${fields.map(f=>{const field=inputMarkup(f[0],f[1],i++);return (f[0]==='Work Permit No'?'<details class="nd-work-permit-details"><summary>Work Permit <span aria-hidden="true">›</span></summary><div class="nd-form-grid">':'')+field+(f[0]==='Work Permit Photo'?'</div></details>':'')}).join('')}</div></fieldset>${(title.startsWith('SECTION C')||(interviewCategory==='non_local'&&title.startsWith('SECTION D')))?'</details>':''}`).join('')}<button class="btn" type="submit">Save &amp; Sign</button></form>`;
- $('ndStaffEntryForm').onsubmit=saveEntry;initSignatures(root);syncInterviewDepartment(root);
+ $('ndStaffEntryForm').onsubmit=saveEntry;initSignatures(root);syncInterviewDepartment(root);syncInterviewWorkingHours(root);
  $('ndInterviewCategory').onchange=()=>{
  const companyAddress=$('ndInterviewCompanyAddress').value;const saved={};fieldsFor('interview').forEach(([label,kind],n)=>{const el=$('ndField'+n);saved[label]={kind,value:el?.value,files:el?.files,ink:el?.dataset.ink,data:kind==='signature'&&el?.dataset.ink?el.toDataURL():null}});
  interviewCategory=$('ndInterviewCategory').value;renderInterview(root);$('ndInterviewCompanyAddress').value=companyAddress;
  fieldsFor('interview').forEach(([label,kind],n)=>{const old=saved[label],el=$('ndField'+n);if(!old||!el)return;if(kind==='file'){if(old.files)el.files=old.files}else if(kind==='signature'&&old.data){const img=new Image();img.onload=()=>el.getContext('2d').drawImage(img,0,0);img.src=old.data;el.dataset.ink='1'}else if(kind!=='signature')el.value=old.value||''});
- syncInterviewDepartment(root);
+ syncInterviewDepartment(root);syncInterviewWorkingHours(root);
  };
 }
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -32942,8 +32962,10 @@ function fieldsFor(type){return type==='interview'?interviewGroups().slice(0,4).
 function inputMarkup(label,type,i){
  const required=['Full Name'].includes(label)?' required':'';
  let el;const attr=`data-nd-field="${i}" id="ndField${i}"`;
- if(type==='file')el=`<input ${attr} type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG or WebP · Maximum 2 MB</small>`;
+ if(label==='Branch')el=`<select ${attr} data-nd-interview-branch><option value="">Please select</option>${interviewBranchNames.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}</select>`;
+ else if(type==='file')el=`<input ${attr} type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG or WebP · Maximum 2 MB</small>`;
  else if(type==='signature')el=`<canvas ${attr} width="600" height="160" style="border:1px solid #ccc;border-radius:8px;width:100%;touch-action:none;background:white" aria-label="${escapeHtml(label)}"></canvas><button class="btn" type="button" data-clear-signature="${i}">Clear Signature</button>`;
+ else if(label==='Working Hours')el=`<input ${attr} type="text" list="ndWorkingHours${i}" placeholder="Select or enter custom hours"><datalist id="ndWorkingHours${i}"><option value="10am-10pm">Eco Botanic</option><option value="1pm-1am">Nusa Bestari</option></datalist>`;
  else if(type==='textarea')el=`<textarea ${attr}${required}></textarea>`;
  else if(type.startsWith('select:'))el=`<select ${attr}${required}>${type.slice(7).split('|').map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x||'Please select')}</option>`).join('')}</select>`;
  else el=`<input ${attr} type="${escapeHtml(type)}" ${type==='number'?'min="0" step="0.01"':''}${required}>`;
@@ -32966,7 +32988,7 @@ async function saveEntry(e){
  const branch=String(values['Preferred Branch']||values['Branch']||'Eco Botanic').trim();
  const fullName=String(values['Full Name']||values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');
  const formDate=values['Interview Date']||values['Start Date']||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
- const {data:saved,error}=await client().from(TABLE).insert({form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'}).select('id,form_type,full_name,form_data,branch').single();if(error)throw error;
+ const {data:saved,error}=await client().from(TABLE).insert({form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'}).select('id,form_type,full_name,form_data,branch,form_date').single();if(error)throw error;
  if(type==='interview')await openInterviewDocument(saved);
  if(form.isConnected){form.reset();form.querySelectorAll('[data-clear-signature]').forEach(b=>b.click())}status('Saved successfully.');
  }catch(err){status('Unable to save: '+err.message)}finally{button.disabled=false}
@@ -32974,12 +32996,14 @@ async function saveEntry(e){
 async function loadTemplates(){try{const {data,error}=await client().from('nd_staff_form_templates').select('form_type,fields').eq('is_active',true);if(error)throw error;(data||[]).forEach(r=>{if(defaults[r.form_type]&&Array.isArray(r.fields))templates[r.form_type]=r.fields})}catch(e){console.warn('[Staff Forms] templates:',e.message)}}
 async function saveTemplates(){if(!isAdmin())return;try{for(const t of ['interview','contract']){const raw=$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value;const fields=raw.split('\n').map(x=>{const at=x.indexOf(' | ');return at<0?null:[x.slice(0,at).trim(),x.slice(at+3).trim()]}).filter(x=>x&&x[0]&&x[1]);if(!fields.length)throw Error('Template must contain fields.');const {error}=await client().from('nd_staff_form_templates').upsert({form_type:t,template_name:t==='interview'?'Interview Template':'Contract Template',fields,updated_at:new Date().toISOString()},{onConflict:'form_type'});if(error)throw error;templates[t]=fields}status('Templates saved successfully.')}catch(e){status('Unable to save templates: '+e.message)}}
 function interviewDocumentValue(values,label){
- const aliases={'Full Name':'Candidate Name','IC No':'IC / Passport','Contact Number':'Phone','Married Status':'Marital Status','Position':'Position Applied','Working Day':'Working Days','Rest Day':'Rest Days','Date':'Signature Date'};
+ const aliases={'Passport Photo Front':'Passport Photo','Full Name':'Candidate Name','IC No':'IC / Passport','Contact Number':'Phone','Married Status':'Marital Status','Position':'Position Applied','Working Day':'Working Days','Rest Day':'Rest Days','Date':'Signature Date'};
  return values[label]??values[aliases[label]]??'';
 }
 function interviewDocumentGroups(values){const previous=interviewCategory;try{interviewCategory=String(values['Applicant Type']||'').startsWith('Non-local')||values['Passport No']?'non_local':'local';return interviewGroups()}finally{interviewCategory=previous}}
 function interviewDocumentImage(value){return value&&typeof value==='object'&&/^data:image\/(png|jpeg|webp);base64,/.test(value.data||'')?value.data:''}
 const ND_INTERVIEW_DOC_STYLE=`
+.nd-doc-identity-attachments{grid-template-columns:1fr!important;gap:20px!important}.nd-doc-identity-attachments figure{margin:0;min-height:150px;padding:16px}.nd-doc-identity-attachments img{max-height:260px!important;width:100%;object-fit:contain}
+
 .nd-interview-document{font-family:Arial,sans-serif;color:#202820;font-size:11pt;line-height:1.45;background:#edf1ed}
 .nd-interview-document *{box-sizing:border-box}
 .nd-doc-sheet{background:#fff;max-width:800px;margin:0 auto 22px;padding:32px 34px;box-shadow:0 3px 14px #173e3310}
@@ -33007,14 +33031,24 @@ function interviewDocumentMarkup(values){
  const section=([title,fields])=>{
   if(title.startsWith('SECTION E'))return `<section class="nd-doc-section"><h3>${escapeHtml(title)}</h3><div class="nd-doc-signatures">${['Employee Signature','Administrative / Finance Signature','President Signature','Company Stamp'].map(label=>{const img=interviewDocumentImage(values[label]);return `<div><strong>${label}</strong>${img?`<img src="${img}" alt="${label}">`:'<div class="nd-doc-sign-space"></div>'}${label==='Company Stamp'?'':`<span class="nd-doc-sign-date">Date: ${escapeHtml(label==='Employee Signature'?interviewDocumentValue(values,'Date')||'________________':'________________')}</span>`}</div>`}).join('')}</div></section>`;
   const rows=fields.filter(([label,kind])=>kind!=='file'&&(label!=='Other Department'||values.Department==='Other'||values[label]));
-  const files=fields.filter(([,kind])=>kind==='file');
+  const files=[];
   return `<section class="nd-doc-section"><h3>${escapeHtml(title)}</h3>${title.startsWith('SECTION C')?'<p class="nd-doc-instruction">This section may be completed after the interview and signing.</p>':''}<table class="nd-doc-table"><tbody>${rows.map(([label])=>{const v=interviewDocumentValue(values,label);return `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(v&&typeof v!=='object'?v:'')||'&nbsp;'}</td></tr>`}).join('')}</tbody></table>${files.length?`<div class="nd-doc-attachments">${files.map(([label])=>{const img=interviewDocumentImage(values[label]);return `<figure>${img?`<img src="${img}" alt="${escapeHtml(label)}">`:'<span class="nd-doc-instruction">Not provided</span>'}<figcaption>${escapeHtml(label)}</figcaption></figure>`}).join('')}</div>`:''}</section>`;
  };
+ const identityFiles=groups.slice(0,2).flatMap(([,fields])=>fields).filter(([,kind])=>kind==='file');
+ const identityPage=`<div class="nd-doc-sheet"><h2 class="nd-doc-title">Employee Interview Form A</h2><p class="nd-doc-subtitle">${subtype} &nbsp; | &nbsp; Identity documents</p><table class="nd-doc-table"><tbody><tr><th>Full Name</th><td>${escapeHtml(values['Full Name']||values['Candidate Name']||'')||'&nbsp;'}</td></tr></tbody></table><section class="nd-doc-section"><h3>${foreign?'PASSPORT':'IDENTITY CARD'} — FRONT &amp; BACK</h3><div class="nd-doc-attachments nd-doc-identity-attachments">${identityFiles.map(([label])=>{const img=interviewDocumentImage(interviewDocumentValue(values,label));return `<figure>${img?`<img src="${img}" alt="${escapeHtml(label)}">`:'<span class="nd-doc-instruction">Not provided</span>'}<figcaption>${escapeHtml(label)}</figcaption></figure>`}).join('')}</div></section></div>`;
  const footer=`<div class="nd-doc-footer">NATURE'S DAO &nbsp; | &nbsp; CONFIDENTIAL &nbsp; | &nbsp; ${subtype}</div>`;
- return `<article class="nd-interview-document"><div class="nd-doc-sheet">${heading()}<h1 class="nd-doc-title">Employee Interview Form</h1><p class="nd-doc-subtitle">${subtype}</p><p class="nd-doc-instruction">Complete available information. Leave unavailable or non-applicable fields blank.</p>${groups.slice(0,2).map(section).join('')}${footer}</div><div class="nd-doc-sheet"><h2 class="nd-doc-title">Employee Interview Form</h2><p class="nd-doc-subtitle">${subtype} &nbsp; | &nbsp; Employment and signatures</p><table class="nd-doc-table"><tbody><tr><th>Full Name</th><td>${escapeHtml(values['Full Name']||values['Candidate Name']||'')||'&nbsp;'}</td></tr></tbody></table>${groups.slice(2).map(section).join('')}${footer}</div></article>`;
+ return `<article class="nd-interview-document"><div class="nd-doc-sheet">${heading()}<h1 class="nd-doc-title">Employee Interview Form A</h1><p class="nd-doc-subtitle">${subtype}</p><p class="nd-doc-instruction">Complete available information. Leave unavailable or non-applicable fields blank.</p>${groups.slice(0,2).map(section).join('')}${footer}</div>${identityPage}<div class="nd-doc-sheet"><h2 class="nd-doc-title">Employee Interview Form A</h2><p class="nd-doc-subtitle">${subtype} &nbsp; | &nbsp; Employment and signatures</p><table class="nd-doc-table"><tbody><tr><th>Full Name</th><td>${escapeHtml(values['Full Name']||values['Candidate Name']||'')||'&nbsp;'}</td></tr></tbody></table>${groups.slice(2).map(section).join('')}${footer}</div></article>`;
+}
+
+function interviewDocumentFileName(row){
+ const values=row.form_data||{};
+ const name=String(values['Full Name']||values['Candidate Name']||row.full_name||'Employee').trim();
+ const date=String(values['Date']||values['Signature Date']||row.form_date||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'})).slice(0,10);
+ return (name+' '+date+' Interview Form A').replace(/[\\/:*?"<>|\x00-\x1f]/g,'-');
 }
 
 async function openInterviewDocument(row){
+ await loadInterviewBranches();
  let dialog=$('ndInterviewDocumentDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndInterviewDocumentDialog';dialog.style.cssText='width:min(900px,94vw);max-height:90dvh;padding:20px;border:1px solid #ddd;border-radius:16px';document.body.append(dialog)}
  let current={...row,form_data:{...(row.form_data||{})}};
  dialog.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button" data-doc-close>Close</button><button class="btn" type="button" data-doc-save>Save Document</button><button class="btn" type="button" data-doc-print>Print / Save as PDF</button></div><p role="status" data-doc-status>Sign below. Employment details can be added or changed later using Edit Details.</p><div data-doc-preview></div><fieldset style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px"><legend>Sign Document</legend><div class="nd-form-grid" data-doc-signatures></div></fieldset>';
@@ -33031,6 +33065,7 @@ async function openInterviewDocument(row){
  }});
  const department=edit.querySelector(`[data-nd-field="Edit${editFields.findIndex(f=>f[0]==='Department')}"]`),other=edit.querySelector('[data-nd-other-department]');
  if(department&&other){other.hidden=department.value!=='Other';department.onchange=()=>other.hidden=department.value!=='Other'}
+ syncInterviewWorkingHours(edit);
  const signing=interviewSections[4][1];panel.innerHTML=signing.map(([label,kind],i)=>inputMarkup(label,kind,'Doc'+i)).join('');initSignatures(panel);
  signing.forEach(([label,kind],i)=>{const el=panel.querySelector(`[data-nd-field="Doc${i}"]`),value=interviewDocumentValue(current.form_data,label),src=interviewDocumentImage(value);if(kind==='signature'&&src){const image=new Image();image.onload=()=>{el.getContext('2d').drawImage(image,0,0,el.width,el.height);el.dataset.ink='1'};image.src=src}else if(kind!=='file'&&kind!=='signature')el.value=value||''});
  panel.querySelectorAll('canvas[data-nd-field]').forEach(canvas=>{canvas.addEventListener('pointerdown',()=>canvas.dataset.modified='1');panel.querySelector(`[data-clear-signature="${canvas.dataset.ndField}"]`).addEventListener('click',()=>canvas.dataset.modified='1')});
@@ -33049,9 +33084,10 @@ for(let i=0;i<signing.length;i++){const [label,kind]=signing[i],el=panel.querySe
  dialog.querySelector('[data-doc-close]').onclick=()=>dialog.close();
  dialog.querySelector('[data-doc-print]').onclick=async()=>{
  if(!await save())return;
- const frame=document.createElement('iframe');frame.title='Interview document print';frame.style.cssText='position:fixed;width:1px;height:1px;left:-10000px;top:0;border:0';
+ const fileName=interviewDocumentFileName(current);
+ const frame=document.createElement('iframe');frame.title=fileName;frame.style.cssText='position:fixed;width:1px;height:1px;left:-10000px;top:0;border:0';
  frame.onload=async()=>{try{await Promise.all(Array.from(frame.contentDocument.images).map(img=>img.decode?.().catch(()=>{})));frame.contentWindow.focus();frame.contentWindow.print()}catch(e){message.textContent='Unable to open print: '+e.message}};
- frame.srcdoc='<!doctype html><html><head><title>Employee Interview Form</title><style>'+ND_INTERVIEW_DOC_STYLE+'</style></head><body>'+interviewDocumentMarkup(current.form_data)+'</body></html>';
+ frame.srcdoc='<!doctype html><html><head><title>'+escapeHtml(fileName)+'</title><style>'+ND_INTERVIEW_DOC_STYLE+'</style></head><body>'+interviewDocumentMarkup(current.form_data)+'</body></html>';
  dialog.querySelectorAll('iframe').forEach(f=>f.remove());dialog.append(frame);
  };
  if(!dialog.open)dialog.showModal();
@@ -33083,7 +33119,7 @@ async function loadHistory(){
  }catch(e){if(node?.isConnected)node.textContent='Unable to load history: '+e.message}
 }
 window.addEventListener('nd-interview-converted',()=>{if(tab==='history')loadHistory()});
-async function openForms(e){if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';try{sessionStorage.setItem('nd_last_page_v2','forms');sessionStorage.setItem('nd_last_page_v3','forms');const email=String(window.currentUserEmail||userEmail||'').toLowerCase();if(email){localStorage.setItem('nd_last_authorized_page_v4::'+email,'forms');localStorage.setItem('nd_last_authorized_page_v5::'+email,'forms')}}catch(_){}$('ndStaffFormsPage').hidden=false;document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));$('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');show('interview');await identity();await loadTemplates();document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{if(['history','templates'].includes(b.dataset.ndFormTab))b.style.display=isAdmin()?'':'none'});return false}
+async function openForms(e){if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';try{sessionStorage.setItem('nd_last_page_v2','forms');sessionStorage.setItem('nd_last_page_v3','forms');const email=String(window.currentUserEmail||userEmail||'').toLowerCase();if(email){localStorage.setItem('nd_last_authorized_page_v4::'+email,'forms');localStorage.setItem('nd_last_authorized_page_v5::'+email,'forms')}}catch(_){}$('ndStaffFormsPage').hidden=false;document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));$('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');show('interview');await identity();await Promise.all([loadTemplates(),loadInterviewBranches()]);document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{if(['history','templates'].includes(b.dataset.ndFormTab))b.style.display=isAdmin()?'':'none'});return false}
 window.ndOpenStaffForms=openForms;
 window.addEventListener('click',e=>{if(e.target.closest?.('#sidebarForms'))openForms(e)},true);
 function init(){document.querySelectorAll('[data-nd-form-tab]').forEach(b=>b.addEventListener('click',()=>{if((b.dataset.ndFormTab==='history'||b.dataset.ndFormTab==='templates')&&!isAdmin())return;show(b.dataset.ndFormTab)}));const staff=$('sidebarStaff'),forms=$('sidebarForms');if(staff&&forms){staff.insertAdjacentElement('afterend',forms)} }
