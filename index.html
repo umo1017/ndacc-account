@@ -33090,6 +33090,7 @@ async function openInterviewDocument(row){
  if(values['Department']!=='Other')values['Other Department']='';
 for(let i=0;i<signing.length;i++){const [label,kind]=signing[i],el=panel.querySelector(`[data-nd-field="Doc${i}"]`);if(kind==='signature'){if(el.dataset.modified||!values[label])values[label]=el.dataset.ink?{name:label,data:el.toDataURL('image/png')}:'';}else if(kind==='file'){if(el.files?.[0])values[label]=await readFile(el.files[0])}else values[label]=el.value||''}return values};
  const render=()=>{preview.innerHTML='<style>'+ND_INTERVIEW_DOC_STYLE+'</style>'+interviewDocumentMarkup(current.form_data)};render();
+ const describeError=(error,phase)=>{const parts=[error?.message,error?.details,error?.hint,error?.code].filter(Boolean).map(String);return phase+': '+(parts.length?[...new Set(parts)].join(' · '):'The server rejected the request.')};
  const request=async build=>{const controller=new AbortController();let timer;try{return await Promise.race([Promise.resolve(build(controller.signal)),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('The connection is taking too long. Please try again.'))},25000)})])}finally{clearTimeout(timer)}};
  let saving=false;
  const save=async()=>{if(saving)return false;saving=true;const btn=dialog.querySelector('[data-doc-save]'),printBtn=dialog.querySelector('[data-doc-print]');btn.disabled=printBtn.disabled=true;message.textContent='Saving document...';try{
@@ -33097,22 +33098,22 @@ for(let i=0;i<signing.length;i++){const [label,kind]=signing[i],el=panel.querySe
  const changed=Object.keys(values).filter(key=>JSON.stringify(values[key])!==JSON.stringify(current.form_data[key]));
  if(!changed.length){message.textContent='Document is up to date.';return true}
  const latest=await request(signal=>{let query=client().from(TABLE).select('form_data').eq('id',current.id);if(query.abortSignal)query=query.abortSignal(signal);return query.maybeSingle()});
- if(latest.error||!latest.data)throw Error(latest.error?.message||'The record could not be loaded. Please reopen the document.');
+ if(latest.error||!latest.data)throw Error(latest.error?describeError(latest.error,'Loading saved document'):'The record could not be loaded. Please reopen the document.');
  const merged={...latest.data.form_data};for(const key of changed){if(JSON.stringify(merged[key])!==JSON.stringify(current.form_data[key])&&JSON.stringify(merged[key])!==JSON.stringify(values[key]))throw Error('This record was changed elsewhere. Reopen the document before saving.');merged[key]=values[key]}
  const {data,error}=await request(signal=>{let query=client().from(TABLE).update({form_data:merged,full_name:fullName,branch}).eq('id',current.id).select('id');if(query.abortSignal)query=query.abortSignal(signal);return query.maybeSingle()});
- if(error||!data)throw Error(error?.message||'The document could not be saved. Please try again.');
- current.form_data=merged;row.form_data=merged;current.full_name=row.full_name=fullName;current.branch=row.branch=branch;render();message.textContent='Document saved successfully.';return true;
- }catch(e){message.textContent='Unable to save document: '+e.message;return false}finally{saving=false;btn.disabled=printBtn.disabled=false}};
+ if(error||!data)throw Error(error?describeError(error,'Updating saved document'):'The document could not be saved. Please try again.');
+ current.form_data=merged;row.form_data=merged;current.full_name=row.full_name=fullName;current.branch=row.branch=branch;render();dialog.querySelector('[data-doc-print-unsaved]')?.remove();message.textContent='Document saved successfully.';return true;
+ }catch(e){message.textContent='Unable to save document: '+e.message;let fallback=dialog.querySelector('[data-doc-print-unsaved]');if(!fallback){fallback=document.createElement('button');fallback.type='button';fallback.className='btn';fallback.dataset.docPrintUnsaved='';fallback.textContent='Print / Save Unsaved Copy';message.after(fallback);fallback.onclick=async()=>{try{const draft={...current,form_data:await collect()};printCopy(draft);message.textContent='Unsaved copy prepared. Changes have not been saved to the system.'}catch(error){message.textContent='Unable to prepare copy: '+error.message}}}return false}finally{saving=false;btn.disabled=printBtn.disabled=false}};
  dialog.querySelector('[data-doc-save]').onclick=save;
  dialog.querySelector('[data-doc-close]').onclick=()=>dialog.close();
- dialog.querySelector('[data-doc-print]').onclick=async()=>{
- if(!await save())return;
- const fileName=interviewDocumentFileName(current);
+ const printCopy=record=>{
+ const fileName=interviewDocumentFileName(record);
  const frame=document.createElement('iframe');frame.title=fileName;frame.style.cssText='position:fixed;width:1px;height:1px;left:-10000px;top:0;border:0';
  frame.onload=async()=>{try{await Promise.all(Array.from(frame.contentDocument.images).map(img=>img.decode?.().catch(()=>{})));frame.contentWindow.focus();frame.contentWindow.print()}catch(e){message.textContent='Unable to open print: '+e.message}};
- frame.srcdoc='<!doctype html><html><head><title>'+escapeHtml(fileName)+'</title><style>'+ND_INTERVIEW_DOC_STYLE+'</style></head><body>'+interviewDocumentMarkup(current.form_data)+'</body></html>';
+ frame.srcdoc='<!doctype html><html><head><title>'+escapeHtml(fileName)+'</title><style>'+ND_INTERVIEW_DOC_STYLE+'</style></head><body>'+interviewDocumentMarkup(record.form_data)+'</body></html>';
  dialog.querySelectorAll('iframe').forEach(f=>f.remove());dialog.append(frame);
  };
+ dialog.querySelector('[data-doc-print]').onclick=async()=>{if(await save())printCopy(current)};
  if(!dialog.open)dialog.showModal();
 }
 
