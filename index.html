@@ -12411,6 +12411,7 @@ function setNextEmployeeNoPreview(){
 }
 
 function resetSubmitStaffForm(){
+  window.ndInterviewEmployeeDraft=null;
   const ids=[
     "empNo","empJoinDate","empLastDate","empName","empNickname","empNric","empPhone",
     "empBankName","empBankAccount","empSocso","empEpf","empTax",
@@ -14769,16 +14770,41 @@ async function saveStaff(){
     return;
   }
 
-  const {data,error}=await salaryDb
-    .from("employees").insert(payload).select("employee_no").single();
+  const interviewDraft=window.ndInterviewEmployeeDraft;
+  const {data,error}=interviewDraft
+    ? await salaryDb.rpc("nd_create_employee_from_interview",{p_form_id:String(interviewDraft.id),p_employee:payload})
+    : await salaryDb.from("employees").insert(payload).select("employee_no").single();
   if(error){ byId("staffReviewMsg").textContent="Save failed: "+error.message; return; }
   const assignedNo=data?.employee_no||"";
+  if(interviewDraft)window.dispatchEvent(new CustomEvent("nd-interview-converted"));
   byId("staffReviewModal").classList.remove("open");
   resetSubmitStaffForm();
   byId("staffSaveMsg").textContent=assignedNo ? `Staff submitted ✓  ${assignedNo}` : "Staff submitted ✓";
   await refreshSalaryStayHere();
 }
 
+
+
+window.ndStartInterviewEmployee=async function(row){
+ const {data:{user}}=await salaryDb.auth.getUser();
+ if(String(user?.email||'').toLowerCase()!=='umo1017@gmail.com')throw Error('Management access only.');
+ await byId('submitStaffBtn').onclick();
+ // New form has been reset. Copy only known fields; never guess salary or start date.
+ const v=row.form_data||{};
+ const map={empName:v['Candidate Name']||row.full_name,empNric:v['IC / Passport']||v['IC No'],empPhone:v['Phone']||v['Contact Number'],empEmail:v['Email Address'],empBirthday:v['Date of Birth'],empJoinDate:v['Start Date'],empOutlet:v['Preferred Branch']||row.branch,empBankName:v['Bank Name'],empBankAccount:v['Bank Account No'],empSocso:v['SOCSO No'],empEpf:v['KWSP (EPF) No']};
+ const type=String(v['Employment Type']||'').toLowerCase().replace(/ /g,'_');
+ if(['full_time','part_time'].includes(type))map.empEmploymentType=type;
+ for(const [id,value]of Object.entries(map)){const el=byId(id);if(el)el.value=value==null?'':String(value)}
+ const nationality=String(v['Nationality']||'').trim().toLowerCase();
+ if(nationality)byId('empCategory').value=['malaysian','malaysia','malaysian citizen'].includes(nationality)?'local':'non_local';
+ if(byId('empBirthdayNA'))byId('empBirthdayNA').checked=false;
+ if(byId('empBirthday'))byId('empBirthday').disabled=false;
+ updateSubmitEmploymentType();
+ if(v['Bank Name']||v['Bank Account No'])byId('empPayBy').value='Bank Transfer';
+ updateSubmitStaffPaymentFields();
+ window.ndInterviewEmployeeDraft={id:String(row.id)};
+ byId('staffSaveMsg').textContent='From interview: '+(row.full_name||v['Candidate Name']||'')+'. Complete missing employment details, then Review and Save.';
+};
 
 function openEditStaff(empId){
   if(!staffEditManager){
@@ -15200,7 +15226,7 @@ function renderStaffList(){
       <thead><tr><th>No.</th><th>Full Name / Nickname</th><th>Type</th><th>Birthday</th><th>Join Date</th><th>Last Working Day</th><th>Resignation Date</th><th>Reason</th><th>Payment Method</th><th>Basic Pay</th><th>Allowance</th><th>Bank Name</th><th>Bank Account</th><th>NRIC / Passport</th><th>Phone</th><th>Employee No.</th><th>SOCSO No.</th><th>KWSP / EPF No.</th><th>Tax No.</th><th>Action</th></tr></thead>
       <tbody>${list.map((e,index)=>`<tr>
 <td>${index+1}</td>
-<td><span class="employee-edit-cell">${staffSafe(e.name||"-")}${staffPencil(e.id,"editEmpName")}</span><div style="font-size:12px;color:var(--muted,#777);margin-top:4px">Nickname: ${staffSafe(e.nickname||"-")}${staffPencil(e.id,"editEmpNickname")}</div>${e.is_pinned?'<span class="staff-pin-badge">TOP</span>':""}<div class="staff-name-actions">${canEditStaffRecord(e)?`<button class="btn" data-edit-staff="${e.id}">Edit</button><button class="btn staff-pin-btn" data-pin-staff="${e.id}" data-pinned="${e.is_pinned?"1":"0"}">${e.is_pinned?"Unpin":"Pin Top"}</button>`:""}</div></td>
+<td><span class="employee-edit-cell">${staffSafe(e.name||"-")}${staffPencil(e.id,"editEmpName")}</span><div style="font-size:12px;color:var(--muted,#777);margin-top:4px">Nickname: ${staffSafe(e.nickname||"-")}${staffPencil(e.id,"editEmpNickname")}</div>${e.is_pinned?'<span class="staff-pin-badge">TOP</span>':""}<div class="staff-name-actions">${e.source_interview_id && currentSalaryUserEmail==='umo1017@gmail.com'?`<button class="btn" type="button" onclick="window.ndViewEmployeeInterview(${Number(e.id)})">Interview Profile</button>`:""}${canEditStaffRecord(e)?`<button class="btn" data-edit-staff="${e.id}">Edit</button><button class="btn staff-pin-btn" data-pin-staff="${e.id}" data-pinned="${e.is_pinned?"1":"0"}">${e.is_pinned?"Unpin":"Pin Top"}</button>`:""}</div></td>
 <td><span class="employee-edit-cell">${(e.employment_type||"full_time")==="part_time"?"Part Time":"Full Time"}${staffPencil(e.id,"editEmpEmploymentType")}</span></td>
 <td><span class="employee-edit-cell">${e.birthday_na?"NA":(e.birthday||"-")}${staffPencil(e.id,"editEmpBirthday")}</span></td>
 <td><span class="employee-edit-cell">${e.join_date||"-"}${staffPencil(e.id,"editEmpJoinDate")}</span></td>
@@ -32786,23 +32812,73 @@ body[data-nd-visible-page="forms"] #ndStaffFormsPage{display:block!important}
 (function(){'use strict';
 const $=id=>document.getElementById(id), TABLE='nd_staff_forms', ADMIN='umo1017@gmail.com';
 let tab='interview',userEmail='',db=null,templates={};
-const defaults={interview:[['Candidate Name','text'],['Phone','tel'],['Position Applied','text'],['Preferred Branch','text'],['Interview Date','date'],['Interviewer','text'],['Experience','textarea'],['Availability','text'],['Expected Salary (RM)','number'],['Assessment','textarea'],['Interview Result','select:Pending|Shortlisted|Accepted|Rejected']],contract:[['Employee Name','text'],['IC / Passport','text'],['Position','text'],['Branch','text'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation (Months)','number'],['Notice Period','text'],['Working Hours','text'],['Contract Terms','textarea'],['Employee Acknowledgement','textarea']]};
+const defaults={interview:[["Candidate Name", "text"], ["IC / Passport", "text"], ["IC Photo Front", "file"], ["IC Photo Back", "file"], ["Date of Birth", "date"], ["Gender", "select:|Female|Male|Other"], ["Nationality", "text"], ["Marital Status", "select:|Single|Married|Divorced|Widowed"], ["Home Address", "textarea"], ["Phone", "tel"], ["Email Address", "email"], ["Emergency Contact Name", "text"], ["Emergency Contact Phone", "tel"], ["Spouse Name", "text"], ["Spouse IC No", "text"], ["Position Applied", "text"], ["Preferred Branch", "select:|Eco Botanic|Nusa Bestari"], ["Employment Type", "select:|Full Time|Part Time"], ["Start Date", "date"], ["Probation Period", "text"], ["Working Days", "number"], ["Working Hours", "text"], ["Rest Days", "number"], ["Bank Name", "text"], ["Bank Account No", "text"], ["KWSP (EPF) No", "text"], ["SOCSO No", "text"], ["EIS No", "text"], ["Employee Signature", "signature"], ["Signature Date", "date"], ["Administrative / Finance Signature", "signature"], ["Company Stamp", "file"], ["President Signature", "signature"], ["Interview Date", "date"], ["Interviewer", "text"], ["Experience", "textarea"], ["Availability", "text"], ["Expected Salary (RM)", "number"], ["Assessment", "textarea"], ["Interview Result", "select:Pending|Shortlisted|Accepted|Rejected"]],contract:[['Employee Name','text'],['IC / Passport','text'],['Position','text'],['Branch','text'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation (Months)','number'],['Notice Period','text'],['Working Hours','text'],['Contract Terms','textarea'],['Employee Acknowledgement','textarea']]};
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function status(v){$('ndStaffFormStatus').textContent=v||''}
 function isAdmin(){return userEmail===ADMIN}
 function client(){if(!db){if(window.salaryDb?.from)db=window.salaryDb;else if(window.supabase?.createClient)db=window.supabase.createClient('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');}return db}
 async function identity(){try{const {data}=await client().auth.getUser();userEmail=String(data?.user?.email||'').toLowerCase()}catch(e){userEmail=''}return userEmail}
-function fieldsFor(type){return templates[type]||defaults[type]}
-function inputMarkup(label,type,i){let el;if(type==='textarea')el=`<textarea data-nd-field="${i}" required></textarea>`;else if(type.startsWith('select:'))el=`<select data-nd-field="${i}">${type.slice(7).split('|').map(x=>`<option>${escapeHtml(x)}</option>`).join('')}</select>`;else el=`<input data-nd-field="${i}" type="${escapeHtml(type)}" ${type==='number'?'step="0.01"':''} required>`;return `<div class="nd-form-field"><label>${escapeHtml(label)}</label>${el}</div>`}
+function fieldsFor(type){
+ const custom=templates[type];if(type!=='interview')return custom||defaults[type];
+ const fields=defaults.interview.map(f=>[...f]);
+ for(const f of custom||[]){if(!fields.some(x=>x[0]===f[0]))fields.push(f)}return fields;
+}
+function inputMarkup(label,type,i){
+ const required=['Candidate Name','Phone','Preferred Branch'].includes(label)?' required':'';
+ let el;const attr=`data-nd-field="${i}" id="ndField${i}"`;
+ if(type==='file')el=`<input ${attr} type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG or WebP · Maximum 2 MB</small>`;
+ else if(type==='signature')el=`<canvas ${attr} width="600" height="160" style="border:1px solid #ccc;border-radius:8px;width:100%;touch-action:none;background:white" aria-label="${escapeHtml(label)}"></canvas><button class="btn" type="button" data-clear-signature="${i}">Clear Signature</button>`;
+ else if(type==='textarea')el=`<textarea ${attr}${required}></textarea>`;
+ else if(type.startsWith('select:'))el=`<select ${attr}${required}>${type.slice(7).split('|').map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x||'Please select')}</option>`).join('')}</select>`;
+ else el=`<input ${attr} type="${escapeHtml(type)}" ${type==='number'?'min="0" step="0.01"':''}${required}>`;
+ return `<div class="nd-form-field"><label for="ndField${i}">${escapeHtml(label)}</label>${el}</div>`;
+}
+function initSignatures(root){root.querySelectorAll('canvas[data-nd-field]').forEach(c=>{const ctx=c.getContext('2d');ctx.lineWidth=2;ctx.lineCap='round';ctx.strokeStyle='#213e31';let down=false;const point=e=>{const r=c.getBoundingClientRect();return [(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]};c.onpointerdown=e=>{down=true;c.setPointerCapture(e.pointerId);ctx.beginPath();const [x,y]=point(e);ctx.moveTo(x,y);ctx.lineTo(x+.1,y+.1);ctx.stroke();c.dataset.ink='1'};c.onpointermove=e=>{if(down){ctx.lineTo(...point(e));ctx.stroke()}};c.onpointerup=c.onpointercancel=()=>down=false;root.querySelector(`[data-clear-signature="${c.dataset.ndField}"]`).onclick=()=>{ctx.clearRect(0,0,c.width,c.height);delete c.dataset.ink}})}
+function readFile(file){return new Promise((resolve,reject)=>{if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>2*1024*1024)return reject(Error('Use JPG, PNG or WebP images up to 2 MB.'));const reader=new FileReader();reader.onload=()=>resolve({name:file.name,data:reader.result});reader.onerror=()=>reject(Error('Unable to read image.'));reader.readAsDataURL(file)})}
 function show(next){if((next==='history'||next==='templates')&&!isAdmin())next='interview';tab=next;status('');document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.ndFormTab===tab);b.style.display=(['history','templates'].includes(b.dataset.ndFormTab)&&!isAdmin())?'none':''});const root=$('ndStaffFormContent');if(!root)return;
 if(tab==='history'){root.innerHTML='<h3>Form History</h3><div class="nd-form-history" id="ndFormHistoryList">Loading...</div>';loadHistory();return}
 if(tab==='templates'){root.innerHTML=`<h3>Form Templates</h3><p class="helper">One field per line: Field Name | text, date, number, tel, textarea, or select:Option1|Option2</p><label>Interview Template</label><textarea id="ndInterviewTemplate" style="min-height:240px"></textarea><label>Contract Template</label><textarea id="ndContractTemplate" style="min-height:280px"></textarea><div style="margin-top:12px"><button class="btn" id="ndSaveTemplates">Save Templates</button></div>`;['interview','contract'].forEach(t=>{$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value=fieldsFor(t).map(f=>f.join(' | ')).join('\n')});$('ndSaveTemplates').onclick=saveTemplates;return}
-const fields=fieldsFor(tab);root.innerHTML=`<h3>${tab==='interview'?'Interview Form':'Employment Contract Form'}</h3><form id="ndStaffEntryForm"><div class="nd-form-grid">${fields.map((f,i)=>inputMarkup(f[0],f[1],i)).join('')}</div><div style="margin-top:16px"><button class="btn" type="submit">Save ${tab==='interview'?'Interview':'Contract'}</button></div></form>`;$('ndStaffEntryForm').onsubmit=saveEntry;
+const fields=fieldsFor(tab);root.innerHTML=`<h3>${tab==='interview'?'Interview Form':'Employment Contract Form'}</h3><form id="ndStaffEntryForm"><div class="nd-form-grid">${fields.map((f,i)=>inputMarkup(f[0],f[1],i)).join('')}</div><div style="margin-top:16px"><button class="btn" type="submit">Save ${tab==='interview'?'Interview':'Contract'}</button></div></form>`;$('ndStaffEntryForm').onsubmit=saveEntry;initSignatures(root);
 }
-async function saveEntry(e){e.preventDefault();const button=e.target.querySelector('[type=submit]');button.disabled=true;status('Saving...');try{await identity();if(!userEmail)throw Error('Please sign in again.');const values={};fieldsFor(tab).forEach((f,i)=>{values[f[0]]=e.target.querySelector(`[data-nd-field="${i}"]`)?.value||''});const branch=String(values['Preferred Branch']||values['Branch']||'Eco Botanic').trim();const fullName=String(values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');const formDate=values['Interview Date']||values['Start Date']||new Date().toISOString().slice(0,10);const {error}=await client().from(TABLE).insert({form_type:tab,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'});if(error)throw error;status('Saved successfully.');e.target.reset()}catch(err){status('Unable to save: '+err.message+'\nCheck that the staff forms database table and permissions have been installed.')}finally{button.disabled=false}}
+async function saveEntry(e){
+ e.preventDefault();const form=e.target,button=form.querySelector('[type=submit]'),type=tab,fields=fieldsFor(type);button.disabled=true;status('Saving...');
+ try{await identity();if(!userEmail)throw Error('Please sign in again.');const values={};
+ for(let i=0;i<fields.length;i++){const [label,kind]=fields[i],el=form.querySelector(`[data-nd-field="${i}"]`);values[label]=kind==='file'?(el?.files?.[0]?await readFile(el.files[0]):''):kind==='signature'?(el?.dataset.ink?{name:label,data:el.toDataURL('image/png')}: ''):el?.value||''}
+ const branch=String(values['Preferred Branch']||values['Branch']||'Eco Botanic').trim();
+ const fullName=String(values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');
+ const formDate=values['Interview Date']||values['Start Date']||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
+ const {error}=await client().from(TABLE).insert({form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'});if(error)throw error;
+ if(form.isConnected){form.reset();form.querySelectorAll('[data-clear-signature]').forEach(b=>b.click())}status('Saved successfully.');
+ }catch(err){status('Unable to save: '+err.message)}finally{button.disabled=false}
+}
 async function loadTemplates(){try{const {data,error}=await client().from('nd_staff_form_templates').select('form_type,fields').eq('is_active',true);if(error)throw error;(data||[]).forEach(r=>{if(defaults[r.form_type]&&Array.isArray(r.fields))templates[r.form_type]=r.fields})}catch(e){console.warn('[Staff Forms] templates:',e.message)}}
 async function saveTemplates(){if(!isAdmin())return;try{for(const t of ['interview','contract']){const raw=$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value;const fields=raw.split('\n').map(x=>{const at=x.indexOf(' | ');return at<0?null:[x.slice(0,at).trim(),x.slice(at+3).trim()]}).filter(x=>x&&x[0]&&x[1]);if(!fields.length)throw Error('Template must contain fields.');const {error}=await client().from('nd_staff_form_templates').upsert({form_type:t,template_name:t==='interview'?'Interview Template':'Contract Template',fields,updated_at:new Date().toISOString()},{onConflict:'form_type'});if(error)throw error;templates[t]=fields}status('Templates saved successfully.')}catch(e){status('Unable to save templates: '+e.message)}}
-async function loadHistory(){if(!isAdmin()){show('interview');return}try{const {data,error}=await client().from(TABLE).select('id,form_type,form_data,created_by,created_at,full_name,branch,form_date').order('created_at',{ascending:false}).limit(300);if(error)throw error;const rows=(data||[]).map(r=>`<tr><td>${escapeHtml(new Date(r.created_at).toLocaleString('en-MY'))}</td><td>${escapeHtml(r.form_type)}</td><td>${escapeHtml(r.full_name||r.form_data?.['Candidate Name']||r.form_data?.['Employee Name']||'')}</td><td>${escapeHtml(r.created_by)}</td><td><button class="btn" type="button" data-form-id="${escapeHtml(r.id)}">View</button></td></tr>`).join('');const historyNode=$('ndFormHistoryList');if(!historyNode)return;historyNode.innerHTML=`<table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Submitted By</th><th>Action</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No records</td></tr>'}</tbody></table>`;historyNode.onclick=e=>{const id=e.target.closest('[data-form-id]')?.dataset.formId;const r=(data||[]).find(x=>String(x.id)===id);if(!r)return;const detail=Object.entries(r.form_data||{}).map(([k,v])=>`${k}: ${v}`).join('\n');const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;background:#f7f8f6;padding:16px;border-radius:10px';pre.textContent=detail;historyNode.prepend(pre)}}catch(e){const historyNode=$('ndFormHistoryList');if(historyNode)historyNode.textContent='Unable to load history: '+e.message}}
+function showProfile(values,title){
+ let dialog=$('ndInterviewDetail');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndInterviewDetail';dialog.style.cssText='width:min(850px,92vw);max-height:85vh;border:1px solid #ddd;border-radius:16px;padding:20px';document.body.append(dialog)}
+ dialog.replaceChildren();const heading=document.createElement('h3');heading.textContent=title;const close=document.createElement('button');close.className='btn';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(heading,close);
+ for(const [key,value] of Object.entries(values||{})){const block=document.createElement('div');block.style.cssText='margin:15px 0;white-space:pre-wrap';const label=document.createElement('strong');label.textContent=key+': ';block.append(label);
+ if(value&&typeof value==='object'&&/^data:image\/(png|jpeg|webp);base64,/.test(value.data||'')){const img=document.createElement('img');img.src=value.data;img.alt=key;img.style.cssText='display:block;max-width:100%;max-height:300px';block.append(img)}else block.append(document.createTextNode(typeof value==='object'?JSON.stringify(value):String(value||'—')));dialog.append(block)}
+ dialog.showModal();
+}
+window.ndViewEmployeeInterview=async id=>{try{await identity();if(!isAdmin())throw Error('Management access only.');const {data,error}=await client().from('employees').select('interview_profile,source_interview_id,name').eq('id',id).single();if(error)throw error;let profile=data.interview_profile;if(data.source_interview_id){const source=await client().from(TABLE).select('form_data').eq('id',data.source_interview_id).single();if(source.error)throw source.error;profile=source.data.form_data}showProfile(profile,data.name+' · Interview')}catch(e){alert(e.message)}};
+async function becomeEmployee(row,button){
+ button.disabled=true;status('Loading employee form...');try{await identity();if(!isAdmin())throw Error('Management access only.');
+ const {data,error}=await client().from('employees').select('id,employee_no').eq('source_interview_id',String(row.id)).maybeSingle();if(error)throw error;if(data){await loadHistory();return status('Already an employee: '+(data.employee_no||data.id))}
+ if(typeof window.ndStartInterviewEmployee!=='function')throw Error('Employee form is unavailable. Please reload.');
+ await window.ndStartInterviewEmployee(row);status('Interview details copied. Complete the employment details and save.');
+ }catch(e){status('Unable to prepare employee: '+e.message)}finally{if(button.isConnected)button.disabled=false}
+}
+async function loadHistory(){
+ if(!isAdmin()){show('interview');return}const node=$('ndFormHistoryList');
+ try{const {data,error}=await client().from(TABLE).select('id,form_type,form_data,created_by,created_at,full_name,branch,form_date').order('created_at',{ascending:false}).limit(300);if(error)throw error;
+ const interviews=(data||[]).filter(r=>r.form_type==='interview').map(r=>String(r.id));let employees=[];
+ if(interviews.length){const result=await client().from('employees').select('id,employee_no,source_interview_id').in('source_interview_id',interviews);if(result.error)throw result.error;employees=result.data||[]}
+ if(!node?.isConnected)return;
+ node.innerHTML=`<table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Submitted By</th><th>Action</th></tr></thead><tbody>${(data||[]).map(r=>{const employee=employees.find(x=>x.source_interview_id===String(r.id));return `<tr><td>${escapeHtml(new Date(r.created_at).toLocaleString('en-MY'))}</td><td>${escapeHtml(r.form_type)}</td><td>${escapeHtml(r.full_name||'')}</td><td>${escapeHtml(r.created_by)}</td><td><button class="btn" type="button" data-form-id="${escapeHtml(r.id)}">View</button> ${r.form_type==='interview'?(employee?`<span>Employee Created · ${escapeHtml(employee.employee_no||employee.id)}</span>`:`<button class="btn" type="button" data-hire-id="${escapeHtml(r.id)}">Become Employee</button>`):''}</td></tr>`}).join('')||'<tr><td colspan="5">No records</td></tr>'}</tbody></table>`;
+ node.onclick=e=>{const button=e.target.closest('[data-form-id],[data-hire-id]');if(!button)return;const row=(data||[]).find(r=>String(r.id)===(button.dataset.formId||button.dataset.hireId));if(!row)return;if(button.dataset.hireId)becomeEmployee(row,button);else showProfile(row.form_data,row.full_name+' · '+row.form_type)};
+ }catch(e){if(node?.isConnected)node.textContent='Unable to load history: '+e.message}
+}
+window.addEventListener('nd-interview-converted',()=>{if(tab==='history')loadHistory()});
 async function openForms(e){if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';$('ndStaffFormsPage').hidden=false;document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));$('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');await identity();await loadTemplates();show('interview');return false}
 window.ndOpenStaffForms=openForms;
 window.addEventListener('click',e=>{if(e.target.closest?.('#sidebarForms'))openForms(e)},true);
