@@ -5685,7 +5685,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       if(vm>0 && !statuses.visa_master) visaMaster+=vm;
 
       const sameDateRows=rows.filter(x=>x.settlement_date===r.settlement_date);
-      if(Number(r.tng||0)>0 && !dailyTngReviewState(sameDateRows)){
+      if(ndTngIsPending(r,sameDateRows)){
         tng+=Number(r.tng||0);
       }
     });
@@ -5702,6 +5702,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     });
 
     root.innerHTML=`
+      <div class="helper" style="margin-bottom:8px">Payment verification from 1 Sep 2026 · All months</div>
       <div class="nd-unverified-grid">
         <div class="salary-card nd-unverified-card">
           <div class="helper">Total Unverified VISA / MASTER</div>
@@ -5769,7 +5770,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
         // TNG is reviewed as one combined amount per date. Until that daily
         // TNG review is clicked, each branch's TNG remains part of its pending total.
         const sameDateRows=rows.filter(x=>x.settlement_date===r.settlement_date);
-        if(Number(r.tng||0)>0 && !dailyTngReviewState(sameDateRows)){
+        if(ndTngIsPending(r,sameDateRows)){
           total+=Number(r.tng||0);
         }
       });
@@ -6003,14 +6004,24 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       </div>`;
   }
 
+  function ndTngReviewedState(value){
+    const state=String(value||'').trim().toLowerCase();
+    return ['accepted','adjust'].includes(state)?state:'';
+  }
   function dailyTngReviewState(rows){
-    const states=rows
-      .filter(r=>!r._missing)
-      .map(r=>(r.payment_statuses||{}).tng_daily_total_review||"")
-      .filter(Boolean);
-    if(states.includes("adjust")) return "adjust";
-    if(states.includes("accepted")) return "accepted";
-    return "";
+    const real=rows.filter(r=>!r._missing);
+    const states=real.map(r=>ndTngReviewedState(r.payment_statuses?.tng_daily_total_review)).filter(Boolean);
+    if(states.includes('adjust')) return 'adjust';
+    if(states.includes('accepted')) return 'accepted';
+    const positive=real.filter(r=>Number(r.tng||0)>0);
+    if(positive.length && positive.every(r=>ndTngReviewedState(r.payment_statuses?.tng))){
+      return positive.some(r=>ndTngReviewedState(r.payment_statuses?.tng)==='adjust')?'adjust':'accepted';
+    }
+    return '';
+  }
+  function ndTngIsPending(row,dateRows){
+    return ndPaymentRequiresVerification(row) && Number(row.tng||0)>0
+      && !dailyTngReviewState(dateRows) && !ndTngReviewedState(row.payment_statuses?.tng);
   }
 
   async function setDailyTngTotalReview(date,status){
@@ -6028,12 +6039,14 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     });
 
     for(const item of updates){
-      const {error}=await db
+      const {data:saved,error}=await db
         .from("daily_settlements")
         .update({payment_statuses:item.payment_statuses})
-        .eq("id",item.id);
-      if(error){
-        alert("Update failed: "+error.message);
+        .eq("id",item.id)
+        .select('id,payment_statuses').maybeSingle();
+      if(error || !saved || saved.payment_statuses?.tng_daily_total_review!==status){
+        alert("Update failed: "+(error?.message||"TNG verification was not saved. Check database permissions."));
+        await fetchRows();renderCombinedHistory();
         return;
       }
     }
@@ -8535,7 +8548,8 @@ return `<div class="history-date-card">
       console.error('Verification History refresh failed',dailyLatest.error||remittanceLatest.error);
       return; // Do not show stale pending items when History cannot be read.
     }
-    allRows=(dailyLatest.data||[]);
+    const latestVerificationRows=new Map((dailyLatest.data||[]).map(r=>[String(r.id),r]));
+    allRows=(allRows||[]).map(r=>latestVerificationRows.has(String(r.id))?{...r,...latestVerificationRows.get(String(r.id))}:r);
     cashRemittances=(remittanceLatest.data||[]);
     ndVerifyQueue=ndVerifyBuildQueue();
     if(!ndVerifyQueue.length){m.classList.remove('open');return;}
@@ -32839,7 +32853,7 @@ function interviewGroups(){return interviewSections.map(([title,fields])=>[title
  return [f];
 })])}
 function renderInterview(root){
- let i=0;root.innerHTML=`<h3>Employee Interview Form</h3><div style="padding:16px;border:1px solid #ddd;border-radius:12px;margin:12px 0"><strong>NATURE'S DAO GLOBAL HOLDINGS SDN BHD</strong><div>Company Registration No.: 202501043436</div><div>Address: Unit 02-02, Level 2, CIMB Leadership Academy, No.3 Jalan Medini Utara 1, Medini Iskandar, 79200, Iskandar Puteri, JB</div></div><label for="ndInterviewCategory">Applicant Type</label><select id="ndInterviewCategory"><option value="local" ${interviewCategory==='local'?'selected':''}>Local (Malaysian)</option><option value="non_local" ${interviewCategory==='non_local'?'selected':''}>Non-local (Foreign National)</option></select><p class="helper">Complete available information. Leave unavailable or non-applicable fields blank. Full Name is required.</p><form id="ndStaffEntryForm">${interviewGroups().map(([title,fields])=>`<fieldset style="border:1px solid #ddd;border-radius:12px;padding:16px;margin:18px 0"><legend style="font-weight:700;color:#9a7426">${title}</legend><div class="nd-form-grid">${fields.map(f=>inputMarkup(f[0],f[1],i++)).join('')}</div></fieldset>`).join('')}<button class="btn" type="submit">Save Interview</button></form>`;
+ let i=0;root.innerHTML=`<h3>Employee Interview Form</h3><div style="padding:16px;border:1px solid #ddd;border-radius:12px;margin:12px 0"><strong>NATURE'S DAO GLOBAL HOLDINGS SDN BHD</strong><div>Company Registration No.: 202501043436</div><div>Address: Unit 02-02, Level 2, CIMB Leadership Academy, No.3 Jalan Medini Utara 1, Medini Iskandar, 79200, Iskandar Puteri, JB</div></div><label for="ndInterviewCategory">Applicant Type</label><select id="ndInterviewCategory"><option value="local" ${interviewCategory==='local'?'selected':''}>Local (Malaysian)</option><option value="non_local" ${interviewCategory==='non_local'?'selected':''}>Non-local (Foreign National)</option></select><p class="helper">Complete available information. Leave unavailable or non-applicable fields blank. Full Name is required. Signatures and company stamping are completed after generating the document.</p><form id="ndStaffEntryForm">${interviewGroups().slice(0,4).map(([title,fields])=>`<fieldset style="border:1px solid #ddd;border-radius:12px;padding:16px;margin:18px 0"><legend style="font-weight:700;color:#9a7426">${title}</legend><div class="nd-form-grid">${fields.map(f=>inputMarkup(f[0],f[1],i++)).join('')}</div></fieldset>`).join('')}<button class="btn" type="submit">Save &amp; Generate Document</button></form>`;
  $('ndStaffEntryForm').onsubmit=saveEntry;initSignatures(root);
  $('ndInterviewCategory').onchange=()=>{
  const saved={};fieldsFor('interview').forEach(([label,kind],n)=>{const el=$('ndField'+n);saved[label]={kind,value:el?.value,files:el?.files,ink:el?.dataset.ink,data:kind==='signature'&&el?.dataset.ink?el.toDataURL():null}});
@@ -32852,7 +32866,7 @@ function status(v){$('ndStaffFormStatus').textContent=v||''}
 function isAdmin(){return userEmail===ADMIN}
 function client(){if(!db){if(window.salaryDb?.from)db=window.salaryDb;else if(window.supabase?.createClient)db=window.supabase.createClient('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');}return db}
 async function identity(){try{const {data}=await client().auth.getUser();userEmail=String(data?.user?.email||'').toLowerCase()}catch(e){userEmail=''}return userEmail}
-function fieldsFor(type){return type==='interview'?interviewGroups().flatMap(g=>g[1]):templates[type]||defaults[type];}
+function fieldsFor(type){return type==='interview'?interviewGroups().slice(0,4).flatMap(g=>g[1]):templates[type]||defaults[type];}
 function inputMarkup(label,type,i){
  const required=['Full Name'].includes(label)?' required':'';
  let el;const attr=`data-nd-field="${i}" id="ndField${i}"`;
@@ -32878,12 +32892,49 @@ async function saveEntry(e){
  const branch=String(values['Preferred Branch']||values['Branch']||'Eco Botanic').trim();
  const fullName=String(values['Full Name']||values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');
  const formDate=values['Interview Date']||values['Start Date']||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
- const {error}=await client().from(TABLE).insert({form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'});if(error)throw error;
+ const {data:saved,error}=await client().from(TABLE).insert({form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'}).select('id,form_type,full_name,form_data,branch').single();if(error)throw error;
+ if(type==='interview')await openInterviewDocument(saved);
  if(form.isConnected){form.reset();form.querySelectorAll('[data-clear-signature]').forEach(b=>b.click())}status('Saved successfully.');
  }catch(err){status('Unable to save: '+err.message)}finally{button.disabled=false}
 }
 async function loadTemplates(){try{const {data,error}=await client().from('nd_staff_form_templates').select('form_type,fields').eq('is_active',true);if(error)throw error;(data||[]).forEach(r=>{if(defaults[r.form_type]&&Array.isArray(r.fields))templates[r.form_type]=r.fields})}catch(e){console.warn('[Staff Forms] templates:',e.message)}}
 async function saveTemplates(){if(!isAdmin())return;try{for(const t of ['interview','contract']){const raw=$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value;const fields=raw.split('\n').map(x=>{const at=x.indexOf(' | ');return at<0?null:[x.slice(0,at).trim(),x.slice(at+3).trim()]}).filter(x=>x&&x[0]&&x[1]);if(!fields.length)throw Error('Template must contain fields.');const {error}=await client().from('nd_staff_form_templates').upsert({form_type:t,template_name:t==='interview'?'Interview Template':'Contract Template',fields,updated_at:new Date().toISOString()},{onConflict:'form_type'});if(error)throw error;templates[t]=fields}status('Templates saved successfully.')}catch(e){status('Unable to save templates: '+e.message)}}
+function interviewDocumentValue(values,label){
+ const aliases={'Full Name':'Candidate Name','IC No':'IC / Passport','Contact Number':'Phone','Married Status':'Marital Status','Position':'Position Applied','Working Day':'Working Days','Rest Day':'Rest Days','Date':'Signature Date'};
+ return values[label]??values[aliases[label]]??'';
+}
+function interviewDocumentGroups(values){const previous=interviewCategory;try{interviewCategory=String(values['Applicant Type']||'').startsWith('Non-local')||values['Passport No']?'non_local':'local';return interviewGroups()}finally{interviewCategory=previous}}
+function interviewDocumentImage(value){return value&&typeof value==='object'&&/^data:image\/(png|jpeg|webp);base64,/.test(value.data||'')?value.data:''}
+function interviewDocumentMarkup(values){
+ return `<article class="nd-interview-document"><header style="text-align:center"><img src="data:image/jpeg;base64,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" alt="Nature's Dao" style="width:230px;max-width:70%"><h2 style="color:#ad862e">NATURE'S DAO GLOBAL HOLDINGS SDN BHD</h2><div>Company Registration No.: 202501043436</div><p>Unit 02-02, Level 2, CIMB Leadership Academy, No.3 Jalan Medini Utara 1, Medini Iskandar, 79200, Iskandar Puteri, JB</p><h2>Employee Interview Form</h2><p>${escapeHtml(values['Applicant Type']||'')}</p></header>${interviewDocumentGroups(values).map(([title,fields])=>`<section><h3 style="color:#ad862e">${title}</h3><table style="width:100%;border-collapse:collapse">${fields.map(([label,kind])=>{const value=interviewDocumentValue(values,label),img=interviewDocumentImage(value);return `<tr><th style="text-align:left;width:40%;padding:7px;vertical-align:top">${escapeHtml(label)}</th><td style="padding:7px;white-space:pre-wrap">${img?`<img src="${img}" alt="${escapeHtml(label)}" style="max-width:100%;max-height:${kind==='signature'?'80':'150'}px">`:escapeHtml(value&&typeof value!=='object'?value:'____________________________')}</td></tr>`}).join('')}</table></section>`).join('')}</article>`;
+}
+async function openInterviewDocument(row){
+ let dialog=$('ndInterviewDocumentDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndInterviewDocumentDialog';dialog.style.cssText='width:min(900px,94vw);max-height:90dvh;padding:20px;border:1px solid #ddd;border-radius:16px';document.body.append(dialog)}
+ let current={...row,form_data:{...(row.form_data||{})}};
+ dialog.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button" data-doc-close>Close</button><button class="btn" type="button" data-doc-save>Save Signatures</button><button class="btn" type="button" data-doc-print>Print / Save as PDF</button></div><p role="status" data-doc-status>Review the generated document, then sign below.</p><div data-doc-preview></div><fieldset style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px"><legend>Sign Document</legend><div class="nd-form-grid" data-doc-signatures></div></fieldset>';
+ const preview=dialog.querySelector('[data-doc-preview]'),panel=dialog.querySelector('[data-doc-signatures]'),message=dialog.querySelector('[data-doc-status]');
+ const signing=interviewSections[4][1];panel.innerHTML=signing.map(([label,kind],i)=>inputMarkup(label,kind,'Doc'+i)).join('');initSignatures(panel);
+ signing.forEach(([label,kind],i)=>{const el=panel.querySelector(`[data-nd-field="Doc${i}"]`),value=interviewDocumentValue(current.form_data,label),src=interviewDocumentImage(value);if(kind==='signature'&&src){const image=new Image();image.onload=()=>{el.getContext('2d').drawImage(image,0,0,el.width,el.height);el.dataset.ink='1'};image.src=src}else if(kind!=='file'&&kind!=='signature')el.value=value||''});
+ const collect=async()=>{const values={...current.form_data};for(let i=0;i<signing.length;i++){const [label,kind]=signing[i],el=panel.querySelector(`[data-nd-field="Doc${i}"]`);if(kind==='signature')values[label]=el.dataset.ink?{name:label,data:el.toDataURL('image/png')}:'';else if(kind==='file'){if(el.files?.[0])values[label]=await readFile(el.files[0])}else values[label]=el.value||''}return values};
+ const render=()=>preview.innerHTML=interviewDocumentMarkup(current.form_data);render();
+ let saving=false;
+ const save=async()=>{if(saving)return false;saving=true;const btn=dialog.querySelector('[data-doc-save]');btn.disabled=true;message.textContent='Saving signatures...';try{
+ const values=await collect();const {data,error}=await client().from(TABLE).update({form_data:values}).eq('id',current.id).eq('form_data',JSON.stringify(current.form_data)).select('id,form_data').maybeSingle();
+ if(error||!data)throw Error(error?.message||'The record changed or signatures could not be saved. Reopen the document and try again.');
+ current.form_data=data.form_data;row.form_data=data.form_data;render();message.textContent='Signatures saved successfully.';return true;
+ }catch(e){message.textContent='Unable to save signatures: '+e.message;return false}finally{saving=false;btn.disabled=false}};
+ dialog.querySelector('[data-doc-save]').onclick=save;
+ dialog.querySelector('[data-doc-close]').onclick=()=>dialog.close();
+ dialog.querySelector('[data-doc-print]').onclick=async()=>{
+ if(!await save())return;
+ const frame=document.createElement('iframe');frame.title='Interview document print';frame.style.cssText='position:fixed;width:1px;height:1px;left:-10000px;top:0;border:0';
+ frame.onload=async()=>{try{await Promise.all(Array.from(frame.contentDocument.images).map(img=>img.decode?.().catch(()=>{})));frame.contentWindow.focus();frame.contentWindow.print()}catch(e){message.textContent='Unable to open print: '+e.message}};
+ frame.srcdoc='<!doctype html><html><head><title>Employee Interview Form</title><style>@page{size:A4;margin:15mm}body{font:12px Arial,sans-serif;color:#222}h2{font-size:18px}h3{font-size:15px;margin:20px 0 8px}tr{break-inside:avoid}th,td{border-bottom:1px solid #eee}img{object-fit:contain}section{margin-top:18px}</style></head><body>'+interviewDocumentMarkup(current.form_data)+'</body></html>';
+ dialog.querySelectorAll('iframe').forEach(f=>f.remove());dialog.append(frame);
+ };
+ if(!dialog.open)dialog.showModal();
+}
+
 function showProfile(values,title){
  let dialog=$('ndInterviewDetail');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndInterviewDetail';dialog.style.cssText='width:min(850px,92vw);max-height:85vh;border:1px solid #ddd;border-radius:16px;padding:20px';document.body.append(dialog)}
  dialog.replaceChildren();const heading=document.createElement('h3');heading.textContent=title;const close=document.createElement('button');close.className='btn';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(heading,close);
@@ -32906,7 +32957,7 @@ async function loadHistory(){
  if(interviews.length){const result=await client().from('employees').select('id,employee_no,source_interview_id').in('source_interview_id',interviews);if(result.error)throw result.error;employees=result.data||[]}
  if(!node?.isConnected)return;
  node.innerHTML=`<table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Submitted By</th><th>Action</th></tr></thead><tbody>${(data||[]).map(r=>{const employee=employees.find(x=>x.source_interview_id===String(r.id));return `<tr><td>${escapeHtml(new Date(r.created_at).toLocaleString('en-MY'))}</td><td>${escapeHtml(r.form_type==='interview'?(r.form_data?.['Applicant Type']||'Interview'):r.form_type)}</td><td>${escapeHtml(r.full_name||'')}</td><td>${escapeHtml(r.created_by)}</td><td><button class="btn" type="button" data-form-id="${escapeHtml(r.id)}">View</button> ${r.form_type==='interview'?(employee?`<span>Employee Created · ${escapeHtml(employee.employee_no||employee.id)}</span>`:`<button class="btn" type="button" data-hire-id="${escapeHtml(r.id)}">Become Employee</button>`):''}</td></tr>`}).join('')||'<tr><td colspan="5">No records</td></tr>'}</tbody></table>`;
- node.onclick=e=>{const button=e.target.closest('[data-form-id],[data-hire-id]');if(!button)return;const row=(data||[]).find(r=>String(r.id)===(button.dataset.formId||button.dataset.hireId));if(!row)return;if(button.dataset.hireId)becomeEmployee(row,button);else showProfile(row.form_data,row.full_name+' · '+row.form_type)};
+ node.onclick=e=>{const button=e.target.closest('[data-form-id],[data-hire-id]');if(!button)return;const row=(data||[]).find(r=>String(r.id)===(button.dataset.formId||button.dataset.hireId));if(!row)return;if(button.dataset.hireId)becomeEmployee(row,button);else if(row.form_type==='interview')openInterviewDocument(row);else showProfile(row.form_data,row.full_name+' · '+row.form_type)};
  }catch(e){if(node?.isConnected)node.textContent='Unable to load history: '+e.message}
 }
 window.addEventListener('nd-interview-converted',()=>{if(tab==='history')loadHistory()});
