@@ -9154,7 +9154,7 @@ document.getElementById('ndCashPettyRefresh')?.addEventListener('click',ndRender
 <button class="salary-view-btn" id="salaryViewTotalBtn" type="button"></button>
 </div>
 <div class="manager-note" id="salaryRoleNote" style="margin-top:8px"></div>
-<div class="helper" id="taxRuleStatus" style="margin-top:6px"></div>
+<div class="helper" id="taxRuleStatus" hidden style="display:none!important"></div>
 </div>
 <div id="ndStaffDeductionsMount" style="display:none"></div>
 <div id="ndAdvanceSalaryHistoryMount"></div>
@@ -14703,7 +14703,7 @@ async function openTaxRules(){
   byId("taxRulesModal").classList.add("open");
 }
 
-function updateTaxRuleStatus(){const year=taxYearNow(),r=getTaxRule(year),el=byId("taxRuleStatus");if(el)el.textContent=r._temporary?`Tax Rule ${year}: copied from previous year — please review/update before payroll.`:`Tax Rule ${year}: active${r.updatedAt?" · "+r.updatedAt:""}`;const a=byId("submitTaxProfileTitle"),b=byId("editTaxProfileTitle");if(a)a.textContent=`Tax Profile / PCB ${year}`;if(b)b.textContent=`Tax Profile / PCB ${year}`;}
+function updateTaxRuleStatus(){const year=taxYearNow(),r=getTaxRule(year),el=byId("taxRuleStatus");if(el){el.textContent='';el.hidden=true;};const a=byId("submitTaxProfileTitle"),b=byId("editTaxProfileTitle");if(a)a.textContent=`Tax Profile / PCB ${year}`;if(b)b.textContent=`Tax Profile / PCB ${year}`;}
 
 function updateSubmitEmploymentType(){
   const isPartTime=byId("empEmploymentType")?.value==="part_time";
@@ -16649,7 +16649,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   function saveState(){
     try{
       const current=String(window.activeMainPage||"");
-      const valid=["daily","roster","salary","settlement","orders","settings"];
+      const valid=["daily","roster","salary","settlement","orders","settings","announcements","forms","staff"];
       const stored=sessionStorage.getItem(PAGE_KEY);
       // During startup several async modules can temporarily expose "daily".
       // Never overwrite an already valid saved page with a transient value.
@@ -16699,7 +16699,10 @@ document.addEventListener("DOMContentLoaded",()=>{
         if(typeof updateSalaryNavVisibility==="function") updateSalaryNavVisibility();
       }catch(_){}
 
-      if(savedPage==="salary"){
+      if(savedPage==="announcements" && window.ndOpenAnnouncements){window.ndOpenAnnouncements();}
+      else if(savedPage==="forms" && window.ndOpenStaffForms){await window.ndOpenStaffForms();}
+      else if(savedPage==="staff" && window.ndOpenStaffManagement){window.ndOpenStaffManagement();}
+      else if(savedPage==="salary"){
         if(window.canViewSalary && typeof showSalary==="function") showSalary();
         else if(typeof showDaily==="function") showDaily();
       }else if(savedPage==="settlement"){
@@ -16794,6 +16797,10 @@ document.addEventListener("DOMContentLoaded",()=>{
       try{
         const {data:{session}}=await window.salaryDb.auth.getSession();
         if(!session) return;
+        const newer={announcements:'ndOpenAnnouncements',forms:'ndOpenStaffForms',staff:'ndOpenStaffManagement'};
+        if(newer[saved] && typeof window[newer[saved]]==='function'){
+          await window[newer[saved]]();ndRestoreDone=true;break;
+        }
         if(saved==="roster" && typeof showRoster==="function"){
           await showRoster(); ndRestoreDone=true; break;
         }
@@ -26436,7 +26443,10 @@ Bed Fee: Amlee / + merchant / database memory checked.
     settlement:{nav:"sidebarSettlement",open:"showSettlement"},
     ai_receipt:{nav:"sidebarAiReceipt",open:"showAiReceipt"},
     orders:{nav:"sidebarOrders",open:"showOrders"},
-    settings:{nav:"sidebarSettings",open:"showSettings"}
+    settings:{nav:"sidebarSettings",open:"showSettings"},
+    announcements:{nav:"sidebarAnnouncements",open:"ndOpenAnnouncements"},
+    forms:{nav:"sidebarForms",open:"ndOpenStaffForms"},
+    staff:{nav:"sidebarStaff",open:"ndOpenStaffManagement"}
   };
 
   function navIsAuthorized(page){
@@ -29270,9 +29280,9 @@ function monthKey(){
 /* Account-scoped, permission-aware one-screen navigation. */
 (function(){
  const nav={daily:"sidebarDaily",roster:"sidebarRoster",salary:"sidebarSalary",
-   bonus:"sidebarBonus",settlement:"sidebarSettlement",orders:"sidebarOrders",social:"sidebarSocial",settings:"sidebarSettings"};
+   bonus:"sidebarBonus",settlement:"sidebarSettlement",orders:"sidebarOrders",social:"sidebarSocial",settings:"sidebarSettings",announcements:"sidebarAnnouncements",forms:"sidebarForms",staff:"sidebarStaff"};
  const screens={daily:"appView",roster:"rosterPage",salary:"salaryPage",bonus:"bonusPage",
-   settlement:"settlementPage",orders:"ordersPage",social:"socialPage",settings:"settingsPage"};
+   settlement:"settlementPage",orders:"ordersPage",social:"socialPage",settings:"settingsPage",announcements:"ndAnnouncementsPage",forms:"ndStaffFormsPage",staff:"ndStaffManagementPage"};
  let lastAccount="",lastWanted="",opening=false,initialRestored=false;
  function account(){
    return String(window.currentUserEmail||window.currentEmail||window.userEmail||"").trim().toLowerCase();
@@ -29392,11 +29402,13 @@ function monthKey(){
  const map={
   sidebarDaily:"daily",sidebarRoster:"roster",sidebarSalary:"salary",
   sidebarBonus:"bonus",sidebarSettlement:"settlement",
-  sidebarOrders:"orders",sidebarSocial:"social",sidebarSettings:"settings"
+  sidebarOrders:"orders",sidebarSocial:"social",sidebarSettings:"settings",
+  sidebarAnnouncements:"announcements",sidebarForms:"forms",sidebarStaff:"staff"
  };
  const screen={
   daily:"appView",roster:"rosterPage",salary:"salaryPage",bonus:"bonusPage",
-  settlement:"settlementPage",orders:"ordersPage",social:"socialPage",settings:"settingsPage"
+  settlement:"settlementPage",orders:"ordersPage",social:"socialPage",settings:"settingsPage",
+  announcements:"ndAnnouncementsPage",forms:"ndStaffFormsPage",staff:"ndStaffManagementPage"
  };
  function email(){return String(window.currentUserEmail||"").trim().toLowerCase()}
  function storeKey(){return "nd_last_authorized_page_v5::"+email()}
@@ -33013,7 +33025,7 @@ async function loadHistory(){
  }catch(e){if(node?.isConnected)node.textContent='Unable to load history: '+e.message}
 }
 window.addEventListener('nd-interview-converted',()=>{if(tab==='history')loadHistory()});
-async function openForms(e){if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';$('ndStaffFormsPage').hidden=false;document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));$('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');await identity();await loadTemplates();show('interview');return false}
+async function openForms(e){if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';try{sessionStorage.setItem('nd_last_page_v2','forms');sessionStorage.setItem('nd_last_page_v3','forms');const email=String(window.currentUserEmail||userEmail||'').toLowerCase();if(email){localStorage.setItem('nd_last_authorized_page_v4::'+email,'forms');localStorage.setItem('nd_last_authorized_page_v5::'+email,'forms')}}catch(_){}$('ndStaffFormsPage').hidden=false;document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));$('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');show('interview');await identity();await loadTemplates();document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{if(['history','templates'].includes(b.dataset.ndFormTab))b.style.display=isAdmin()?'':'none'});return false}
 window.ndOpenStaffForms=openForms;
 window.addEventListener('click',e=>{if(e.target.closest?.('#sidebarForms'))openForms(e)},true);
 function init(){document.querySelectorAll('[data-nd-form-tab]').forEach(b=>b.addEventListener('click',()=>{if((b.dataset.ndFormTab==='history'||b.dataset.ndFormTab==='templates')&&!isAdmin())return;show(b.dataset.ndFormTab)}));const staff=$('sidebarStaff'),forms=$('sidebarForms');if(staff&&forms){staff.insertAdjacentElement('afterend',forms)} }
@@ -33265,6 +33277,10 @@ body[data-nd-visible-page="staff"] #ndStaffManagementPage{display:block!importan
 #appView #dailySettlementProofCard .nd-card-proof-tools{display:flex!important;justify-content:flex-end!important;align-items:center!important;gap:4px!important;flex-wrap:nowrap!important;margin:6px 0 0!important}
 #appView #dailySettlementProofCard .nd-card-proof-tools #dailyCardProofState{margin:0 auto 0 0!important;font-size:9px!important;white-space:nowrap!important;line-height:24px!important}
 #appView #dailySettlementProofCard .nd-card-proof-tools #dailyCardProofViewBtn,#appView #dailySettlementProofCard .nd-card-proof-tools #dailyCardProofClearBtn{height:24px!important;min-height:24px!important;padding:3px 6px!important;font-size:9px!important;border-radius:5px!important}
+
+body[data-nd-visible-page]:not([data-nd-visible-page="announcements"]) #ndAnnouncementsPage,body[data-nd-visible-page]:not([data-nd-visible-page="forms"]) #ndStaffFormsPage{display:none!important}
+body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-visible-page="forms"] #ndStaffFormsPage{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
+#taxRuleStatus{display:none!important}
 </style>
 </body>
 </html>
