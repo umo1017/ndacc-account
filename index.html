@@ -2,6 +2,31 @@
 
 <html lang="zh-CN">
 <head>
+<script id="nd-receipt-lossless-reader-v1">
+(function(){
+ const objectUrls=new Set();
+ window.addEventListener('pagehide',e=>{if(!e.persisted){for(const url of objectUrls)URL.revokeObjectURL(url);objectUrls.clear();}});
+ window.ndReceiptSignedUrl=async function(client,bucket,path,expires=300,options){
+  try{
+   const result=await client.storage.from(bucket).createSignedUrl(path,expires,options);
+   if(result.error||!result.data?.signedUrl)return result;
+   const response=await fetch(result.data.signedUrl);if(!response.ok)throw Error('Unable to load receipt ('+response.status+').');
+   const bytes=new Uint8Array(await response.arrayBuffer());let blob;
+   const compressed=bytes[0]===31&&bytes[1]===139;
+   if(compressed){
+    if(typeof DecompressionStream==='undefined')throw Error('Please update your browser to view archived receipts.');
+    const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    blob=await new Response(stream).blob();
+   }else blob=new Blob([bytes],{type:response.headers.get('content-type')||''});
+   const head=new Uint8Array(await blob.slice(0,12).arrayBuffer());
+   const pdf=head[0]===37&&head[1]===80&&head[2]===68&&head[3]===70;
+   const mime=pdf?'application/pdf':head[0]===255&&head[1]===216?'image/jpeg':head[0]===137&&head[1]===80?'image/png':/\.webp$/i.test(path)?'image/webp':/\.heic$/i.test(path)?'image/heic':blob.type||'application/octet-stream';
+   const url=URL.createObjectURL(new Blob([blob],{type:mime}));objectUrls.add(url);
+   return {data:{...result.data,signedUrl:url+(pdf?'#receipt.pdf':'')},error:null};
+  }catch(error){return {data:null,error};}
+ };
+})();
+</script>
 <script id="nd-receipt-preview-v1">
 (function(){
  let dialog,lastFocus,oldOverflow;
@@ -23,7 +48,7 @@
    btn.onclick=async()=>{if(!confirm('Confirm '+label+' for this receipt?'))return;controls.forEach(b=>b.disabled=true);status.textContent='Saving...';try{const saved=await context.verify(value);if(saved===false){status.textContent='Not saved';return;}status.textContent=label+' ✓';}catch(err){status.textContent='Save failed';alert('Verification failed: '+(err?.message||err));}finally{controls.forEach(b=>b.disabled=false);}};
   }
   const content=dialog.querySelector('[data-content]');content.replaceChildren();
-  const pdf=/\.pdf$/i.test(parsed.pathname);const media=document.createElement(pdf?'iframe':'img');
+  const pdf=/\.pdf(?:$|[?#])/i.test(parsed.href);const media=document.createElement(pdf?'iframe':'img');
   if(pdf){media.title='Receipt PDF';const hint=document.createElement('p');hint.textContent='PDF preview: scroll inside the document to view all pages.';content.appendChild(hint);}else{media.alt='Receipt';media.onerror=()=>{content.replaceChildren();const message=document.createElement('p');message.textContent='Unable to display this receipt. Close and reopen to try again.';content.appendChild(message);};}
   media.src=parsed.href;content.appendChild(media);
   if(!dialog.open){lastFocus=document.activeElement;oldOverflow=document.body.style.overflow;document.body.style.overflow='hidden';dialog.showModal();}
@@ -5178,7 +5203,7 @@ window.ndEmployeeFullName = function(employee){
     if(!raw) return false;
     const d=new Date(raw);
     if(Number.isNaN(d.getTime())) return false;
-    d.setMonth(d.getMonth()+3);
+    d.setFullYear(d.getFullYear()+7);
     return d.getTime()<=Date.now();
   }
 
@@ -5201,7 +5226,7 @@ window.ndEmployeeFullName = function(employee){
       alert("Receipt is no longer available.");
       return;
     }
-    const {data,error}=await db.storage.from(CASH_REMITTANCE_BUCKET).createSignedUrl(item.receipt_path,300);
+    const {data,error}=await window.ndReceiptSignedUrl(db,CASH_REMITTANCE_BUCKET,item.receipt_path,300);
     if(error || !data?.signedUrl){
       alert("Unable to open receipt: "+(error?.message||"Unknown error"));
       return;
@@ -5445,7 +5470,7 @@ window.ndEmployeeFullName = function(employee){
   async function cleanupExpiredCashRemittanceReceipts(){
     if(!isSystemAdmin) return;
     const cutoff=new Date();
-    cutoff.setMonth(cutoff.getMonth()-3);
+    cutoff.setFullYear(cutoff.getFullYear()-7);
     const expired=(cashRemittances||[]).filter(x=>
       x.receipt_path && x.submitted_at && new Date(x.submitted_at).getTime()<=cutoff.getTime()
     );
@@ -6091,7 +6116,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       alert("This proof has reached the 7-year retention period.");
       return;
     }
-    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300);
+    const {data,error}=await window.ndReceiptSignedUrl(db,PETTY_RECEIPT_BUCKET,receipt.path,300);
     if(error || !data?.signedUrl){
       alert("Unable to open proof: "+(error?.message||"Unknown error"));
       return;
@@ -7083,7 +7108,7 @@ return `<div class="history-date-card">
   function receiptExpiryDate(uploadedAt){
     const d=new Date(uploadedAt||Date.now());
     if(Number.isNaN(d.getTime())) return null;
-    d.setMonth(d.getMonth()+6);
+    d.setFullYear(d.getFullYear()+7);
     return d;
   }
 
@@ -7229,7 +7254,7 @@ return `<div class="history-date-card">
       alert("This Daily Settlement proof has reached the 7-year retention period.");
       return;
     }
-    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300);
+    const {data,error}=await window.ndReceiptSignedUrl(db,PETTY_RECEIPT_BUCKET,receipt.path,300);
     if(error || !data?.signedUrl){
       alert("Unable to open file: "+(error?.message||"Unknown error"));
       return;
@@ -7381,11 +7406,11 @@ return `<div class="history-date-card">
       return;
     }
     if(receiptIsExpired(receipt)){
-      alert("This receipt has expired after 6 months.");
+      alert("This receipt has reached the 7-year retention period.");
       return;
     }
 
-    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300,{
+    const {data,error}=await window.ndReceiptSignedUrl(db,PETTY_RECEIPT_BUCKET,receipt.path,300,{
       download:download ? (receipt.name||"receipt") : false
     });
     if(error || !data?.signedUrl){
@@ -7489,11 +7514,11 @@ return `<div class="history-date-card">
       return;
     }
     if(receiptIsExpired(receipt)){
-      alert("This receipt has expired after 6 months.");
+      alert("This receipt has reached the 7-year retention period.");
       return;
     }
 
-    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300,{
+    const {data,error}=await window.ndReceiptSignedUrl(db,PETTY_RECEIPT_BUCKET,receipt.path,300,{
       download:receipt.name||"receipt"
     });
     if(error || !data?.signedUrl){
@@ -7558,7 +7583,7 @@ return `<div class="history-date-card">
   async function cleanupExpiredPettyReceipts(){
     if(!isSystemAdmin) return 0;
     const cutoff=new Date();
-    cutoff.setMonth(cutoff.getMonth()-6);
+    cutoff.setFullYear(cutoff.getFullYear()-7);
 
     const {data,error}=await db.from("daily_settlements")
       .select("id,petty_entries")
@@ -8413,7 +8438,7 @@ return `<div class="history-date-card">
   }
   async function openPettyReceipt(receipt){
     if(!receipt?.path){alert('No receipt available.');return;}
-    const {data,error}=await db.storage.from(PETTY_RECEIPT_BUCKET).createSignedUrl(receipt.path,300);
+    const {data,error}=await window.ndReceiptSignedUrl(db,PETTY_RECEIPT_BUCKET,receipt.path,300);
     if(error||!data?.signedUrl){alert('Unable to open receipt: '+(error?.message||'Unknown error'));return;}
     window.ndReceiptPreview(data.signedUrl,ndReceiptReviewContext(receipt));
   }
@@ -8621,6 +8646,9 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
 <input id="aiReceiptHistoryMonth" style="width:auto" type="month"/>
 <button class="btn" id="aiReceiptExportCsvBtn" type="button">Export CSV</button>
+<button class="btn" id="aiReceiptMonthlyPdfBtn" type="button">Monthly Receipts PDF</button>
+<a class="btn" id="aiReceiptMonthlyPdfDownload" hidden>Download PDF</a>
+<span class="helper" id="aiReceiptMonthlyPdfState" role="status" style="flex-basis:100%"></span>
 </div>
 </div>
 <div class="ai-receipt-kpis" style="margin-top:12px">
@@ -25771,7 +25799,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
   async function openReceipt(receipt,record){
     if(!receipt?.path){alert("No receipt file.");return;}
     const db=dbClient();
-    const {data,error}=await db.storage.from("petty-receipts").createSignedUrl(receipt.path,300);
+    const {data,error}=await window.ndReceiptSignedUrl(db,"petty-receipts",receipt.path,300);
     if(error||!data?.signedUrl){alert("Unable to open receipt.");return;}
     window.ndReceiptPreview(data.signedUrl,{amount:record?.total_amount});
   }
@@ -26109,6 +26137,84 @@ Bed Fee: Amlee / + merchant / database memory checked.
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
 
+  let monthlyReceiptsBusy=false,monthlyReceiptsUrl='';
+  function monthlyPdfLibrary(){
+    if(window.PDFLib)return Promise.resolve(window.PDFLib);
+    if(window.ndMonthlyPdfLibrary)return window.ndMonthlyPdfLibrary;
+    window.ndMonthlyPdfLibrary=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+      script.onload=()=>window.PDFLib?resolve(window.PDFLib):reject(Error('PDF library unavailable.'));
+      script.onerror=()=>reject(Error('Unable to load PDF library. Please retry.'));document.head.appendChild(script);
+    }).catch(err=>{window.ndMonthlyPdfLibrary=null;throw err;});return window.ndMonthlyPdfLibrary;
+  }
+  async function monthlyReceiptRows(client,ym){
+    if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym))throw Error('Select a valid month.');
+    const [y,m]=ym.split('-').map(Number),start=ym+'-01',next=m===12?(y+1)+'-01-01':y+'-'+String(m+1).padStart(2,'0')+'-01';
+    async function all(table,date,fields){
+      const rows=[];for(let offset=0;;offset+=500){
+        const {data,error}=await client.from(table).select(fields).gte(date,start).lt(date,next).order('id',{ascending:true}).range(offset,offset+499);
+        if(error)throw Error(table+': '+error.message);rows.push(...(data||[]));if((data||[]).length<500)return rows;
+      }
+    }
+    const [records,daily]=await Promise.all([all('ai_receipt_records','receipt_date','*'),all('daily_settlements','settlement_date','id,settlement_date,branch,petty_entries')]);
+    const byRef=new Map();
+    for(const r of records)byRef.set(r.source_ref||'scan:'+r.id,{...r});
+    for(const row of daily)(Array.isArray(row.petty_entries)?row.petty_entries:[]).forEach((e,index)=>{
+      if(e?.type!=='out')return;
+      const ref='daily_settlements:'+row.id+':petty:'+index;
+      byRef.set(ref,{source_ref:ref,receipt_date:row.settlement_date,branch:row.branch,total_amount:Number(e.amount||0),source_type:'petty_cash',receipt_file:e.receipt||null});
+    });
+    return [...byRef.values()].sort((a,b)=>String(a.receipt_date).localeCompare(String(b.receipt_date))||String(a.branch).localeCompare(String(b.branch))||String(a.source_ref||a.id).localeCompare(String(b.source_ref||b.id)));
+  }
+  async function monthlyReceiptImage(bytes,type){
+    const url=URL.createObjectURL(new Blob([bytes],{type:type||'image/jpeg'}));
+    try{return await new Promise((resolve,reject)=>{
+      const img=new Image();img.onload=()=>{try{const scale=Math.min(1,2400/Math.max(img.naturalWidth,img.naturalHeight));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);canvas.toBlob(async blob=>{if(!blob)return reject(Error('Image conversion failed.'));try{resolve(new Uint8Array(await blob.arrayBuffer()));}catch(err){reject(err);}},'image/jpeg',0.92);}catch(err){reject(err);}};img.onerror=()=>reject(Error('Image format is not supported.'));img.src=url;
+    });}finally{URL.revokeObjectURL(url);}
+  }
+  async function buildMonthlyReceiptsPdf(client,ym,records,progress){
+    const {PDFDocument,StandardFonts,rgb}=await monthlyPdfLibrary(),pdf=await PDFDocument.create(),font=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
+    const dark=rgb(.10,.23,.18),muted=rgb(.36,.41,.39),failures=[];
+    const ascii=value=>String(value??'').replace(/[^\x20-\x7e]/g,'?');
+    function text(page,value,x,y,size=11,strong=false){page.drawText(ascii(value),{x,y,size,font:strong?bold:font,color:dark});}
+    let summary;
+    function summaryPage(){const page=pdf.addPage([595.28,841.89]);text(page,"NATURE'S DAO",32,805,19,true);text(page,'Monthly Expense Receipts | '+ym,32,779,13,true);text(page,'Includes records available to the signed-in account.',32,759,10);return page;}
+    summary=summaryPage();text(summary,'Expense records: '+records.length+' | Recorded total: '+money(records.reduce((n,r)=>n+Number(r.total_amount||0),0)),32,735,11,true);
+    text(summary,'No.   Date          Branch                        Amount / Source',32,710,10,true);let y=689;
+    records.forEach((r,i)=>{if(y<48){summary=summaryPage();y=725;}text(summary,String(i+1).padStart(3,'0')+'   '+r.receipt_date+'   '+String(r.branch||'-').slice(0,24).padEnd(24,' ')+'   '+money(r.total_amount),32,y,9);y-=15;});
+    const pageCache=new Map();
+    for(let i=0;i<records.length;i++){
+      const r=records[i],receipt=r.receipt_file;progress?.('Preparing receipt '+(i+1)+' / '+records.length+'...');
+      const info=()=>{const page=pdf.addPage([595.28,841.89]);text(page,'Receipt '+(i+1)+' | '+r.receipt_date+' | '+String(r.branch||'-'),26,813,11,true);text(page,'Amount: '+money(r.total_amount)+' | '+(r.source_type==='petty_cash'?'Petty Cash':'Receipt Scan'),26,793,11);return page;};
+      try{
+        if(!receipt?.path)throw Error('No receipt attached.');
+        const key=receipt.path;
+        if(pageCache.has(key)){const page=info();text(page,'Shared receipt: see Receipt '+pageCache.get(key)+'.',26,750,12);continue;}
+        const {data,error}=await window.ndReceiptSignedUrl(client,'petty-receipts',receipt.path,600);if(error||!data?.signedUrl)throw Error(error?.message||'Receipt unavailable.');
+        const response=await fetch(data.signedUrl);if(!response.ok)throw Error('Receipt download failed ('+response.status+').');const bytes=new Uint8Array(await response.arrayBuffer());
+        const isPdf=bytes[0]===37&&bytes[1]===80&&bytes[2]===68&&bytes[3]===70;
+        if(isPdf){const source=await PDFDocument.load(bytes);if(!source.getPageCount())throw Error('PDF has no pages.');for(const sourcePage of source.getPages())sourcePage.drawText(' ',{x:0,y:0,size:1});const embedded=await pdf.embedPages(source.getPages());for(const entry of embedded){const page=info(),scale=Math.min(543/entry.width,738/entry.height);page.drawPage(entry,{x:(595.28-entry.width*scale)/2,y:28+(738-entry.height*scale)/2,width:entry.width*scale,height:entry.height*scale});}}
+        else{const image=await pdf.embedJpg(await monthlyReceiptImage(bytes,response.headers.get('content-type'))),page=info(),scale=Math.min(543/image.width,738/image.height);page.drawImage(image,{x:(595.28-image.width*scale)/2,y:28+(738-image.height*scale)/2,width:image.width*scale,height:image.height*scale});}
+        pageCache.set(key,i+1);
+      }catch(err){failures.push({number:i+1,message:String(err.message||err)});const page=info();text(page,'RECEIPT NOT INCLUDED',26,750,15,true);text(page,'Missing, expired or unreadable. Check the original expense record.',26,725,10);}
+    }
+    if(failures.length){const p=summaryPage();text(p,'INCOMPLETE: '+failures.length+' receipt(s) require attention.',32,725,13,true);text(p,'See the numbered receipt pages for missing attachments.',32,702,10);}
+    const pages=pdf.getPages();pages.forEach((page,i)=>page.drawText((i+1)+' / '+pages.length,{x:530,y:12,size:8,font,color:muted}));pdf.setTitle("Nature's Dao - Monthly Receipts - "+ym);pdf.setAuthor("Nature's Dao");
+    return {bytes:await pdf.save(),failures};
+  }
+  async function exportMonthlyReceiptsPdf(){
+    if(monthlyReceiptsBusy)return;monthlyReceiptsBusy=true;const btn=$('aiReceiptMonthlyPdfBtn'),state=$('aiReceiptMonthlyPdfState'),download=$('aiReceiptMonthlyPdfDownload'),ym=$('aiReceiptHistoryMonth')?.value||currentMonth();
+    btn.disabled=true;download.hidden=true;state.textContent='Loading all expense records...';
+    try{
+      const client=dbClient(),records=await monthlyReceiptRows(client,ym);if(!records.length){state.textContent='No expense records for '+ym+'.';return;}
+      const result=await buildMonthlyReceiptsPdf(client,ym,records,value=>state.textContent=value);
+      if(monthlyReceiptsUrl)URL.revokeObjectURL(monthlyReceiptsUrl);monthlyReceiptsUrl=URL.createObjectURL(new Blob([result.bytes],{type:'application/pdf'}));
+      download.href=monthlyReceiptsUrl;download.download='Natures_Dao_Receipts_'+ym+(result.failures.length?'_INCOMPLETE':'')+'.pdf';download.hidden=false;
+      state.textContent=result.failures.length?'PDF ready with '+result.failures.length+' missing/unreadable receipt(s). Check the marked pages.':'PDF ready: '+records.length+' expense records. Save the monthly file using Download PDF.';
+      download.click();
+    }catch(err){state.textContent='Unable to create PDF: '+(err.message||err);}finally{monthlyReceiptsBusy=false;btn.disabled=false;}
+  }
+
   async function showReceiptPage(){
     window.activeMainPage="ai_receipt";
     try{
@@ -26186,6 +26292,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     $("aiReceiptSaveBtn")?.addEventListener("click",saveRecord);
     $("aiReceiptHistoryMonth")?.addEventListener("change",async()=>{await Promise.all([loadHistory(),loadReportSyncSummary()]);await loadClaimSummary();});
     $("aiReceiptExportCsvBtn")?.addEventListener("click",exportExpenseCsv);
+    $("aiReceiptMonthlyPdfBtn")?.addEventListener("click",exportMonthlyReceiptsPdf);
     $("aiReceiptMerchant")?.addEventListener("change",async()=>{
       await applySupplierMemory($("aiReceiptMerchant").value);
       await checkDuplicate();
