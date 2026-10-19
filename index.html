@@ -14300,7 +14300,7 @@ async function toggleSalaryPayment(type,empId){
     document.body.appendChild(modal);
   }
   const escapeHtml=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  modal.querySelector('#ndSignDetails').innerHTML=`<p><b>Employee:</b> ${escapeHtml(name)}</p><p><b>Branch:</b> ${escapeHtml(outlet)}</p><p><b>Salary:</b> ${isSeven?'7th':'14th'} · ${escapeHtml(monthDate())}</p><p><b>Net Pay:</b> <strong>RM ${net.toFixed(2)}</strong></p>`;
+  modal.querySelector('#ndSignDetails').innerHTML=`<p><b>Employee:</b> ${escapeHtml(name)}</p><p><b>Branch:</b> ${escapeHtml(outlet)}</p><p><b>Salary:</b> ${isSeven?'7th':'14th'} · ${escapeHtml(monthDate())}</p><p class="nd-sign-net-pay"><span>Net Pay</span><strong>RM ${net.toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></p>`;
   const pic=modal.querySelector('#ndSignPic');pic.innerHTML=names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
   const paymentMethod=String(employee?.payment_method||'').trim().toLowerCase();
   const cashPayment=paymentMethod==='cash';
@@ -32917,7 +32917,7 @@ function interviewGroups(){return interviewSections.map(([title,fields])=>[title
  return [f];
 })])}
 function renderInterview(root){
- let i=0;root.innerHTML=`<h3>Employee Interview Form</h3><div style="padding:16px;border:1px solid #ddd;border-radius:12px;margin:12px 0"><strong>NATURE'S DAO GLOBAL HOLDINGS SDN BHD</strong><div>Company Registration No.: 202501043436</div><div>Address: Unit 02-02, Level 2, CIMB Leadership Academy, No.3 Jalan Medini Utara 1, Medini Iskandar, 79200, Iskandar Puteri, JB</div></div><label for="ndInterviewCategory">Applicant Type</label><select id="ndInterviewCategory"><option value="local" ${interviewCategory==='local'?'selected':''}>Local (Malaysian)</option><option value="non_local" ${interviewCategory==='non_local'?'selected':''}>Non-local (Foreign National)</option></select><p class="helper">Complete available information. Leave unavailable or non-applicable fields blank. Full Name is required. Signatures and company stamping are completed after generating the document.</p><form id="ndStaffEntryForm">${interviewGroups().slice(0,4).map(([title,fields])=>`<fieldset style="border:1px solid #ddd;border-radius:12px;padding:16px;margin:18px 0"><legend style="font-weight:700;color:#9a7426">${title}</legend><div class="nd-form-grid">${fields.map(f=>inputMarkup(f[0],f[1],i++)).join('')}</div></fieldset>`).join('')}<button class="btn" type="submit">Save &amp; Generate Document</button></form>`;
+ let i=0;root.innerHTML=`<h3>Employee Interview Form</h3><div style="padding:16px;border:1px solid #ddd;border-radius:12px;margin:12px 0"><strong>NATURE'S DAO GLOBAL HOLDINGS SDN BHD</strong><div>Company Registration No.: 202501043436</div><div>Address: Unit 02-02, Level 2, CIMB Leadership Academy, No.3 Jalan Medini Utara 1, Medini Iskandar, 79200, Iskandar Puteri, JB</div></div><label for="ndInterviewCategory">Applicant Type</label><select id="ndInterviewCategory"><option value="local" ${interviewCategory==='local'?'selected':''}>Local (Malaysian)</option><option value="non_local" ${interviewCategory==='non_local'?'selected':''}>Non-local (Foreign National)</option></select><p class="helper">Complete available information. Leave unavailable or non-applicable fields blank. Full Name is required. Signatures and company stamping are completed after generating the document.</p><form id="ndStaffEntryForm">${interviewGroups().slice(0,4).map(([title,fields])=>`${interviewCategory==='non_local'&&title.startsWith('SECTION D')?'<details class="nd-foreign-bank-details"><summary>SECTION D: BANK &amp; STATUTORY INFORMATION <span aria-hidden="true">›</span></summary>':''}<fieldset style="border:1px solid #ddd;border-radius:12px;padding:16px;margin:18px 0"><legend style="font-weight:700;color:#9a7426">${title}</legend><div class="nd-form-grid">${fields.map(f=>{const field=inputMarkup(f[0],f[1],i++);return (f[0]==='Work Permit No'?'<details class="nd-work-permit-details"><summary>Work Permit <span aria-hidden="true">›</span></summary><div class="nd-form-grid">':'')+field+(f[0]==='Work Permit Photo'?'</div></details>':'')}).join('')}</div></fieldset>${interviewCategory==='non_local'&&title.startsWith('SECTION D')?'</details>':''}`).join('')}<button class="btn" type="submit">Save &amp; Generate Document</button></form>`;
  $('ndStaffEntryForm').onsubmit=saveEntry;initSignatures(root);
  $('ndInterviewCategory').onchange=()=>{
  const saved={};fieldsFor('interview').forEach(([label,kind],n)=>{const el=$('ndField'+n);saved[label]={kind,value:el?.value,files:el?.files,ink:el?.dataset.ink,data:kind==='signature'&&el?.dataset.ink?el.toDataURL():null}});
@@ -33281,6 +33281,32 @@ body[data-nd-visible-page="staff"] #ndStaffManagementPage{display:block!importan
 body[data-nd-visible-page]:not([data-nd-visible-page="announcements"]) #ndAnnouncementsPage,body[data-nd-visible-page]:not([data-nd-visible-page="forms"]) #ndStaffFormsPage{display:none!important}
 body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-visible-page="forms"] #ndStaffFormsPage{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
 #taxRuleStatus{display:none!important}
+
+#ndSignedPaymentModal #ndSignDetails .nd-sign-net-pay{padding:12px 15px!important;margin:12px 0!important;border-radius:12px!important;background:#eff5f1!important}
+#ndSignedPaymentModal .nd-sign-net-pay>span{display:block!important;font-size:12px!important;font-weight:600!important;color:#6f8175!important;margin-bottom:4px!important}
+#ndSignedPaymentModal .nd-sign-net-pay>strong{display:block!important;font-size:32px!important;line-height:1.2!important;font-weight:800!important;color:#204c37!important;letter-spacing:-.5px!important}
+#ndSignedPaymentModal label[for="ndSignPic"]{display:block!important;font-size:11px!important;line-height:1.4!important;margin:12px 0 5px!important;font-weight:600!important}
+#ndSignedPaymentModal #ndSignPic{display:block!important;width:auto!important;max-width:100%!important;min-width:200px!important;min-height:34px!important;height:34px!important;padding:5px 28px 5px 10px!important;font-size:13px!important;font-weight:500!important;border-radius:8px!important;margin:0 0 12px!important;box-sizing:border-box!important}
+
+#ndAnnouncementsPage .nd-ann-buttons:has(#ndAnnMonth){display:flex!important;align-items:center!important;gap:6px!important;margin:10px 0!important;flex-wrap:wrap!important}
+#ndAnnouncementsPage #ndAnnMonth{width:145px!important;max-width:145px!important;min-width:0!important;height:34px!important;min-height:34px!important;padding:5px 8px!important;font-size:13px!important;font-weight:500!important;border:1px solid #d6dfd8!important;border-radius:8px!important;box-sizing:border-box!important;flex:0 0 145px!important;background:#fff!important}
+#ndAnnouncementsPage #ndAnnPrev,#ndAnnouncementsPage #ndAnnNext{width:30px!important;min-width:30px!important;height:32px!important;min-height:32px!important;padding:4px!important;font-size:11px!important;line-height:1!important;border-radius:7px!important}
+#ndAnnouncementsPage #ndAnnMonthUnread{font-size:11px!important}
+
+#ndStaffFormsPage .nd-work-permit-details{grid-column:1/-1;border:1px solid #e0e7e2;border-radius:10px;background:#fafcfb;padding:10px 12px}
+#ndStaffFormsPage .nd-work-permit-details>summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;font-size:14px;font-weight:650;color:#365744}
+#ndStaffFormsPage .nd-work-permit-details>summary::-webkit-details-marker{display:none}
+#ndStaffFormsPage .nd-work-permit-details>summary span{font-size:22px;line-height:1}
+#ndStaffFormsPage .nd-work-permit-details[open]>summary{margin-bottom:12px}
+#ndStaffFormsPage .nd-work-permit-details[open]>summary span{transform:rotate(90deg)}
+
+#ndStaffFormsPage .nd-foreign-bank-details{margin:18px 0;border:1px solid #ddd;border-radius:12px;padding:14px 16px}
+#ndStaffFormsPage .nd-foreign-bank-details>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;cursor:pointer;font-size:14px;font-weight:700;color:#9a7426}
+#ndStaffFormsPage .nd-foreign-bank-details>summary::-webkit-details-marker{display:none}
+#ndStaffFormsPage .nd-foreign-bank-details>summary span{font-size:22px;line-height:1;flex-shrink:0}
+#ndStaffFormsPage .nd-foreign-bank-details[open]>summary span{transform:rotate(90deg)}
+#ndStaffFormsPage .nd-foreign-bank-details>fieldset{margin:12px 0 0!important;padding:0!important;border:0!important}
+#ndStaffFormsPage .nd-foreign-bank-details>fieldset>legend{display:none}
 </style>
 </body>
 </html>
