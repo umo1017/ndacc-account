@@ -5508,6 +5508,8 @@ window.ndEmployeeFullName = function(employee){
     if(expired.length) await fetchRows();
   }
 
+// Cash ledger starts from zero on 1 September 2026. Historical receipts remain intact.
+  const ND_CASH_LEDGER_START='2026-09-01';
 function computedCarryBefore(branch,date,sourceRows=allRows){
     const rows=(sourceRows||[])
       .filter(r=>String(r.branch||"")===String(branch||"") && String(r.settlement_date||"")<String(date||""))
@@ -5523,11 +5525,13 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     let petty=Number(rows[0].petty_opening||0);
 
     rows.forEach(r=>{
-      cash+=Number(r.cash||0)-Number(r.cash_withdrawal||0);
+      if(String(r.settlement_date||'')>=ND_CASH_LEDGER_START)cash+=Number(r.cash||0)-Number(r.cash_withdrawal||0);
       const mv=pettyMovementFromRow(r);
       petty+=mv.pin-mv.pout;
     });
-    cash-=verifiedCashRemittanceTotal(branch,"",date);
+    cash-=ndVerifiedTransfers(branch,"",date)
+      .filter(x=>String(x.remittance_date||'')>=ND_CASH_LEDGER_START)
+      .reduce((sum,x)=>sum+Number(x.amount||0),0);
     return {cash,petty};
   }
 
@@ -5537,7 +5541,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const rows=(sourceRows||[]).filter(r=>{
       if(r._missing || String(r.branch||"").trim()!==target)return false;
       const d=String(r.settlement_date||"");
-      if(cutoff && d>cutoff)return false;
+      if(d<ND_CASH_LEDGER_START || (cutoff && d>cutoff))return false;
       // A settlement is unique per branch/date. Never count the same date twice
       // if an old duplicated fetch or overlapping reload exists in memory.
       if(seen.has(d))return false;
@@ -5545,7 +5549,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     });
     const cash=rows.reduce((s,r)=>s+(Number(r.cash)||0),0);
     const withdrawals=rows.reduce((s,r)=>s+(Number(r.cash_withdrawal)||0),0);
-    const transfers=verifiedCashRemittanceTotal(target,cutoff);
+    const transfers=cutoff&&cutoff<ND_CASH_LEDGER_START?0:ndVerifiedTransfers(target,cutoff).filter(x=>String(x.remittance_date||'')>=ND_CASH_LEDGER_START).reduce((sum,x)=>sum+Number(x.amount||0),0);
     return {cash,withdrawals,transfers,balance:cash-withdrawals-transfers};
   }
   function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
@@ -5617,7 +5621,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
           .reduce((sum,k)=>sum+Number(r[k]||0),0);
         const cashOpening=computedCarryBefore(branch,r.settlement_date,rows).cash;
         const remittanceToday=verifiedCashRemittanceForDate(branch,r.settlement_date);
-        const cashBalance=cashOpening+Number(r.cash||0)-Number(r.cash_withdrawal||0)-remittanceToday;
+        const cashBalance=String(r.settlement_date||'')<ND_CASH_LEDGER_START?0:cashOpening+Number(r.cash||0)-Number(r.cash_withdrawal||0)-remittanceToday;
         const pettyNet=carryPetty+mv.pin-mv.pout;
 
         const patch={
@@ -6656,7 +6660,7 @@ return `<div class="history-date-card">
     const cashOpening=Number($("cashOpening").value)||0;
     const cashWithdrawal=num("cashWithdrawal");
     const cashRemittance=verifiedCashRemittanceForDate(currentBranch,$("settlementDate")?.value||today());
-    const cashBalance=cashOpening+num("cash")-cashWithdrawal-cashRemittance;
+    const cashBalance=String($('settlementDate')?.value||today())<ND_CASH_LEDGER_START?0:cashOpening+num("cash")-cashWithdrawal-cashRemittance;
     $("grandTotal").value=money(total);
     $("cashBalance").value=money(cashBalance);
     $("pettyRemaining").value=money(pettyRemaining);
@@ -6883,7 +6887,7 @@ return `<div class="history-date-card">
     const cashOpening=Number($("cashOpening").value)||0;
     const cashWithdrawal=num("cashWithdrawal");
     const cashRemittance=verifiedCashRemittanceForDate(currentBranch,$("settlementDate")?.value||today());
-    const cashBalance=cashOpening+num("cash")-cashWithdrawal-cashRemittance;
+    const cashBalance=String($('settlementDate')?.value||today())<ND_CASH_LEDGER_START?0:cashOpening+num("cash")-cashWithdrawal-cashRemittance;
 
     return {
       settlement_date:$("settlementDate").value,
@@ -6943,7 +6947,7 @@ return `<div class="history-date-card">
       const mv=pettyMovementFromRow(r);
       const cashOpening=computedCarryBefore(branch,r.settlement_date,fullRows).cash;
       const remittanceToday=verifiedCashRemittanceForDate(branch,r.settlement_date);
-      const cashBalance=cashOpening+Number(r.cash||0)-Number(r.cash_withdrawal||0)-remittanceToday;
+      const cashBalance=String(r.settlement_date||'')<ND_CASH_LEDGER_START?0:cashOpening+Number(r.cash||0)-Number(r.cash_withdrawal||0)-remittanceToday;
       const pettyNet=carryPetty+mv.pin-mv.pout;
       const {error:updateError}=await db.from("daily_settlements").update({
         grand_total:grand,
@@ -8025,6 +8029,11 @@ return `<div class="history-date-card">
   function updateTodayTotalCash(){
     const el=$("todayTotalCash"); if(!el) return;
     const selectedDate=$("settlementDate")?.value||getActiveDailyDate();
+    if(String(selectedDate)<ND_CASH_LEDGER_START){
+      el.textContent=money(0);el.title='Cash balance starts from zero on 1 September 2026.';
+      el.dataset.cashBreakdown=el.title;
+      document.getElementById('ndCashBalanceAudit')?.remove();return;
+    }
 
     // Same canonical formula used by Total Cash Remaining for Withdrawal:
     // all CASH up to the selected date minus all Cash Withdrawal up to that date.
