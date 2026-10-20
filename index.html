@@ -12052,7 +12052,7 @@ function ndRestrictGlobalSalaryAccess(){
     accessibleSalaryOutlets=(accessibleSalaryOutlets||[]).filter(x=>x!=='Global');
   }
 }
-async function loadSalaryBranches(){
+async function loadSalaryBranches(refreshSelects=true){
   // Load the user's salary access independently from salary_outlets.
   // This prevents the Salary menu from disappearing just because salary_outlets
   // has a temporary RLS/read problem.
@@ -12096,7 +12096,7 @@ async function loadSalaryBranches(){
       )];
     }
 
-    populateOutletSelects();
+    if(refreshSelects)populateOutletSelects();
     updateSalaryNavVisibility();
     return;
   }
@@ -12151,7 +12151,7 @@ async function loadSalaryBranches(){
   accessibleSalaryOutlets=[...new Set([...accessibleSalaryOutlets,...await ndSpecialSalaryOutlets()])];
   ndRestrictGlobalSalaryAccess();
   if(currentSalaryUserEmail===ND_SAM_EMAIL) accessibleSalaryOutlets=["Eco Botanic","Nusa Bestari"];
-  populateOutletSelects();
+  if(refreshSelects)populateOutletSelects();
   updateSalaryNavVisibility();
 }
 
@@ -15391,30 +15391,39 @@ async function rehireStaff(empId){
   try{await loadSalaryData();renderStaffList();}catch(err){console.warn("Rehire refresh:",err);}
 }
 window.rehireStaff=rehireStaff;
+let ndStaffDirectoryLoading=null;
+window.ndRefreshStaffDirectory=async function(){
+ if(!ndStaffDirectoryLoading)ndStaffDirectoryLoading=(async()=>{
+  await determineManager();await loadSalaryBranches(false);
+  const {data,error}=await salaryDb.from('employees').select('*').order('outlet').order('name');
+  if(error)throw Error(error.message||'Unable to load employees.');
+  salaryEmployees=(data||[]).filter(e=>isGlobalAdmin||isPayrollManager||(accessibleSalaryOutlets||[]).includes(e.outlet)).sort(salaryStaffSort);
+  return salaryEmployees;
+ })().finally(()=>{ndStaffDirectoryLoading=null});
+ return ndStaffDirectoryLoading;
+};
 function ndResignationBranches(){
-  const allowed=isGlobalAdmin ? [...new Set(salaryEmployees.map(e=>e.outlet).filter(Boolean))] :
-    [...new Set((accessibleSalaryOutlets||[]).filter(x=>x&&x!=="Global"))];
-  return allowed.filter(b=>salaryEmployees.some(e=>e.outlet===b));
+ const candidates=isGlobalAdmin?[...salaryBranches.map(b=>b.name),...salaryEmployees.map(e=>e.outlet)]:(accessibleSalaryOutlets||[]);
+ return [...new Set(candidates.map(b=>String(b||'').trim()))].filter(b=>b&&b!=='Global'&&canEditStaffRecord({outlet:b})).sort();
 }
 function ndResignationUpdateEmployees(){
-  const branch=byId("ndResignBranch")?.value||"";
-  const sel=byId("ndResignEmployee");if(!sel)return;
-  sel.innerHTML='<option value="">Select employee</option>'+salaryEmployees
-    .filter(e=>e.outlet===branch&&!e.last_working_date&&canEditStaffRecord(e))
-    .sort(salaryStaffSort)
-    .map(e=>`<option value="${Number(e.id)}">${staffSafe(e.name||"-")}${e.employee_no?" · "+staffSafe(e.employee_no):""}</option>`).join("");
+ const branch=byId('ndResignBranch')?.value||'',sel=byId('ndResignEmployee');if(!sel)return;
+ const rows=salaryEmployees.filter(e=>String(e.outlet||'').trim()===branch&&!e.last_working_date&&canEditStaffRecord(e)).sort(salaryStaffSort);
+ sel.innerHTML='<option value="">'+(branch&&!rows.length?'No active employees in this branch':'Select employee')+'</option>'+rows.map(e=>`<option value="${Number(e.id)}">${staffSafe(e.name||'-')}${e.employee_no?' · '+staffSafe(e.employee_no):''}</option>`).join('');
+ sel.disabled=!branch||!rows.length;
 }
-function ndOpenResignation(){
-  const branch=byId("ndResignBranch");
-  const permitted=ndResignationBranches().filter(b=>salaryEmployees.some(e=>e.outlet===b&&canEditStaffRecord(e)));
-  branch.innerHTML='<option value="">Select branch</option>'+permitted.map(b=>`<option value="${staffSafe(b)}">${staffSafe(b)}</option>`).join("");
-  byId("ndResignEmployee").innerHTML='<option value="">Select employee</option>';
-  byId("ndResignDate").value=ndLocalDateISO();
-  byId("ndResignLastDay").value="";
-  byId("ndResignReason").value="";
-  byId("ndResignMessage").textContent="";
-  ndRenderResignItems();
-  byId("ndResignationModal").classList.add("open");
+let ndResignationOpenToken=0;
+async function ndOpenResignation(){
+ const token=++ndResignationOpenToken,branch=byId('ndResignBranch'),employee=byId('ndResignEmployee'),msg=byId('ndResignMessage'),confirmButton=byId('ndConfirmResignationBtn');
+ byId('ndResignationModal').classList.add('open');branch.disabled=true;employee.disabled=true;confirmButton.disabled=true;
+ branch.innerHTML='<option value="">Loading branches…</option>';employee.innerHTML='<option value="">Loading employees…</option>';msg.textContent='Loading staff records…';
+ byId('ndResignDate').value=ndLocalDateISO();byId('ndResignLastDay').value='';byId('ndResignReason').value='';ndRenderResignItems();
+ try{
+  await window.ndRefreshStaffDirectory();if(token!==ndResignationOpenToken)return;
+  const permitted=ndResignationBranches();branch.innerHTML='<option value="">Select branch</option>'+permitted.map(b=>`<option value="${staffSafe(b)}">${staffSafe(b)}</option>`).join('');branch.disabled=!permitted.length;
+  if(permitted.length===1)branch.value=permitted[0];ndResignationUpdateEmployees();ndRenderResignItems();confirmButton.disabled=!permitted.length;
+  msg.textContent=permitted.length?'':'No branches available with staff management access.';
+ }catch(error){if(token!==ndResignationOpenToken)return;branch.innerHTML='<option value="">Unable to load branches</option>';employee.innerHTML='<option value="">Unable to load employees</option>';msg.textContent='Unable to load staff records: '+error.message+' Close and reopen to retry.';}
 }
 async function ndSaveResignation(){
   const msg=byId("ndResignMessage");
@@ -15443,7 +15452,7 @@ async function ndSaveResignation(){
   finally{btn.disabled=false;}
 }
 document.addEventListener("click",ev=>{
-  if(ev.target.closest?.("#ndOpenResignationBtn"))ndOpenResignation();
+  if(ev.target.closest?.("#ndOpenResignationBtn"))void ndOpenResignation();
   if(ev.target.closest?.("#ndCloseResignationBtn, #ndResignationCancelBtn"))byId("ndResignationModal").classList.remove("open");
   if(ev.target.closest?.("#ndConfirmResignationBtn"))void ndSaveResignation();
 });
@@ -15811,7 +15820,7 @@ byId("empPayBy").onchange=updateSubmitStaffPaymentFields;
   byId("editEmpEmploymentType").onchange=updateEditEmploymentType;
   updateSubmitStaffPaymentFields();
   updateSubmitEmploymentType();
-  byId("staffListBtn").onclick=()=>{if(document.body.dataset.ndVisiblePage!=="staff"&&typeof window.ndOpenStaffManagement==="function"){window.ndOpenStaffManagement();return;}renderStaffList();byId("staffListModal").classList.add("open");};
+  byId("staffListBtn").onclick=()=>{if(document.body.dataset.ndVisiblePage!=="staff"&&typeof window.ndOpenStaffManagement==="function"){window.ndOpenStaffManagement();return;}renderStaffList();byId("staffListModal").classList.add("open");void window.ndRefreshStaffDirectory().then(()=>{renderStaffList();}).catch(error=>{let message=byId("ndStaffDirectoryError");if(!message){message=document.createElement("p");message.id="ndStaffDirectoryError";message.setAttribute("role","status");byId("staffListContent").prepend(message);}message.textContent="Unable to refresh staff records: "+error.message;});};
   if(byId("branchManageBtn")) byId("branchManageBtn").onclick=async()=>{ if(!isPayrollManager){alert("Manager only.");return;} await renderBranchManagement(); byId("branchManageModal").classList.add("open"); };
   byId("closeBranchManageModal").onclick=()=>byId("branchManageModal").classList.remove("open");
   if(byId("salaryManagersBtn")) byId("salaryManagersBtn").onclick=async()=>{ if(!isPayrollManager){alert("Salary manager only.");return;} await renderSalaryManagers(); byId("salaryManagersModal").classList.add("open"); };
