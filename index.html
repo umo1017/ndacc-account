@@ -8758,7 +8758,7 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 <strong>Card Settlement Receipt</strong><span class="branch-chip">Daily Settlement receipts auto-import</span><input id="ndCardReceiptMonth" type="month" aria-label="Card settlement receipt month" style="width:150px;min-width:0">
 <span id="aiReceiptClaimSummaryTotal">RM 0.00</span>
 </div>
-<div class="nd-card-pdf-controls"><label for="ndCardReceiptBranch">Branch</label><select id="ndCardReceiptBranch"><option value="">All Branches</option></select><button class="btn" type="button" id="ndCardReceiptPdfBtn">Download Monthly Card Receipts PDF</button><a class="btn" id="ndCardReceiptPdfDownload" hidden>Download PDF</a></div><p id="ndCardReceiptPdfStatus" class="helper" role="status"></p><div id="aiReceiptClaimSummaryWrap" style="margin-top:12px"></div>
+<div class="nd-card-pdf-controls"><label for="ndCardReceiptBranch">Branch</label><select id="ndCardReceiptBranch"><option value="">All Branches</option></select><button class="btn" type="button" id="ndCardReceiptPdfBtn">Download Monthly Card Receipts PDF</button><a class="btn" id="ndCardReceiptPdfDownload" hidden>Download PDF</a></div><p id="ndCardReceiptPdfStatus" class="helper" role="status"></p><div id="ndCardMonthlyFiles" class="nd-card-monthly-files"></div><div id="aiReceiptClaimSummaryWrap" style="margin-top:12px"></div>
 </div>
 <div class="salary-card" style="margin-top:14px">
 <div class="outlet-title">
@@ -9446,7 +9446,7 @@ document.getElementById('ndCashPettyRefresh')?.addEventListener('click',ndRender
 </div>
 <div class="settlement-kpis">
 <div class="settlement-kpi"><div class="k">Revenue</div><div class="v" id="settlementRevenue">RM 0.00</div></div>
-<div class="settlement-kpi"><div class="k">Branch Salary <span class="branch-chip">AUTO · LIVE</span></div><div class="v" id="settlementSalary">RM 0.00</div></div>
+<div class="settlement-kpi"><div class="k">Branch Salary <span class="branch-chip">Manual</span></div><div class="v" id="settlementSalary">RM 0.00</div></div>
 <div class="settlement-kpi"><div class="k">Petty Cash Record <span class="branch-chip">AUTO · LIVE</span></div><div class="v" id="settlementPetty">RM 0.00</div></div>
 <div class="settlement-kpi"><div class="k">Profit</div><div class="v" id="settlementProfit">RM 0.00</div></div>
 </div>
@@ -9485,41 +9485,41 @@ document.getElementById('ndCashPettyRefresh')?.addEventListener('click',ndRender
 </div>
 <div class="settlement-expense-row" data-expense-payment-key="salary7">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-<strong>Branch Salary 7th</strong><span class="branch-chip">AUTO · LIVE</span>
+<strong>Branch Salary 7th</strong><span class="branch-chip">Manual</span>
 </div>
-<input disabled="" id="settlementSalary7Input" readonly="" type="number"/>
+<input id="settlementSalary7Input" data-report-manual="salary7" type="number" min="0" step="0.01" inputmode="decimal"/>
 </div><div class="settlement-expense-row" data-expense-payment-key="salary14">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-<strong>Branch Salary 14th</strong><span class="branch-chip">AUTO · LIVE</span>
+<strong>Branch Salary 14th</strong><span class="branch-chip">Manual</span>
 </div>
-<input disabled="" id="settlementSalary14Input" readonly="" type="number"/>
+<input id="settlementSalary14Input" data-report-manual="salary14" type="number" min="0" step="0.01" inputmode="decimal"/>
 </div>
 <div class="settlement-expense-row" data-expense-payment-key="salary_epf">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 <div>
-<strong>EPF</strong> <span class="branch-chip">AUTO · LIVE</span>
-<div class="helper" id="settlementEpfBreakdown">Employee RM 0.00 + Employer RM 0.00</div>
+<strong>EPF</strong> <span class="branch-chip">Manual</span>
+
 </div>
 </div>
-<input disabled="" id="settlementEpfInput" readonly="" type="number"/>
+<input id="settlementEpfInput" data-report-manual="epf_total" type="number" min="0" step="0.01" inputmode="decimal"/>
 </div>
 <div class="settlement-expense-row" data-expense-payment-key="salary_socso_eis">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 <div>
-<strong>SOCSO / EIS</strong> <span class="branch-chip">AUTO · LIVE</span>
-<div class="helper" id="settlementSocsoEisBreakdown">Employee RM 0.00 + Employer RM 0.00</div>
+<strong>SOCSO / EIS</strong> <span class="branch-chip">Manual</span>
+
 </div>
 </div>
-<input disabled="" id="settlementSocsoEisInput" readonly="" type="number"/>
+<input id="settlementSocsoEisInput" data-report-manual="socso_eis_total" type="number" min="0" step="0.01" inputmode="decimal"/>
 </div>
 <div class="settlement-expense-row" data-expense-payment-key="salary_taxpcb">
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 <div>
-<strong>Tax PCB</strong> <span class="branch-chip">AUTO · LIVE</span>
-<div class="helper" id="settlementTaxPcbBreakdown">Employee RM 0.00 · Employer RM 0.00</div>
+<strong>Tax PCB</strong> <span class="branch-chip">Manual</span>
+
 </div>
 </div>
-<input disabled="" id="settlementTaxPcbInput" readonly="" type="number"/>
+<input id="settlementTaxPcbInput" data-report-manual="taxpcb_employee" type="number" min="0" step="0.01" inputmode="decimal"/>
 </div>
 <div class="settlement-expense-row" data-expense-payment-key="sst">
 <div style="display:flex;align-items:center;gap:6px">
@@ -12482,7 +12482,7 @@ function ndNoticeIsSigned(a){const valid=x=>typeof x==='string'?/^(data:image\/|
 function ndNoticeValidDraft(){if(!ndOnboardAgreement?.employee_signature||!ndOnboardAgreement?.company_signature)throw Error('Review and sign the Employment Notice Agreement before onboarding.');if(JSON.stringify(ndOnboardAgreement.employee)!==JSON.stringify(ndNoticeDetails()))throw Error('Employee details changed. Review and sign the updated agreement.');return ndOnboardAgreement;}
 function ndUpdateNoticeStatus(){const node=byId('ndOnboardAgreementStatus');if(node)node.textContent=ndOnboardAgreement?'Signed by employee and company representative.':'';}
 function ndSignaturePad(canvas){const ctx=canvas.getContext('2d');ctx.lineWidth=2.4;ctx.lineCap='round';ctx.strokeStyle='#182c25';let active=false;const point=e=>{const r=canvas.getBoundingClientRect();return [(e.clientX-r.left)*canvas.width/(r.width||canvas.width),(e.clientY-r.top)*canvas.height/(r.height||canvas.height)];};canvas.onpointerdown=e=>{active=true;canvas.setPointerCapture?.(e.pointerId);const [x,y]=point(e);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+.1,y+.1);ctx.stroke();canvas.dataset.ink='1';e.preventDefault();};canvas.onpointermove=e=>{if(!active)return;ctx.lineTo(...point(e));ctx.stroke();e.preventDefault();};canvas.onpointerup=canvas.onpointercancel=()=>active=false;}
-function ndNoticeMarkup(a){const sig=x=>/^data:image\/png;base64,|^https:\/\//.test(x||'')?x:'';return `<article class="nd-notice-document"><header><strong>${staffSafe(a.company.name)}</strong><p>Company Registration No. ${staffSafe(a.company.registration)}</p><p>${staffSafe(a.company.address)}</p></header><h2>${staffSafe(a.title||"Employment Notice & Property Return Agreement")}</h2><p class="nd-notice-reference">Reference: ${staffSafe(a.id)} · Version ${staffSafe(a.version)}</p><dl>${(a.details||[['Employee',a.employee.employee_name],['IC / Passport',a.employee.identity||'—'],['Branch',a.employee.branch],['Employment Start Date',a.employee.start_date],['Notice Period','One (1) calendar month']]).map(([k,v])=>`<div><dt>${k}</dt><dd>${staffSafe(v||'—')}</dd></div>`).join('')}</dl>${a.clauses.map(([title,text],i)=>`<section><h3>${i+1}. ${staffSafe(title)}</h3><p>${staffSafe(text)}</p></section>`).join('')}${(a.appendices||[]).map(ap=>`<section style="border-top:2px solid #244b3a;margin-top:24px;padding-top:12px"><h2>${staffSafe(ap.title)}</h2>${ap.clauses.map(([title,text],i)=>`<section><h3>${i+1}. ${staffSafe(title)}</h3><p>${staffSafe(text)}</p></section>`).join('')}</section>`).join('')}<div class="nd-notice-signatures">${[[a.party_label||'Employee',a.signer_name||a.employee.employee_name,a.employee_signature],['For the Company',a.representative_name,a.company_signature]].map(([label,name,image])=>`<div><strong>${label}</strong>${sig(image)?`<img alt="${label} signature" src="${sig(image)}"/>`:'<div class="nd-notice-blank">Signature pending</div>'}<p>${staffSafe(name||'')}<br>Date: ${staffSafe(a.signed_date||'—')}</p></div>`).join('')}</div><footer>CONFIDENTIAL · ${a.contract_type==='customer_media'?'Signed customer consent record':'Signed employment record'}</footer></article>`;}
+function ndNoticeMarkup(a){const sig=x=>/^data:image\/png;base64,|^https:\/\//.test(x||'')?x:'';return `<article class="nd-notice-document"><header><strong>${staffSafe(a.company.name)}</strong><p>Company Registration No. ${staffSafe(a.company.registration)}</p><p>${staffSafe(a.company.address)}</p></header><h2>${staffSafe(a.title||"Employment Notice & Property Return Agreement")}</h2><p class="nd-notice-reference">Reference: ${staffSafe(a.id)} · Version ${staffSafe(a.version)}</p><dl>${(a.details||[['Employee',a.employee.employee_name],['IC / Passport',a.employee.identity||'—'],['Branch',a.employee.branch],['Employment Start Date',a.employee.start_date],['Notice Period','One (1) calendar month']]).map(([k,v])=>`<div><dt>${k}</dt><dd>${staffSafe(v||'—')}</dd></div>`).join('')}</dl>${a.clauses.map(([title,text],i)=>`<section><h3>${i+1}. ${staffSafe(title)}</h3><p>${staffSafe(text)}</p></section>`).join('')}${(a.appendices||[]).map(ap=>`<section style="border-top:2px solid #244b3a;margin-top:24px;padding-top:12px"><h2>${staffSafe(ap.title)}</h2>${ap.clauses.map(([title,text],i)=>`<section><h3>${i+1}. ${staffSafe(title)}</h3><p>${staffSafe(text)}</p></section>`).join('')}</section>`).join('')}<div class="nd-notice-signatures">${[[a.party_label||'Employee',a.signer_name||a.employee.employee_name,a.employee_signature],['For the Company',a.representative_name,a.company_signature]].map(([label,name,image])=>`<div><strong>${label}</strong>${sig(image)?`<img alt="${label} signature" src="${sig(image)}"/>`:'<div class="nd-notice-blank">Signature pending</div>'}<p>${staffSafe(name||'')}<br>Date: ${staffSafe(a.signed_date||'—')}</p></div>`).join('')}</div><footer>NATURES DAO GROUP - CONFIDENTIAL LEGAL DOCUMENT</footer></article>`;}
 async function ndNoticeBranding(){if(!window.ndGetCompanyDocumentBranding)throw Error('Company template is unavailable. Reload the page.');const b=await window.ndGetCompanyDocumentBranding();return {name:b['Company Name'],registration:b['Company Registration No'],address:b['Company Address']};}
 async function ndOpenNotice(employeeId){
  let modal=byId('ndNoticeModal');if(!modal){modal=document.createElement('div');modal.className='salary-modal';modal.id='ndNoticeModal';modal.style.zIndex='2300';modal.innerHTML='<div class="salary-dialog" style="width:min(840px,100%)"><div class="outlet-title"><h3>Employment Notice Agreement</h3><button type="button" class="btn" data-notice-close aria-label="Close agreement">×</button></div><div data-notice-body></div><p data-notice-status role="status"></p></div>';document.body.append(modal);}
@@ -12627,7 +12627,7 @@ async function ndNoticePDF(a,options={}){
  await signatures();
  for(const appendix of a.appendices||[]){page();text(a.company.name,12,true);text(appendix.title.toUpperCase(),14,true,5);text('Employee: '+a.employee.employee_name+' | Passport: '+(a.employee.identity||'-'),10);text('Reference: '+a.id,8);for(const [i,[title,body]]of appendix.clauses.entries())clause(title,body,i);await signatures();}
 
- const count=pdf.getNumberOfPages();for(let i=1;i<=count;i++){pdf.setPage(i);pdf.setFontSize(8);pdf.setTextColor(100);pdf.text((a.contract_type==='customer_media'?'CONFIDENTIAL - CUSTOMER CONSENT RECORD':'CONFIDENTIAL - EMPLOYMENT RECORD'),margin,288);pdf.text('Page '+i+' of '+count,192,288,{align:'right'});}const name=(a.employee.employee_name+' '+a.signed_date+' '+(a.file_title||'Employment Notice Agreement')+'.pdf').replace(/[\\/:*?"<>|\x00-\x1f]/g,'-');if(options.save!==false)pdf.save(name);return pdf;
+ const count=pdf.getNumberOfPages();for(let i=1;i<=count;i++){pdf.setPage(i);pdf.setFontSize(8);pdf.setTextColor(100);pdf.text('NATURES DAO GROUP - CONFIDENTIAL LEGAL DOCUMENT',margin,288);pdf.text('Page '+i+' of '+count,192,288,{align:'right'});}const name=(a.employee.employee_name+' '+a.signed_date+' '+(a.file_title||'Employment Notice Agreement')+'.pdf').replace(/[\\/:*?"<>|\x00-\x1f]/g,'-');if(options.save!==false)pdf.save(name);return pdf;
 }
 window.ndContractDocumentMarkup=ndNoticeMarkup;
 window.ndDownloadStaffContractPDF=ndNoticePDF;
@@ -17482,6 +17482,7 @@ function settlementClearAutoMonthlyRows(){
   });
 }
 function settlementRecalculate(){
+  for(const el of document.querySelectorAll('[data-report-manual]'))settlementAuto[el.dataset.reportManual]=Number(el.value||0);
   const manual=settlementManualExpense();
   const projects=settlementProjectExpense();
 
@@ -17525,35 +17526,8 @@ function settlementRecalculate(){
   const taxPcbInput=document.getElementById("settlementTaxPcbInput");
   const pettyInput=document.getElementById("settlementPettyInput");
 
-  if(salary7Input) salary7Input.value=Number(settlementAuto.salary7||0).toFixed(2);
-  if(salary14Input) salary14Input.value=Number(settlementAuto.salary14||0).toFixed(2);
-  if(epfInput) epfInput.value=Number(settlementAuto.epf_total||0).toFixed(2);
-  if(socsoEisInput) socsoEisInput.value=Number(settlementAuto.socso_eis_total||0).toFixed(2);
-  if(taxPcbInput) taxPcbInput.value=Number(settlementAuto.taxpcb_employee||0).toFixed(2);
-  if(pettyInput) pettyInput.value=Number(settlementAuto.petty_cash||0).toFixed(2);
+  if(pettyInput){pettyInput.value=Number(settlementAuto.petty_cash||0).toFixed(2);pettyInput.readOnly=true;pettyInput.disabled=true;}
 
-  const epfBreakdown=document.getElementById("settlementEpfBreakdown");
-  if(epfBreakdown){
-    epfBreakdown.textContent=
-      `Employee ${settlementMoney(settlementAuto.epf_employee)} + Employer ${settlementMoney(settlementAuto.epf_employer)}`;
-  }
-
-  const socsoBreakdown=document.getElementById("settlementSocsoEisBreakdown");
-  if(socsoBreakdown){
-    const employeeTotal=Number(settlementAuto.socso_employee||0)+
-      Number(settlementAuto.eis_employee||0)+
-      Number(settlementAuto.lindung24||0);
-    const employerTotal=Number(settlementAuto.socso_employer||0)+
-      Number(settlementAuto.eis_employer||0);
-    socsoBreakdown.textContent=
-      `Employee ${settlementMoney(employeeTotal)} + Employer ${settlementMoney(employerTotal)}`;
-  }
-
-  const pcbBreakdown=document.getElementById("settlementTaxPcbBreakdown");
-  if(pcbBreakdown){
-    pcbBreakdown.textContent=
-      `Employee ${settlementMoney(settlementAuto.taxpcb_employee)} · Employer RM 0.00`;
-  }
 }
 function renderSettlementProjects(){
   const root=document.getElementById("settlementProjects");
@@ -17569,7 +17543,7 @@ function renderSettlementProjects(){
 function renderSettlementTabs(){
   const root=document.getElementById("settlementBranchTabs");
   if(!root) return;
-  const names=settlementOutlets.map(x=>x.name);
+  const names=settlementOutlets.map(x=>x.name).filter(name=>String(name).toLowerCase()!=='collaboration');if(settlementCurrentOutlet==='Collaboration')settlementCurrentOutlet=names[0]||'';
   root.innerHTML=[
     ...names.map(name=>`<button class="settlement-tab ${name===settlementCurrentOutlet?"active":""}" type="button" data-settlement-branch="${settlementEsc(name)}">${settlementEsc(name)}</button>`),
     `<button class="settlement-tab ${settlementCurrentOutlet==="__TOTAL__"?"active":""}" type="button" data-settlement-branch="__TOTAL__">Total Branches · All Expenses</button>`
@@ -17974,170 +17948,9 @@ async function loadSettlementMonth(){
     return sum+Number(r.petty_out||0);
   },0);
 
-  let settlementAutoPayrollSourceMonth=String(monthDate).slice(0,7);
-  let settlementAutoStaffCount=0;
-
-  settlementAuto={
-    revenue:+latestRevenue.toFixed(2),
-    salary:0,
-    salary7:0,
-    salary14:0,
-    petty_cash:+latestPetty.toFixed(2),
-    epf_employee:0,
-    epf_employer:0,
-    epf_total:0,
-    socso_employee:0,
-    socso_employer:0,
-    eis_employee:0,
-    eis_employer:0,
-    lindung24:0,
-    socso_eis_total:0,
-    taxpcb_employee:0
-  };
-  try{
-    const monthKey=String(monthDate).slice(0,7)+"-01";
-
-    // AUTO · LIVE:
-    // use the newest payroll data available at or before the selected Report month.
-    // This avoids showing RM 0.00 at the beginning of a new month before the new
-    // payroll has been confirmed, while never pulling data from a future month.
-    const payroll=await settlementLatestPayrollRows(settlementCurrentOutlet,monthDate);
-
-    const branchEmployees=(payroll.employees||[]).filter(e=>settlementEmployeeWorkedInMonth(e,ym,payroll));
-    settlementAutoStaffCount=branchEmployees.length;
-
-    const confirmed7Map=payroll.s7Map;
-    const commissionSnapMap=payroll.s14Map;
-    const monthlyMap=payroll.monthlyMap;
-
-    settlementAutoPayrollSourceMonth=payroll.sourceMonth||String(monthKey).slice(0,7);
-
-    // 7th salary = employee NET PAY.
-    // Statutory remittances are shown separately below Branch Salary 14th:
-    // EPF = employee + employer
-    // SOCSO/EIS = employee + employer (+ Lindung 24 Jam)
-    // PCB = employee withholding only; employer portion is RM 0.00.
-    let salary7=0;
-    let epfEmployee=0, epfEmployer=0;
-    let socsoEmployee=0, socsoEmployer=0;
-    let eisEmployee=0, eisEmployer=0;
-    let lindung24=0, taxPcb=0;
-
-    branchEmployees.forEach(e=>{
-      if(String(e.employment_type||"full_time")==="part_time") return;
-      const id=String(e.id);
-      let calc=null;
-
-      try{
-        const snap=confirmed7Map.get(id);
-        calc=settlementCalculate7thBudget(
-          e,
-          monthlyMap.get(id)||{},
-          ym,
-          snap||null
-        );
-      }catch(err){
-        console.warn("Settlement statutory calculation failed",e?.id,err);
-        calc=null;
-      }
-
-      if(calc){
-        salary7+=Number(calc.net_pay||0);
-        epfEmployee+=Number(calc.employee_epf||0);
-        epfEmployer+=Number(calc.employer_epf||0);
-        socsoEmployee+=Number(calc.employee_socso||0);
-        socsoEmployer+=Number(calc.employer_socso||0);
-        eisEmployee+=Number(calc.employee_eis||0);
-        eisEmployer+=Number(calc.employer_eis||0);
-        lindung24+=Number(calc.employee_lindung24||0);
-        taxPcb+=Number(calc.tax||0);
-      }else{
-        const guaranteed=Math.max(0,Number(e.guaranteed_pay||0));
-        const allowance=Math.max(0,Number(e.allowance||0));
-        const monthlyRow=monthlyMap.get(id)||{};
-        const ot=Math.max(0,Number(monthlyRow.ot||0));
-        const deduction=Math.max(0,Number(monthlyRow.manual_deduction||0));
-        salary7+=Math.max(0,guaranteed+allowance+ot-deduction);
-      }
-    });
-
-    settlementAuto.salary7=+salary7.toFixed(2);
-    const salary7El=document.getElementById("settlementSalary7");
-    if(salary7El){
-      salary7El.title=`AUTO from ${branchEmployees.length} active staff · Payroll source ${settlementAutoPayrollSourceMonth}`;
-    }
-    settlementAuto.epf_employee=+epfEmployee.toFixed(2);
-    settlementAuto.epf_employer=+epfEmployer.toFixed(2);
-    settlementAuto.epf_total=+(epfEmployee+epfEmployer).toFixed(2);
-
-    settlementAuto.socso_employee=+socsoEmployee.toFixed(2);
-    settlementAuto.socso_employer=+socsoEmployer.toFixed(2);
-    settlementAuto.eis_employee=+eisEmployee.toFixed(2);
-    settlementAuto.eis_employer=+eisEmployer.toFixed(2);
-    settlementAuto.lindung24=+lindung24.toFixed(2);
-    settlementAuto.socso_eis_total=+(
-      socsoEmployee+socsoEmployer+
-      eisEmployee+eisEmployer+
-      lindung24
-    ).toFixed(2);
-
-    settlementAuto.taxpcb_employee=+taxPcb.toFixed(2);
-
-    // 14th AUTO uses the selected month's data only.
-    // That month's confirmed snapshot wins; otherwise calculate live from that month's Commission inputs.
-    let salary14Latest=0;
-
-    for(const e of branchEmployees){
-      const id=String(e.id);
-      const confirmed14=commissionSnapMap.get(id);
-
-      if(confirmed14){
-        salary14Latest+=Number(confirmed14.net_pay||0);
-        continue;
-      }
-
-      const monthlyRow=monthlyMap.get(id)||{};
-      const confirmed7Row=confirmed7Map.get(id);
-      let sevenCalc=null;
-
-      try{
-        sevenCalc=String(e.employment_type||"full_time")==="part_time"
-          ? null
-          : settlementCalculate7thBudget(e,monthlyRow,ym,confirmed7Row||null);
-      }catch(_){
-        sevenCalc=null;
-      }
-
-      let threeBonus=0;
-      try{
-        if(window.ndQuarter3Bonus?.isPayoutMonth?.(ym) && window.ndQuarter3Bonus?.calculateEmployee){
-          threeBonus=Number(await window.ndQuarter3Bonus.calculateEmployee(Number(e.id),ym)||0);
-        }
-      }catch(err){
-        console.warn("Report latest 3-Bonus failed",e?.id,err);
-      }
-
-      try{
-        const latest14=calculate14th(monthlyRow,sevenCalc,threeBonus);
-        salary14Latest+=Number(latest14.net_pay||0);
-      }catch(err){
-        console.warn("Report latest 14th calculation failed",e?.id,err);
-      }
-    }
-
-    settlementAuto.salary14=+salary14Latest.toFixed(2);
-
-    // Full company payroll cash cost:
-    // employee net salary + latest 14th + statutory remittances.
-    settlementAuto.salary=+(
-      settlementAuto.salary7+
-      settlementAuto.salary14+
-      settlementAuto.epf_total+
-      settlementAuto.socso_eis_total+
-      settlementAuto.taxpcb_employee
-    ).toFixed(2);
-  }catch(err){ console.warn("Salary 7th/14th split unavailable",err); }
-
+  settlementAuto={revenue:+latestRevenue.toFixed(2),petty_cash:+latestPetty.toFixed(2),salary:0,salary7:0,salary14:0,epf_total:0,socso_eis_total:0,taxpcb_employee:0};
+  const manualValues=recordRes.data?.manual_report_amounts||{};
+  for(const input of document.querySelectorAll('[data-report-manual]')){input.value=Number(manualValues[input.dataset.reportManual]||0);input.disabled=false;input.readOnly=false;}
   settlementRecord=recordRes.data||null;
   settlementCarrySource=null;
 
@@ -18165,6 +17978,7 @@ async function loadSettlementMonth(){
   }
 
   settlementApplyMonthlyExpenseValues(effective);
+  const sstInput=document.querySelector('[data-finance-field="sst"]');if(sstInput)sstInput.value=Number(recordRes.data?.sst||0);
   try{
     const savedLabels=JSON.parse(localStorage.getItem("nd_report_expense_labels_v1_"+settlementCurrentOutlet)||"{}");
     Object.entries(savedLabels).forEach(([field,label])=>{
@@ -18186,9 +18000,9 @@ async function loadSettlementMonth(){
   settlementRenderPaymentMeta();
   settlementRecalculate();
 
-  if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · AUTO LIVE · ${settlementAutoStaffCount} Staff · Source ${settlementAutoPayrollSourceMonth}`;
+  if(state) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · Manual payroll and statutory amounts`;
   if(carryState){
-    carryState.textContent=`AUTO Budget · Salary + Statutory + Carry Forward · ${String(monthDate||"").slice(0,7)}`;
+    carryState.textContent=`Petty Cash: automatic · Payroll and statutory amounts: entered for this month`;
   }
 }
 async function saveSettlementMonth(){
@@ -18206,6 +18020,8 @@ async function saveSettlementMonth(){
       payment_meta:settlementCollectPaymentMeta(),
       updated_at:new Date().toISOString()
     };
+    row.manual_report_amounts={};
+    document.querySelectorAll('[data-report-manual]').forEach(input=>{const value=Number(input.value||0);if(!Number.isFinite(value)||value<0)throw Error('Report amounts must be zero or positive.');row.manual_report_amounts[input.dataset.reportManual]=value;});
     SETTLEMENT_EXPENSE_FIELDS.forEach(f=>row[f]=settlementNumber(f));
 
     const {error}=await settlementDb().from("settlement_monthly_expenses")
@@ -18264,6 +18080,7 @@ async function settlementEffectiveExpenseRecord(outlet,monthDate){
   // Use this month's positive value when entered; otherwise carry the latest prior
   // non-zero value forward. This is the intended AUTO expense behaviour.
   SETTLEMENT_EXPENSE_FIELDS.forEach(field=>{
+    if(field==='sst'){effective[field]=Number(current?.sst||0);return;}
     const currentRaw=current?.[field];
     const currentNum=Number(currentRaw||0);
 
@@ -18335,14 +18152,13 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
   const start=ym+"-01";
   const next=(m===12)?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,"0")}-01`;
 
-  const [dailyRes,expenseRecord,payroll]=await Promise.all([
+  const [dailyRes,expenseRecord]=await Promise.all([
     db.from("daily_settlements")
       .select("grand_total,petty_out,petty_in,petty_entries")
       .eq("branch",outlet)
       .gte("settlement_date",start)
       .lt("settlement_date",next),
-    settlementEffectiveExpenseRecord(outlet,monthDate),
-    settlementLatestPayrollRows(outlet,monthDate)
+    settlementEffectiveExpenseRecord(outlet,monthDate)
   ]);
 
   if(dailyRes.error) throw dailyRes.error;
@@ -18358,79 +18174,9 @@ async function settlementDynamicBranchMonth(outlet,monthDate){
     return sum+Number(r.petty_out||0);
   },0);
 
-  // Only employees active during the selected report month contribute.
-  // Their values come from the latest payroll record at or before this month.
-  const employees=(payroll.employees||[]).filter(e=>settlementEmployeeWorkedInMonth(e,ym,payroll));
-  const s7Map=payroll.s7Map;
-  const s14Map=payroll.s14Map;
-  const monthlyMap=payroll.monthlyMap;
-
-  let salary7=0, epfEmployee=0, epfEmployer=0;
-  let socsoEmployee=0, socsoEmployer=0, eisEmployee=0, eisEmployer=0;
-  let lindung24=0, taxPcb=0;
-
-  employees.forEach(e=>{
-    if(String(e.employment_type||"full_time")==="part_time") return;
-    const id=String(e.id);
-    try{
-      const snap=s7Map.get(id);
-      const calc=settlementCalculate7thBudget(e,monthlyMap.get(id)||{},ym,snap||null);
-      salary7+=Number(calc.net_pay||0);
-      epfEmployee+=Number(calc.employee_epf||0);
-      epfEmployer+=Number(calc.employer_epf||0);
-      socsoEmployee+=Number(calc.employee_socso||0);
-      socsoEmployer+=Number(calc.employer_socso||0);
-      eisEmployee+=Number(calc.employee_eis||0);
-      eisEmployer+=Number(calc.employer_eis||0);
-      lindung24+=Number(calc.employee_lindung24||0);
-      taxPcb+=Number(calc.tax||0);
-    }catch(err){
-      console.warn("Report payroll calculation failed:",outlet,e?.id,err);
-    }
-  });
-
-  // 14th payroll counts each active employee once.
-  // Use the newest confirmed 14th snapshot at or before the selected report month;
-  // otherwise calculate from the newest available Commission input at or before that month.
-  // Part-time staff are included because the 14th Commission page includes them.
-  let salary14=0;
-  for(const e of employees){
-    const id=String(e.id);
-    const confirmed14=s14Map.get(id);
-    if(confirmed14){
-      salary14+=Number(confirmed14.net_pay||0);
-      continue;
-    }
-
-    const monthlyRow=monthlyMap.get(id)||{};
-    const sevenSnap=s7Map.get(id);
-    let sevenCalc=null;
-    if(String(e.employment_type||"full_time")!=="part_time"){
-      try{
-        sevenCalc=settlementCalculate7thBudget(e,monthlyRow,ym,sevenSnap||null);
-      }catch(err){
-        console.warn("Report 7th basis failed:",outlet,e?.id,err);
-      }
-    }
-
-    let threeBonus=0;
-    try{
-      if(window.ndQuarter3Bonus?.isPayoutMonth?.(ym) && window.ndQuarter3Bonus?.calculateEmployee){
-        threeBonus=Number(await window.ndQuarter3Bonus.calculateEmployee(Number(e.id),ym)||0);
-      }
-    }catch(err){ console.warn("Report 3-Bonus failed:",outlet,e?.id,err); }
-
-    try{
-      salary14+=Number(calculate14th(monthlyRow,sevenCalc,threeBonus).net_pay||0);
-    }catch(err){
-      console.warn("Report 14th calculation failed:",outlet,e?.id,err);
-    }
-  }
-
-  const epfTotal=epfEmployee+epfEmployer;
-  const socsoEisTotal=socsoEmployee+socsoEmployer+eisEmployee+eisEmployer+lindung24;
+  const entered=expenseRecord?.manual_report_amounts||{};
+  const salary7=Number(entered.salary7||0),salary14=Number(entered.salary14||0),epfTotal=Number(entered.epf_total||0),socsoEisTotal=Number(entered.socso_eis_total||0),taxPcb=Number(entered.taxpcb_employee||0);
   const salary=salary7+salary14+epfTotal+socsoEisTotal+taxPcb;
-
   const exp=settlementExpenseRecordTotals(expenseRecord);
   const manual_expenses=Number(exp.manual_expenses||0);
   const project_expenses=Number(exp.project_expenses||0);
@@ -18473,7 +18219,7 @@ async function settlementAllBranchesForMonth(monthDate){
   const names=[...new Set(
     (settlementOutlets||[])
       .map(x=>String(x.name||"").trim())
-      .filter(Boolean)
+      .filter(name=>name&&String(name).toLowerCase()!=='collaboration')
   )];
 
   const rows=[];
@@ -24153,6 +23899,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     const db=dbClient();
     const monthDate=monthDateFromDate(record.receipt_date);
     const field=reportFieldForCategory(record.category);
+    if(field==="sst")return {synced:false,reason:"manual_report_amount"};
     const amount=Number(record.total_amount||0);
 
     const {data:existing,error:loadErr}=await db.from("settlement_monthly_expenses")
@@ -24632,7 +24379,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     try{const db=dbClient(),rows=await cardReceiptRows(db,month,branch);if(!rows.length){if(current())status.textContent='No card settlement receipts for '+branch+' / '+month+'.';return;}
       const records=rows.map(row=>({branch:row.branch,receipt_date:row.settlement_date,total_amount:cardSettlementAmount(row),source_type:'card_settlement',receipt_file:row.card_settlement_receipt,verification:({accepted:'Verified',adjust:'Error'})[row.payment_statuses?.card_settlement_proof]||'Pending'}));
       const result=await buildMonthlyReceiptsPdf(db,month,records,text=>{if(current())status.textContent=text;},{card:true});if(!current())return;
-      if(cardPdfUrl)URL.revokeObjectURL(cardPdfUrl);cardPdfUrl=URL.createObjectURL(new Blob([result.bytes],{type:'application/pdf'}));download.href=cardPdfUrl;download.download='Natures_Dao_'+branch.replace(/[^a-zA-Z0-9_-]/g,'_')+'_Card_Settlement_Receipts_'+month+(result.failures.length?'_INCOMPLETE':'')+'.pdf';download.hidden=false;status.textContent=result.failures.length?'PDF contains '+result.failures.length+' unavailable receipt(s), marked on their pages.':'Monthly PDF ready: '+branch+' / '+month+' / '+records.length+' receipt(s).';download.click();
+      if(cardPdfUrl)URL.revokeObjectURL(cardPdfUrl);cardPdfUrl=URL.createObjectURL(new Blob([result.bytes],{type:'application/pdf'}));download.href=cardPdfUrl;download.download=String(window.ndBusinessConfig?.receipts?.pdf_prefix||'Natures_Dao').replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+branch.replace(/[^a-zA-Z0-9_-]/g,'_')+'_Card_Settlement_Receipts_'+month+(result.failures.length?'_INCOMPLETE':'')+'.pdf';download.hidden=false;status.textContent=result.failures.length?'PDF contains '+result.failures.length+' unavailable receipt(s), marked on their pages.':'Monthly PDF ready: '+branch+' / '+month+' / '+records.length+' receipt(s).';download.click();
     }catch(error){if(current())status.textContent='Unable to prepare monthly card receipts: '+error.message;}finally{cardPdfBusy=false;button.disabled=false;}
   }
   async function loadClaimSummary(){
@@ -24641,7 +24388,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     root.innerHTML='<div class="helper">Loading card settlement receipts...</div>';
     try{const db=dbClient(),allRows=await cardReceiptRows(db,ym);if(request!==cardReceiptRequest)return;
       const selected=branchInput.value,names=[...new Set([...allRows.map(row=>row.branch),...Array.from(branchInput.options).map(o=>o.value)].filter(Boolean))].sort();branchInput.innerHTML='<option value="">All Branches</option>'+names.map(branch=>'<option value="'+esc(branch)+'">'+esc(branch)+'</option>').join('');branchInput.value=selected;
-      const rows=allRows.filter(row=>!branchInput.value||row.branch===branchInput.value).reverse();
+      const rows=allRows.filter(row=>!branchInput.value||row.branch===branchInput.value).reverse();const files=$('ndCardMonthlyFiles');if(files){files.innerHTML=names.filter(name=>allRows.some(row=>row.branch===name)).map(name=>'<div><strong>'+esc(name)+' <small>'+esc(ym)+'</small></strong><button class="btn" type="button" data-card-monthly-branch="'+esc(name)+'">Download Monthly File</button></div>').join('');files.onclick=async event=>{const button=event.target.closest('[data-card-monthly-branch]');if(button){branchInput.value=button.dataset.cardMonthlyBranch;await loadClaimSummary();await exportMonthlyCardReceipts();}};}
       $('aiReceiptClaimSummaryTotal').textContent=money(rows.reduce((sum,row)=>sum+cardSettlementAmount(row),0));
       root.innerHTML=rows.length?'<table><thead><tr><th>Date</th><th>Branch</th><th>Amount</th><th>Status</th><th>Receipt</th></tr></thead><tbody>'+rows.map((row,i)=>'<tr><td>'+esc(row.settlement_date)+'</td><td>'+esc(row.branch)+'</td><td><strong>'+money(cardSettlementAmount(row))+'</strong></td><td>'+esc(({accepted:'Verified',adjust:'Error'})[row.payment_statuses?.card_settlement_proof]||'Pending')+'</td><td><button type="button" class="mini" data-card-receipt="'+i+'">View</button> <button type="button" class="mini" data-card-download="'+i+'">Download</button></td></tr>').join('')+'</tbody></table>':'<div class="helper">No card settlement receipts for '+esc(branchInput.value||'all branches')+' / '+esc(ym)+'.</div>';
       root.onclick=async event=>{const button=event.target.closest('[data-card-receipt],[data-card-download]');if(!button)return;const row=rows[Number(button.dataset.cardReceipt??button.dataset.cardDownload)],receipt=row?.card_settlement_receipt;if(!receipt)return;button.disabled=true;try{const {data,error}=await window.ndReceiptSignedUrl(db,'petty-receipts',receipt.path,300);if(error||!data?.signedUrl)throw Error(error?.message||'Receipt unavailable.');if(button.hasAttribute('data-card-download')){const response=await fetch(data.signedUrl);if(!response.ok)throw Error('Receipt download failed.');const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=receipt.name||('Card Settlement '+row.branch+' '+row.settlement_date);link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}else window.ndReceiptPreview(data.signedUrl,{title:'Card Settlement Receipt'})}catch(error){alert(error.message)}finally{button.disabled=false}};
@@ -24771,6 +24518,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     await loadClaimSummary();
   }
   window.showAiReceipt=showReceiptPage;
+  window.ndOpenMonthlyCardReceipts=async()=>{await showReceiptPage();window.ndReceiptWorkspaceTab?.('cards');$('ndCardReceiptMonth').value=currentMonth();await loadClaimSummary();$('ndCardMonthlyFiles').scrollIntoView({behavior:'smooth',block:'center'});};
 
   document.addEventListener("DOMContentLoaded",()=>{
     const nav=$("sidebarAiReceipt");
@@ -31475,27 +31223,28 @@ const ND_PASSPORT_CLAUSES=[['Employee possession','The Employee retains possessi
 function ndContractValuesFromSource(row,kind){
  const v=kind==='interview'?(row.form_data||{}):(row.interview_profile||{}),pick=(...keys)=>{for(const key of keys){const value=v[key];if(typeof value==='string'||typeof value==='number')if(String(value).trim())return String(value)}return '';};
  const probation=pick('Probation (Months)','Probation Period').match(/\d+(?:\.\d+)?/);
- return {'Employee Name':kind==='employee'?row.name:row.full_name||pick('Full Name','Candidate Name'),'IC / Passport':kind==='employee'?row.nric_passport||pick('IC No','Passport No','IC / Passport'):pick('IC No','Passport No','IC / Passport'),'Home Address':row.home_address||pick('Home Address'),Nationality:row.nationality||pick('Nationality')||(/local.*malaysian/i.test(pick('Applicant Type'))?'Malaysia':''),Branch:kind==='employee'?row.outlet:row.branch||pick('Branch','Preferred Branch'),'Start Date':kind==='employee'?row.join_date||pick('Start Date'):pick('Start Date'),Position:row.position||pick('Other Department','Department','Position','Position Applied'),'Basic Salary (RM)':kind==='employee'&&row.guaranteed_pay!=null?String(row.guaranteed_pay):pick('Basic Salary (RM)','Basic Pay (RM)'),'Allowance (RM)':kind==='employee'&&row.allowance!=null?String(row.allowance):pick('Allowance (RM)')||'0','Probation (Months)':probation?.[0]||'3','Working Hours':row.working_hours||pick('Working Hours'),'Normal Weekly Hours':row.normal_weekly_hours||pick('Normal Weekly Hours'),'Payment Authorisation Reference':row.payment_authorisation_reference||pick('Payment Authorisation Reference'),'Rest Day':Number.isInteger(row.fixed_rest_weekday)?['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][row.fixed_rest_weekday]||'':pick('Rest Day'),'Work Location':row.work_location||pick('Work Location'),'Payment Method':(row.payment_method||pick('Payment Method')||'').replace(/^bank$/i,'Bank Transfer')};
+ return {'Employee Name':kind==='employee'?row.name:row.full_name||pick('Full Name','Candidate Name'),'IC / Passport':kind==='employee'?row.nric_passport||pick('IC No','Passport No','IC / Passport'):pick('IC No','Passport No','IC / Passport'),'Home Address':row.home_address||pick('Home Address'),Nationality:row.nationality||pick('Nationality')||(/local.*malaysian/i.test(pick('Applicant Type'))?'Malaysia':''),Branch:kind==='employee'?row.outlet:row.branch||pick('Branch','Preferred Branch'),'Start Date':kind==='employee'?row.join_date||pick('Start Date'):pick('Start Date'),Position:row.position||pick('Other Department','Department','Position','Position Applied'),'Basic Salary (RM)':kind==='employee'&&row.guaranteed_pay!=null?String(row.guaranteed_pay):pick('Basic Salary (RM)','Basic Pay (RM)'),'Allowance (RM)':kind==='employee'&&row.allowance!=null?String(row.allowance):pick('Allowance (RM)')||'0','Probation (Months)':probation?.[0]||'3','Working Hours':row.working_hours||pick('Working Hours')||window.ndBusinessConfig?.contracts?.working_hours,'Normal Weekly Hours':row.normal_weekly_hours||pick('Normal Weekly Hours'),'Payment Authorisation Reference':row.payment_authorisation_reference||pick('Payment Authorisation Reference'),'Rest Day':Number.isInteger(row.fixed_rest_weekday)?['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][row.fixed_rest_weekday]||'':pick('Rest Day'),'Work Location':row.work_location||pick('Work Location'),'Payment Method':(row.payment_method||pick('Payment Method')||'').replace(/^bank$/i,'Bank Transfer')};
 }
 function ndContractSourcePicker(root,form,fields){
- const kind=$('ndContractSourceKind'),select=$('ndContractSourceRecord'),message=$('ndContractSourceStatus'),search=$('ndContractSourceSearch');let records=[],request=0;
+ const kind=$('ndContractSourceKind'),select=$('ndContractSourceRecord'),message=$('ndContractSourceStatus'),search=$('ndContractSourceSearch'),branch=$('ndContractSourceBranch'),remembered=ndContractSource;let records=[],request=0;
  const active=()=>root.isConnected&&$('ndContractEntry')===form;
- function draw(){const q=search.value.trim().toLowerCase();select.innerHTML='<option value="">Select a person</option>'+records.filter(row=>[row.full_name,row.name,row.branch,row.outlet,row.employee_no].some(v=>String(v||'').toLowerCase().includes(q))).map(row=>'<option value="'+escapeHtml(row.id)+'">'+escapeHtml((row.full_name||row.name||'Unnamed')+' · '+(row.branch||row.outlet||'No branch')+(row.last_working_date?' · Former employee':''))+'</option>').join('');}
- kind.onchange=async()=>{const token=++request;ndContractSource=null;records=[];search.value='';select.disabled=true;draw();if(!kind.value){message.textContent='Enter details manually or select an existing record.';return;}message.textContent='Loading available records…';const sourceKind=kind.value;try{await identity();if(!userEmail)throw Error('Please sign in.');for(let offset=0;;offset+=500){let query=sourceKind==='interview'?client().from(TABLE).select('id,full_name,branch,created_at,form_data').eq('form_type','interview'):client().from('employees').select('id,name,outlet,employee_no,last_working_date');const result=await query.order(sourceKind==='interview'?'created_at':'name',{ascending:sourceKind!=='interview'}).range(offset,offset+499);if(result.error)throw result.error;if(token!==request||!active())return;records.push(...(result.data||[]).filter(row=>sourceKind!=='interview'||(row.form_type===undefined||row.form_type==='interview')&&!!(row.form_data?.['Full Name']||row.full_name)));if((result.data||[]).length<500)break;}draw();select.disabled=!records.length;message.textContent=records.length?'Select a person to copy available details. Review all values before signing.':'No records available to your account.';}catch(error){if(token===request&&active())message.textContent='Unable to load people: '+error.message;}};
+ function draw(){const q=search.value.trim().toLowerCase();select.innerHTML='<option value="">Select a person</option>'+records.filter(row=>!branch.value||(row.branch||row.outlet||'')===branch.value).filter(row=>[row.full_name,row.name,row.branch,row.outlet,row.employee_no].some(v=>String(v||'').toLowerCase().includes(q))).map(row=>'<option value="'+escapeHtml(row.id)+'">'+escapeHtml((row.full_name||row.name||'Unnamed')+' · '+(row.branch||row.outlet||'No branch')+(row.last_working_date?' · Former employee':''))+'</option>').join('');}
+ kind.onchange=async()=>{const token=++request;ndContractSource=null;records=[];search.value='';select.disabled=true;draw();if(!kind.value){message.textContent='Enter details manually or select an existing record.';return;}message.textContent='Loading available records…';const sourceKind=kind.value;try{await identity();if(!userEmail)throw Error('Please sign in.');for(let offset=0;;offset+=500){let query=sourceKind==='interview'?client().from(TABLE).select('id,full_name,branch,created_at,form_data').eq('form_type','interview'):client().from('employees').select('id,name,outlet,employee_no,last_working_date');const result=await query.order(sourceKind==='interview'?'created_at':'name',{ascending:sourceKind!=='interview'}).range(offset,offset+499);if(result.error)throw result.error;if(token!==request||!active())return;records.push(...(result.data||[]).filter(row=>sourceKind!=='interview'||(row.form_type===undefined||row.form_type==='interview')&&!!(row.form_data?.['Full Name']||row.full_name)));if((result.data||[]).length<500)break;}branch.innerHTML='<option value="">Select branch</option>'+[...new Set(records.map(r=>r.branch||r.outlet||'').filter(Boolean))].sort().map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');draw();select.disabled=true;if(remembered&&remembered.kind===sourceKind){const row=records.find(r=>String(r.id)===remembered.id);if(row){branch.value=row.branch||row.outlet||'';draw();select.disabled=false;select.value=remembered.id;void select.onchange();}}message.textContent=records.length?'Select a person to copy available details. Review all values before signing.':'No records available to your account.';}catch(error){if(token===request&&active())message.textContent='Unable to load people: '+error.message;}};
+ branch.onchange=()=>{ndContractSource=null;draw();select.disabled=!branch.value;const summary=$('ndContractImportedSummary');if(summary)summary.textContent='Select a person to review their saved information.';};
  search.oninput=()=>{const selected=select.value;draw();if([...select.options].some(option=>option.value===selected))select.value=selected;else ndContractSource=null;};
- select.onchange=async()=>{ndContractSource=null;if(!select.value){message.textContent='Select a person before generating a contract.';return;}const token=++request,id=select.value,sourceKind=kind.value;select.disabled=true;message.textContent='Loading person details…';try{const result=await client().from(sourceKind==='interview'?TABLE:'employees').select('*').eq('id',id).single();if(result.error)throw result.error;if(token!==request||!active())return;if(!result.data)throw Error('This record is no longer available.');if(sourceKind==='interview'&&result.data.form_type!=='interview')throw Error('Select an interview record.');const values=ndContractValuesFromSource(result.data,sourceKind);ndContractSource={kind:sourceKind,id:String(id)};ndContractDraft['Media Consent']='';if($('ndContractMediaConsent'))$('ndContractMediaConsent').value='';for(const [label]of fields){const input=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]===label)+'"]'),value=String(values[label]??(['Start Date','Submission Date'].includes(label)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date()):label==='Notice Period'?'One calendar month':''));if(input.tagName==='SELECT'&&value&&![...input.options].some(o=>o.value===value))input.add(new Option(value,value));input.value=value;ndContractDraft[label]=value;}form.ndSyncPayment?.();message.textContent='Details imported. Review the information and complete the contract terms before generating the document.';}catch(error){if(token===request&&active())message.textContent='Unable to copy details: '+error.message;}finally{if(token===request&&active())select.disabled=false;}};
+ select.onchange=async()=>{ndContractSource=null;if(!select.value){message.textContent='Select a person before generating a contract.';return;}const token=++request,id=select.value,sourceKind=kind.value;select.disabled=true;message.textContent='Loading person details…';try{const result=await client().from(sourceKind==='interview'?TABLE:'employees').select('*').eq('id',id).single();if(result.error)throw result.error;if(token!==request||!active())return;if(!result.data)throw Error('This record is no longer available.');if(sourceKind==='interview'&&result.data.form_type!=='interview')throw Error('Select an interview record.');const values=ndContractValuesFromSource(result.data,sourceKind);ndContractSource={kind:sourceKind,id:String(id)};ndContractDraft['Media Consent']='';if($('ndContractMediaConsent'))$('ndContractMediaConsent').value='';for(const [label]of fields){const input=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]===label)+'"]');const config=window.ndBusinessConfig?.contracts||{},source=result.data.form_data||result.data.interview_profile||{};const defaults={'Scope of Services':config.scope||'Services follow the applicable written Company Policies.','Payment Schedule':config.payment_schedule||'Payment follows the applicable written Company Policies and mandatory legal deadlines.','Normal Weekly Hours':config.normal_hours||'','Probation (Months)':config.probation_months||'3','Purpose of Temporary Submission':config.passport_purpose||'','Custodian Name':config.custodian||'','Expected Return Date':'','Additional Terms':config.additional_terms||''};const value=String(values[label]||source[label]||defaults[label]||(['Start Date','Submission Date'].includes(label)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date()):label==='Notice Period'?'One calendar month':''));if(input.tagName==='SELECT'&&value&&![...input.options].some(o=>o.value===value))input.add(new Option(value,value));input.value=value;ndContractDraft[label]=value;}form.ndSyncPayment?.();const summary=$('ndContractImportedSummary');summary.innerHTML='<dl class="nd-contract-imported">'+fields.filter(([label])=>!['Additional Terms'].includes(label)).map(([label],i)=>{const input=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]===label)+'"]');return '<div><dt>'+escapeHtml(label)+'</dt><dd>'+escapeHtml(input.value||'Not recorded')+'</dd></div>';}).join('')+'</dl>';message.textContent='Saved information imported. Review the document, then sign. Missing employment details must be completed in the source record or Form Settings.';}catch(error){if(token===request&&active())message.textContent='Unable to copy details: '+error.message;}finally{if(token===request&&active())select.disabled=false;}};
 }
 function ndContractFields(type){if(type==='passport')return [['Employee Name','text'],['IC / Passport','text'],['Nationality','select:|Malaysia|China|Myanmar|Vietnam|Indonesia|Thailand|Other'],['Branch','text'],['Purpose of Temporary Submission','select:|Medical Screening|Work Pass Application|Work Pass Renewal|Foreign Worker Identity Card Application'],['Custodian Name','text'],['Submission Date','date'],['Expected Return Date','date'],['Additional Terms','textarea']];const shared=[['Employee Name','text'],['IC / Passport','text'],['Home Address','textarea'],['Nationality','select:|Malaysia|China|Myanmar|Vietnam|Indonesia|Thailand|Other'],['Branch','text'],['Start Date','date']];return shared.concat(type==='collaboration'?[['Scope of Services','textarea'],['Payment Schedule','textarea'],['Notice Period','text']]:[['Position','text'],['Basic Salary (RM)','number'],...(type==='onboarding'?[['Probation (Months)','number']]:[]),['Working Hours','text'],['Normal Weekly Hours','number'],['Rest Day','select:|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'],['Work Location','textarea'],['Payment Method','select:|Bank Transfer|Cash|TNG'],['Payment Authorisation Reference','text']],[['Additional Terms','textarea']]);}
 function ndRenderContractForm(root){
- const fields=ndContractFields(ndContractType);root.innerHTML=`<h3>Contract</h3><label for="ndContractType">Contract Type</label><select id="ndContractType">${Object.entries(ND_CONTRACT_TYPES).map(([key,label])=>`<option value="${key}" ${key===ndContractType?'selected':''}>${label}</option>`).join('')}</select><section class="nd-contract-source"><h4>Select Person &amp; Import Details</h4><div class="nd-form-grid"><div><label for="ndContractSourceKind">Person Source</label><select id="ndContractSourceKind"><option value="interview">Completed Interview Forms</option><option value="employee">Existing Employees</option></select></div><div><label for="ndContractSourceSearch">Search Name / Branch</label><input id="ndContractSourceSearch" type="search" placeholder="Search available people"></div><div><label for="ndContractSourceRecord">Select Person</label><select id="ndContractSourceRecord" disabled><option value="">Select a person</option></select></div></div><p id="ndContractSourceStatus" class="helper" role="status">Enter details manually or select an existing record.</p></section><form id="ndContractEntry"><div class="nd-form-grid">${fields.map(([label,kind],i)=>inputMarkup(label,kind,'Contract'+i)).join('')}</div>${['onboarding','permanent'].includes(ndContractType)?'<label style="display:flex;gap:10px;margin:20px 0"><input type="checkbox" id="ndContractPassport" style="width:20px;height:20px;flex:none"/>Include Passport Handling &amp; Return Agreement (optional)</label><p class="helper">For temporary submission for a permitted official procedure. The employee retains the right to hold their own passport.</p>':''}<button class="btn" type="submit" style="margin-top:16px">Generate Document &amp; Review</button></form>`;
- const form=$('ndContractEntry');fields.forEach(([label,kind],i)=>{const input=form.querySelector('[data-nd-field="Contract'+i+'"]');input.required=!['Allowance (RM)','Additional Terms','Home Address','Work Location','Payment Authorisation Reference'].includes(label);input.value=ndContractDraft[label]??(label==='Probation (Months)'?'3':label==='Allowance (RM)'?'0':label==='Commission Schedule'?ND_CONTRACT_COMMISSION_DEFAULT:label==='Notice Period'?'One calendar month':['Start Date','Submission Date'].includes(label)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date()):label==='Branch'&&ndContractType==='collaboration'?'Collaboration':'');});
+ const fields=ndContractFields(ndContractType);root.innerHTML=`<h3>Contract</h3><label for="ndContractType">Contract Type</label><select id="ndContractType">${Object.entries(ND_CONTRACT_TYPES).map(([key,label])=>`<option value="${key}" ${key===ndContractType?'selected':''}>${label}</option>`).join('')}</select><section class="nd-contract-source"><h4>Select Person &amp; Import Details</h4><div class="nd-form-grid"><div><label for="ndContractSourceKind">Person Source</label><select id="ndContractSourceKind"><option value="interview">Completed Interview Forms</option><option value="employee">Existing Employees</option></select></div><div><label for="ndContractSourceBranch">Branch</label><select id="ndContractSourceBranch"><option value="">Select branch</option></select></div><div><label for="ndContractSourceSearch">Search Name / Branch</label><input id="ndContractSourceSearch" type="search" placeholder="Search available people"></div><div><label for="ndContractSourceRecord">Select Person</label><select id="ndContractSourceRecord" disabled><option value="">Select a person</option></select></div></div><p id="ndContractSourceStatus" class="helper" role="status">Enter details manually or select an existing record.</p></section><div id="ndContractImportedSummary" class="nd-contract-review-summary">Select a person to review their saved information.</div><form id="ndContractEntry"><div class="nd-form-grid" hidden>${fields.map(([label,kind],i)=>inputMarkup(label,kind,'Contract'+i)).join('')}</div>${['onboarding','permanent'].includes(ndContractType)?'<label style="display:flex;gap:10px;margin:20px 0"><input type="checkbox" id="ndContractPassport" style="width:20px;height:20px;flex:none"/>Include Passport Handling &amp; Return Agreement (optional)</label><p class="helper">For temporary submission for a permitted official procedure. The employee retains the right to hold their own passport.</p>':''}<button class="btn" type="submit" style="margin-top:16px">Generate Document &amp; Review</button></form>`;
+ const form=$('ndContractEntry');fields.forEach(([label,kind],i)=>{const input=form.querySelector('[data-nd-field="Contract'+i+'"]');input.required=false;input.readOnly=true;input.value=ndContractDraft[label]??(label==='Probation (Months)'?'3':label==='Allowance (RM)'?'0':label==='Commission Schedule'?ND_CONTRACT_COMMISSION_DEFAULT:label==='Notice Period'?'One calendar month':['Start Date','Submission Date'].includes(label)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date()):label==='Branch'&&ndContractType==='collaboration'?'Collaboration':'');});
  const payment=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Payment Method')+'"]'),authorisation=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Payment Authorisation Reference')+'"]'),normalHours=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Normal Weekly Hours')+'"]');
  if(normalHours){normalHours.min='1';normalHours.max='45';normalHours.step='0.5';normalHours.placeholder='Paid normal hours, excluding overtime';}
- form.ndSyncPayment=()=>{if(authorisation){const needed=!!payment?.value&&payment.value!=='Bank Transfer';authorisation.required=needed;authorisation.closest('.nd-form-field').hidden=!needed;authorisation.placeholder=payment?.value==='Cash'?'Employee written request + JTKSM approval reference':'Approved payment instrument / employee consent reference';}};if(payment)payment.addEventListener('change',form.ndSyncPayment);form.ndSyncPayment();
+ form.ndSyncPayment=()=>{if(authorisation){const needed=!!payment?.value&&payment.value!=='Bank Transfer';authorisation.required=false;authorisation.closest('.nd-form-field').hidden=!needed;authorisation.placeholder=payment?.value==='Cash'?'Employee written request + JTKSM approval reference':'Approved payment instrument / employee consent reference';}};if(payment)payment.addEventListener('change',form.ndSyncPayment);form.ndSyncPayment();
  if($('ndContractMediaConsent'))$('ndContractMediaConsent').value=ndContractDraft['Media Consent']||'';
- ndContractSourcePicker(root,form,fields);$('ndContractSourceKind').value='interview';void $('ndContractSourceKind').onchange();
+ ndContractSourcePicker(root,form,fields);$('ndContractSourceKind').value=ndContractSource?.kind||'employee';void $('ndContractSourceKind').onchange();
  $('ndContractType').onchange=()=>{fields.forEach(([label],i)=>ndContractDraft[label]=form.querySelector('[data-nd-field="Contract'+i+'"]').value);if($('ndContractMediaConsent'))ndContractDraft['Media Consent']=$('ndContractMediaConsent').value;ndContractType=$('ndContractType').value;ndRenderContractForm(root);};
- form.onsubmit=async event=>{event.preventDefault();if(!ndContractSource){status('Select a person and import their record before generating a contract.');$('ndContractSourceRecord').focus();return;}if(!form.reportValidity())return;try{await identity();if(!userEmail)throw Error('Please sign in.');const values={};fields.forEach(([label],i)=>values[label]=form.querySelector('[data-nd-field="Contract'+i+'"]').value.trim());if($('ndContractMediaConsent'))values['Media Consent']=$('ndContractMediaConsent').value;if(ndContractType==='passport'&&values['Expected Return Date']<values['Submission Date'])throw Error('Expected Return Date cannot be before Submission Date.');const a=ndBuildContract(values,ndContractType,!!$('ndContractPassport')?.checked);await ndOpenContractDocument({form_type:'contract',full_name:values['Employee Name'],branch:values.Branch,form_data:{...values,'Contract Type':ND_CONTRACT_TYPES[ndContractType],'Passport Agreement Included':!!$('ndContractPassport')?.checked,__nd_contract_source:ndContractSource?{...ndContractSource}:null,__nd_signed_contract:a}},false);}catch(error){status('Unable to prepare contract: '+error.message)}};
+ form.onsubmit=async event=>{event.preventDefault();if(!ndContractSource){status('Select a person and import their record before generating a contract.');$('ndContractSourceRecord').focus();return;}if(!form.reportValidity())return;try{await identity();if(!userEmail)throw Error('Please sign in.');const values={};fields.forEach(([label],i)=>values[label]=form.querySelector('[data-nd-field="Contract'+i+'"]').value.trim());if($('ndContractMediaConsent'))values['Media Consent']=$('ndContractMediaConsent').value;if(ndContractType==='passport'&&values['Expected Return Date']<values['Submission Date'])throw Error('Expected Return Date cannot be before Submission Date.');if(!values['Employee Name']||!values['IC / Passport']||!values.Branch)throw Error('Complete name, identity number and branch in the source record first.');const a=ndBuildContract(values,ndContractType,!!$('ndContractPassport')?.checked);await ndOpenContractDocument({form_type:'contract',full_name:values['Employee Name'],branch:values.Branch,form_data:{...values,'Contract Type':ND_CONTRACT_TYPES[ndContractType],'Passport Agreement Included':!!$('ndContractPassport')?.checked,__nd_contract_source:ndContractSource?{...ndContractSource}:null,__nd_signed_contract:a}},false);}catch(error){status('Unable to prepare contract: '+error.message)}};
 }
 function ndSopLanguage(nationality){const country=String(nationality||'').trim().toLowerCase();return /^(china|chinese|中国|中國)$/.test(country)?'zh':/^(myanmar|burma|burmese|缅甸|緬甸)$/.test(country)?'my':/^(vietnam|vietnamese|viet nam|越南)$/.test(country)?'vi':'en';}
 function ndContractPrivacyNotice(a,scope='contract'){
@@ -32291,14 +32040,15 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
  let issueEmployees=[];
  function renderIssueEmployees(){const branch=$('ndIssueBranch').value,select=$('ndIssueEmployee');select.innerHTML='<option value="">Select employee</option>'+issueEmployees.filter(e=>String(e.outlet||'').trim()===branch).map(e=>'<option value="'+esc(e.id)+'">'+esc(e.name)+'</option>').join('');select.disabled=!branch;}
  async function loadIssueCategories(){const r=await db().from('nd_ops_issue_categories').select('name').order('name');if(r.error)throw r.error;const select=$('ndIssueCategory');if(!select)return;const previous=select.value;select.innerHTML='<option>Maintenance / Damage</option><option>System Change</option>'+[...new Set((r.data||[]).map(r=>r.name))].map(name=>'<option value="custom:'+esc(name)+'">'+esc(name)+'</option>').join('')+'<option value="Other">+ Add Category…</option>';if([...select.options].some(o=>o.value===previous))select.value=previous;}
- async function loadIssueEmployees(){const r=await db().from('employees').select('id,name,outlet,last_working_date').order('name');if(r.error)throw r.error;issueEmployees=(r.data||[]).filter(e=>!e.last_working_date||e.last_working_date>=today());renderIssueEmployees();}
+ async function loadIssueEmployees(){const branch=$('ndIssueBranch').value,date=$('ndIssueRosterDate').value||today();issueEmployees=[];renderIssueEmployees();if(!branch)return;const select=$('ndIssueEmployee');select.disabled=true;try{const r=await db().rpc('nd_issue_roster_people',{p_branch:branch,p_date:date});if(r.error)throw r.error;if($('ndIssueBranch').value!==branch||$('ndIssueRosterDate').value!==date)return;issueEmployees=r.data||[];renderIssueEmployees();if(!issueEmployees.length)status('ndIssueStatus','No salary-duty employees are assigned to this branch and date.');else status('ndIssueStatus','');}catch(error){status('ndIssueStatus','Unable to load duty roster: '+error.message);}}
 
- async function openIssues(){hideFinance();let panel=$('ndIssuesPanel');if(!panel){panel=document.createElement('section');panel.id='ndIssuesPanel';panel.className='salary-card';$('ndStaffFinanceModules')?.append(panel);}panel.hidden=false;panel.innerHTML='<div class="outlet-title"><h3>Report an Issue</h3><button class="btn" id="ndIssueNew" type="button">+ Submit Issue</button></div><p class="helper">Report damaged equipment, maintenance needs or system changes. Management can track each issue until resolved.</p><form id="ndIssueForm" hidden><div class="nd-ops-grid"><div><label for="ndIssueBranch">Branch *</label><select id="ndIssueBranch" required></select></div><div><label for="ndIssueEmployee">Employee *</label><select id="ndIssueEmployee" required></select></div><div><label for="ndIssueCategory">Category *</label><select id="ndIssueCategory"><option>Maintenance / Damage</option><option>System Change</option><option value="Other">+ Add Category…</option></select></div><div id="ndIssueCustomCategoryField" hidden><label for="ndIssueCustomCategory">Category Name *</label><input id="ndIssueCustomCategory" maxlength="100"><button class="btn" id="ndIssueSaveCategory" type="button">Save Category</button><p role="status" id="ndIssueCategoryStatus"></p></div><div class="wide"><label for="ndIssueDescription">Issue *</label><textarea id="ndIssueDescription" required maxlength="8000" rows="5" placeholder="Describe the issue"></textarea></div></div><div class="nd-ops-actions"><button class="btn" type="submit">Submit Issue</button><button class="btn" id="ndIssueCancel" type="button">Cancel</button></div></form><div class="nd-ops-actions"><input type="hidden" id="ndIssueFilter" value="unresolved"><div class="nd-issue-status-tabs" role="group" aria-label="Issue status"><button class="btn" type="button" data-issue-filter="unresolved" aria-pressed="true">Unresolved</button><button class="btn" type="button" data-issue-filter="resolved" aria-pressed="false">Resolved</button></div><button class="btn" id="ndIssueRefresh" type="button">Refresh</button></div><p role="status" id="ndIssueStatus"></p><div id="ndIssueList"></div>';
- $('ndIssueBranch').onchange=renderIssueEmployees;$('ndIssueCategory').onchange=()=>{const other=$('ndIssueCategory').value==='Other';$('ndIssueCustomCategoryField').hidden=!other;$('ndIssueCustomCategory').required=other;};
+
+ async function openIssues(){hideFinance();let panel=$('ndIssuesPanel');if(!panel){panel=document.createElement('section');panel.id='ndIssuesPanel';panel.className='salary-card';$('ndStaffFinanceModules')?.append(panel);}panel.hidden=false;panel.innerHTML='<div class="outlet-title"><h3>Report an Issue</h3><button class="btn" id="ndIssueNew" type="button">+ Submit Issue</button></div><p class="helper">Report damaged equipment, maintenance needs or system changes. Management can track each issue until resolved.</p><form id="ndIssueForm" hidden><div class="nd-ops-grid"><div><label for="ndIssueBranch">Branch *</label><select id="ndIssueBranch" required></select></div><div><label for="ndIssueRosterDate">Duty Date *</label><input id="ndIssueRosterDate" type="date" required></div><div><label for="ndIssueEmployee">Roster Employee *</label><select id="ndIssueEmployee" required></select></div><div><label for="ndIssueCategory">Category *</label><select id="ndIssueCategory"><option>Maintenance / Damage</option><option>System Change</option><option value="Other">+ Add Category…</option></select></div><div id="ndIssueCustomCategoryField" hidden><label for="ndIssueCustomCategory">Category Name *</label><input id="ndIssueCustomCategory" maxlength="100"><button class="btn" id="ndIssueSaveCategory" type="button">Save Category</button><p role="status" id="ndIssueCategoryStatus"></p></div><div class="wide"><label for="ndIssueDescription">Issue *</label><textarea id="ndIssueDescription" required maxlength="8000" rows="5" placeholder="Describe the issue"></textarea></div></div><div class="nd-ops-actions"><button class="btn" type="submit">Submit Issue</button><button class="btn" id="ndIssueCancel" type="button">Cancel</button></div></form><div class="nd-ops-actions"><input type="hidden" id="ndIssueFilter" value="unresolved"><div class="nd-issue-status-tabs" role="group" aria-label="Issue status"><button class="btn" type="button" data-issue-filter="unresolved" aria-pressed="true">Unresolved</button><button class="btn" type="button" data-issue-filter="resolved" aria-pressed="false">Resolved</button></div><button class="btn" id="ndIssueRefresh" type="button">Refresh</button></div><p role="status" id="ndIssueStatus"></p><div id="ndIssueList"></div>';
+ $('ndIssueRosterDate').value=today();$('ndIssueBranch').onchange=()=>void loadIssueEmployees();$('ndIssueRosterDate').onchange=()=>void loadIssueEmployees();$('ndIssueCategory').onchange=()=>{const other=$('ndIssueCategory').value==='Other';$('ndIssueCustomCategoryField').hidden=!other;$('ndIssueCustomCategory').required=other;};
  $('ndIssueSaveCategory').onclick=async event=>{const button=event.currentTarget,name=$('ndIssueCustomCategory').value.trim();if(!name){status('ndIssueCategoryStatus','Enter a category name.');$('ndIssueCustomCategory').focus();return;}if(button.disabled)return;button.disabled=true;status('ndIssueCategoryStatus','Saving category…');try{const r=await db().rpc('nd_ops_issue_category_save',{p_name:name});if(r.error)throw r.error;const saved=String(r.data||name);await loadIssueCategories();$('ndIssueCategory').value=['Maintenance / Damage','System Change'].includes(saved)?saved:'custom:'+saved;$('ndIssueCustomCategoryField').hidden=true;$('ndIssueCustomCategory').required=false;status('ndIssueStatus','Category saved. It will be available next time.');}catch(error){status('ndIssueCategoryStatus','Unable to save category: '+error.message);}finally{button.disabled=false;}};
  $('ndIssueNew').onclick=()=>{$('ndIssueForm').hidden=false;};$('ndIssueCancel').onclick=()=>{$('ndIssueForm').hidden=true;};panel.querySelectorAll('[data-issue-filter]').forEach(button=>button.onclick=()=>{$('ndIssueFilter').value=button.dataset.issueFilter;renderIssues();});$('ndIssueRefresh').onclick=async()=>{try{await loadIssues();status('ndIssueStatus','')}catch(e){status('ndIssueStatus','Unable to load issues: '+e.message)}};
  $('ndIssueList').onclick=event=>{const button=event.target.closest('[data-issue-update]');if(button)editIssue(issues.find(r=>String(r.id)===button.dataset.issueUpdate));};
- $('ndIssueForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;if(!form.reportValidity())return;const button=form.querySelector('[type=submit]');if(button.disabled)return;button.disabled=true;try{await auth();if(!user)throw Error('Please sign in.');const description=$('ndIssueDescription').value.trim(),title=description.split(/\r?\n/)[0].slice(0,160);if(!description)throw Error('Describe the issue.');const result=await db().from('nd_ops_issues').insert({branch:$('ndIssueBranch').value,category:$('ndIssueCategory').value.startsWith('custom:')?'Other':$('ndIssueCategory').value,category_name:$('ndIssueCategory').value.startsWith('custom:')?$('ndIssueCategory').value.slice(7):$('ndIssueCategory').value==='Other'?$('ndIssueCustomCategory').value.trim():null,employee_id:$('ndIssueEmployee').value,employee_name:issueEmployees.find(e=>String(e.id)===$('ndIssueEmployee').value)?.name||'',status:'open',title,description});if(result.error)throw result.error;form.reset();form.hidden=true;$('ndIssueFilter').value='unresolved';$('ndIssueCustomCategoryField').hidden=true;$('ndIssueCustomCategory').required=false;renderIssueEmployees();await loadIssueCategories();await loadIssues();status('ndIssueStatus','Issue submitted. UMO will be notified when signed in.');await poll();}catch(e){status('ndIssueStatus','Unable to submit issue: '+e.message)}finally{button.disabled=false}};
+ $('ndIssueForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;if(!form.reportValidity())return;const button=form.querySelector('[type=submit]');if(button.disabled)return;button.disabled=true;try{await auth();if(!user)throw Error('Please sign in.');const description=$('ndIssueDescription').value.trim(),title=description.split(/\r?\n/)[0].slice(0,160);if(!description)throw Error('Describe the issue.');const result=await db().from('nd_ops_issues').insert({branch:$('ndIssueBranch').value,category:$('ndIssueCategory').value.startsWith('custom:')?'Other':$('ndIssueCategory').value,category_name:$('ndIssueCategory').value.startsWith('custom:')?$('ndIssueCategory').value.slice(7):$('ndIssueCategory').value==='Other'?$('ndIssueCustomCategory').value.trim():null,roster_date:$('ndIssueRosterDate').value,employee_id:$('ndIssueEmployee').value,employee_name:issueEmployees.find(e=>String(e.id)===$('ndIssueEmployee').value)?.name||'',status:'open',title,description});if(result.error)throw result.error;form.reset();$('ndIssueRosterDate').value=today();form.hidden=true;$('ndIssueFilter').value='unresolved';$('ndIssueCustomCategoryField').hidden=true;$('ndIssueCustomCategory').required=false;renderIssueEmployees();await loadIssueCategories();await loadIssues();status('ndIssueStatus','Issue submitted. UMO will be notified when signed in.');await poll();}catch(e){status('ndIssueStatus','Unable to submit issue: '+e.message)}finally{button.disabled=false}};
  try{await auth();await branches($('ndIssueBranch'));await loadIssueEmployees();await loadIssueCategories();await loadIssues();}catch(e){status('ndIssueStatus','Unable to load issues: '+e.message+'. Run the operations SQL if this feature is not installed.');}
  }
  function editIssue(row){if(!row||!owner())return;const d=modal('ndIssueUpdateDialog');d.innerHTML='<h3>Update Issue</h3><p>'+esc(row.title)+'</p><form><div class="nd-ops-grid"><div class="wide"><label for="ndIssueNewStatus">Status</label><select id="ndIssueNewStatus"><option value="open">Unresolved</option><option value="resolved">Resolved</option></select></div><div class="wide"><label for="ndIssueResolution">Management response</label><textarea id="ndIssueResolution" maxlength="8000" rows="4"></textarea></div></div><div class="nd-ops-actions"><button class="btn" type="submit">Save Update</button><button class="btn" type="button" data-close>Cancel</button></div><p role="status"></p></form>';$('ndIssueNewStatus').value=row.status==='resolved'?'resolved':'open';$('ndIssueResolution').value=row.resolution||'';d.querySelector('[data-close]').onclick=()=>d.close();d.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=e.submitter||d.querySelector('[type=submit]');button.disabled=true;try{const result=await db().from('nd_ops_issues').update({status:$('ndIssueNewStatus').value,resolution:$('ndIssueResolution').value.trim()}).eq('id',row.id);if(result.error)throw result.error;await loadIssues();d.close();}catch(err){d.querySelector('[role=status]').textContent=err.message}finally{button.disabled=false}};d.showModal();}
@@ -32468,5 +32218,25 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
 </script>
 
 <style>#ndOnboardAgreementStatus:empty,#ndOnboardStockStatus:empty,#ndOnboardSelectedStock:empty{display:none!important}</style>
-<style id="nd-staff-agreement-colors">.staff-name-actions .nd-staff-agreement.unsigned{background:#fff1f0!important;color:#ac2727!important;border:1px solid #e9aaaa!important}.staff-name-actions .nd-staff-agreement.signed{background:#eaf2ff!important;color:#225daa!important;border:1px solid #a4c3ec!important}</style><style id="nd-issue-status-style">.nd-issue-status-tabs{display:flex;gap:8px;flex-wrap:wrap}.nd-issue-status-tabs .btn[aria-pressed="true"]{background:#244b39!important;color:#fff!important;border-color:#244b39!important}#ndIssueSaveCategory{margin-top:8px}#ndIssueDescription{min-height:140px}</style></body>
+<style id="nd-staff-agreement-colors">.staff-name-actions .nd-staff-agreement.unsigned{background:#fff1f0!important;color:#ac2727!important;border:1px solid #e9aaaa!important}.staff-name-actions .nd-staff-agreement.signed{background:#eaf2ff!important;color:#225daa!important;border:1px solid #a4c3ec!important}</style><style id="nd-issue-status-style">.nd-issue-status-tabs{display:flex;gap:8px;flex-wrap:wrap}.nd-issue-status-tabs .btn[aria-pressed="true"]{background:#244b39!important;color:#fff!important;border-color:#244b39!important}#ndIssueSaveCategory{margin-top:8px}#ndIssueDescription{min-height:140px}</style><script>document.addEventListener('input',event=>{if(event.target.matches('[data-report-manual]'))settlementRecalculate();});</script><style id="nd-workspace-redesign">
+:root{--nd-admin-accent:#23594b;--nd-admin-tint:#eff6f2;--nd-admin-radius:16px}
+#aiReceiptPage .salary-top{background:linear-gradient(120deg,#183f37,#357063);color:#fff;border-radius:var(--nd-admin-radius);padding:24px}#aiReceiptPage .salary-top .helper{color:#d6e9df}#aiReceiptPage .salary-card{border-radius:var(--nd-admin-radius);border:1px solid #dbe5e0;box-shadow:0 4px 18px #183d3108}#aiReceiptPage summary{padding:4px 0}.nd-receipt-nav{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.nd-receipt-nav .btn[aria-pressed=true]{background:var(--nd-admin-accent);color:white}.nd-receipt-hidden{display:none!important}.nd-card-monthly-files{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:16px}.nd-card-monthly-files>div{padding:16px;border:1px solid #ccdae6;border-radius:12px;background:#f2f7fc;display:flex;flex-direction:column;gap:12px}.nd-card-monthly-files small{display:block;color:#617b89;margin-top:5px}.nd-contract-imported{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border:1px solid #dbe4df;border-radius:14px;overflow:hidden;margin:16px 0}.nd-contract-imported>div{padding:12px 16px;border-bottom:1px solid #e6ece8;min-width:0;background:#f8faf8}.nd-contract-imported dt{color:#6c7b72;font-size:12px}.nd-contract-imported dd{margin:5px 0 0;font-weight:700;overflow-wrap:anywhere}#ndContractEntry .nd-form-grid[hidden]{display:none!important}#settingsPage .settings-section{border-radius:var(--nd-admin-radius)}#settlementExpenseForm [data-report-manual]{background:#fff8e9;border-color:#d7bb81}#settlementPettyInput{background:#e7f3ed!important;color:#255d44!important}@media(max-width:600px){.nd-contract-imported{grid-template-columns:1fr}.nd-receipt-nav .btn{flex:1;padding:10px;font-size:12px}.nd-card-pdf-controls{align-items:stretch;flex-direction:column}.nd-card-pdf-controls select{width:100%}}
+</style><script id="nd-receipt-workspace">
+(()=>{const $=id=>document.getElementById(id);function setup(){const page=$('aiReceiptPage');if(!page||$('ndReceiptNav'))return;const nav=document.createElement('nav');nav.id='ndReceiptNav';nav.className='nd-receipt-nav';nav.setAttribute('aria-label','Receipt workspace');nav.innerHTML=['capture|Scan & Details','expenses|Expense History','cards|Card Receipts'].map(value=>{const [key,label]=value.split('|');return '<button class="btn" type="button" data-receipt-tab="'+key+'">'+label+'</button>'}).join('');page.querySelector('.salary-top').after(nav);const panels={capture:page.querySelector('.ai-receipt-grid'),expenses:$('aiReceiptHistoryWrap')?.closest('.salary-card'),cards:$('aiReceiptClaimSummaryWrap')?.closest('.salary-card')};for(const id of ['aiReceiptSupplierMemoryWrap','aiReceiptReportSyncWrap']){const card=$(id)?.closest('.salary-card');if(card){const detail=document.createElement('details');detail.className='salary-card';const title=card.querySelector('strong')?.textContent||'Details';const summary=document.createElement('summary');summary.textContent=title;detail.append(summary);while(card.children.length)detail.append(card.firstElementChild);card.replaceWith(detail);detail.dataset.receiptExtra='';}}
+window.ndReceiptWorkspaceTab=key=>{Object.entries(panels).forEach(([name,panel])=>panel?.classList.toggle('nd-receipt-hidden',key!==name));nav.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.receiptTab===key)));page.querySelectorAll('[data-receipt-extra]').forEach(el=>el.classList.toggle('nd-receipt-hidden',key!=='expenses'));};nav.onclick=e=>{const key=e.target.closest('[data-receipt-tab]')?.dataset.receiptTab;if(key)window.ndReceiptWorkspaceTab(key);};window.ndReceiptWorkspaceTab(window.ndBusinessConfig?.receipts?.workspace_default||'capture');window.addEventListener('nd-business-config-loaded',()=>window.ndReceiptWorkspaceTab(window.ndBusinessConfig?.receipts?.workspace_default||'capture'));const receipt=$('dailySettlementProofCard')||document.querySelector('#appView [data-payment-proof]');if(receipt&&!$('ndOpenCardMonthly')){const b=document.createElement('button');b.className='btn';b.id='ndOpenCardMonthly';b.type='button';b.textContent='Monthly Card Receipt Files';b.onclick=()=>window.ndOpenMonthlyCardReceipts?.();receipt.append(b);}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();})();</script><script id="nd-business-control-center">
+(()=>{'use strict';const $=id=>document.getElementById(id),db=()=>window.salaryDb,owners=['umo1017@gmail.com','mars83002566@gmail.com'],esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));let saved=new Map(),actor=null;
+const definitions={appearance:{title:'Appearance',group:'branches',fields:[['accent','Accent Colour','color','#23594b'],['radius','Corner Radius','number','16']]},contracts:{title:'Contract Defaults',group:'documents',fields:[['normal_hours','Normal Weekly Hours (maximum 45)','number',''],['probation_months','Probation Months','number','3'],['working_hours','Working Schedule','text',''],['scope','Collaboration Scope','textarea','Services follow the applicable written Company Policies.'],['payment_schedule','Collaboration Payment Schedule','textarea','Payment follows applicable written Company Policies and mandatory legal deadlines.'],['passport_purpose','Passport Procedure','select',''],['custodian','Passport Custodian','text',''],['additional_terms','Additional Contract Terms','textarea','']]},report_labels:{title:'Report Labels',group:'payroll',fields:[['salary7','Salary 7th Label','text','Branch Salary 7th'],['salary14','Salary 14th Label','text','Branch Salary 14th'],['epf_total','EPF Label','text','EPF'],['socso_eis_total','SOCSO / EIS Label','text','SOCSO / EIS'],['taxpcb_employee','Tax PCB Label','text','Tax PCB'],['sst','SST Label','text','SST'],['petty_cash','Petty Cash Label','text','Petty Cash Record']]},receipts:{title:'Receipt Workspace',group:'branches',fields:[['workspace_default','Default Receipt View','select','capture'],['pdf_prefix','Monthly PDF Filename Prefix','text','Natures_Dao']]}};
+function apply(){const a=window.ndBusinessConfig.appearance||{};if(/^#[0-9a-f]{6}$/i.test(a.accent||''))document.documentElement.style.setProperty('--nd-admin-accent',a.accent);if(Number(a.radius)>=0&&Number(a.radius)<=30)document.documentElement.style.setProperty('--nd-admin-radius',a.radius+'px');const labels=window.ndBusinessConfig.report_labels||{},map={salary7:'salary7',salary14:'salary14',epf_total:'salary_epf',socso_eis_total:'salary_socso_eis',taxpcb_employee:'salary_taxpcb',sst:'sst',petty_cash:'petty_cash'};for(const [key,label]of Object.entries(labels)){const row=document.querySelector('#settlementExpenseForm [data-expense-payment-key="'+map[key]+'"]');if(row?.querySelector('strong'))row.querySelector('strong').textContent=label;}window.dispatchEvent(new CustomEvent('nd-business-config-loaded'));}
+window.ndBusinessConfig={};window.ndLoadBusinessConfig=async()=>{const client=db();if(!client)return;const auth=await client.auth.getUser();if(!auth.data?.user){window.ndBusinessConfig={};saved.clear();return;}const result=await client.from('nd_system_settings').select('*');if(result.error)throw result.error;saved=new Map((result.data||[]).map(r=>[r.key,r]));const next=Object.fromEntries([...saved].map(([key,row])=>[key,row.value]));if(JSON.stringify(next)!==JSON.stringify(window.ndBusinessConfig)){window.ndBusinessConfig=next;apply();}};
+async function identify(){const r=await db().auth.getUser();actor=r.data?.user;if(r.error||!owners.includes(String(actor?.email||'').toLowerCase()))throw Error('Owner access required.');}
+function mount(){const root=$('settingsAccordion');if(!root||$('ndControlCenterTitle'))return;const title=document.createElement('h3');title.id='ndControlCenterTitle';title.textContent='Business Control Center';root.prepend(title);for(const [key,def]of Object.entries(definitions)){const section=document.createElement('section');section.className='settings-section';section.dataset.group=def.group;section.dataset.search=def.title;section.innerHTML='<button type="button" class="settings-section-head" aria-expanded="false"><span><strong>'+def.title+'</strong><small>Saved to the database and applied across signed-in devices.</small></span><span class="settings-chevron">⌄</span></button><div class="settings-section-body"><form data-business-setting="'+key+'"><div class="nd-settings-grid">'+def.fields.map(([name,label,type,defaultValue])=>{const attrs='data-config-field="'+name+'" aria-label="'+esc(label)+'"';let input=type==='textarea'?'<textarea '+attrs+' rows="3"></textarea>':type==='select'?'<select '+attrs+'>'+ (name==='workspace_default'?[['capture','Scan & Details'],['expenses','Expense History'],['cards','Card Receipts']]:[['','Not set'],['Medical Screening','Medical Screening'],['Work Pass Application','Work Pass Application'],['Work Pass Renewal','Work Pass Renewal'],['Foreign Worker Identity Card Application','Foreign Worker Identity Card Application']]).map(([v,label])=>'<option value="'+v+'">'+label+'</option>').join('')+'</select>':'<input '+attrs+' type="'+type+'" '+(type==='number'?'min="0" step="0.5"':'')+'>';return '<label>'+esc(label)+input+'</label>';}).join('')+'</div><div class="nd-ops-actions"><button class="btn" type="submit">Save Settings</button><button class="btn" type="button" data-config-reload>Reload Saved</button></div><p role="status" data-config-status></p></form></div>';root.append(section);const form=section.querySelector('form');form.onsubmit=async event=>{event.preventDefault();const button=form.querySelector('[type=submit]'),status=form.querySelector('[data-config-status]');if(button.disabled)return;button.disabled=true;try{await identify();const value=Object.fromEntries([...form.querySelectorAll('[data-config-field]')].map(el=>[el.dataset.configField,el.value.trim()]));const result=await db().rpc('nd_system_setting_save',{p_key:key,p_value:value,p_revision:saved.get(key)?.revision||0});if(result.error)throw result.error;const row=Array.isArray(result.data)?result.data[0]:result.data;saved.set(key,row);window.ndBusinessConfig[key]=row.value;apply();status.textContent='Saved · Revision '+row.revision+' · Applies without another index update.';}catch(error){status.textContent='Unable to save: '+error.message;}finally{button.disabled=false;}};form.querySelector('[data-config-reload]').onclick=async()=>{try{await window.ndLoadBusinessConfig();fill(key);}catch(error){form.querySelector('[data-config-status]').textContent=error.message;}};}
+const section=document.createElement('section');section.className='settings-section';section.dataset.group='system';section.dataset.search='Deleted Advances Recovery Marry Restore';section.innerHTML='<button class="settings-section-head" type="button" aria-expanded="false"><span><strong>Deleted Salary Advances</strong><small>UMO can restore an audited deletion and its original deduction.</small></span><span>⌄</span></button><div class="settings-section-body"><button class="btn" type="button" id="ndLoadDeletedAdvances">Load Deleted Advances</button><p role="status" id="ndDeletedAdvanceStatus"></p><div id="ndDeletedAdvances"></div></div>';root.append(section);$('ndLoadDeletedAdvances').onclick=()=>void deleted();}
+function fill(key){const def=definitions[key],form=document.querySelector('[data-business-setting="'+key+'"]');if(!form)return;for(const [name,label,type,defaultValue]of def.fields)form.querySelector('[data-config-field="'+name+'"]').value=saved.get(key)?.value?.[name]??defaultValue;}
+async function deleted(){try{await identify();if(String(actor.email).toLowerCase()!=='umo1017@gmail.com')throw Error('Only UMO can view deleted advances.');const r=await db().rpc('nd_salary_advance_deleted_list');if(r.error)throw r.error;$('ndDeletedAdvances').innerHTML=(r.data||[]).map(row=>'<article class="nd-ops-record"><strong>'+esc(row.advance_record.employee_name)+' · RM '+Number(row.advance_record.amount).toFixed(2)+'</strong><p>'+esc(row.advance_record.outlet)+' · '+esc(row.advance_record.deduction_month)+'</p>'+(row.restored_at?'<span>Restored</span>':'<button class="btn" data-restore-advance="'+esc(row.advance_id)+'">Restore Advance</button>')+'</article>').join('')||'No deleted advances.';$('ndDeletedAdvances').onclick=async event=>{const b=event.target.closest('[data-restore-advance]');if(!b||b.disabled)return;if(!confirm('Restore this advance and add its deduction back to unconfirmed payroll?'))return;b.disabled=true;try{const r=await db().rpc('nd_salary_advance_restore',{p_id:b.dataset.restoreAdvance});if(r.error)throw r.error;await deleted();$('ndDeletedAdvanceStatus').textContent='Advance and payroll deduction restored.';}catch(error){$('ndDeletedAdvanceStatus').textContent=error.message;b.disabled=false;}};}catch(error){$('ndDeletedAdvanceStatus').textContent=error.message;}}
+async function opened(){mount();try{await identify();await window.ndLoadBusinessConfig();for(const key of Object.keys(definitions))fill(key);}catch(error){for(const form of document.querySelectorAll('[data-business-setting]'))form.querySelector('[data-config-status]').textContent='Settings unavailable: '+error.message;}}
+function setup(){const old=window.ndSettingsV2?.open;if(old){window.ndSettingsV2.open=async(...args)=>{await old(...args);await opened();};}document.addEventListener('click',event=>{if(event.target.closest('#sidebarSettings'))setTimeout(()=>void opened(),100);});window.ndLoadBusinessConfig().catch(()=>{});db()?.auth.onAuthStateChange?.(()=>{window.ndBusinessConfig={};saved.clear();setTimeout(()=>window.ndLoadBusinessConfig().catch(()=>{}),100);});window.addEventListener('focus',()=>window.ndLoadBusinessConfig().catch(()=>{}));document.addEventListener('visibilitychange',()=>{if(!document.hidden)window.ndLoadBusinessConfig().catch(()=>{});});window.ndBusinessControl={open:opened};}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();})();
+</script>
+<style>#settingsPage .btn,#settlementPage .btn,#aiReceiptPage .btn,#ndStaffFormsPage .btn{border-radius:var(--nd-admin-radius);border-color:#c8d9d0}#settingsPage .settings-section-head,#ndStaffFormsPage .nd-contract-source h4{color:var(--nd-admin-accent)}#settingsPage [type=submit],#aiReceiptPage .primary,#ndContractEntry [type=submit]{background:var(--nd-admin-accent)!important;color:#fff!important}#settingsPage [data-business-setting]{padding:4px}#settingsPage [data-business-setting] label{display:flex;flex-direction:column;gap:6px;font-size:13px}#settingsPage [data-business-setting] input,#settingsPage [data-business-setting] select,#settingsPage [data-business-setting] textarea{width:100%;box-sizing:border-box}</style></body>
 </html>
