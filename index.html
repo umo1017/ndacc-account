@@ -4526,7 +4526,6 @@ window.ndEmployeeFullName = function(employee){
 <button class="sidebar-btn" id="sidebarRoster" type="button">Monthly Roster</button>
 <button class="sidebar-btn" id="sidebarAnnouncements" type="button">Announcements <span id="ndAnnSidebarCount"></span></button>
 <button class="sidebar-btn" id="sidebarOrders" style="display:none" type="button">Inventory</button>
-<button class="sidebar-btn" id="sidebarStaffStock" style="display:none" type="button">Staff Stock</button>
 <button class="sidebar-btn" id="sidebarSettlement" style="display:none" type="button">Report</button>
 <button class="sidebar-btn" id="sidebarAiReceipt" style="display:none" type="button">Expenses</button>
 <button class="sidebar-btn" id="sidebarSalary" type="button">Salary</button>
@@ -9827,12 +9826,12 @@ document.getElementById('ndCashPettyRefresh')?.addEventListener('click',ndRender
 </div>
 </div>
 </div>
-<section id="ndStaffStockPage" class="salary-page" style="display:none"><div class="salary-shell"><header class="staff-stock-top"><h1>Staff Stock</h1><div class="staff-stock-tools"><button class="btn" id="ndStaffStockRefresh">Refresh</button><button class="btn" id="ndStaffStockAdd" hidden>+ Add Employee Item</button></div></header><div class="staff-stock-branch"><label for="ndStaffStockBranch">Branch</label><select id="ndStaffStockBranch"><option value="__ALL__">All Branches</option></select></div><p id="ndStaffStockPageStatus" role="status"></p><div id="ordersStaffStockPanel" style="display:block">
+<dialog id="ndStaffStockDialog" aria-label="Staff Stock"><section id="ndStaffStockPage" class="nd-staff-stock-view"><div class="salary-shell"><header class="staff-stock-top"><h1>Staff Stock</h1><div class="staff-stock-tools"><button class="btn" id="ndStaffStockClose" type="button">Close</button><button class="btn" id="ndStaffStockRefresh">Refresh</button><button class="btn" id="ndStaffStockAdd" hidden>+ Add Employee Item</button></div></header><div class="staff-stock-branch"><label for="ndStaffStockBranch">Branch</label><select id="ndStaffStockBranch"><option value="__ALL__">All Branches</option></select></div><p id="ndStaffStockPageStatus" role="status"></p><div id="ordersStaffStockPanel" style="display:block">
 <div class="salary-card"><div class="outlet-title"><strong>Employee Items</strong></div><input id="staffStockInventorySearch" type="search" placeholder="Search item / brand / branch" style="max-width:360px;margin:10px 0"/><div class="orders-list-wrap" id="staffStockAvailable"></div></div>
 <details class="salary-card"><summary style="font-weight:700;cursor:pointer">Receive Stock</summary><div class="orders-toolbar" style="margin-top:14px"><div class="field" style="min-width:250px;flex:1"><label>Stock Item</label><input id="staffStockProductSearch" placeholder="Search product / brand" type="search"/><div id="staffStockProductResults" style="margin-top:6px"></div></div><div class="field"><label>Quantity Received</label><input id="staffStockQty" min="1" step="1" type="number" value="1"/></div><button class="btn" id="staffStockReceiveBtn" type="button">Receive Stock</button></div><p id="staffStockReceiveStatus" class="helper" role="status"></p></details>
 <details class="salary-card"><summary style="font-weight:700;cursor:pointer">Stock Received History</summary><div class="orders-list-wrap"><table class="orders-table"><thead><tr><th>Received</th><th>Branch</th><th>Item</th><th>Quantity</th><th>By</th></tr></thead><tbody id="staffStockReceiptsBody"></tbody></table></div></details>
 <details class="salary-card"><summary>Employee Item History · All Branches</summary><div class="orders-list-wrap" style="margin-top:10px"><table class="orders-table"><thead id="staffStockHead"></thead><tbody id="staffStockBody"></tbody></table></div></details>
-</div></div></section>
+</div></div></section></dialog>
 <div class="salary-page" id="socialPage" style="display:none">
 <div class="salary-shell social-shell social-studio">
 <header class="social-hero">
@@ -10435,7 +10434,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <div class="salary-dialog" style="width:min(1100px,100%)">
 <div class="outlet-title">
 <h3 style="margin:0">Staff</h3>
-<div style="display:flex;align-items:center;gap:8px;margin-left:auto"><button class="btn" id="ndOpenResignationBtn" type="button">Resignation</button></div>
+<div style="display:flex;align-items:center;gap:8px;margin-left:auto"><button class="btn" id="ndStaffStockBtn" type="button">Staff Stock</button><button class="btn" id="ndOpenResignationBtn" type="button">Resignation</button></div>
 <button class="btn main-page-close" id="closeStaffListModal" type="button">×</button>
 </div>
 <div id="staffListContent"></div>
@@ -19998,7 +19997,7 @@ let selectedLoanProduct=null;
 function ordersDb(){ if(window.salaryDb) return window.salaryDb; throw new Error("Database connection is not ready."); }
 function ordersEsc(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function ordersMonth(){const e=document.getElementById("ordersMonth");if(e?.value)return e.value;const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;}
-function ordersBranch(){if(window.activeMainPage==="staff_stock")return document.getElementById("ndStaffStockBranch")?.value||"__ALL__";return document.getElementById("ordersBranch")?.value||"__ALL__";}
+function ordersBranch(){if(document.getElementById("ndStaffStockDialog")?.open)return document.getElementById("ndStaffStockBranch")?.value||"__ALL__";return document.getElementById("ordersBranch")?.value||"__ALL__";}
 function ordersIsAllBranches(){return ordersBranch()==="__ALL__";}
 
 async function loadOrderBranches(){
@@ -20327,7 +20326,7 @@ async function receiveStaffStock(){
  try{await window.ndEnsureStaffStockReady();const key=JSON.stringify(request);if(ndStockReceiptOperation?.key!==key)ndStockReceiptOperation={key,id:crypto.randomUUID()};const {error}=await ordersDb().rpc('nd_staff_inventory_receive',{...request,p_operation:ndStockReceiptOperation.id});if(error)throw error;ndStockReceiptOperation=null;selectedStaffStockProduct=null;document.getElementById('staffStockProductSearch').value='';document.getElementById('staffStockProductResults').innerHTML='';document.getElementById('staffStockQty').value='1';document.getElementById('staffStockReceiveStatus').textContent='Stock received ✓';window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));await renderStaffStock();}catch(error){document.getElementById('staffStockReceiveStatus').textContent='Unable to receive stock: '+error.message;}
 }
 let ndStaffStockOverview=[];
-function ndDrawStockOverview(){const root=document.getElementById('staffStockAvailable');if(!root)return;const q=String(document.getElementById('staffStockInventorySearch')?.value||'').toLowerCase().trim(),rows=ndStaffStockOverview.filter(r=>[r.outlet,r.product_name,r.brand].some(v=>String(v||'').toLowerCase().includes(q)));root.innerHTML='<div class="nd-staff-stock-cards">'+rows.map(r=>'<article class="nd-staff-stock-item"><strong>'+ordersEsc(r.product_name)+'</strong><small>'+ordersEsc(r.outlet)+'</small><b>'+Number(r.available)+'</b><small>Available</small>'+(window.ndCanEditProducts?.()?'<button class="btn" data-edit-sku="'+ordersEsc(r.sku_id)+'">Edit</button>':'')+'</article>').join('')+'</div>'+(rows.length?'':'<p>No employee items for this selection.</p>');}
+function ndDrawStockOverview(){const root=document.getElementById('staffStockAvailable');if(!root)return;const q=String(document.getElementById('staffStockInventorySearch')?.value||'').toLowerCase().trim(),rows=ndStaffStockOverview.filter(r=>[r.outlet,r.product_name,r.brand].some(v=>String(v||'').toLowerCase().includes(q)));root.innerHTML='<div class="nd-staff-stock-cards">'+rows.map(r=>'<article class="nd-staff-stock-item"><strong>'+ordersEsc(r.product_name)+'</strong><small>'+ordersEsc(r.outlet)+'</small><b>'+Number(r.available)+'</b><small>Available</small><button class="btn" data-staff-stock-add="'+ordersEsc(r.sku_id)+'" data-location="'+ordersEsc(r.outlet)+'">+ Add Quantity</button>'+(window.ndCanEditProducts?.()?'<button class="btn" data-edit-sku="'+ordersEsc(r.sku_id)+'">Edit</button>':'')+'</article>').join('')+'</div>'+(rows.length?'':'<p>No employee items for this selection.</p>');}
 async function renderStaffStockReceipts(){
  const wanted=ordersBranch();let q=ordersDb().from('inventory_movements').select('*').order('created_at',{ascending:false});if(!ordersIsAllBranches())q=q.in('outlet',[...new Set([ordersBranch(),'Staff Store'])]);const {data,error}=await window.ndOrdersAllResult(()=>q);const body=document.getElementById('staffStockReceiptsBody'),available=document.getElementById('staffStockAvailable');if(error){if(available)available.textContent=error.message;if(body)body.innerHTML=`<tr><td colspan="5">${ordersEsc(error.message)}</td></tr>`;return;}
  if(wanted!==ordersBranch())return;const moves=data||[],groups=new Map();for(const m of moves){const key=m.outlet+'|'+m.sku_id;if(!groups.has(key))groups.set(key,{outlet:m.outlet,sku_id:String(m.sku_id),product_name:m.product_name,brand:m.brand||'',available:0,received:0,out:0,returned:0});const row=groups.get(key),qty=Number(m.qty_change||0);row.available+=qty;if(qty<0)row.out-=qty;else if(m.movement_type==='STAFF_RETURN')row.returned+=qty;else row.received+=qty;}
@@ -20545,7 +20544,7 @@ try{ordersDb().auth.onAuthStateChange(()=>setTimeout(refreshOrdersVisibility,100
   document.addEventListener("click",function(e){
     const map={
       sidebarDaily:"daily", sidebarRoster:"roster", sidebarSalary:"salary",
-      sidebarSettlement:"settlement", sidebarOrders:"orders",sidebarStaffStock:"staff_stock", sidebarSettings:"settings"
+      sidebarSettlement:"settlement", sidebarOrders:"orders", sidebarSettings:"settings"
     };
     for(const id in map){
       if(e.target.closest && e.target.closest("#"+id)){ savePage(map[id]); break; }
@@ -20981,7 +20980,7 @@ table{
       sidebarRoster:"roster",
       sidebarSalary:"salary",
       sidebarSettlement:"settlement",
-      sidebarOrders:"orders",sidebarStaffStock:"staff_stock",
+      sidebarOrders:"orders",
       sidebarSocial:"social",
       sidebarSettings:"settings"
     };
@@ -21177,7 +21176,7 @@ document.addEventListener("click",async function(e){
   const KEY="nd_last_page_v2";
   const valid=new Set(["daily","roster","salary","settlement","orders","settings"]);
   document.addEventListener("click",e=>{
-    const map={sidebarDaily:"daily",sidebarRoster:"roster",sidebarSalary:"salary",sidebarSettlement:"settlement",sidebarOrders:"orders",sidebarStaffStock:"staff_stock",sidebarSocial:"social",sidebarSettings:"settings"};
+    const map={sidebarDaily:"daily",sidebarRoster:"roster",sidebarSalary:"salary",sidebarSettlement:"settlement",sidebarOrders:"orders",sidebarSocial:"social",sidebarSettings:"settings"};
     for(const [id,page] of Object.entries(map)){
       if(e.target.closest?.("#"+id)){try{sessionStorage.setItem(KEY,page);window.activeMainPage=page;}catch(_){} break;}
     }
@@ -21474,7 +21473,7 @@ html,body{max-width:100%;overflow-x:hidden!important}
       roster:"rosterPage",
       salary:"salaryPage",
       settlement:"settlementPage",
-      orders:"ordersPage",staff_stock:"ndStaffStockPage",
+      orders:"ordersPage",
       settings:"settingsPage"
     };
     for(const [page,id] of Object.entries(map)){
@@ -21505,7 +21504,7 @@ html,body{max-width:100%;overflow-x:hidden!important}
       roster:"sidebarRoster",
       salary:"sidebarSalary",
       settlement:"sidebarSettlement",
-      orders:"sidebarOrders",staff_stock:"sidebarStaffStock",
+      orders:"sidebarOrders",
       settings:"sidebarSettings"
     };
     const btn=document.getElementById(buttonMap[page]);
@@ -21519,7 +21518,7 @@ html,body{max-width:100%;overflow-x:hidden!important}
       sidebarRoster:"roster",
       sidebarSalary:"salary",
       sidebarSettlement:"settlement",
-      sidebarOrders:"orders",sidebarStaffStock:"staff_stock",
+      sidebarOrders:"orders",
       sidebarSocial:"social",
       sidebarSettings:"settings"
     };
@@ -24647,7 +24646,6 @@ Bed Fee: Amlee / + merchant / database memory checked.
     settlement:{nav:"sidebarSettlement",open:"showSettlement"},
     ai_receipt:{nav:"sidebarAiReceipt",open:"showAiReceipt"},
     orders:{nav:"sidebarOrders",open:"showOrders"},
-    staff_stock:{nav:"sidebarStaffStock",open:"showStaffStock"},
     settings:{nav:"sidebarSettings",open:"showSettings"},
     announcements:{nav:"sidebarAnnouncements",open:"ndOpenAnnouncements"},
     forms:{nav:"sidebarForms",open:"ndOpenStaffForms"},
@@ -27480,9 +27478,9 @@ function monthKey(){
 /* Account-scoped, permission-aware one-screen navigation. */
 (function(){
  const nav={daily:"sidebarDaily",roster:"sidebarRoster",salary:"sidebarSalary",
-   bonus:"sidebarBonus",settlement:"sidebarSettlement",orders:"sidebarOrders",staff_stock:"sidebarStaffStock",social:"sidebarSocial",settings:"sidebarSettings",announcements:"sidebarAnnouncements",forms:"sidebarForms",staff:"sidebarStaff"};
+   bonus:"sidebarBonus",settlement:"sidebarSettlement",orders:"sidebarOrders",social:"sidebarSocial",settings:"sidebarSettings",announcements:"sidebarAnnouncements",forms:"sidebarForms",staff:"sidebarStaff"};
  const screens={daily:"appView",roster:"rosterPage",salary:"salaryPage",bonus:"bonusPage",
-   settlement:"settlementPage",orders:"ordersPage",staff_stock:"ndStaffStockPage",social:"socialPage",settings:"settingsPage",announcements:"ndAnnouncementsPage",forms:"ndStaffFormsPage",staff:"ndStaffManagementPage"};
+   settlement:"settlementPage",orders:"ordersPage",social:"socialPage",settings:"settingsPage",announcements:"ndAnnouncementsPage",forms:"ndStaffFormsPage",staff:"ndStaffManagementPage"};
  let lastAccount="",lastWanted="",opening=false,initialRestored=false;
  function account(){
    return String(window.currentUserEmail||window.currentEmail||window.userEmail||"").trim().toLowerCase();
@@ -27602,12 +27600,12 @@ function monthKey(){
  const map={
   sidebarDaily:"daily",sidebarRoster:"roster",sidebarSalary:"salary",
   sidebarBonus:"bonus",sidebarSettlement:"settlement",
-  sidebarOrders:"orders",sidebarStaffStock:"staff_stock",sidebarSocial:"social",sidebarSettings:"settings",
+  sidebarOrders:"orders",sidebarSocial:"social",sidebarSettings:"settings",
   sidebarAnnouncements:"announcements",sidebarForms:"forms",sidebarStaff:"staff"
  };
  const screen={
   daily:"appView",roster:"rosterPage",salary:"salaryPage",bonus:"bonusPage",
-  settlement:"settlementPage",orders:"ordersPage",staff_stock:"ndStaffStockPage",social:"socialPage",settings:"settingsPage",
+  settlement:"settlementPage",orders:"ordersPage",social:"socialPage",settings:"settingsPage",
   announcements:"ndAnnouncementsPage",forms:"ndStaffFormsPage",staff:"ndStaffManagementPage"
  };
  function email(){return String(window.currentUserEmail||"").trim().toLowerCase()}
@@ -32178,7 +32176,7 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
  const $=id=>document.getElementById(id),escape=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),states=new Map(),listStates=new Map();let balances=new Map(),balanceBranch=null,balanceSeq=0;
  const brand=p=>{const raw=String(p.brand||'').trim(),match=(window.ORDER_PRODUCT_CATALOG||[]).find(c=>raw?String(c.brand||'').trim().toLowerCase()===raw.toLowerCase():String(c.sku_id)===String(p.sku_id)||String(c.product_name)===String(p.product_name));return String(match?.brand||raw).trim()||'Unbranded';},category=p=>String(p.category||'').trim()||'Other';
  const catalog=()=>window.ORDER_PRODUCT_CATALOG||(typeof ORDER_PRODUCT_CATALOG!=='undefined'?ORDER_PRODUCT_CATALOG:[]);
- const branch=()=>window.activeMainPage==='staff_stock'?ordersBranch():($('transferProductSearch')?.closest('#ordersTransferPanel')&&$('ordersTransferPanel')?.style.display!=='none'?$('transferFromOutlet')?.value:$('ordersBranch')?.value)||'__ALL__';
+ const branch=()=>document.getElementById('ndStaffStockDialog')?.open?ordersBranch():($('transferProductSearch')?.closest('#ordersTransferPanel')&&$('ordersTransferPanel')?.style.display!=='none'?$('transferFromOutlet')?.value:$('ordersBranch')?.value)||'__ALL__';
  const icon='<span class="nd-product-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m3 7 9-5 9 5v10l-9 5-9-5zM3 7l9 5 9-5M12 12v10"/></svg></span>';
  function cards(rows,attribute,quantities=true){return '<div class="nd-product-cards">'+rows.map(p=>'<div class="nd-product-card-wrap"><button type="button" class="nd-product-card" '+attribute+'="'+escape(p.sku_id)+'">'+icon+'<span class="nd-product-info"><strong>'+escape(p.product_name)+'</strong><span class="nd-product-meta">'+escape(p.outlet?p.outlet+' · '+category(p):category(p))+'</span><span class="nd-product-price">RM '+Number(p.price||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+(quantities?'<span class="nd-product-stock">Stock '+(p.available!=null?Number(p.available):balanceBranch===branch()&&balances.has(String(p.sku_id))?Number(balances.get(String(p.sku_id))):balanceBranch===branch()?'0':'—')+'</span>':'')+'</span></span></button>'+(window.ndCanEditProducts?.()?'<button type="button" data-edit-sku="'+escape(p.sku_id)+'">Edit</button>':'')+'</div>').join('')+'</div>';}
  function resetSelection(type){try{if(type==='order')selectedOrderProduct=null;if(type==='loan')selectedLoanProduct=null;if(type==='inventory')selectedInventoryProduct=null;if(type==='staffstock')selectedStaffStockProduct=null;if(type==='transfer')selectedTransferProduct=null;}catch(_){}}
@@ -32549,42 +32547,33 @@ document.addEventListener('click',event=>{const b=event.target.closest('#ndAdvan
 window.ndOpenPrivateLoans=open;
 })();
 </script>
-<script id="nd-staff-stock-standalone-v1">
+<script id="nd-staff-stock-modal-v2">
 (function(){
-const $=id=>document.getElementById(id);let opening=0,renderRequest=0;
-window.showStaffStock=async function(){
- const token=++opening,status=$('ndStaffStockPageStatus');
- try{const {data,error}=await ordersDb().auth.getUser();if(error)throw error;if(!data?.user)throw Error('Please sign in.');if(token!==opening)return;
- window.activeMainPage='staff_stock';document.body.dataset.ndVisiblePage='staff_stock';
- document.querySelectorAll('.salary-page,#ndStaffFormsPage,#ndStaffManagementPage,#ndAnnouncementsPage').forEach(el=>{if(el.id!=='ndStaffStockPage'){el.style.display='none';el.classList.remove('active','sidebar-offset');}});$('appView')?.classList.add('hidden');
- const page=$('ndStaffStockPage');page.style.display='block';page.classList.add('active','sidebar-offset');$('ordersStaffStockPanel').style.display='block';
- document.querySelectorAll('.sidebar-btn').forEach(b=>b.classList.toggle('active',b.id==='sidebarStaffStock'));window.ndCloseSidebar?.();
- for(const key of ['nd_last_page_v2','nd_last_page_v3'])try{sessionStorage.setItem(key,'staff_stock');}catch(_){}
- status.textContent='Loading employee stock…';
- await Promise.all([loadOrderCustomProducts(),loadOrderBranches()]);if(token!==opening||window.activeMainPage!=='staff_stock')return;
- const select=$('ndStaffStockBranch'),previous=select.value;select.innerHTML=[...$('ordersBranch').options].filter(o=>o.value!=='Global').map(o=>'<option value="'+ordersEsc(o.value)+'">'+ordersEsc(o.textContent)+'</option>').join('');select.value=[...select.options].some(o=>o.value===previous)?previous:'__ALL__';
- await reload();status.textContent='';
- }catch(error){status.textContent='Unable to load Staff Stock: '+error.message;}
-};
-async function reload(){const token=++renderRequest,msg=$('ndStaffStockPageStatus');msg.textContent='Updating stock…';try{await renderStaffStock();if(token!==renderRequest)return;const state=window.ndBrandStock?.states.get('staffStockProductSearch');if(state)window.ndBrandStock.draw(state);$('ndStaffStockAdd').hidden=!window.ndCanEditProducts?.();msg.textContent='';}catch(error){if(token===renderRequest)msg.textContent=error.message;}}
+const $=id=>document.getElementById(id);let loading=0;const pending=new Map();
+window.showStaffStock=async function(){const d=$('ndStaffStockDialog'),msg=$('ndStaffStockPageStatus'),token=++loading;try{
+ const auth=await ordersDb().auth.getUser();if(auth.error)throw auth.error;if(!auth.data?.user)throw Error('Please sign in.');
+ if(!d.open)d.showModal();msg.textContent='Loading employee stock…';$('ordersStaffStockPanel').style.display='block';
+ await Promise.all([loadOrderCustomProducts(),loadOrderBranches()]);if(token!==loading)return;const select=$('ndStaffStockBranch'),previous=select.value;select.innerHTML=[...$('ordersBranch').options].filter(o=>o.value!=='Global').map(o=>'<option value="'+ordersEsc(o.value)+'">'+ordersEsc(o.textContent)+'</option>').join('');select.value=[...select.options].some(o=>o.value===previous)?previous:'__ALL__';
+ await renderStaffStock();const state=window.ndBrandStock?.states.get('staffStockProductSearch');if(state)window.ndBrandStock.draw(state);$('ndStaffStockAdd').hidden=!window.ndCanEditProducts?.();msg.textContent='';
+ }catch(error){msg.textContent='Unable to load Staff Stock: '+error.message;}};
+async function addQuantity(sku,location){const p=ORDER_PRODUCT_CATALOG.find(p=>String(p.sku_id)===String(sku));if(!p)return;const key=location+'|'+sku,prior=pending.get(key);let d=$('ndStaffStockQuantityDialog');if(!d){d=document.createElement('dialog');d.id='ndStaffStockQuantityDialog';d.style.cssText='width:min(460px,94vw);border:0;border-radius:18px;padding:24px';document.body.append(d);}d.innerHTML='<h3>Add Quantity</h3><p>'+ordersEsc(p.product_name)+'</p><p>'+ordersEsc(location)+'</p><form><label>Quantity to Add<input name="quantity" type="number" min="1" max="999999" step="1" required value="'+(prior?.p_quantity||1)+'" style="width:100%;margin:10px 0"></label><div style="display:flex;gap:10px;margin-top:16px"><button class="btn" type="button" data-close>Close</button><button class="btn" type="submit">'+(prior?'Retry Add Quantity':'Add Quantity')+'</button></div><p role="status"></p></form>';const form=d.querySelector('form'),input=form.elements.quantity,message=d.querySelector('[role=status]');input.readOnly=!!prior;let busy=false;d.querySelector('[data-close]').onclick=()=>{if(!busy)d.close();};d.oncancel=event=>{if(busy)event.preventDefault();};
+ form.onsubmit=async event=>{event.preventDefault();if(busy||!form.reportValidity())return;const qty=Number(input.value);if(!Number.isSafeInteger(qty)||qty<1||qty>999999){message.textContent='Enter a whole quantity from 1 to 999999.';return;}let request=pending.get(key);if(!request){request={p_outlet:location,p_sku:String(sku),p_name:p.product_name,p_brand:p.brand||'',p_quantity:qty,p_operation:crypto.randomUUID()};pending.set(key,request);}busy=true;input.readOnly=true;const button=form.querySelector('[type=submit]');button.disabled=true;message.textContent='Adding quantity…';try{await window.ndEnsureStaffStockReady();const result=await ordersDb().rpc('nd_staff_inventory_receive',request);if(result.error)throw result.error;pending.delete(key);d.close();window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));await renderStaffStock();$('ndStaffStockPageStatus').textContent='Added '+qty+' · '+p.product_name;}catch(error){const unknown=!error.code||/fetch|network|timeout|connection/i.test(error.message||'');if(!unknown){pending.delete(key);input.readOnly=false;}message.textContent=unknown?'Result not confirmed. Retry this same quantity to avoid duplicates. '+error.message:'Unable to add quantity: '+error.message;button.textContent=unknown?'Retry Add Quantity':'Add Quantity';}finally{busy=false;button.disabled=false;}};
+ d.showModal();input.focus();}
 function setup(){
- const hideStaff=()=>{const page=$('ndStaffStockPage');if(document.body.dataset.ndVisiblePage!=='staff_stock'){page.style.display='none';page.classList.remove('active','sidebar-offset');}};
- new MutationObserver(hideStaff).observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});
- window.addEventListener('click',event=>{const b=event.target.closest?.('.sidebar-btn');if(b&&b.id!=='sidebarStaffStock'){opening++;$('ndStaffStockPage').style.display='none';$('ndStaffStockPage').classList.remove('active','sidebar-offset');}},true);
- const sidebar=$('sidebarOrders'),button=$('sidebarStaffStock');const sync=()=>button.style.display=sidebar.style.display;sync();new MutationObserver(sync).observe(sidebar,{attributes:true,attributeFilter:['style','hidden']});
- button.onclick=()=>void window.showStaffStock();$('ndStaffStockRefresh').onclick=()=>void window.showStaffStock();
- $('ndStaffStockBranch').onchange=()=>{const state=window.ndBrandStock?.states.get('staffStockProductSearch');if(state&&(state.busy||state.request)){$('ndStaffStockBranch').value=state.branch;return alert('Finish or retry the pending stock receipt first.');}if(state){state.selected?.clear();state.review=null;state.picked='';state.input.value='';window.ndBrandStock.draw(state);}void reload();void window.ndBrandStock?.loadBalances();};
- $('ndStaffStockAdd').onclick=()=>{if(!window.ndCanEditProducts?.())return;addNewOrderProduct();const d=$('orderNewProductModal');d.dataset.staffSeries='1';d.querySelector('#newOrderProductCategory').value='Employee Series';};
- window.addEventListener('nd-product-catalog-changed',()=>{if(window.activeMainPage==='staff_stock')void renderStaffStock();});
+ $('ndStaffStockDialog').addEventListener('close',()=>{const product=$('orderNewProductModal');if(product&&$('ndStaffStockDialog').contains(product)){product.classList.remove('open');document.body.append(product);}});
+ $('ndStaffStockBtn').onclick=()=>void window.showStaffStock();$('ndStaffStockClose').onclick=()=>$('ndStaffStockDialog').close();$('ndStaffStockRefresh').onclick=()=>void window.showStaffStock();
+ $('ndStaffStockBranch').onchange=()=>{const state=window.ndBrandStock?.states.get('staffStockProductSearch');if(state&&(state.busy||state.request)){$('ndStaffStockBranch').value=state.branch;return alert('Finish or retry the pending stock receipt first.');}if(state){state.selected?.clear();state.review=null;state.picked='';state.input.value='';window.ndBrandStock.draw(state);}void renderStaffStock();void window.ndBrandStock?.loadBalances();};
+ $('ndStaffStockAdd').onclick=()=>{if(!window.ndCanEditProducts?.())return;addNewOrderProduct();const d=$('orderNewProductModal');d.dataset.staffSeries='1';d.querySelector('#newOrderProductCategory').value='Employee Series';$('ndStaffStockDialog').append(d);};
+ $('staffStockAvailable').addEventListener('click',event=>{const button=event.target.closest('[data-staff-stock-add]');if(button)void addQuantity(button.dataset.staffStockAdd,button.dataset.location);});
+ window.addEventListener('nd-product-catalog-changed',()=>{if($('ndStaffStockDialog').open)void renderStaffStock();});
  window.addEventListener('nd-staff-inventory-changed',()=>{if($('ndOnboardSku')&&$('empOutlet')?.value)void window.ndRefreshEmployeeItemChoices?.();});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
+
 <style id="nd-staff-stock-standalone-style">
-body:not([data-nd-visible-page="staff_stock"]) #ndStaffStockPage{display:none!important}
-body[data-nd-visible-page="staff_stock"] #ndStaffStockPage{display:block!important}
-body[data-nd-visible-page="staff_stock"] #ordersPage,body[data-nd-visible-page="staff_stock"] #salaryPage,body[data-nd-visible-page="staff_stock"] #rosterPage,body[data-nd-visible-page="staff_stock"] #settlementPage,body[data-nd-visible-page="staff_stock"] #ndStaffFormsPage,body[data-nd-visible-page="staff_stock"] #ndStaffManagementPage,body[data-nd-visible-page="staff_stock"] #ndAnnouncementsPage,body[data-nd-visible-page="staff_stock"] #settingsPage,body[data-nd-visible-page="staff_stock"] #socialPage,body[data-nd-visible-page="staff_stock"] #bonusPage{display:none!important}
+#ndStaffStockDialog{width:min(1100px,96vw);max-height:92dvh;overflow:auto;padding:0;border:0;border-radius:20px}#ndStaffStockDialog::backdrop{background:#142b2466}#ndStaffStockPage{min-height:0!important}#ndStaffStockQuantityDialog::backdrop{background:#142b2466}
 
 #ndStaffStockPage{padding:22px;background:#f3f6f4;min-height:100vh;color:#203c33}#ndStaffStockPage .salary-shell{max-width:1100px;margin:auto}#ndStaffStockPage .staff-stock-top{padding:26px;border-radius:22px;background:linear-gradient(110deg,#173e32,#367567);color:white;display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:18px}#ndStaffStockPage h1{margin:0;font-size:28px}#ndStaffStockPage .staff-stock-tools{display:flex;gap:10px;flex-wrap:wrap}#ndStaffStockPage .salary-card{background:white;border:1px solid #dee7e1;border-radius:18px;padding:20px;margin:16px 0}#ndStaffStockPage .staff-stock-branch{max-width:330px}#ndStaffStockPage .staff-stock-branch select{width:100%;min-height:46px}#ndStaffStockPage .nd-staff-stock-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}#ndStaffStockPage .nd-staff-stock-item{padding:18px;border:1px solid #dce7e0;border-radius:14px;background:#f8fbf9;min-width:0}#ndStaffStockPage .nd-staff-stock-item strong{display:block;font-size:17px;overflow-wrap:anywhere}#ndStaffStockPage .nd-staff-stock-item small{display:block;color:#748177;margin:7px 0}#ndStaffStockPage .nd-staff-stock-item b{font-size:27px;color:#215d42}#ndStaffStockPage .nd-staff-stock-item button{margin-top:12px}#ndStaffStockPage summary{min-height:26px;cursor:pointer}#ndStaffStockPage .orders-toolbar{display:block}#ndStaffStockPage .nd-product-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}#ndStaffStockPage .nd-product-card{display:flex;text-align:left;align-items:center;width:100%;min-height:96px;border:1px solid #dce5de;border-radius:12px;padding:14px;background:#fff;gap:12px}#ndStaffStockPage .nd-product-selected{background:#e7f4eb;border:2px solid #267044}#ndStaffStockPage .nd-product-icon{width:35px;min-width:35px}#ndStaffStockPage .nd-product-info{min-width:0}#ndStaffStockPage .nd-product-info strong{display:block;overflow-wrap:anywhere}#ndStaffStockPage .nd-product-meta,#ndStaffStockPage .nd-product-price{display:block;font-size:13px;margin-top:5px}#ndStaffStockPage .nd-product-stock{margin-left:10px;font-weight:700}#ndStaffStockPage .nd-multi-actions{margin:14px 0}#ndStaffStockPage .nd-multi-selection{display:flex;align-items:center;gap:10px;flex-wrap:wrap}#ndStaffStockPage .nd-multi-review-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid #eee}#ndStaffStockPage .nd-multi-review-row input{max-width:100px}#ndStaffStockPage .nd-multi-default-qty{display:none!important}#ndStaffStockPage #staffStockReceiveBtn{margin-top:14px;background:#245c43;color:white}#ndStaffStockPage .orders-list-wrap{overflow:auto}#ndStaffStockPage table{width:100%;border-collapse:collapse;white-space:nowrap}#ndStaffStockPage td,#ndStaffStockPage th{padding:12px;text-align:left;border-bottom:1px solid #e2e7e4}#ndStaffStockPage #staffStockQty{display:none}#ndStaffStockPage .orders-toolbar .field:has(#staffStockQty){display:none}#ndStaffStockPage .nd-product-card-wrap>[data-edit-sku]{display:none}
 @media(max-width:600px){#ndStaffStockPage{padding:14px}#ndStaffStockPage .staff-stock-top{padding:20px;align-items:flex-start;flex-direction:column}#ndStaffStockPage .salary-card{padding:16px}#ndStaffStockPage .nd-product-cards{grid-template-columns:1fr}#ndStaffStockPage .nd-staff-stock-cards{grid-template-columns:1fr 1fr}#ndStaffStockPage .nd-staff-stock-item{padding:12px}#ndStaffStockPage .nd-staff-stock-item strong{font-size:15px}}
