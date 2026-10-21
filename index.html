@@ -32631,5 +32631,56 @@ window.ndCheckBirthdayReminder=check;setInterval(check,60000);window.addEventLis
 @media(max-width:600px){#ordersPage .nd-product-card,#ndStaffStockDialog .nd-product-card{padding:12px!important;gap:10px}#ordersPage .nd-product-icon,#ndStaffStockDialog .nd-product-icon{width:38px;min-width:38px;height:42px}#ordersPage .nd-product-info strong,#ndStaffStockDialog .nd-product-info strong{font-size:14px!important}#ordersPage .nd-product-row-right,#ndStaffStockDialog .nd-product-row-right{flex-basis:30%;max-width:30%}#ndStaffStockDialog #ndStaffStockPage{padding:12px}#ndStaffStockDialog .staff-stock-top{flex-direction:row;align-items:center;padding:16px;flex-wrap:wrap}}
 </style>
 <script id="nd-stock-scroll-accessibility">document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('#ndStaffStockDialog .orders-list-wrap').forEach(el=>{el.tabIndex=0;el.setAttribute('role','region');el.setAttribute('aria-label','Staff stock records. Scroll horizontally for all columns.');if(el.querySelector('table')){const hint=document.createElement('p');hint.className='nd-stock-scroll-hint';hint.textContent='Swipe right to view all columns →';el.before(hint);}});});</script>
+<style id="nd-inventory-compact-v4">
+#ordersPage .salary-shell{gap:12px!important}
+#ordersPage .salary-shell>.nd-inventory-header{padding:18px 20px!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;border-radius:18px!important;gap:12px!important}
+#ordersPage .nd-inventory-header .salary-title{font-size:24px!important}
+#ordersPage .nd-inventory-header .salary-right{flex-wrap:nowrap!important;margin:0!important;width:auto!important}
+#ordersPage #ordersRefreshBtn{font-size:23px!important;padding:5px 12px!important}
+#ordersPage #ordersNavigationCard{padding:6px!important;background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important}
+#ordersPage #ndInventoryCompactNav{display:flex;align-items:center;gap:6px;width:100%;min-width:0}
+#ordersPage #ndInventoryCompactNav>.btn,#ordersPage #ndInventoryMore>summary{flex:1 1 0;min-width:0;width:auto!important;border:0!important;background:#edf2ef!important;border-radius:10px!important;padding:12px 10px!important;font-size:14px!important;line-height:1.3;min-height:42px!important;white-space:nowrap;text-align:center;cursor:pointer;box-sizing:border-box;color:#496056;font-weight:750}
+#ordersPage #ndInventoryCompactNav>.active,#ordersPage #ndInventoryMore[data-active=true]>summary{background:#245640!important;color:#fff!important}
+#ordersPage #ndInventoryMore{position:relative;flex:1 1 0;min-width:0}#ordersPage #ndInventoryMore>summary{list-style:none;display:block;overflow:hidden;text-overflow:ellipsis}#ordersPage summary::-webkit-details-marker{display:none}
+#ordersPage .nd-inventory-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:20;min-width:215px;padding:6px;background:#fff;border:1px solid #dce6df;border-radius:14px;box-shadow:0 12px 32px #193b2926}
+#ordersPage .nd-inventory-menu>.btn{display:block;width:100%!important;text-align:left!important;border:0!important;background:transparent!important;color:#365448!important;margin:0!important;padding:12px!important;border-radius:8px!important;font-size:14px!important;white-space:nowrap}#ordersPage .nd-inventory-menu>.active{background:#e8f2eb!important}
+#ordersPage #ordersBranchButtons{display:none!important}#ordersPage #ordersBranch{display:block!important;visibility:visible!important}
+#ordersPage .nd-panel-filters{padding:10px 12px!important;display:flex!important;flex-wrap:nowrap!important;gap:12px!important;margin-bottom:12px!important;background:#f0f4f1!important}
+#ordersPage .nd-panel-filters[hidden]{display:none!important}#ordersPage .nd-panel-filters .field{flex:1 1 0!important;min-width:0!important}#ordersPage .nd-panel-filters .field[hidden]{display:none!important}
+#ordersPage .nd-panel-filters label{font-size:11px!important;margin-bottom:4px!important}#ordersPage .nd-panel-filters input,#ordersPage .nd-panel-filters select{min-height:40px!important;padding:8px!important;font-size:14px!important}
+#ordersPage #ndOrderComposer{padding:0!important;overflow:hidden;background:#fff!important}
+#ordersPage #ndOrderComposer>summary{display:flex;align-items:center;justify-content:space-between;padding:17px 18px;font-size:17px;font-weight:800;color:#28573f;cursor:pointer;list-style:none}
+#ordersPage #ndOrderComposer[open]>summary{border-bottom:1px solid #e5ece7}#ordersPage #ndOrderComposer[open] .nd-disclosure-arrow{transform:rotate(180deg)}
+#ordersPage #ndOrderComposer>.orders-toolbar,#ordersPage #ndOrderComposer>#ndOrderCartWrap{box-sizing:border-box;padding:0 16px 16px!important;margin:0!important}
+#ordersPage #ndOrderComposer .nd-brand-picker{margin-top:4px!important}#ordersPage #orderProductSearch[hidden]{display:none!important}
+@media(max-width:600px){#ordersPage .salary-shell>.nd-inventory-header{padding:16px!important}#ordersPage #ndInventoryCompactNav{gap:4px}#ordersPage #ndInventoryCompactNav>.btn,#ordersPage #ndInventoryMore>summary{font-size:12px!important;padding:12px 6px!important}#ordersPage .nd-panel-filters{gap:8px!important}}
+</style>
+<script id="nd-inventory-compact-v4-script">(function(){
+ const $=id=>document.getElementById(id);
+ function setup(){
+ const card=$('ordersNavigationCard'),toolbar=card?.querySelector('.nd-order-nav');if(!toolbar||$('ndInventoryCompactNav'))return;
+ const nav=document.createElement('nav');nav.id='ndInventoryCompactNav';nav.setAttribute('aria-label','Inventory sections');
+ const orders=document.createElement('button');orders.id='ndInventoryOrdersTab';orders.type='button';orders.className='btn';orders.textContent='Orders';orders.onclick=()=>setOrdersMode('manage');nav.append(orders);
+ for(const [id,label]of [['ordersArrivalsBtn','Arrivals'],['ordersInventoryBtn','Stock']]){const b=$(id);b.textContent=label;nav.append(b);}
+ const more=document.createElement('details');more.id='ndInventoryMore';more.innerHTML='<summary>More <span aria-hidden="true">⌄</span></summary><div class="nd-inventory-menu"></div>';const menu=more.lastElementChild;
+ for(const [id,label]of [['ordersMonthlyBtn','Order History'],['ordersTotalQtyBtn','Order Summary'],['ordersLoanBtn','Loan Stock'],['ordersTransferBtn','Stock Transfer'],['ordersChannelsBtn','Purchase Channels']]){const b=$(id);b.textContent=label;menu.append(b);b.addEventListener('click',()=>{more.open=false;});}
+ nav.append(more);toolbar.append(nav);
+ const manage=$('ordersManageBtn');manage.hidden=true;
+ const header=$('ordersPage').querySelector('.salary-top');header.classList.add('nd-inventory-header');$('ordersRefreshBtn').textContent='↻';$('ordersRefreshBtn').setAttribute('aria-label','Refresh inventory');$('ordersRefreshBtn').title='Refresh';$('ndEditAllProducts').textContent='Products';$('orderNewProductBtn').hidden=true;
+ const panel=$('ordersManagePanel'),composer=panel.querySelector('.salary-card'),details=document.createElement('details');details.id='ndOrderComposer';details.className='salary-card';details.innerHTML='<summary><span>＋ Add Order</span><span class="nd-disclosure-arrow" aria-hidden="true">⌄</span></summary>';composer.querySelector('.outlet-title')?.remove();while(composer.firstChild)details.append(composer.firstChild);composer.replaceWith(details);
+ const label=$('orderProductSearch')?.closest('.field')?.querySelector('label');if(label)label.hidden=true;
+ panel.querySelector('.outlet-title strong').textContent='Orders';
+ const sync=()=>{const active=[['manage','ordersManageBtn'],['arrival','ordersArrivalsBtn'],['inventory','ordersInventoryBtn'],['monthly','ordersMonthlyBtn'],['total','ordersTotalQtyBtn'],['loan','ordersLoanBtn'],['transfer','ordersTransferBtn'],['channels','ordersChannelsBtn']].find(([,id])=>$(id)?.classList.contains('active'));if(!active)return;const mode=active[0];orders.classList.toggle('active',mode==='manage');orders.setAttribute('aria-current',mode==='manage'?'page':'false');more.dataset.active=['monthly','total','loan','transfer','channels'].includes(mode)?'true':'false';
+ const old=more.querySelector('summary');const title=mode==='manage'||mode==='arrival'||mode==='inventory'?'More':$(active[1]).textContent;if(old.firstChild.textContent!==title+' ')old.firstChild.textContent=title+' ';
+ // Arrival history is global; branch and month apply only to views that use them.
+ const filters=$('ordersPage').querySelectorAll('.nd-panel-filters');filters.forEach(el=>{if(el.closest('#ordersLoanPanel')||el.closest('#ordersArrivalsPanel'))el.hidden=true;});
+ };
+ // Existing observers move the single original filter fields with the chosen view.
+ new MutationObserver(records=>{if(records.some(r=>r.type==='attributes'&&r.target.classList?.contains('orders-tab')))sync();}).observe(toolbar,{subtree:true,attributes:true,attributeFilter:['class']});sync();
+ document.addEventListener('click',e=>{if(more.open&&!more.contains(e.target))more.open=false;});
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
 </body>
 </html>
