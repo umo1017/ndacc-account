@@ -2,8 +2,8 @@
 
 <html lang="zh-CN">
 <head>
-<meta name="nd-build" content="20261023-partial-receipt-history-2">
-<meta name="nd-app-build" content="ND-20261023-PARTIAL-RECEIPT-HISTORY-02">
+<meta name="nd-build" content="20261023-modal-coordination-3">
+<meta name="nd-app-build" content="ND-20261023-MODAL-COORDINATION-03">
 <style id="nd-advance-open-button">#ndStaffFinanceNav #ndAdvanceBtn{pointer-events:auto!important;touch-action:manipulation!important;position:relative;z-index:1;cursor:pointer}#ndStaffFinanceNav{isolation:isolate}</style>
 <script id="nd-interview-contact-rules">
 (()=>{'use strict';
@@ -84,7 +84,7 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
 
 </script>
 <script id="nd-advance-entry-single-handler">
-window.ND_APP_BUILD='ND-20261023-PARTIAL-RECEIPT-HISTORY-02';
+window.ND_APP_BUILD='ND-20261023-MODAL-COORDINATION-03';
 window.addEventListener('click',function(event){
  const button=event.target?.closest?.('#ndAdvanceBtn,[data-nd-advance-open]');if(!button)return;
  event.preventDefault();event.stopImmediatePropagation();
@@ -31088,19 +31088,23 @@ body[data-nd-visible-page]:not([data-nd-visible-page="staff"]) #ndStaffManagemen
  const el=id=>document.getElementById(id),panel=el('ndPettyGlobalAck'),btn=el('ndGaUnderstood'),later=el('ndGaRemindLater');
  const HOUR=60*60*1000,KEY='nd_petty_topup_reminder_v1::';
  let busy=false,acting=false,active=null,db=null,retry=0,timer=null,lastFocus=null,oldOverflow='',locked=[];
+ let deferred=null,resumeQueued=false;
+ const blockingDialog=()=>document.querySelector('dialog[open],.salary-modal.open,.social-modal.open');
  const fmt=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
  const getDb=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null)||window.db||db;
  const read=id=>{try{const value=JSON.parse(localStorage.getItem(KEY+id)||'null');return value?.userId===id&&typeof value.signature==='string'&&Number.isFinite(value.dueAt)?value:null;}catch(_){return null;}};
  const clear=id=>{localStorage.removeItem(KEY+id);};
  const schedule=value=>{clearTimeout(timer);timer=null;if(value)timer=setTimeout(()=>void check(),Math.max(0,Math.min(HOUR,value.dueAt-Date.now()))+25);};
  const close=()=>{panel.classList.remove('nd-show');panel.setAttribute('aria-hidden','true');active=null;locked.forEach(([node,was])=>node.inert=was);locked=[];document.body.style.overflow=oldOverflow;if(lastFocus?.isConnected)lastFocus.focus?.();};
- const show=value=>{active=value;window.ndNotifications?.record([{event_key:'topup:'+value.signature,kind:'topup',title:'Cash Top Up to Petty Cash',message:'Eco Botanic: '+fmt(value.eco)+' · Nusa Bestari: '+fmt(value.nusa),branch:'All Branches',payload:{date:value.day,signature:value.signature}}]).catch(()=>{});el('ndGaDate').textContent=value.day;el('ndGaEco').textContent=fmt(value.eco);el('ndGaNusa').textContent=fmt(value.nusa);el('ndGaError').textContent='';lastFocus=document.activeElement;oldOverflow=document.body.style.overflow;locked=[...document.body.children].filter(node=>node!==panel&&!['SCRIPT','STYLE','LINK'].includes(node.tagName)).map(node=>[node,!!node.inert]);locked.forEach(([node])=>node.inert=true);document.body.style.overflow='hidden';panel.setAttribute('aria-hidden','false');panel.classList.add('nd-show');btn.focus();};
+ const show=value=>{if(blockingDialog()){deferred=value;return;}active=value;window.ndNotifications?.record([{event_key:'topup:'+value.signature,kind:'topup',title:'Cash Top Up to Petty Cash',message:'Eco Botanic: '+fmt(value.eco)+' · Nusa Bestari: '+fmt(value.nusa),branch:'All Branches',payload:{date:value.day,signature:value.signature}}]).catch(()=>{});el('ndGaDate').textContent=value.day;el('ndGaEco').textContent=fmt(value.eco);el('ndGaNusa').textContent=fmt(value.nusa);el('ndGaError').textContent='';lastFocus=document.activeElement;oldOverflow=document.body.style.overflow;locked=[...document.body.children].filter(node=>node!==panel&&!['SCRIPT','STYLE','LINK'].includes(node.tagName)).map(node=>[node,!!node.inert]);locked.forEach(([node])=>node.inert=true);document.body.style.overflow='hidden';panel.setAttribute('aria-hidden','false');panel.classList.add('nd-show');btn.focus();};
  async function acknowledged(value){const r=await db.from('nd_petty_topup_ack').select('signature').eq('user_id',value.userId).eq('signature',value.signature).maybeSingle();if(r.error)throw r.error;return !!r.data;}
  async function check(){
-  if(busy||acting||panel.classList.contains('nd-show'))return;
+  if(busy||acting||panel.classList.contains('nd-show')||blockingDialog())return;
   db=getDb();if(!db)return;busy=true;
   try{
    const auth=await db.auth.getUser();if(auth.error)throw auth.error;const userId=auth.data?.user?.id;if(!userId){schedule(null);return;}
+   if(deferred&&deferred.userId!==userId)deferred=null;
+   if(deferred){const waiting=deferred;if(await acknowledged(waiting)){if(deferred===waiting)deferred=null;}else{show(waiting);if(panel.classList.contains('nd-show')&&deferred===waiting)deferred=null;return;}}
    let pending=read(userId);schedule(pending);
    // A postponed notice is retained even after its original calendar day ends.
    if(pending&&pending.dueAt<=Date.now()){
@@ -31122,11 +31126,20 @@ body[data-nd-visible-page]:not([data-nd-visible-page="staff"]) #ndStaffManagemen
    const snapshot={...active},auth=await db.auth.getUser();if(auth.error)throw auth.error;if(auth.data?.user?.id!==snapshot.userId){close();setTimeout(check,0);return;}
    if(snooze){const pending={...snapshot,dueAt:Date.now()+HOUR};localStorage.setItem(KEY+snapshot.userId,JSON.stringify(pending));schedule(pending);void window.ndNotifications?.setStateByKey('topup:'+snapshot.signature,{snoozed_until:new Date(pending.dueAt).toISOString()}).catch(()=>{});close();}
    else{const {error}=await db.from('nd_petty_topup_ack').upsert({user_id:snapshot.userId,signature:snapshot.signature,acknowledged_at:new Date().toISOString()},{onConflict:'user_id,signature'});if(error)throw error;try{clear(snapshot.userId);}catch(_){}schedule(null);void window.ndNotifications?.setStateByKey('topup:'+snapshot.signature,{read_at:new Date().toISOString()}).catch(()=>{});close();setTimeout(check,1500);}
-  }catch(error){el('ndGaError').textContent=snooze?'Unable to schedule the reminder. Please try again or choose I Understand.':'Unable to save acknowledgement. Please try again.';console.warn(error);}finally{acting=false;btn.disabled=later.disabled=false;}
+  }catch(error){el('ndGaError').textContent=snooze?'Unable to schedule the reminder. Please try again or choose I Understand.':'Unable to save acknowledgement. Please try again.';console.warn(error);}finally{acting=false;btn.disabled=later.disabled=false;coordinate();}
  }
  btn.addEventListener('click',()=>void act(false));later.addEventListener('click',()=>void act(true));
  panel.addEventListener('keydown',event=>{if(!panel.classList.contains('nd-show'))return;if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();}if(event.key==='Tab'){const first=btn.disabled?null:btn,last=later.disabled?null:later;if(!first){event.preventDefault();return;}if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
- document.addEventListener('focusin',event=>{if(panel.classList.contains('nd-show')&&!panel.contains(event.target))btn.focus();});
+ document.addEventListener('focusin',event=>{if(panel.classList.contains('nd-show')&&!blockingDialog()&&!panel.contains(event.target))btn.focus();});
+ // Native dialogs occupy the browser top layer. A background notice must never
+ // make that visible dialog inert or redirect its focus to a hidden background.
+ function coordinate(){
+  if(panel.classList.contains('nd-show')&&blockingDialog()&&!acting){deferred=active?{...active}:deferred;close();}
+  if(deferred&&!blockingDialog()&&!panel.classList.contains('nd-show')&&!resumeQueued){resumeQueued=true;setTimeout(()=>{resumeQueued=false;void check();},0);}
+ }
+ new MutationObserver(records=>{if(records.some(r=>r.target.tagName==='DIALOG'||r.target.matches?.('.salary-modal,.social-modal')))coordinate();}).observe(document.body,{subtree:true,attributes:true,attributeFilter:['open','class']});
+ document.addEventListener('close',()=>{coordinate();if(!blockingDialog())setTimeout(()=>void check(),0);},true);
+ getDb()?.auth.onAuthStateChange?.((event,session)=>{if(event==='SIGNED_OUT'||active&&session?.user?.id&&session.user.id!==active.userId){if(panel.classList.contains('nd-show'))close();deferred=null;schedule(null);}});
  setInterval(check,20000);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)void check();});
  window.addEventListener('focus',check);
