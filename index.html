@@ -2,7 +2,8 @@
 
 <html lang="zh-CN">
 <head>
-<meta name="nd-app-build" content="ND-20261023-INTERVIEW-CONTACT-07">
+<meta name="nd-build" content="20261023-usability-audit-1">
+<meta name="nd-app-build" content="ND-20261023-USABILITY-AUDIT-01">
 <style id="nd-advance-open-button">#ndStaffFinanceNav #ndAdvanceBtn{pointer-events:auto!important;touch-action:manipulation!important;position:relative;z-index:1;cursor:pointer}#ndStaffFinanceNav{isolation:isolate}</style>
 <script id="nd-interview-contact-rules">
 (()=>{'use strict';
@@ -83,7 +84,7 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
 
 </script>
 <script id="nd-advance-entry-single-handler">
-window.ND_APP_BUILD='ND-20261023-INTERVIEW-CONTACT-07';
+window.ND_APP_BUILD='ND-20261023-USABILITY-AUDIT-01';
 window.addEventListener('click',function(event){
  const button=event.target?.closest?.('#ndAdvanceBtn,[data-nd-advance-open]');if(!button)return;
  event.preventDefault();event.stopImmediatePropagation();
@@ -2886,63 +2887,6 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   }
 }
 </style>
-<script id="payslip-final-clean-fit">
-(function(){
-  const BASE_W=1123, BASE_H=700;
-
-  function fit7thPayslip(){
-    const root=document.getElementById('salaryPayslipPrint');
-    const sheet=root?.querySelector('.payslip-sheet[data-payslip-type="7th"]');
-    if(!root || !sheet) return;
-
-    if(window.innerWidth>700){
-      sheet.style.removeProperty('transform');
-      sheet.style.removeProperty('transform-origin');
-      root.style.removeProperty('width');
-      root.style.removeProperty('height');
-      root.style.removeProperty('min-height');
-      return;
-    }
-
-    const dialog=root.closest('.salary-dialog,.payslip-dialog');
-    const available=Math.max(280,(dialog?.clientWidth||window.innerWidth)-18);
-    const scale=Math.min(1,available/BASE_W);
-
-    sheet.style.setProperty('transform',`scale(${scale})`,'important');
-    sheet.style.setProperty('transform-origin','top left','important');
-    sheet.style.setProperty('zoom','1','important');
-
-    root.style.setProperty('width',(BASE_W*scale)+'px','important');
-    root.style.setProperty('height',(BASE_H*scale)+'px','important');
-    root.style.setProperty('min-height',(BASE_H*scale)+'px','important');
-    root.style.setProperty('max-height',(BASE_H*scale)+'px','important');
-    root.style.setProperty('margin-left','auto','important');
-    root.style.setProperty('margin-right','auto','important');
-    root.style.setProperty('overflow','visible','important');
-  }
-
-  function queueFit(){
-    requestAnimationFrame(()=>{
-      fit7thPayslip();
-      setTimeout(fit7thPayslip,60);
-      setTimeout(fit7thPayslip,220);
-    });
-  }
-
-  document.addEventListener('click',function(e){
-    if(e.target.closest('[data-payslip7]')) queueFit();
-  },true);
-  window.addEventListener('resize',queueFit,{passive:true});
-  window.addEventListener('orientationchange',queueFit,{passive:true});
-  document.addEventListener('DOMContentLoaded',function(){
-    const root=document.getElementById('salaryPayslipPrint');
-    if(root){
-      new MutationObserver(queueFit).observe(root,{childList:true,subtree:true});
-    }
-    queueFit();
-  });
-})();
-</script>
 <style id="branch-whatsapp-payslip-style">
 .branch-whatsapp-payslips-btn{
   white-space:nowrap;
@@ -15707,7 +15651,7 @@ document.addEventListener("click",ev=>{
 document.addEventListener("change",ev=>{if(ev.target?.id==="ndResignBranch"){ndResignationUpdateEmployees();ndRenderResignItems();}if(ev.target?.id==="ndResignEmployee")ndRenderResignItems();});
 
 function renderStaffList(){
- let archiveButton=byId('ndStaffArchiveView');if(!archiveButton){archiveButton=document.createElement('button');archiveButton.id='ndStaffArchiveView';archiveButton.type='button';archiveButton.className='btn';byId('ndOpenResignationBtn').before(archiveButton);archiveButton.onclick=()=>{ndStaffArchiveView=!ndStaffArchiveView;renderStaffList();};}archiveButton.hidden=!isGlobalAdmin;archiveButton.textContent=ndStaffArchiveView?'Back to Staff':'Archived Staff';
+ byId('ndStaffArchiveView')?.remove();
  if(!isGlobalAdmin)ndStaffArchiveView=false;
   const staffOutlets=[...new Set([
     ...(isGlobalAdmin ? [...salaryBranches.map(b=>b.name),...salaryEmployees.map(e=>e.outlet),"Global"] : (accessibleSalaryOutlets||[]).filter(x=>x && x!=="Global")),
@@ -29541,36 +29485,6 @@ document.addEventListener("click",e=>{
 
 
 
-function fitPayslipToMobileWidth(){
-  if(window.innerWidth>700) return;
-  const modal=document.getElementById("payslipModal");
-  const sheet=modal?.querySelector("#salaryPayslipPrint .payslip-sheet");
-  if(!modal || !sheet) return;
-
-  // Measure the sheet's natural width without scaling.
-  const prev=sheet.style.transform;
-  sheet.style.transform="none";
-  const naturalWidth=sheet.getBoundingClientRect().width || sheet.scrollWidth || 1;
-
-  const available=Math.max(240, Math.min(window.innerWidth-28, modal.clientWidth-24));
-  const scale=Math.min(1, available/naturalWidth);
-
-  if(sheet.classList.contains("payslip-14-reference")){
-    sheet.style.setProperty("--payslip-mobile-scale-14", String(scale));
-  }else{
-    sheet.style.setProperty("--payslip-mobile-scale", String(scale));
-  }
-
-  sheet.style.transform=prev;
-  requestAnimationFrame(()=>{
-    sheet.style.transform="";
-    const scaledHeight=sheet.getBoundingClientRect().height;
-    const printRoot=modal.querySelector("#salaryPayslipPrint");
-    if(printRoot) printRoot.style.height=Math.ceil(scaledHeight)+"px";
-  });
-}
-
-
 
 window.addEventListener("resize",()=>{
   const modal=document.getElementById("payslipModal");
@@ -29676,6 +29590,7 @@ document.addEventListener("DOMContentLoaded",function(){
 (function(){
   window.__ndRuntimeErrors = window.__ndRuntimeErrors || [];
   window.addEventListener("error", function(e){
+    if(window.__ndRuntimeErrors.length>=100)window.__ndRuntimeErrors.shift();
     window.__ndRuntimeErrors.push({
       type:"error",
       message:String(e.message||"Unknown error"),
@@ -29685,6 +29600,7 @@ document.addEventListener("DOMContentLoaded",function(){
   });
   window.addEventListener("unhandledrejection", function(e){
     const reason=e.reason;
+    if(window.__ndRuntimeErrors.length>=100)window.__ndRuntimeErrors.shift();
     window.__ndRuntimeErrors.push({
       type:"promise",
       message:String(reason?.message||reason||"Unhandled promise rejection")
@@ -29693,96 +29609,14 @@ document.addEventListener("DOMContentLoaded",function(){
 })();
 </script>
 <script id="salary-view-button-hard-fix">
+// The main salary module owns the click. Delegate only if a rebuilt button has no handler.
 (function(){
-  function bindSalaryViewButtons(){
-    const b7=document.getElementById("salaryView7Btn");
-    const b14=document.getElementById("salaryView14Btn");
-    const bTotal=document.getElementById("salaryViewTotalBtn");
-
-    const bind=(btn,mode)=>{
-      if(!btn || btn.dataset.salaryBound==="1") return;
-      btn.dataset.salaryBound="1";
-
-      const run=(e)=>{
-        if(e){
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        if(typeof setSalaryViewMode==="function"){
-          setSalaryViewMode(mode);
-        }
-      };
-
-      btn.addEventListener("click",run,false);
-      btn.addEventListener("pointerup",function(e){
-        if(e.pointerType==="touch") run(e);
-      },false);
-    };
-
-    bind(b7,"7th");
-    bind(b14,"14th");
-    bind(bTotal,"total");
-  }
-
-  document.addEventListener("DOMContentLoaded",bindSalaryViewButtons);
-  document.addEventListener("click",function(e){
-    if(e.target?.closest?.('[data-nav="salary"],#salaryNavBtn,#salaryBtn')){
-      setTimeout(bindSalaryViewButtons,50);
-      setTimeout(bindSalaryViewButtons,250);
-    }
-  },true);
-
-  // Rebind if the Salary page is rebuilt.
-  const observer=new MutationObserver(bindSalaryViewButtons);
-  document.addEventListener("DOMContentLoaded",function(){
-    const page=document.getElementById("salaryPage");
-    if(page) observer.observe(page,{childList:true,subtree:true});
-  });
-})();
-</script>
-<script id="mobile-payslip-auto-fit-final">
-(function(){
-  function fitPayslipToPhone(){
-    const modal=document.getElementById("salaryPayslipModal");
-    const sheet=document.getElementById("salaryPayslipPrint");
-    if(!modal || !sheet) return;
-
-    if(window.innerWidth>700){
-      sheet.style.transform="";
-      sheet.style.marginBottom="";
-      return;
-    }
-
-    const available=Math.max(280,Math.min(window.innerWidth-32,680));
-    const base=1123;
-    const scale=Math.min(1,available/base);
-
-    sheet.style.transform=`scale(${scale})`;
-    sheet.style.transformOrigin="top left";
-
-    // Transform does not change layout height, so compensate to remove the huge blank area.
-    const naturalHeight=sheet.scrollHeight||794;
-    sheet.style.marginBottom=`-${Math.max(0,naturalHeight*(1-scale))}px`;
-  }
-
-  document.addEventListener("click",function(e){
-    if(e.target?.closest?.("[data-payslip7],[data-payslip14],#salaryPayslipModal")){
-      setTimeout(fitPayslipToPhone,40);
-      setTimeout(fitPayslipToPhone,250);
-    }
-  },true);
-
-  window.addEventListener("resize",fitPayslipToPhone);
-  window.addEventListener("orientationchange",()=>setTimeout(fitPayslipToPhone,200));
-
-  const observer=new MutationObserver(function(){
-    const modal=document.getElementById("salaryPayslipModal");
-    if(modal && getComputedStyle(modal).display!=="none") fitPayslipToPhone();
-  });
-  document.addEventListener("DOMContentLoaded",function(){
-    const modal=document.getElementById("salaryPayslipModal");
-    if(modal) observer.observe(modal,{attributes:true,childList:true,subtree:true});
-  });
+ const modes={salaryView7Btn:'7th',salaryView14Btn:'14th',salaryViewTotalBtn:'total'};
+ document.addEventListener('click',function(e){
+  const b=e.target.closest?.('#salaryView7Btn,#salaryView14Btn,#salaryViewTotalBtn');
+  if(!b||b.disabled||typeof b.onclick==='function')return;
+  if(typeof setSalaryViewMode==='function')setSalaryViewMode(modes[b.id]);
+ });
 })();
 </script>
 <script id="auth-visibility-guard-v2">
@@ -29836,96 +29670,35 @@ document.addEventListener("DOMContentLoaded",function(){
 </script>
 <script id="payslip-mobile-all-types-fit-final">
 (function(){
-  function fitCurrentPayslipMobile(){
-    const modal=document.getElementById("payslipModal");
-    const root=document.getElementById("salaryPayslipPrint");
-    const sheet=root?.querySelector(".payslip-sheet");
-    if(!modal || !root || !sheet) return;
-
-    if(window.innerWidth>700){
-      sheet.style.removeProperty("transform");
-      sheet.style.removeProperty("transform-origin");
-      root.style.removeProperty("width");
-      root.style.removeProperty("min-width");
-      root.style.removeProperty("max-width");
-      root.style.removeProperty("height");
-      root.style.removeProperty("min-height");
-      root.style.removeProperty("max-height");
-      return;
-    }
-
-    // Measure the real natural size of whichever payslip is open (7th or 14th).
-    sheet.style.setProperty("transform","none","important");
-    sheet.style.setProperty("transform-origin","top left","important");
-    sheet.style.setProperty("margin","0","important");
-    sheet.style.setProperty("zoom","1","important");
-
-    const naturalWidth=Math.max(
-      1,
-      sheet.scrollWidth||0,
-      sheet.offsetWidth||0,
-      sheet.getBoundingClientRect().width||0
-    );
-    const naturalHeight=Math.max(
-      1,
-      sheet.scrollHeight||0,
-      sheet.offsetHeight||0,
-      sheet.getBoundingClientRect().height||0
-    );
-
-    const dialog=modal.querySelector(".salary-dialog");
-    const available=Math.max(
-      260,
-      Math.min(window.innerWidth-32,(dialog?.clientWidth||window.innerWidth)-16)
-    );
-    const scale=Math.min(1,available/naturalWidth);
-
-    sheet.style.setProperty("transform",`scale(${scale})`,"important");
-    sheet.style.setProperty("transform-origin","top left","important");
-
-    // Root matches the scaled visual dimensions, so the sheet is centered correctly
-    // and there is no huge blank area on the left/bottom.
-    const visualWidth=Math.ceil(naturalWidth*scale);
-    const visualHeight=Math.ceil(naturalHeight*scale);
-
-    root.style.setProperty("width",visualWidth+"px","important");
-    root.style.setProperty("min-width",visualWidth+"px","important");
-    root.style.setProperty("max-width",visualWidth+"px","important");
-    root.style.setProperty("height",visualHeight+"px","important");
-    root.style.setProperty("min-height",visualHeight+"px","important");
-    root.style.setProperty("max-height",visualHeight+"px","important");
-    root.style.setProperty("margin-left","auto","important");
-    root.style.setProperty("margin-right","auto","important");
-    root.style.setProperty("overflow","visible","important");
+ let frame=0,settle=0;
+ function fit(){
+  const modal=document.getElementById('payslipModal'),root=document.getElementById('salaryPayslipPrint'),sheet=root?.querySelector('.payslip-sheet');
+  if(!modal?.classList.contains('open')||getComputedStyle(modal).display==='none'||!sheet)return;
+  if(window.innerWidth>700){
+   for(const key of ['transform','transform-origin','margin','zoom'])sheet.style.removeProperty(key);
+   for(const key of ['width','min-width','max-width','height','min-height','max-height','margin-left','margin-right','overflow'])root.style.removeProperty(key);
+   return;
   }
-
-  function queueFit(){
-    requestAnimationFrame(()=>{
-      fitCurrentPayslipMobile();
-      setTimeout(fitCurrentPayslipMobile,50);
-      setTimeout(fitCurrentPayslipMobile,180);
-      setTimeout(fitCurrentPayslipMobile,400);
-    });
-  }
-
-  // Replace the older generic fitting helper with the corrected all-types version.
-  window.fitPayslipToMobileWidth=fitCurrentPayslipMobile;
-
-  document.addEventListener("click",function(e){
-    if(e.target?.closest?.("[data-payslip7],[data-payslip14]")){
-      queueFit();
-    }
-  },true);
-
-  window.addEventListener("resize",queueFit,{passive:true});
-  window.addEventListener("orientationchange",queueFit,{passive:true});
-
-  document.addEventListener("DOMContentLoaded",function(){
-    const root=document.getElementById("salaryPayslipPrint");
-    if(root){
-      new MutationObserver(queueFit).observe(root,{childList:true,subtree:true});
-    }
-  });
+  sheet.style.setProperty('transform','none','important');
+  sheet.style.setProperty('transform-origin','top left','important');
+  sheet.style.setProperty('margin','0','important');sheet.style.setProperty('zoom','1','important');
+  const width=Math.max(1,sheet.scrollWidth||0,sheet.offsetWidth||0,sheet.getBoundingClientRect().width||0),height=Math.max(1,sheet.scrollHeight||0,sheet.offsetHeight||0,sheet.getBoundingClientRect().height||0);
+  const dialog=modal.querySelector('.salary-dialog'),available=Math.max(1,Math.min(window.innerWidth-32,(dialog?.clientWidth||window.innerWidth)-16)),scale=Math.min(1,available/width);
+  sheet.style.setProperty('transform',`scale(${scale})`,'important');
+  for(const k of ['width','min-width','max-width'])root.style.setProperty(k,Math.ceil(width*scale)+'px','important');
+  for(const k of ['height','min-height','max-height'])root.style.setProperty(k,Math.ceil(height*scale)+'px','important');
+  root.style.setProperty('margin-left','auto','important');root.style.setProperty('margin-right','auto','important');root.style.setProperty('overflow','visible','important');
+ }
+ function queue(){if(frame)return;frame=requestAnimationFrame(()=>{frame=0;fit();});clearTimeout(settle);settle=setTimeout(fit,180);}
+ window.fitPayslipToMobileWidth=queue;
+ window.addEventListener('resize',queue,{passive:true});window.addEventListener('orientationchange',queue,{passive:true});
+ function setup(){
+  const root=document.getElementById('salaryPayslipPrint'),modal=document.getElementById('payslipModal');
+  if(root){new MutationObserver(queue).observe(root,{childList:true,subtree:true});root.addEventListener('load',queue,true);}
+  if(modal)new MutationObserver(queue).observe(modal,{attributes:true,attributeFilter:['class','style']});
+  document.fonts?.ready?.then(queue).catch(()=>{});queue();
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
 })();
 </script>
 <script id="nd-brand-binding-ui-v3">
@@ -32477,11 +32250,11 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
  d.querySelector('form').onsubmit=async e=>{e.preventDefault();if(!d.querySelector('form').reportValidity())return;const button=d.querySelector('[type=submit]');if(button.disabled)return;button.disabled=true;try{const batch=$('ndExpiryBatch').value.trim();if(!batch)throw Error('Enter a batch or delivery reference.');const payload={branch:$('ndExpiryBranch').value,sku_id:String(p.sku_id),product_name:p.product_name,brand:p.brand||'',batch_label:batch,no_expiry:$('ndExpiryChoice').value==='none',expiry_date:$('ndExpiryChoice').value==='date'?$('ndExpiryDate').value:null};const result=expiryEditing?await db().from('nd_product_expiry').update(payload).eq('id',expiryEditing):await db().from('nd_product_expiry').insert(payload);if(result.error)throw result.error;await refreshExpiry();d.close();await poll();}catch(err){d.querySelector('[role=status]').textContent=err.code==='23505'?'This branch/product/batch already exists. Edit that batch instead.':err.message}finally{button.disabled=false}};
  $('ndExpiryArchive')?.addEventListener('click',async event=>{if(!confirm('Archive this batch after it has been used, returned or disposed?'))return;event.currentTarget.disabled=true;try{const r=await db().from('nd_product_expiry').update({active:false}).eq('id',row.id);if(r.error)throw r.error;await refreshExpiry();d.close();}catch(e){d.querySelector('[role=status]').textContent=e.message;event.currentTarget.disabled=false;}});
  }
- function pendingAlerts(){const entries=[];for(const row of issues)if(row.status!=='resolved')entries.push({key:'issue:'+row.id,kind:'issue',title:row.title,text:row.branch+' · '+row.category+' · '+row.created_by,body:row.description});for(const row of expiry)if(row.active!==false&&!row.no_expiry&&row.expiry_date&&reminderDate(row.expiry_date)<=today())entries.push({key:'expiry:'+row.id+':'+row.expiry_date,kind:'expiry',title:row.product_name,text:row.branch+' · '+row.batch_label+' · '+row.expiry_date,body:expiryState(row)});return entries.filter(e=>!reads.has(e.key));}
- async function poll(){if(busy||document.hidden||!db())return;busy=true;try{await auth();if(!owner())return;const [i,e,r]=await Promise.all([db().from('nd_ops_issues').select('*').neq('status','resolved').order('created_at',{ascending:false}).limit(1000),db().from('nd_product_expiry').select('*').eq('active',true).eq('no_expiry',false).lte('expiry_date',queryExpiryLimit()).limit(10000),db().from('nd_ops_alert_reads').select('alert_key').eq('user_id',user.id).limit(10000)]);if(i.error||e.error||r.error)throw Error(i.error?.message||e.error?.message||r.error?.message);const openIssues=i.data||[],due=e.data||[];const alerts=[];reads=new Set((r.data||[]).map(v=>v.alert_key));for(const x of openIssues)alerts.push({key:'issue:'+x.id,kind:'issue',title:x.title,text:x.branch+' · '+(x.category_name||x.category)+' · '+(x.employee_name||x.created_by),body:x.description});for(const x of due)if(x.expiry_date&&!x.no_expiry&&x.active!==false&&reminderDate(x.expiry_date)<=today())alerts.push({key:'expiry:'+x.id+':'+x.expiry_date,kind:'expiry',title:x.product_name,text:x.branch+' · '+x.batch_label+' · '+x.expiry_date,body:expiryState(x)});showAlerts(alerts.filter(x=>!reads.has(x.key)));}catch(error){/* Forms display installation errors. A missing optional table must not block existing pages. */}finally{busy=false}}
- function showAlerts(alerts){if(window.ndNotifications){void window.ndNotifications.poll();return;}if(!alerts.length||!owner())return;const d=modal('ndOperationsAlertDialog');if(d.open)return;d.innerHTML='<h3>Management Notifications</h3><p>New unresolved issues and products approaching expiry.</p><div>'+alerts.map(a=>'<article class="nd-ops-record"><span class="nd-ops-tag">'+(a.kind==='issue'?'Unresolved Issue':'Product Expiry')+'</span><h4>'+esc(a.title)+'</h4><small>'+esc(a.text)+'</small><p>'+esc(a.body)+'</p></article>').join('')+'</div><div class="nd-ops-actions"><button class="btn" data-review-issues type="button">Open Issues</button><button class="btn" data-review-expiry type="button">Open Inventory</button><button class="btn" data-ack type="button">I Have Read</button></div><p role="status"></p>';
+ function pendingAlerts(){const entries=[];for(const row of issues)if(row.status!=='resolved')entries.push({key:'issue:'+row.id,kind:'issue',title:row.title,text:row.branch+' · '+row.category+' · '+row.created_by,body:row.description});for(const row of expiry)if(row.active!==false&&!row.resolved_at&&!row.no_expiry&&row.expiry_date&&reminderDate(row.expiry_date)<=today())entries.push({key:'expiry:'+row.id+':'+row.expiry_date,kind:'expiry',title:row.product_name,text:row.branch+' · '+row.expiry_date,body:expiryState(row)});return entries.filter(e=>!reads.has(e.key));}
+ async function poll(){if(busy||document.hidden||!db())return;busy=true;try{await auth();if(!owner())return;const [i,e,r]=await Promise.all([db().from('nd_ops_issues').select('*').neq('status','resolved').order('created_at',{ascending:false}).limit(1000),db().from('nd_product_expiry').select('*').eq('active',true).eq('no_expiry',false).lte('expiry_date',queryExpiryLimit()).limit(10000),db().from('nd_ops_alert_reads').select('alert_key').eq('user_id',user.id).limit(10000)]);if(i.error||e.error||r.error)throw Error(i.error?.message||e.error?.message||r.error?.message);const openIssues=i.data||[],due=e.data||[];const alerts=[];reads=new Set((r.data||[]).map(v=>v.alert_key));for(const x of openIssues)alerts.push({key:'issue:'+x.id,kind:'issue',title:x.title,text:x.branch+' · '+(x.category_name||x.category)+' · '+(x.employee_name||x.created_by),body:x.description});for(const x of due)if(x.expiry_date&&!x.resolved_at&&!x.no_expiry&&x.active!==false&&reminderDate(x.expiry_date)<=today())alerts.push({key:'expiry:'+x.id+':'+x.expiry_date,kind:'expiry',title:x.product_name,text:x.branch+' · '+x.expiry_date,body:expiryState(x)});showAlerts(alerts.filter(x=>!reads.has(x.key)));}catch(error){/* Forms display installation errors. A missing optional table must not block existing pages. */}finally{busy=false}}
+ function showAlerts(alerts){if(window.ndNotifications){void window.ndNotifications.poll();return;}alerts=alerts.filter(a=>Number(localStorage.getItem('nd-ops-snooze:'+user.id+':'+a.key)||0)<=Date.now());if(!alerts.length||!owner())return;const d=modal('ndOperationsAlertDialog');if(d.open)return;d.innerHTML='<h3>Management Notifications</h3><p>New unresolved issues and products approaching expiry.</p><div>'+alerts.map(a=>'<article class="nd-ops-record"><span class="nd-ops-tag">'+(a.kind==='issue'?'Unresolved Issue':'Product Expiry')+'</span><h4>'+esc(a.title)+'</h4><small>'+esc(a.text)+'</small><p>'+esc(a.body)+'</p></article>').join('')+'</div><div class="nd-ops-actions"><button class="btn" data-ack type="button">I Understand</button><button class="btn" data-snooze type="button">Remind Me in 3 Hours</button></div><p role="status"></p>';
  d.querySelector('[data-ack]').onclick=async event=>{const button=event.currentTarget;button.disabled=true;try{const result=await db().from('nd_ops_alert_reads').upsert(alerts.map(a=>({user_id:user.id,alert_key:a.key})),{onConflict:'user_id,alert_key'});if(result.error)throw result.error;for(const a of alerts)reads.add(a.key);d.close();}catch(e){d.querySelector('[role=status]').textContent='Unable to save acknowledgement: '+e.message;button.disabled=false}};
- d.querySelector('[data-review-issues]').onclick=()=>{d.close();$('sidebarRecords')?.click();$('ndAdvanceHistoryBtn')?.click();};d.querySelector('[data-review-expiry]').onclick=()=>{d.close();window.showOrders?.();$('ordersInventoryBtn')?.click();};d.showModal();}
+ d.querySelector('[data-snooze]').onclick=()=>{for(const a of alerts)localStorage.setItem('nd-ops-snooze:'+user.id+':'+a.key,String(Date.now()+10800000));d.close();};d.showModal();}
  function moveOrderFilters(mode){const map={monthly:'ordersMonthlyPanel',manage:'ordersManagePanel',loan:'ordersLoanPanel',inventory:'ordersInventoryPanel',total:'ordersTotalPanel',staff:'ordersStaffStockPanel',transfer:'ordersTransferPanel',channels:'ordersChannelsPanel'},panel=$(map[mode]);if(!panel)return;let holder=panel.querySelector('.nd-panel-filters');if(!holder){holder=document.createElement('div');holder.className='nd-panel-filters';panel.prepend(holder);}const branch=$('ordersBranch')?.closest('.field'),month=$('ordersMonth')?.closest('.field'),add=$('ordersAddBranchBtn');if(branch){holder.append(branch);branch.hidden=['channels','transfer','total'].includes(mode);}if(month){holder.append(month);month.hidden=!['monthly','manage','total'].includes(mode);}if(add){holder.append(add);add.hidden=mode!=='inventory';}if(mode==='transfer'){void loadTransferOutlets();}if(mode==='loan'){const old=$('loanBranchPickerWrap');if(old)old.hidden=true;}holder.hidden=mode==='channels'||mode==='transfer';if(mode==='inventory'){ensureExpiryPanel();void refreshExpiry();}}
  function setup(){const nav=$('ndAdvanceHistoryBtn');if(nav)nav.addEventListener('click',()=>void openIssues());for(const id of ['ndAdvanceBtn','ndDeductionsBtn','ndStaffPerformanceBtn'])$(id)?.addEventListener('click',()=>{if($('ndIssuesPanel'))$('ndIssuesPanel').hidden=true;});
  const modes={ordersMonthlyBtn:'monthly',ordersManageBtn:'manage',ordersLoanBtn:'loan',ordersInventoryBtn:'inventory',ordersTotalQtyBtn:'total',ordersStaffStockBtn:'staff',ordersTransferBtn:'transfer',ordersChannelsBtn:'channels'};for(const [id,mode]of Object.entries(modes))$(id)?.addEventListener('click',()=>moveOrderFilters(mode));$('ordersBranch')?.addEventListener('change',()=>{renderExpiry();});
@@ -32735,7 +32508,7 @@ function recordsMarkup(rows){rows=rows.filter(r=>!r.nd_deleted_at);return '<div 
 renderWorkingOrders=async function(){const token=++seq,root=$('orderWorkingList');try{const rows=await orderRows();if(token!==seq)return;const selected=$('ndOrderStateFilter')?.value||'Not Ordered',shown=rows.filter(r=>String(r.month_key)===ordersMonth()&&(selected==='all'||r.status===selected));root.innerHTML=recordsMarkup(shown);}catch(error){if(token===seq)root.textContent='Unable to load orders: '+error.message;}};
 renderMonthlyOrders=async function(){const request=++monthlySeq,scope=ordersBranch()+'|'+ordersMonth(),root=$('ordersMonthlyBody'),head=$('ordersMonthlyHead');try{const [working,legacy]=await Promise.all([orderRows(),all(()=>{let q=ordersDb().from('order_submissions').select('*').eq('month_key',ordersMonth()).order('submitted_at',{ascending:false}).order('id',{ascending:false});if(!ordersIsAllBranches())q=q.eq('branch',ordersBranch());return q;})]);if(request!==monthlySeq||scope!==ordersBranch()+'|'+ordersMonth())return;const ids=new Set(working.map(r=>String(r.id)));let rows=[...working.filter(r=>r.month_key===ordersMonth()),...legacy.filter(r=>!ids.has(String(r.source_working_id||String(r.po_number||'').match(/-(\d+)$/)?.[1]||''))).map(r=>({...r,__legacy:true}))];const query=String($('ordersMonthlySearch').value||'').toLowerCase().trim();if(query)rows=rows.filter(r=>[r.product_name,r.brand,r.branch].some(v=>String(v||'').toLowerCase().includes(query)));if(window.ndBrandStockRows)rows=window.ndBrandStockRows('ordersMonthlyBody',rows,renderMonthlyOrders);head.innerHTML='<tr><th>Date</th><th>Branch</th><th>Brand</th><th>Product</th><th>Qty</th><th>Status</th><th>Action</th></tr>';const temp=document.createElement('div');temp.innerHTML=recordsMarkup(rows);root.innerHTML=temp.querySelector('tbody').innerHTML;}catch(error){if(request!==monthlySeq||scope!==ordersBranch()+'|'+ordersMonth())return;root.innerHTML='<tr><td colspan="7">'+esc(error.message)+'</td></tr>';}};
 markOrdered=async function(id){const r=await ordersDb().rpc('nd_order_mark_ordered',{p_id:String(id)});if(r.error)throw r.error;await Promise.all([renderWorkingOrders(),renderMonthlyOrders()]);setOrdersMode('arrival');};
-confirmArrival=async function(id){const d=dialog('ndOrderArrivalDialog','Confirm Arrival');d.querySelector('[data-content]').innerHTML='<form><label>Expiry *<select id="ndArrivalExpiry" required><option value="">Select expiry option</option><option value="date">Expiry Date</option><option value="none">No Expiry</option></select></label><label>Expiry Date<input id="ndArrivalDate" type="date" disabled></label><button class="btn" type="submit">Receive Stock</button></form>';const form=d.querySelector('form'),choice=$('ndArrivalExpiry'),date=$('ndArrivalDate');choice.onchange=()=>{date.disabled=choice.value!=='date';date.required=choice.value==='date';if(date.disabled)date.value='';};form.onsubmit=async event=>{event.preventDefault();if(!form.reportValidity())return;const button=form.querySelector('button');if(button.disabled)return;button.disabled=true;try{const r=await ordersDb().rpc('nd_order_arrival',{p_id:String(id),p_no_expiry:choice.value==='none',p_expiry:choice.value==='date'?date.value:null});if(r.error)throw r.error;d.close();await Promise.all([renderWorkingOrders(),renderMonthlyOrders(),renderInventory()]);window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));window.ndOps?.refreshExpiry();void window.ndRenderStockArrivals?.();}catch(error){d.querySelector('[role=status]').textContent=error.message;button.disabled=false;}};d.showModal();};
+confirmArrival=async function(id){const d=dialog('ndOrderArrivalDialog','Confirm Arrival');d.querySelector('[data-content]').innerHTML='<form><label>Expiry *<select id="ndArrivalExpiry" required><option value="date" selected>Expiry Date</option><option value="none">No Expiry</option></select></label><label>Expiry Date<input id="ndArrivalDate" type="date" required></label><button class="btn" type="submit">Receive Stock</button></form>';const form=d.querySelector('form'),choice=$('ndArrivalExpiry'),date=$('ndArrivalDate');choice.onchange=()=>{date.disabled=choice.value!=='date';date.required=choice.value==='date';if(date.disabled)date.value='';};form.onsubmit=async event=>{event.preventDefault();if(!form.reportValidity())return;const button=form.querySelector('button');if(button.disabled)return;button.disabled=true;try{const r=await ordersDb().rpc('nd_order_arrival',{p_id:String(id),p_no_expiry:choice.value==='none',p_expiry:choice.value==='date'?date.value:null});if(r.error)throw r.error;d.close();await Promise.all([renderWorkingOrders(),renderMonthlyOrders(),renderInventory()]);window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));window.ndOps?.refreshExpiry();void window.ndRenderStockArrivals?.();}catch(error){d.querySelector('[role=status]').textContent=error.message;button.disabled=false;}};d.showModal();};
 const originalLoad=loadOrderCustomProducts;
 loadOrderCustomProducts=async function(){await originalLoad();const overrides=await all(()=>ordersDb().from('nd_order_product_overrides').select('*').order('sku_id'));for(const o of overrides){const p=catalog().find(p=>String(p.sku_id)===o.sku_id);if(p)Object.assign(p,{product_name:o.product_name,brand:o.brand,category:o.category,price:Number(o.price),discontinued:o.discontinued===true});}window.dispatchEvent(new CustomEvent('nd-product-catalog-changed'));fillChannels();};
 function fillChannels(){const select=$('ndChannelProduct');if(!select||select.tagName!=='SELECT')return;const value=select.value;select.replaceChildren(new Option('Select existing product',''));const groups=new Map();for(const p of catalog()){const b=p.brand||'Unbranded';if(!groups.has(b)){const g=document.createElement('optgroup');g.label=b;groups.set(b,g);select.append(g);}groups.get(b).append(new Option(p.product_name,String(p.sku_id)));}select.value=value;}
@@ -33151,17 +32924,18 @@ function record(items){const intendedUser=user?.id;const task=mutation.then(asyn
 async function update(n,patch){const r=await database().from('nd_notifications').update(patch).eq('id',n.id).eq('user_id',user.id);if(r.error)throw r.error;Object.assign(n,patch);const cached=rows.find(x=>x.id===n.id);if(cached)Object.assign(cached,patch);draw();}
 function active(n){if(n.resolved_at||!allowed(n))return false;if(n.kind==='birthday'&&n.payload?.date!==today())return false;return true;}
 function pending(n){return n.kind!=='topup'&&active(n)&&!n.read_at&&(!n.snoozed_until||Date.parse(n.snoozed_until)<=Date.now());}
+function messageFor(n){if(n.kind==='expiry'&&n.payload?.expiry_date){const date=n.payload.expiry_date;return (date<today()?'This product has expired.\nExpired on ':date===today()?'This product expires today.\nExpiry date: ':'This product expires within 3 months.\nExpiry date: ')+date;}return n.message||'';}
 function makePopup(){let d=$('ndNotificationPopup');if(!d){d=document.createElement('dialog');d.id='ndNotificationPopup';d.className='nd-notification-dialog';document.body.append(d);}return d;}
 async function finish(n,snooze=false){await update(n,snooze?{snoozed_until:new Date(Date.now()+10800000).toISOString()}:{read_at:new Date().toISOString(),snoozed_until:null});current=null;($('ndBirthdayPopup')?.open?$('ndBirthdayPopup'):$('ndNotificationPopup'))?.close();setTimeout(()=>void pump(),0);}
 async function pump(){if(pumping||document.hidden||current||!user||document.querySelector('dialog[open],#ndPettyGlobalAck.nd-show'))return;pumping=true;try{const n=rows.find(pending);if(!n)return;current=n;
 const d=n.kind==='birthday'?($('ndBirthdayPopup')||(()=>{const x=document.createElement('dialog');x.id='ndBirthdayPopup';x.className='nd-ops-dialog';document.body.append(x);return x;})()):makePopup();
-if(n.kind==='birthday'&&window.ndBirthdayCardMarkup)d.innerHTML=window.ndBirthdayCardMarkup([n.payload.employee]);else{const performance=n.kind==='performance';d.innerHTML='<header class="nd-n-hero"><small>NATURE’S DAO</small><h2>'+(performance?'Congratulations!':esc(n.title))+'</h2></header><div class="nd-n-body">'+(performance?'<h3>'+esc(n.payload.nickname||n.payload.name)+'</h3>':'')+'<p>'+esc(n.message).replace(/\n/g,'<br>')+'</p>'+(['performance','bank'].includes(n.kind)?'<div class="nd-n-amount">'+money(n.payload.amount)+'</div>':'')+'<small>'+esc(n.branch)+'</small><div class="nd-n-actions">'+(n.kind==='task'?'<button class="btn primary" data-n-task>Open Task</button>':'')+(n.kind==='bank'?'<button class="btn primary" data-n-receipt>View Receipt & Verify</button>':'')+'<button class="btn" data-n-ack>I Understand</button><button class="btn" data-n-snooze>Remind Me in 3 Hours</button><button class="btn" data-n-history>All Notifications</button></div><p role="status"></p></div>';}
+if(n.kind==='birthday'&&window.ndBirthdayCardMarkup)d.innerHTML=window.ndBirthdayCardMarkup([n.payload.employee]);else{const performance=n.kind==='performance';d.innerHTML='<header class="nd-n-hero"><small>NATURE’S DAO</small><h2>'+(performance?'Congratulations!':esc(n.title))+'</h2></header><div class="nd-n-body">'+(performance?'<h3>'+esc(n.payload.nickname||n.payload.name)+'</h3>':'')+'<p>'+esc(messageFor(n)).replace(/\n/g,'<br>')+'</p>'+(['performance','bank'].includes(n.kind)?'<div class="nd-n-amount">'+money(n.payload.amount)+'</div>':'')+'<small>'+esc(n.branch)+'</small><div class="nd-n-actions">'+(n.kind==='task'?'<button class="btn primary" data-n-task>Open Task</button>':'')+(n.kind==='bank'?'<button class="btn primary" data-n-receipt>View Receipt & Verify</button>':'')+'<button class="btn" data-n-ack>I Understand</button><button class="btn" data-n-snooze>Remind Me in 3 Hours</button>'+(['issue','expiry'].includes(n.kind)?'':'<button class="btn" data-n-history>All Notifications</button>')+'</div><p role="status"></p></div>';}
 d.querySelector('[data-birthday-ack],[data-n-ack]')?.addEventListener('click',()=>void operate(()=>finish(n),d));d.querySelector('[data-birthday-snooze],[data-n-snooze]')?.addEventListener('click',()=>void operate(()=>finish(n,true),d));d.querySelector('[data-n-task]')?.addEventListener('click',()=>void operate(async()=>{await finish(n);await window.ndTasks?.open(n.payload?.task_id);},d));d.querySelector('[data-n-receipt]')?.addEventListener('click',()=>void review(n,d));d.querySelector('[data-n-history]')?.addEventListener('click',()=>{current=null;d.close();open();});d.oncancel=e=>{e.preventDefault();};d.setAttribute('aria-label',n.title);d.showModal();
 }finally{pumping=false;}}
 async function operate(fn,d){const buttons=[...d.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await fn();}catch(e){let msg=d.querySelector('[role=status]');if(!msg){msg=document.createElement('p');msg.setAttribute('role','status');d.append(msg);}msg.textContent=e.message;}finally{buttons.forEach(b=>b.disabled=false);}}
 async function review(n,dialog){if(!ownerOnly)return;await operate(async()=>{const r=await database().from('cash_remittances').select('id,status').eq('id',n.payload.remittance_id).single();if(r.error)throw r.error;if(r.data.status!=='pending'){await update(n,{resolved_at:new Date().toISOString()});current=null;dialog.close();return;}if(!window.ndReviewCashTransfer)throw Error('Receipt review is still loading. Please try again.');await window.ndReviewCashTransfer(n.payload.remittance_id);if(dialog.id==='ndNotificationPopup'){current=null;dialog.close();}},dialog);}
 function status(n){return n.resolved_at?'Completed':n.kind==='bank'?'Pending Verification':n.read_at?'Read':n.snoozed_until&&Date.parse(n.snoozed_until)>Date.now()?'Remind Later':'Unread';}
-function draw(){const count=rows.filter(n=>active(n)&&!n.read_at).length;for(const id of ['ndNotificationsButton','ndAnnouncementNotificationsButton']){const button=$(id);if(button){button.innerHTML='Notifications <span class="nd-notification-count" '+(count?'':'hidden')+'>'+count+'</span>';button.setAttribute('aria-label','Notifications · '+count+' unread');}}const root=$('ndNotificationList');if(!root)return;const filter=$('ndNotificationFilter').value,kind=$('ndNotificationKind').value,show=rows.filter(n=>(filter==='all'||filter==='unread'&&!n.read_at&&!n.resolved_at||filter==='pending'&&active(n)&&!n.resolved_at)&&(kind==='all'||n.kind===kind));root.innerHTML=show.map(n=>'<article class="nd-n-record"><div class="nd-n-record-top"><span>'+esc(n.kind==='task'?'Task':n.kind==='bank'?'Bank Transfer':n.kind==='performance'?'Achievement':n.kind==='expiry'?'Product Expiry':n.kind==='birthday'?'Birthday':n.kind==='topup'?'Petty Cash':'Issue')+'</span><small>'+esc(status(n))+'</small></div><h3>'+esc(n.title)+'</h3><p>'+esc(n.message).replace(/\n/g,'<br>')+'</p>'+(['performance','bank'].includes(n.kind)?'<div class="nd-n-history-amount" style="font-size:22px;font-weight:750;color:#28573f;margin:12px 0">'+money(n.payload.amount)+'</div>':'')+'<small>'+esc(n.branch)+' · '+esc(new Date(n.created_at).toLocaleString('en-GB',{timeZone:'Asia/Kuala_Lumpur'}))+'</small><div class="nd-n-actions">'+(n.kind==='task'?'<button class="btn" data-open-task="'+esc(n.payload?.task_id||'')+'">Open Task</button>':'')+(n.kind==='bank'&&!n.resolved_at&&ownerOnly?'<button class="btn primary" data-review-notification="'+esc(n.id)+'">View Receipt & Verify</button>':'')+(!n.read_at&&!n.resolved_at?'<button class="btn" data-read-notification="'+esc(n.id)+'">I Understand</button>':'')+'</div></article>').join('')||'<p class="nd-n-empty">No notifications for this selection.</p>';$('ndNotificationState').textContent=lastError||[...sourceErrors.values()].join(' · ');}
+function draw(){const count=rows.filter(n=>active(n)&&!n.read_at).length;for(const id of ['ndNotificationsButton','ndAnnouncementNotificationsButton']){const button=$(id);if(button){button.innerHTML='Notifications <span class="nd-notification-count" '+(count?'':'hidden')+'>'+count+'</span>';button.setAttribute('aria-label','Notifications · '+count+' unread');}}const root=$('ndNotificationList');if(!root)return;const filter=$('ndNotificationFilter').value,kind=$('ndNotificationKind').value,show=rows.filter(n=>(filter==='all'||filter==='unread'&&!n.read_at&&!n.resolved_at||filter==='pending'&&active(n)&&!n.resolved_at)&&(kind==='all'||n.kind===kind));root.innerHTML=show.map(n=>'<article class="nd-n-record"><div class="nd-n-record-top"><span>'+esc(n.kind==='task'?'Task':n.kind==='bank'?'Bank Transfer':n.kind==='performance'?'Achievement':n.kind==='expiry'?'Product Expiry':n.kind==='birthday'?'Birthday':n.kind==='topup'?'Petty Cash':'Issue')+'</span><small>'+esc(status(n))+'</small></div><h3>'+esc(n.title)+'</h3><p>'+esc(messageFor(n)).replace(/\n/g,'<br>')+'</p>'+(['performance','bank'].includes(n.kind)?'<div class="nd-n-history-amount" style="font-size:22px;font-weight:750;color:#28573f;margin:12px 0">'+money(n.payload.amount)+'</div>':'')+'<small>'+esc(n.branch)+' · '+esc(new Date(n.created_at).toLocaleString('en-GB',{timeZone:'Asia/Kuala_Lumpur'}))+'</small><div class="nd-n-actions">'+(n.kind==='task'?'<button class="btn" data-open-task="'+esc(n.payload?.task_id||'')+'">Open Task</button>':'')+(n.kind==='bank'&&!n.resolved_at&&ownerOnly?'<button class="btn primary" data-review-notification="'+esc(n.id)+'">View Receipt & Verify</button>':'')+(!n.read_at&&!n.resolved_at?'<button class="btn" data-read-notification="'+esc(n.id)+'">I Understand</button>':'')+'</div></article>').join('')||'<p class="nd-n-empty">No notifications for this selection.</p>';$('ndNotificationState').textContent=lastError||[...sourceErrors.values()].join(' · ');}
 async function open(){let d=$('ndNotificationsPage');if(!d){d=document.createElement('dialog');d.id='ndNotificationsPage';d.innerHTML='<div class="nd-n-page-shell"><header class="nd-n-page-head"><div><small>NATURE’S DAO</small><h1>Notifications</h1></div><button class="btn" data-close>Close</button></header><div class="nd-n-filters"><select id="ndNotificationFilter"><option value="all">All History</option><option value="unread">Unread</option><option value="pending">Active Reminders</option></select><select id="ndNotificationKind"><option value="all">All Types</option><option value="birthday">Birthday</option><option value="performance">Achievements</option><option value="expiry">Product Expiry</option><option value="bank">Bank Transfer</option><option value="issue">Issues</option><option value="topup">Petty Cash</option><option value="task">Tasks</option></select><button class="btn" data-refresh>Refresh</button></div><p id="ndNotificationState" role="status"></p><div id="ndNotificationList"></div></div>';document.body.append(d);d.querySelector('[data-close]').onclick=()=>d.close();d.querySelector('[data-refresh]').onclick=()=>void poll(true);d.querySelectorAll('select').forEach(s=>s.onchange=draw);d.addEventListener('click',e=>{const taskButton=e.target.closest('[data-open-task]');if(taskButton){d.close();void window.ndTasks?.open(taskButton.dataset.openTask);return;}const reviewButton=e.target.closest('[data-review-notification]'),readButton=e.target.closest('[data-read-notification]'),n=rows.find(n=>n.id===(reviewButton?.dataset.reviewNotification||readButton?.dataset.readNotification));if(!n)return;if(reviewButton)void review(n,d);if(readButton)void operate(()=>update(n,{read_at:new Date().toISOString(),snoozed_until:null}),d);});}if(!d.open)d.showModal();draw();await poll(true);}
 async function birthdays(people){const date=today();await record(people.map(e=>({read_at:e.__nd_local_read?new Date().toISOString():null,snoozed_until:e.__nd_local_snooze>Date.now()?new Date(e.__nd_local_snooze).toISOString():null,event_key:'birthday:'+e.id+':'+date,kind:'birthday',title:'Happy Birthday · '+(e.nickname||e.name),message:(e.nickname||e.name)+' · '+e.outlet+' · '+date,branch:e.outlet||'',payload:{date,employee:e}})));}
 function awards(salesRows,rosterRows,staff,cfg,branch,date,weeklySettings){const first=date.slice(0,7)+'-01',origin='2026-10-08',sales=new Map(),overrides=new Map(),people=new Map(),matches=new Map(),week=new Map();for(const s of salesRows)sales.set(s.settlement_date,(sales.get(s.settlement_date)||0)+Number(s.grand_total||0));for(const r of rosterRows)if(r.staff_name)overrides.set(r.work_date,r.staff_name);for(const e of staff)for(const n of [e.name,e.full_name,e.nickname,e.staff_name])if(norm(n))matches.set(norm(n),e);
@@ -33171,7 +32945,7 @@ const out=[];for(const p of people.values())for(const [w,hits]of p.hits)if(hits>
 async function performance(){const db=database(),date=today(),first=date.slice(0,7)+'-01',branchRows=await all(()=>db.from('daily_outlets').select('name').eq('is_active',true).order('name')),names=new Set([user.email,user.user_metadata?.name,user.user_metadata?.full_name].map(norm).filter(Boolean));const profile=await db.from('salary_manager_profiles').select('name').eq('email',String(user.email).toLowerCase()).limit(1);for(const p of profile.data||[])if(p.name)names.add(norm(p.name));const duty=await db.from('nd_salary_duty_access').select('staff_name').eq('email',String(user.email).toLowerCase()).limit(1000);for(const d of duty.data||[])if(d.staff_name)names.add(norm(d.staff_name));const events=[];
 for(const b of branchRows.map(r=>r.name).filter(n=>n&&n!=='Global')){let cfg={daily_target:4000,required_days:4,weekly_bonus:388,monthly_target:100000,monthly_pool:1888};try{cfg={...cfg,...JSON.parse(localStorage.getItem('nd_target_bonus_settings_v1_'+b)||'{}')};}catch(_){}const [s,r,e,c]=await Promise.all([all(()=>db.from('daily_settlements').select('settlement_date,grand_total').eq('branch',b).gte('settlement_date',first).lte('settlement_date',date).order('settlement_date')),all(()=>db.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',b).gte('work_date',first).lte('work_date',date).order('work_date')),all(()=>db.from('employees').select('*').eq('outlet',b).order('id')),db.from('roster_outlet_settings').select('weekly_names').eq('outlet_name',b).maybeSingle()]);if(c.error)throw c.error;for(const a of awards(s,r,e,cfg,b,date,c.data?c.data.weekly_names||{}:null)){if(!ownerOnly&&!a.aliases.some(n=>names.has(norm(n))))continue;events.push({event_key:'performance:'+b+':'+a.tier+':'+a.period+':'+a.employee_id,kind:'performance',title:'Congratulations · '+a.nickname,message:a.tier==='weekly'?'Weekly target achieved! '+a.hits+' qualifying days.':'Monthly target achieved! Bonus pool '+money(a.pool)+'. Your share when the target was reached is shown below.',branch:b,payload:{...a,date}});}}
 await record(events);}
-async function management(){if(!ownerOnly)return;const db=database(),date=today(),queries=[['expiry',()=>db.from('nd_product_expiry').select('*').eq('active',true).eq('no_expiry',false).lte('expiry_date',expiryLimit(date)).order('id')],['bank',()=>db.from('cash_remittances').select('*').eq('status','pending').order('id')],['issue',()=>db.from('nd_ops_issues').select('*').neq('status','resolved').order('id')]],results=await Promise.allSettled(queries.map(([,make])=>all(make))),events=[],successful=new Set();for(let i=0;i<results.length;i++){const result=results[i],kind=queries[i][0];if(result.status==='rejected'){sourceErrors.set(kind,kind+' reminders: '+result.reason.message);continue;}sourceErrors.delete(kind);successful.add(kind);for(const x of result.value){if(kind==='expiry'&&x.expiry_date&&monthAdd(x.expiry_date,-3)<=date)events.push({event_key:'expiry:'+x.id+':'+x.expiry_date,kind:'expiry',title:x.product_name,message:(x.expiry_date<date?'Expired: ':'Expiry date: ')+x.expiry_date+'\nBatch: '+(x.batch_label||''),branch:x.branch||'',payload:{expiry_id:x.id,expiry_date:x.expiry_date}});if(kind==='bank')events.push({event_key:'bank:'+x.id,kind:'bank',title:'Cash Transfer to Bank',message:'A deposit is waiting for receipt verification.',branch:x.branch||'',payload:{remittance_id:x.id,amount:Number(x.amount),date:x.remittance_date}});if(kind==='issue')events.push({event_key:'issue:'+x.id,kind:'issue',title:x.title||'Unresolved Issue',message:x.description||'',branch:x.branch||'',payload:{issue_id:x.id}});}}await record(events);const due=new Set(events.map(n=>n.event_key));for(const n of rows.filter(n=>successful.has(n.kind)&&!n.resolved_at&&!due.has(n.event_key)))await update(n,{resolved_at:new Date().toISOString()});}
+async function management(){if(!ownerOnly)return;const db=database(),date=today(),queries=[['expiry',()=>db.from('nd_product_expiry').select('*').eq('active',true).eq('no_expiry',false).lte('expiry_date',expiryLimit(date)).order('id')],['bank',()=>db.from('cash_remittances').select('*').eq('status','pending').order('id')],['issue',()=>db.from('nd_ops_issues').select('*').neq('status','resolved').order('id')]],results=await Promise.allSettled(queries.map(([,make])=>all(make))),events=[],successful=new Set();for(let i=0;i<results.length;i++){const result=results[i],kind=queries[i][0];if(result.status==='rejected'){sourceErrors.set(kind,kind+' reminders: '+result.reason.message);continue;}sourceErrors.delete(kind);successful.add(kind);for(const x of result.value){if(kind==='expiry'&&!x.resolved_at&&x.expiry_date&&monthAdd(x.expiry_date,-3)<=date)events.push({event_key:'expiry:'+x.id+':'+x.expiry_date,kind:'expiry',title:x.product_name,message:(x.expiry_date<date?'This product has expired. Expired on ':'Expiry date: ')+x.expiry_date,branch:x.branch||'',payload:{expiry_id:x.id,expiry_date:x.expiry_date}});if(kind==='bank')events.push({event_key:'bank:'+x.id,kind:'bank',title:'Cash Transfer to Bank',message:'A deposit is waiting for receipt verification.',branch:x.branch||'',payload:{remittance_id:x.id,amount:Number(x.amount),date:x.remittance_date}});if(kind==='issue')events.push({event_key:'issue:'+x.id,kind:'issue',title:x.title||'Unresolved Issue',message:x.description||'',branch:x.branch||'',payload:{issue_id:x.id}});}}await record(events);const due=new Set(events.map(n=>n.event_key));for(const n of rows.filter(n=>successful.has(n.kind)&&!n.resolved_at&&!due.has(n.event_key)))await update(n,{resolved_at:new Date().toISOString()});}
 async function setStateByKey(key,patch){const task=mutation.then(async()=>{if(!await auth())return;const n=rows.find(n=>n.event_key===key);if(n)await update(n,patch);});mutation=task.catch(()=>{});return task;}
 
 async function poll(force=false){if(loading){pollAgain=true;return;}if(document.hidden||!await auth())return;loading=true;try{await read();lastError='';if(ownerOnly)try{await management();sourceErrors.delete('management');}catch(e){sourceErrors.set('management','Management reminders: '+e.message);}if(force||Date.now()-performanceAt>300000)try{await performance();performanceAt=Date.now();sourceErrors.delete('performance');}catch(e){sourceErrors.set('performance','Achievements: '+e.message);}draw();}catch(e){lastError='Unable to load notifications: '+e.message;draw();}finally{loading=false;if(pollAgain){pollAgain=false;setTimeout(()=>void poll(true),0);}else void pump();}}
@@ -33286,7 +33060,7 @@ async function load(outlet,date){
  }catch(e){if(token!==seq||key!==contextKey())return;pending=false;error='Salary budget unavailable: '+e.message;apply();const state=document.getElementById('settlementMonthState');if(state)state.textContent=error;}
 }
 window.ndPayrollBudget={load,invalidate,apply,assertReady(){if(pending||error||loadedKey!==contextKey()||!values)throw Error(error||'Wait for the selected month’s salary budget to finish loading.');},get values(){return values;}};
-const start=()=>{const form=document.getElementById('settlementExpenseForm');if(form)new MutationObserver(apply).observe(form,{childList:true,subtree:true});apply();};
+const start=()=>{const form=document.getElementById('settlementExpenseForm');if(form)new MutationObserver(records=>{if(records.some(r=>[...r.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('[data-report-budget]')||n.querySelector?.('[data-report-budget]')))))apply();}).observe(form,{childList:true,subtree:true});apply();};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
 
@@ -33330,6 +33104,21 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  document.addEventListener('change',event=>{if(event.target.closest?.('#empFixedRestWeekday')||event.target.id==='empJoinDate')sync('empFixedRestWeekday','empJoinDate','empOffDays');if(event.target.closest?.('#editEmpFixedRestWeekday')||event.target.id==='editEmpJoinDate')sync('editEmpFixedRestWeekday','editEmpJoinDate','editEmpOffDays');});
 })();
 </script>
+<style id="nd-expiry-history-style">#ndExpiryHistoryDialog{width:min(900px,calc(100vw - 24px));max-height:88dvh;overflow:auto;box-sizing:border-box}#ndExpiryHistoryDialog .outlet-title{display:flex;justify-content:space-between;align-items:center;gap:12px}.nd-expiry-history-filters{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}.nd-expiry-history-filters input{flex:1;min-width:150px}.nd-expired-product{padding:20px;border:1px solid #e4e7e3;background:#fff;border-radius:16px;margin:12px 0}.nd-expired-heading{display:flex;justify-content:space-between;gap:14px;align-items:start}.nd-expired-heading h3{margin:5px 0;font-size:18px;overflow-wrap:anywhere}.nd-expired-status{font-size:12px;padding:6px 10px;border-radius:99px;background:#fce8e5;color:#a33528;white-space:nowrap}.nd-expired-status.resolved{background:#e5f1e8;color:#256145}.nd-expired-actions{margin-top:14px}</style>
+<script id="nd-inventory-expiry-history">
+(()=>{'use strict';
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),db=()=>window.salaryDb;
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+let rows=[],seq=0;
+async function load(){const token=++seq,root=$('ndExpiryHistoryRecords');if(!root)return;root.textContent='Loading expiry history…';try{const result=[],account=await db().auth.getUser();if(account.error||!account.data?.user)throw Error('Please sign in.');const uid=account.data.user.id;for(let offset=0;;offset+=500){const r=await db().from('nd_product_expiry').select('*').eq('no_expiry',false).lt('expiry_date',today()).order('expiry_date',{ascending:false}).order('id').range(offset,offset+499);if(r.error)throw r.error;result.push(...(r.data||[]));if((r.data||[]).length<500)break;}const current=await db().auth.getUser();if(token!==seq||current.data?.user?.id!==uid)return;rows=result;draw();$('ndExpiryHistoryStatus').textContent='';}catch(error){if(token===seq){rows=[];root.replaceChildren();$('ndExpiryHistoryStatus').textContent='Unable to load expiry history: '+error.message;}}}
+function draw(){const root=$('ndExpiryHistoryRecords');if(!root)return;const state=$('ndExpiryHistoryFilter').value,query=$('ndExpiryHistorySearch').value.trim().toLowerCase(),shown=rows.filter(r=>(state==='all'||(state==='resolved')===Boolean(r.resolved_at))&&[r.product_name,r.brand,r.branch].join(' ').toLowerCase().includes(query));root.innerHTML=shown.map(r=>'<article class="nd-expired-product"><div class="nd-expired-heading"><div><small>'+esc(r.brand)+'</small><h3>'+esc(r.product_name)+'</h3></div><span class="nd-expired-status '+(r.resolved_at?'resolved':'')+'">'+(r.resolved_at?'Resolved':'Unresolved')+'</span></div><p>'+esc(r.branch)+' · Expired '+esc(r.expiry_date)+'</p>'+(r.resolved_at?'<small>Resolved by '+esc(r.resolved_by||'—')+'</small>':'')+'<div class="nd-expired-actions"><button type="button" class="btn" data-expiry-resolve="'+esc(r.id)+'" data-resolved="'+!r.resolved_at+'">Mark '+(r.resolved_at?'Unresolved':'Resolved')+'</button></div></article>').join('')||'<p class="helper">No expired products for this selection.</p>';}
+async function setStatus(button){if(button.disabled)return;button.disabled=true;$('ndExpiryHistoryStatus').textContent='';const id=button.dataset.expiryResolve,target=button.dataset.resolved==='true';try{const r=await db().rpc('nd_product_expiry_set_resolved',{p_expiry_id:id,p_resolved:target});if(r.error)throw r.error;const index=rows.findIndex(r=>String(r.id)===id);if(index>=0)rows[index]=r.data;draw();void window.ndNotifications?.poll(true);void window.ndOps?.refreshExpiry();}catch(error){$('ndExpiryHistoryStatus').textContent='Unable to update: '+error.message;button.disabled=false;}}
+async function open(){let d=$('ndExpiryHistoryDialog');if(!d){d=document.createElement('dialog');d.id='ndExpiryHistoryDialog';d.className='nd-refresh-dialog';d.innerHTML='<header class="outlet-title"><h2>Expiry History</h2><button class="btn" type="button" data-close>Close</button></header><div class="nd-expiry-history-filters"><input id="ndExpiryHistorySearch" type="search" placeholder="Search product / brand / branch" aria-label="Search expiry history"><select id="ndExpiryHistoryFilter" aria-label="Resolution status"><option value="all">All</option><option value="unresolved">Unresolved</option><option value="resolved">Resolved</option></select><button class="btn" data-refresh type="button">Refresh</button></div><p id="ndExpiryHistoryStatus" role="status"></p><div id="ndExpiryHistoryRecords"></div>';document.body.append(d);d.querySelector('[data-close]').onclick=()=>{seq++;d.close();};d.querySelector('[data-refresh]').onclick=()=>void load();$('ndExpiryHistorySearch').oninput=draw;$('ndExpiryHistoryFilter').onchange=draw;d.addEventListener('click',e=>{const button=e.target.closest('[data-expiry-resolve]');if(button)void setStatus(button);});}if(!d.open)d.showModal();await load();}
+function setup(){const menu=$('ndInventoryMenuDialog')?.querySelector('.nd-inventory-menu')||$('ndInventoryMore')?.querySelector('.nd-inventory-menu');if(!menu||$('ndExpiryHistoryBtn'))return;const stock=$('ndStaffStockBtn');if(stock){menu.append(stock);stock.addEventListener('click',()=>{$('ndInventoryMenuDialog')?.close();if($('ndInventoryMore'))$('ndInventoryMore').open=false;});}const button=document.createElement('button');button.id='ndExpiryHistoryBtn';button.type='button';button.className='btn';button.textContent='Expiry History';button.onclick=()=>{$('ndInventoryMenuDialog')?.close();if($('ndInventoryMore'))$('ndInventoryMore').open=false;void open();};menu.append(button);db()?.auth.onAuthStateChange?.(()=>{seq++;rows=[];const d=$('ndExpiryHistoryDialog');if(d){d.close();$('ndExpiryHistoryRecords').replaceChildren();}});}
+window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
@@ -33343,7 +33132,7 @@ const $=id=>document.getElementById(id),esc=ordersEsc,db=()=>window.salaryDb;let
 const all=factory=>window.ndOrdersAll(factory);
 function day(value){if(!value)return '';if(/^\d{4}-\d{2}-\d{2}$/.test(value))return value;const d=new Date(value);if(!Number.isFinite(d.getTime()))return '';const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);return ['year','month','day'].map(k=>p.find(x=>x.type===k).value).join('-');}
 function dialog(id,title){let d=$(id);if(!d){d=document.createElement('dialog');d.id=id;d.className='nd-refresh-dialog';document.body.append(d);}d.innerHTML='<div class="outlet-title"><h3>'+esc(title)+'</h3><button class="btn" type="button" data-close>Close</button></div><div data-body></div><p role="status"></p>';d.querySelector('[data-close]').onclick=()=>d.close();return d;}
-confirmArrival=async function(id){const d=dialog('ndOrderArrivalDialog','Receive Stock');d.showModal();try{const result=await ordersDb().from('order_working_items').select('*').eq('id',id).single();if(result.error)throw result.error;const row=result.data,received=Number(row.received_quantity||(row.status==='Arrived'?row.quantity:0)),remaining=Number(row.quantity)-received;if(row.status!=='Ordered'||remaining<=0)throw Error('This order has no remaining quantity to receive. Refresh arrivals.');d.querySelector('[data-body]').innerHTML='<p><strong>'+esc(row.product_name)+'</strong></p><p>Ordered '+Number(row.quantity)+' · Received '+received+' · Remaining '+remaining+'</p><form><label>Arrival Quantity *<input id="ndArrivalQuantity" type="number" min="1" max="'+remaining+'" step="1" value="'+remaining+'" required></label><label>Expiry *<select id="ndArrivalExpiry" required><option value="">Select expiry option</option><option value="date">Expiry Date</option><option value="none">No Expiry</option></select></label><label>Expiry Date<input id="ndArrivalDate" type="date" disabled></label><button class="btn primary" type="submit">Receive Stock</button></form>';const form=d.querySelector('form'),choice=$('ndArrivalExpiry'),date=$('ndArrivalDate'),qty=$('ndArrivalQuantity');let request=null,payloadKey='';choice.onchange=()=>{date.disabled=choice.value!=='date';date.required=!date.disabled;if(date.disabled)date.value='';};form.onsubmit=async event=>{event.preventDefault();if(!form.reportValidity())return;const quantity=Number(qty.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>remaining){d.querySelector('[role=status]').textContent='Enter a whole quantity from 1 to '+remaining+'.';return;}const button=form.querySelector('button');if(button.disabled)return;button.disabled=true;const payload={p_id:String(id),p_quantity:quantity,p_no_expiry:choice.value==='none',p_expiry:choice.value==='date'?date.value:null},key=JSON.stringify(payload);if(key!==payloadKey){request=crypto.randomUUID();payloadKey=key;}try{const r=await ordersDb().rpc('nd_order_receive_partial',{...payload,p_request:request});if(r.error)throw r.error;d.close();await Promise.all([renderWorkingOrders(),renderMonthlyOrders(),renderInventory(),window.ndRenderStockArrivals?.()]);void window.ndOps?.refreshExpiry();window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));}catch(error){d.querySelector('[role=status]').textContent='Unable to receive stock: '+error.message;}finally{button.disabled=false;}};}catch(error){d.querySelector('[role=status]').textContent=error.message;}};
+confirmArrival=async function(id){const d=dialog('ndOrderArrivalDialog','Receive Stock');d.showModal();try{const result=await ordersDb().from('order_working_items').select('*').eq('id',id).single();if(result.error)throw result.error;const row=result.data,received=Number(row.received_quantity||(row.status==='Arrived'?row.quantity:0)),remaining=Number(row.quantity)-received;if(row.status!=='Ordered'||remaining<=0)throw Error('This order has no remaining quantity to receive. Refresh arrivals.');d.querySelector('[data-body]').innerHTML='<p><strong>'+esc(row.product_name)+'</strong></p><p>Ordered '+Number(row.quantity)+' · Received '+received+' · Remaining '+remaining+'</p><form><label>Arrival Quantity *<input id="ndArrivalQuantity" type="number" min="1" max="'+remaining+'" step="1" value="'+remaining+'" required></label><label>Expiry *<select id="ndArrivalExpiry" required><option value="date" selected>Expiry Date</option><option value="none">No Expiry</option></select></label><label>Expiry Date<input id="ndArrivalDate" type="date" required></label><button class="btn primary" type="submit">Receive Stock</button></form>';const form=d.querySelector('form'),choice=$('ndArrivalExpiry'),date=$('ndArrivalDate'),qty=$('ndArrivalQuantity');let request=null,payloadKey='';choice.onchange=()=>{date.disabled=choice.value!=='date';date.required=!date.disabled;if(date.disabled)date.value='';};form.onsubmit=async event=>{event.preventDefault();if(!form.reportValidity())return;const quantity=Number(qty.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>remaining){d.querySelector('[role=status]').textContent='Enter a whole quantity from 1 to '+remaining+'.';return;}const button=form.querySelector('button');if(button.disabled)return;button.disabled=true;const payload={p_id:String(id),p_quantity:quantity,p_no_expiry:choice.value==='none',p_expiry:choice.value==='date'?date.value:null},key=JSON.stringify(payload);if(key!==payloadKey){request=crypto.randomUUID();payloadKey=key;}try{const r=await ordersDb().rpc('nd_order_receive_partial',{...payload,p_request:request});if(r.error)throw r.error;d.close();await Promise.all([renderWorkingOrders(),renderMonthlyOrders(),renderInventory(),window.ndRenderStockArrivals?.()]);void window.ndOps?.refreshExpiry();window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));}catch(error){d.querySelector('[role=status]').textContent='Unable to receive stock: '+error.message;}finally{button.disabled=false;}};}catch(error){d.querySelector('[role=status]').textContent=error.message;}};
 let arrivalSeq=0;
 window.ndRenderStockArrivals=async function(){const seq=++arrivalSeq,branch=ordersBranch(),root=$('ndStockArrivalsList');if(!root)return;root.textContent='Loading arrivals…';try{const rows=await all(()=>{let q=ordersDb().from('order_working_items').select('*').in('status',['Ordered','Arrived']).order('created_at',{ascending:false});return branch==='__ALL__'?q:q.eq('branch',branch);});if(seq!==arrivalSeq||branch!==ordersBranch())return;const received=$('ndStockArrivalsFilter').value==='Arrived';if(!received){root.innerHTML='<div class="orders-list-wrap"><table class="orders-table"><thead><tr><th>Branch</th><th>Product</th><th>Received / Ordered</th><th>Remaining</th><th>Action</th></tr></thead><tbody>'+rows.filter(r=>r.status==='Ordered').map(r=>'<tr><td>'+esc(r.branch)+'</td><td>'+esc(r.product_name)+'</td><td>'+Number(r.received_quantity||0)+' / '+Number(r.quantity)+'</td><td>'+Math.max(0,Number(r.quantity)-Number(r.received_quantity||0))+'</td><td><button class="btn" data-order-action="arrive" data-order-id="'+esc(r.id)+'">Receive Stock</button></td></tr>').join('')+'</tbody></table></div>';if(!rows.some(r=>r.status==='Ordered'))root.textContent='No orders awaiting arrival.';return;}
 const receipts=await all(()=>{let q=ordersDb().from('nd_order_receipts').select('*').order('created_at',{ascending:false});return branch==='__ALL__'?q:q.eq('branch',branch);});if(seq!==arrivalSeq||branch!==ordersBranch())return;const represented=new Set(receipts.map(r=>String(r.order_id))),history=[...receipts,...rows.filter(r=>r.status==='Arrived'&&!represented.has(String(r.id))).map(r=>({...r,received_by_email:r.arrived_by||null,created_at:r.arrived_at||r.created_at,expiry_date:null,no_expiry:null}))].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));root.innerHTML='<div class="orders-list-wrap"><table class="orders-table"><thead><tr><th>Date</th><th>Branch</th><th>Product</th><th>Arrived Quantity</th><th>Expiry</th><th>Received By</th><th>Status</th></tr></thead><tbody>'+history.map(r=>'<tr><td>'+esc(day(r.created_at))+'</td><td>'+esc(r.branch)+'</td><td>'+esc(r.product_name)+'</td><td>'+Number(r.quantity)+'</td><td>'+esc(r.no_expiry===true?'No Expiry':r.expiry_date||'See expiry batches')+'</td><td>'+esc(r.received_by_email||'—')+'</td><td>'+(r.reversed_at?'<span>Reset</span>':'<button class="btn nd-arrived-reset" type="button" data-reset-order="'+esc(r.order_id||r.id)+'" '+(r.request_id?'data-reset-receipt="'+esc(r.request_id)+'"':'')+'>Arrived ↶</button>')+'</td></tr>').join('')+'</tbody></table></div>';if(!history.length)root.textContent='No received stock.';}catch(error){if(seq===arrivalSeq)root.textContent='Unable to load arrivals: '+error.message;}};
@@ -33355,7 +33144,7 @@ renderTransfers=async function(){const seq=++transferSeq;await loadTransferOutle
 async function credit(){const seq=++creditSeq,auth=await db().auth.getUser();if(auth.error||String(auth.data?.user?.email||'').toLowerCase()!=='umo1017@gmail.com')return;const d=dialog('ndCreditDialog','Supplier Credit');d.showModal();const body=d.querySelector('[data-body]');body.innerHTML='<button class="btn" data-new type="button">+ Add Supplier Credit</button><div data-credits></div>';body.querySelector('[data-new]').onclick=()=>editCredit();try{const rows=await all(()=>db().from('nd_supplier_credits').select('*').order('updated_at',{ascending:false}));if(seq!==creditSeq)return;body.querySelector('[data-credits]').innerHTML=rows.map(r=>'<article class="nd-ops-record"><h4>'+esc(r.supplier)+'</h4><p>Credit Limit <strong>RM '+Number(r.credit_limit).toFixed(2)+'</strong></p><p>Amount Due <strong>RM '+Number(r.amount_due).toFixed(2)+'</strong> · Available RM '+Math.max(0,Number(r.credit_limit)-Number(r.amount_due)).toFixed(2)+'</p>'+(r.due_date?'<p>Due '+esc(r.due_date)+'</p>':'')+'<p>'+esc(r.note)+'</p><button class="btn" type="button" data-credit="'+esc(r.id)+'">Edit</button></article>').join('')||'<p>No supplier credits.</p>';body.querySelectorAll('[data-credit]').forEach(b=>b.onclick=()=>editCredit(rows.find(r=>r.id===b.dataset.credit)));}catch(error){d.querySelector('[role=status]').textContent='Unable to load credits: '+error.message;}}
 function editCredit(row={}){const d=dialog('ndCreditEditDialog',row.id?'Edit Supplier Credit':'Add Supplier Credit');d.querySelector('[data-body]').innerHTML='<form><label>Supplier *<input name="supplier" required maxlength="200" value="'+esc(row.supplier||'')+'"></label><label>Credit Limit (RM)<input name="credit_limit" type="number" min="0" step="0.01" required value="'+Number(row.credit_limit||0)+'"></label><label>Amount Due (RM)<input name="amount_due" type="number" min="0" step="0.01" required value="'+Number(row.amount_due||0)+'"></label><label>Due Date<input name="due_date" type="date" value="'+esc(row.due_date||'')+'"></label><label>Note<textarea name="note" maxlength="4000">'+esc(row.note||'')+'</textarea></label><button class="btn primary" type="submit">Save</button></form>';let request=row.id||crypto.randomUUID();d.querySelector('form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,b=f.querySelector('button');if(b.disabled||!f.reportValidity())return;b.disabled=true;try{const payload={id:request,supplier:f.elements.supplier.value.trim(),credit_limit:Number(f.elements.credit_limit.value),amount_due:Number(f.elements.amount_due.value),due_date:f.elements.due_date.value||null,note:f.elements.note.value.trim()},r=await db().from('nd_supplier_credits').upsert(payload,{onConflict:'id'});if(r.error)throw r.error;d.close();await credit();}catch(error){d.querySelector('[role=status]').textContent=error.message;}finally{b.disabled=false;}};d.showModal();}
 function budgets(){const form=$('settlementExpenseForm');if(!form)return;for(const row of form.querySelectorAll('[data-expense-payment-key]')){if(row.querySelector('[data-report-budget]'))continue;const key=row.dataset.expensePaymentKey,cell=document.createElement('div');cell.className='nd-expense-cell nd-expense-budget';const input=document.createElement('input');input.type='number';input.min='0';input.step='0.01';input.inputMode='decimal';input.dataset.reportBudget=key;input.setAttribute('aria-label',key+' budget (RM)');input.placeholder='0.00';input.value=settlementRecord?.budget_amounts?.[key]??'';input.addEventListener('input',budgetTotal);cell.append(input);row.querySelector('.nd-expense-amount')?.before(cell);}const head=form.querySelector('.settlement-expense-head');if(head){const cell=[...head.children].find(c=>c.textContent==='Budget');if(cell)cell.dataset.budgetHeading='';}budgetTotal();}
-function budgetTotal(){let total=0;for(const el of document.querySelectorAll('[data-report-budget]'))total+=Math.max(0,Number(el.value)||0);if($('settlementExpenseTotal'))$('settlementExpenseTotal').textContent='RM '+total.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function budgetTotal(){let total=0;for(const el of document.querySelectorAll('[data-report-budget]'))total+=Math.max(0,Number(el.value)||0);const output=$('settlementExpenseTotal'),text='RM '+total.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});if(output&&output.textContent!==text)output.textContent=text;}
 const recalc=settlementRecalculate;settlementRecalculate=function(...args){const r=recalc.apply(this,args);budgetTotal();return r;};
 window.ndBudgetUI={ensure:budgets,total:budgetTotal};
 function setup(){
@@ -33397,7 +33186,7 @@ async function complete(button){
  }catch(error){lastError=error.message;draw();}
 }
 function setup(){// Notifications lives exclusively inside Announcements.
- $('ndNotificationsButton')?.remove();const header=$('ndAnnouncementsPage')?.querySelector('.topbar'),anchor=$('ndAnnouncementNotificationsButton');if(!header)return;let b=$('ndAnnouncementTasksButton');if(!b){b=document.createElement('button');b.id='ndAnnouncementTasksButton';b.type='button';b.className='btn';b.textContent='My Tasks';b.onclick=()=>void open();if(anchor)anchor.after(b);else header.after(b);}void load();db()?.auth.onAuthStateChange?.((event,session)=>{if(event==='SIGNED_OUT'||session?.user&&session.user.id!==user?.id){epoch++;rows=[];user=null;pendingCreate=null;for(const id of ['ndTasksDialog','ndTaskCreateDialog','ndTaskCompleteDialog']){const d=$(id);if(d?.open)d.close();d?.replaceChildren();}drawBadge();}queueMicrotask(()=>void load());});setInterval(()=>void load(),45000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)void load();});window.addEventListener('focus',()=>void load());}
+ $('ndNotificationsButton')?.remove();const header=$('ndAnnouncementsPage')?.querySelector('.topbar'),anchor=$('ndAnnouncementNotificationsButton');if(!header)return;let b=$('ndAnnouncementTasksButton');if(!b){b=document.createElement('button');b.id='ndAnnouncementTasksButton';b.type='button';b.className='btn';b.textContent='My Tasks';b.onclick=()=>void open();if(anchor)anchor.after(b);else header.after(b);}void load();db()?.auth.onAuthStateChange?.((event,session)=>{if(event==='SIGNED_OUT'||session?.user&&session.user.id!==user?.id){epoch++;rows=[];user=null;pendingCreate=null;for(const id of ['ndTasksDialog','ndTaskCreateDialog','ndTaskCompleteDialog']){const d=$(id);if(d?.open)d.close();d?.replaceChildren();}drawBadge();}queueMicrotask(()=>void load());});setInterval(()=>{if(!document.hidden)void load();},45000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)void load();});window.addEventListener('focus',()=>void load());}
 window.ndTasks={open,load,get rows(){return rows;}};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
