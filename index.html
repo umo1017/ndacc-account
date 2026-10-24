@@ -15234,16 +15234,30 @@ async function saveStaff(){
  button.disabled=true;let saveStage='Validate employee details';
  try{
   const payload=collectStaffPayload(),draft=window.ndInterviewEmployeeDraft;
+  // Recover a committed conversion before duplicate validation or any new upload.
+  if(draft&&!ndPendingOnboardEmployee){
+   const found=await salaryDb.from('employees').select('*').eq('source_interview_id',String(draft.id)).maybeSingle();
+   if(found.error)throw found.error;
+   if(found.data){
+    const existing=found.data;
+    if(normalizeUniqueValue(existing.nric_passport)!==normalizeUniqueValue(payload.nric_passport)||String(existing.outlet)!==String(payload.outlet))throw Error('This interview is already linked to a different employee. Review the employee record.');
+    byId('staffReviewModal').classList.remove('open');resetSubmitStaffForm();
+    byId('staffSaveMsg').textContent='Employee already onboarded ✓ '+(existing.employee_no||'')+'. Review existing employee items before issuing more.';
+    window.dispatchEvent(new CustomEvent('nd-interview-converted'));await refreshSalaryStayHere();renderStaffList();window.ndOpenStaffManagement?.();return;
+   }
+  }
   const unique=await validateUniqueStaffFields(payload,ndPendingOnboardEmployee?.id);if(!unique.ok)throw Error(unique.message);
   if(!ndPendingOnboardEmployee){
    if(ndReadItems(payload.notes)?.issues?.some(i=>i.sku_id))await window.ndEnsureStaffStockReady();
-   saveStage='Upload contract signatures';const agreement=await ndUploadNotice(ndNoticeValidDraft());
+   saveStage='Upload contract signatures';const signedDraft=window.ndSignedOnboardingDraft;const agreement=signedDraft?.uploadedAgreement||await ndUploadNotice(ndNoticeValidDraft());if(signedDraft)signedDraft.uploadedAgreement=agreement;
    payload.notes=JSON.stringify({...JSON.parse(payload.notes),employment_notice_agreement:agreement});
    if(draft&&!window.ndSignedOnboardingDraft)throw Error('Complete the signed onboarding contract before issuing items.');
    if(window.ndSignedOnboardingDraft&&payload.guaranteed_pay!==ndSignedOnboardingBasic())throw Error('Basic salary must match the signed contract.');
-   saveStage='Create employee from signed contract';const {data,error}=draft?await salaryDb.rpc('nd_complete_signed_onboarding',{p_form_id:String(draft.id),p_contract_id:String(window.ndSignedOnboardingDraft.id),p_employee:ndSignedOnboardingRpcPayload(payload),p_request:window.ndSignedOnboardingDraft.request}):await salaryDb.from('employees').insert(payload).select('id,employee_no,notes').single();
-   if(error)throw error;
-   ndPendingOnboardEmployee={...(Array.isArray(data)?data[0]:data),_draftId:draft?.id,_notes:payload.notes,_restWeekdays:draft?[...(payload.fixed_rest_weekdays||[])]:null};
+   saveStage='Create employee from signed contract';
+   if(draft){const state=window.ndSignedOnboardingDraft;if(!state.saveArgs)state.saveArgs=JSON.parse(JSON.stringify({p_form_id:String(draft.id),p_contract_id:String(state.id),p_employee:ndSignedOnboardingRpcPayload(payload),p_request:state.request}));}
+   const {data,error}=draft?await salaryDb.rpc('nd_complete_signed_onboarding',window.ndSignedOnboardingDraft.saveArgs):await salaryDb.from('employees').insert(payload).select('id,employee_no,notes').single();
+   if(error){if(draft&&error.code&&!/already completed|different details/i.test(error.message||''))window.ndSignedOnboardingDraft.saveArgs=null;throw error;}
+   ndPendingOnboardEmployee={...(Array.isArray(data)?data[0]:data),_draftId:draft?.id,_notes:draft?window.ndSignedOnboardingDraft.saveArgs.p_employee.notes:payload.notes,_restWeekdays:draft?[...(payload.fixed_rest_weekdays||[])]:null};
   }
   saveStage='Save employee item records';const pending=ndPendingOnboardEmployee;
   if(!pending.id){let q=salaryDb.from('employees').select('id,employee_no,notes');q=pending.employee_no?q.eq('employee_no',pending.employee_no):q.eq('source_interview_id',String(pending._draftId));const {data,error}=await q.single();if(error)throw Error('Employee created; item confirmation needs retry: '+error.message);if(!data?.id)throw Error('Employee created. Reopen Staff records to confirm employee items.');Object.assign(pending,data);}
@@ -15446,73 +15460,25 @@ async function ndSetStaffArchived(empId,archived,confirmAction=true){
  finally{buttons.forEach(b=>b.disabled=false);}
 }
 document.addEventListener('click',event=>{const archive=event.target.closest?.('[data-archive-staff]'),restore=event.target.closest?.('[data-restore-staff]');if(archive||restore){event.preventDefault();void ndSetStaffArchived(Number((archive||restore).dataset[archive?'archiveStaff':'restoreStaff']),!!archive);}});
+const ndStaffDeleteBusy=new Set();
 async function deleteStaff(empId){
-  if(!isGlobalAdmin){
-    alert("Only Umo / Mars can delete staff.");
-    return;
-  }
-
-  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
-  if(!e){
-    alert("Staff record not found.");
-    return;
-  }
-
-  // Preserve historical salary records.
-  // A staff member who has ever had payroll/monthly salary activity must not be
-  // permanently deleted. Archive the directory entry while retaining the
-  // employment dates and historical worked months in Salary.
-  const historyChecks=await Promise.all([
-    salaryDb.from("employee_salary_monthly").select("employee_id",{count:"exact",head:true}).eq("employee_id",empId),
-    salaryDb.from("payroll_snapshot").select("employee_id",{count:"exact",head:true}).eq("employee_id",empId),
-    salaryDb.from("payroll_commission_snapshot").select("employee_id",{count:"exact",head:true}).eq("employee_id",empId)
-  ]);
-  const historyError=historyChecks.find(r=>r.error)?.error;
-  if(historyError){
-    alert("Unable to check payroll history: "+historyError.message);
-    return;
-  }
-  const hasPayrollHistory=historyChecks.some(r=>Number(r.count||0)>0);
-  if(hasPayrollHistory){
-    if(confirm('Archive '+(e.name||'this staff')+' from the Staff directory? Salary history and employment dates will be retained.'))await ndSetStaffArchived(empId,true,false);
-    return;
-  }
-
-  if(!confirm(`Delete staff ${e.name||""}?`)) return;
-  if(!confirm(`Second confirmation: Delete ${e.name||""} permanently?`)) return;
-
-  const savedMonth=byId("salaryMonth").value;
-  const savedScroll=window.scrollY;
-
-  const {data,error}=await salaryDb.rpc("delete_staff_with_payroll",{
-    p_employee_id:empId
-  });
-
-  const deletionMessage=String(error?.message||data?.message||'');
-  if(/salary history|payroll history|cannot be permanently deleted/i.test(deletionMessage)){
-    await ndSetStaffArchived(empId,true);
-    return;
-  }
-  if(error){
-    alert("Delete failed: "+error.message);
-    return;
-  }
-
-  if(!data || data.deleted!==true){
-    alert("Delete failed: "+(data?.message||"No record was deleted."));
-    return;
-  }
-
-  byId("staffListModal").classList.remove("open");
-  window.activeMainPage="salary";
-  byId("salaryMonth").value=savedMonth;
-  await loadSalaryData();
-  byId("salaryMonth").value=savedMonth;
-  requestAnimationFrame(()=>window.scrollTo(0,savedScroll));
-
-  alert("Staff deleted successfully.");
+ if(!isGlobalAdmin)return alert('Only UMO / Mars can delete staff.');
+ const employee=salaryEmployees.find(e=>Number(e.id)===Number(empId));if(!employee)return alert('Staff record not found.');
+ if(ndStaffDeleteBusy.has(String(empId)))return;
+ if(!confirm('Delete '+(employee.name||'this employee')+'? All outstanding returnable products will be returned to stock automatically. Salary history will be retained by archiving when required.'))return;
+ ndStaffDeleteBusy.add(String(empId));
+ const buttons=[...document.querySelectorAll('[data-delete-staff]')].filter(b=>Number(b.dataset.deleteStaff)===Number(empId));buttons.forEach(b=>b.disabled=true);
+ try{
+  await window.ndEnsureStaffStockReady();
+  const result=await salaryDb.rpc('nd_staff_delete_return',{p_employee_id:Number(empId)});
+  if(result.error)throw result.error;
+  if(!result.data?.ok)throw Error('The employee change was not confirmed.');
+  window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));
+  await refreshSalaryStayHere();renderStaffList();
+  alert(result.data.archived?'Staff archived; outstanding returnable products returned. Salary history retained.':'Staff deleted; outstanding returnable products returned.');
+ }catch(error){alert('Delete failed: '+error.message+(/nd_staff_delete_return|schema cache/i.test(error.message||'')?' Run employee_onboarding_returns.sql first.':''));}
+ finally{ndStaffDeleteBusy.delete(String(empId));buttons.forEach(b=>b.disabled=false);}
 }
-
 
 
 
@@ -15720,6 +15686,7 @@ async function ndSaveResignation(){
   if(emp.last_working_date){msg.textContent="This employee already has a last working day.";return;}
   if(!byId("ndResignNA").checked&&!byId("ndResignAttachment").files.length){msg.textContent="Upload the resignation document or select N/A.";return;}
   try{const fresh=await ndFetchItemsEmployee(emp.id);if(!ndItemsCleared(fresh.notes)){ndRenderResignItems();msg.textContent="Complete employee item returns before confirming resignation. Open Employee Items to review.";return;}emp.notes=fresh.notes;}catch(err){msg.textContent="Unable to check item clearance: "+err.message;return;}
+  try{const stock=await salaryDb.from('staff_stock_issues').select('issued_qty,returned_qty,damaged_qty,consumed_qty,return_required').eq('employee_id',empId);if(stock.error)throw stock.error;if((stock.data||[]).some(r=>r.return_required!==false&&Number(r.issued_qty)-Number(r.returned_qty||0)-Number(r.damaged_qty||0)-Number(r.consumed_qty||0)>0)){msg.textContent='Return outstanding products in Inventory > More > Staff Stock before confirming resignation.';return;}}catch(error){msg.textContent='Unable to check stock returns: '+error.message;return;}
   try{const check=await salaryDb.rpc('nd_passport_resignation_check',{p_employee:Number(emp.id)});if(check.error)throw check.error;if(check.data?.required){msg.textContent='Sign the passport return acknowledgement before confirming resignation.';return;}}catch(error){msg.textContent='Unable to check passport return: '+error.message;return;}
   if(!confirm(`Confirm resignation for ${emp.name}?\nLast Working Day: ${lastDay}\nSalary will remain visible for ${lastDay.slice(0,7)}.`))return;
   const btn=byId("ndConfirmResignationBtn");btn.disabled=true;
