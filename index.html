@@ -12917,7 +12917,14 @@ function prepareAutoEmployeeNo(){
   el.readOnly=false;
 }
 
+function ndSignedOnboardingBasic(){
+ if(!window.ndSignedOnboardingDraft)return null;
+ const a=ndNoticeValidDraft(),raw=(a.details||[]).find(row=>row[0]==='Basic Salary (RM)')?.[1];
+ if(raw==null||String(raw).trim()===''||!Number.isFinite(Number(raw))||Number(raw)<0)throw Error('The signed contract must contain a valid basic salary.');
+ return Number(raw);
+}
 function collectStaffPayload(){
+  const signedBasic=ndSignedOnboardingBasic();
   return {
     employee_no:null,
     birthday:byId("empBirthdayNA")?.checked?null:(byId("empBirthday")?.value||null),
@@ -12948,7 +12955,7 @@ function collectStaffPayload(){
     tax_previous_ytd_gross:Number(byId("empTaxPrevGross")?.value||0),
     tax_previous_ytd_epf:Number(byId("empTaxPrevEpf")?.value||0),
     tax_previous_ytd_pcb:Number(byId("empTaxPrevPcb")?.value||0),
-    guaranteed_pay:(byId("empOutlet")?.value==="Collaboration" && byId("empGuaranteed").value==="" ? null : (byId("empEmploymentType")?.value==="part_time"?0:Number(byId("empGuaranteed").value||0))),
+    guaranteed_pay:signedBasic!==null?signedBasic:(byId("empOutlet")?.value==="Collaboration" && byId("empGuaranteed").value==="" ? null : (byId("empEmploymentType")?.value==="part_time"?0:Number(byId("empGuaranteed").value||0))),
     allowance:Number(byId("empAllowance").value||0),
     monthly_off_days:(byId("empOutlet")?.value==="Collaboration" && byId("empOffDays").value==="" ? null : Number(byId("empOffDays").value||0)),
     fixed_rest_weekday:(ndReadFixedRestDays("empFixedRestWeekday")[0]??null),
@@ -15114,8 +15121,10 @@ function updateTaxRuleStatus(){const year=taxYearNow(),r=getTaxRule(year),el=byI
 
 function updateSubmitEmploymentType(){
   const isPartTime=byId("empEmploymentType")?.value==="part_time";
+  const signed=!!window.ndSignedOnboardingDraft;
   const wrap=byId("empBasicPayWrap");
-  if(wrap) wrap.style.display=isPartTime?"none":"";
+  if(wrap) wrap.style.display=isPartTime&&!signed?"none":"";
+  if(signed)return; // Signed pay must remain unchanged for all employment types.
   if(isPartTime && byId("empGuaranteed")) byId("empGuaranteed").value="0";
 }
 
@@ -15227,6 +15236,7 @@ async function saveStaff(){
    saveStage='Upload contract signatures';const agreement=await ndUploadNotice(ndNoticeValidDraft());
    payload.notes=JSON.stringify({...JSON.parse(payload.notes),employment_notice_agreement:agreement});
    if(draft&&!window.ndSignedOnboardingDraft)throw Error('Complete the signed onboarding contract before issuing items.');
+   if(window.ndSignedOnboardingDraft&&payload.guaranteed_pay!==ndSignedOnboardingBasic())throw Error('Basic salary must match the signed contract.');
    saveStage='Create employee from signed contract';const {data,error}=draft?await salaryDb.rpc('nd_complete_signed_onboarding',{p_form_id:String(draft.id),p_contract_id:String(window.ndSignedOnboardingDraft.id),p_employee:payload,p_request:window.ndSignedOnboardingDraft.request}):await salaryDb.from('employees').insert(payload).select('id,employee_no,notes').single();
    if(error)throw error;
    ndPendingOnboardEmployee={...(Array.isArray(data)?data[0]:data),_draftId:draft?.id,_notes:payload.notes};
@@ -15267,7 +15277,7 @@ window.ndStartInterviewEmployee=async function(row,contractRow=null){
  const a=contractRow.form_data.__nd_signed_contract,get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||'';
  for(const [id,value]of Object.entries({empName:a.employee.employee_name,empNric:a.employee.identity,empOutlet:a.employee.branch,empJoinDate:get('Start Date'),empGuaranteed:get('Basic Salary (RM)'),empPayBy:get('Payment Method'),empNickname:v.Nickname||v['Nick Name']||'',empPhone:v['Contact Number']||'',empCategory:contractRow.form_data.__nd_contract_source.foreign?'non_local':'local'})){const field=byId(id);if(field)field.value=String(value??'');}
  const rest=String(get('Rest Day')).split(/[,;|]/).map(v=>v.trim()),days=[...new Set(rest.map(value=>['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(value)).filter(n=>n>=0))];if(days.length){ndSetFixedRestDays('empFixedRestWeekday',{fixed_rest_weekdays:days});const start=new Date(get('Start Date')+'T12:00:00');let count=0;for(let n=1;n<=new Date(start.getFullYear(),start.getMonth()+1,0).getDate();n++)if(days.includes(new Date(start.getFullYear(),start.getMonth(),n).getDay()))count++;byId('empOffDays').value=String(count);}
- ndOnboardAgreement=a;window.ndSignedOnboardingDraft={id:String(contractRow.id),request:crypto.randomUUID()};ndUpdateNoticeStatus();updateSubmitStaffPaymentFields();for(const id of ['empName','empNric','empOutlet','empJoinDate','empGuaranteed','empPayBy']){const field=byId(id);if(field){if(field.tagName==='SELECT')field.disabled=true;else field.readOnly=true;}}if(byId('ndOpenOnboardAgreement'))byId('ndOpenOnboardAgreement').hidden=true;await ndRefreshOnboardStock();byId('ndOnboardItems').scrollIntoView({block:'start'});
+ ndOnboardAgreement=a;window.ndSignedOnboardingDraft={id:String(contractRow.id),request:crypto.randomUUID()};updateSubmitEmploymentType();ndUpdateNoticeStatus();updateSubmitStaffPaymentFields();for(const id of ['empName','empNric','empOutlet','empJoinDate','empGuaranteed','empPayBy']){const field=byId(id);if(field){if(field.tagName==='SELECT')field.disabled=true;else field.readOnly=true;}}if(byId('ndOpenOnboardAgreement'))byId('ndOpenOnboardAgreement').hidden=true;await ndRefreshOnboardStock();byId('ndOnboardItems').scrollIntoView({block:'start'});
  byId('staffSaveMsg').textContent='Contract signed. Confirm Employee Items, then Review and Save.';
 };
 
