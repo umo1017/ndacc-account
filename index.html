@@ -12864,6 +12864,7 @@ document.addEventListener('click',async ev=>{
 });
 
 function resetSubmitStaffForm(){
+  const complete=byId('confirmSubmitStaffBtn');if(complete){delete complete.dataset.onboardingLocked;complete.disabled=false;complete.textContent='Complete Onboarding & Import to Staff';}
   ndOnboardAgreement=null;
   ndUpdateNoticeStatus();
   ndPendingOnboardEmployee=null;
@@ -13002,7 +13003,19 @@ function validateNewStaffRequiredFields(messageElId){
   return true;
 }
 
-function reviewStaffBeforeSubmit(){
+async function reviewStaffBeforeSubmit(){
+  const button=byId('confirmSubmitStaffBtn');
+  button.disabled=true;button.textContent='Checking onboarding status…';
+  try{
+   const draft=window.ndInterviewEmployeeDraft;
+   if(draft&&!ndPendingOnboardEmployee){
+    const check=await salaryDb.from('employees').select('id').eq('source_interview_id',String(draft.id)).maybeSingle();
+    if(check.error)throw check.error;
+    if(check.data){button.dataset.onboardingLocked='1';button.textContent='Onboarding Completed';byId('staffSaveMsg').textContent='This applicant is already an employee. Onboarding is locked.';return;}
+   }
+   delete button.dataset.onboardingLocked;button.disabled=false;button.textContent='Complete Onboarding & Import to Staff';
+  }catch(error){byId('staffSaveMsg').textContent='Unable to check onboarding status: '+error.message;return;}
+
   if(!validateNewStaffRequiredFields("staffSaveMsg")) return;
   const p=collectStaffPayload();
 
@@ -15239,6 +15252,7 @@ async function saveStaff(){
    const found=await salaryDb.from('employees').select('*').eq('source_interview_id',String(draft.id)).maybeSingle();
    if(found.error)throw found.error;
    if(found.data){
+    button.dataset.onboardingLocked='1';button.textContent='Onboarding Completed';
     const existing=found.data;
     if(normalizeUniqueValue(existing.nric_passport)!==normalizeUniqueValue(payload.nric_passport)||String(existing.outlet)!==String(payload.outlet))throw Error('This interview is already linked to a different employee. Review the employee record.');
     byId('staffReviewModal').classList.remove('open');resetSubmitStaffForm();
@@ -15276,7 +15290,7 @@ async function saveStaff(){
   if(!ndReadItems(pending.notes)?.confirmed_at||!ndReadNotice(pending.notes)){const intended=JSON.parse(pending._notes);const notes=JSON.stringify({...ndItemsEnvelope(pending.notes,ndReadItems(pending.notes)||intended.issued_items),employment_notice_agreement:intended.employment_notice_agreement});let q=salaryDb.from('employees').update({notes}).eq('id',pending.id);q=pending.notes==null?q.is('notes',null):q.eq('notes',pending.notes);const {data,error}=await q.select('id,notes').single();if(error||!data)throw Error('Employee created; item confirmation not saved. Retry Save. '+(error?.message||'Record changed.'));pending.notes=data.notes;if(!ndReadItems(pending.notes)?.confirmed_at||!ndReadNotice(pending.notes))throw Error('Onboarding records could not be verified. Retry Save.');}
   const number=pending.employee_no||'';if(draft)window.dispatchEvent(new CustomEvent('nd-interview-converted'));
   byId('staffReviewModal').classList.remove('open');resetSubmitStaffForm();byId('staffSaveMsg').textContent='Employee onboarded ✓ '+number;await refreshSalaryStayHere();window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));renderStaffList();window.ndOpenStaffManagement?.();
- }catch(err){byId('staffReviewMsg').textContent='Save failed ['+saveStage+']: '+(err.message||err);}finally{button.disabled=false;}
+ }catch(err){byId('staffReviewMsg').textContent='Save failed ['+saveStage+']: '+(err.message||err);}finally{button.disabled=button.dataset.onboardingLocked==='1';}
 }
 
 
@@ -31131,7 +31145,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <script id="nd-staff-performance-v1">
 (function(){'use strict';
 const $=id=>document.getElementById(id), root=$('ndStaffPerformancePanel'), tab=$('ndStaffPerformanceBtn');if(!root||!tab)return;
-const defs={complaint:[['poor_technique','Poor Technique / 手法不好'],['short_time','Time Shortening / 服务时间不足'],['poor_attitude','Poor Attitude / 态度不好'],['heavy_pressure','Too Much Pressure / 力度太重'],['light_pressure','Insufficient Pressure / 力度太轻'],['communication','Poor Communication / 沟通不好'],['late_service','Late Service / 服务迟到'],['hygiene','Hygiene Issue / 卫生问题'],['unprofessional','Unprofessional Behaviour / 不专业行为']],compliment:[['good_technique','Good Technique / 手法很好'],['good_attitude','Good Attitude / 态度很好'],['good_service','Excellent Service / 服务很好'],['professional','Professional Service / 专业服务'],['punctual','On-Time Service / 准时服务']]};
+const defs={complaint:[['poor_technique','Poor Technique / 手法不好'],['short_time','Time Shortening / 服务时间不足'],['poor_attitude','Poor Attitude / 态度不好'],['heavy_pressure','Too Much Pressure / 力度太重'],['light_pressure','Insufficient Pressure / 力度太轻'],['communication','Poor Communication / 沟通不好'],['late_service','Late Service / 服务迟到'],['hygiene','Hygiene Issue / 卫生问题'],['unprofessional','Unprofessional Behaviour / 不专业行为'],['requesting_tips','Requesting Tips / 向顾客索取小费']],compliment:[['good_technique','Good Technique / 手法很好'],['good_attitude','Good Attitude / 态度很好'],['good_service','Excellent Service / 服务很好'],['professional','Professional Service / 专业服务'],['punctual','On-Time Service / 准时服务']]};
 const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const localToday=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 let type='complaint', records=[],loading=false, active=false, performanceEmployees=[];
@@ -31743,6 +31757,8 @@ window.ndPrepareContractTemplateUpdate=ndUpdateSubmittedContractTemplate;
 async function ndOpenContractDocument(row,readOnly=true){
  let dialog=$('ndContractDocumentDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndContractDocumentDialog';dialog.style.cssText='width:min(900px,96vw);max-height:92dvh;overflow:auto;border:0;border-radius:16px;padding:20px';document.body.append(dialog);dialog.addEventListener('close',()=>{if(dialog.ndContractZipUrl){URL.revokeObjectURL(dialog.ndContractZipUrl);dialog.ndContractZipUrl='';}});}if(dialog.ndContractZipUrl){URL.revokeObjectURL(dialog.ndContractZipUrl);dialog.ndContractZipUrl='';}const a=JSON.parse(JSON.stringify(row.form_data.__nd_signed_contract));window.ndUpgradeReferenceContract?.(a);const customer=a.contract_type==='customer_media',administrative=['cash_request','confirmation','private_loan'].includes(a.contract_type);let saving=false,saved=readOnly;
  const draw=(signing=false)=>{dialog.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><strong>${escapeHtml(a.title)}</strong><button class="btn" type="button" data-contract-close>Close</button></div>${readOnly&&row.id&&String(userEmail||'').toLowerCase()==='umo1017@gmail.com'&&['passport','cash_request','private_loan'].includes(a.contract_type)&&(a.contract_type==='private_loan'?a.document_template!=='salary-advance-v1':(!/^uploaded-.*-20261022$/.test(a.reference_layout||'')||(a.template_sha256!==window.ndUploadedContractTemplates?.[({passport:'passport',cash_request:'cash'})[a.contract_type]]?.sha256)))?'<div style="margin:14px 0"><button class="btn primary" type="button" data-contract-update-template>Update Template</button></div>':''}<div data-contract-preview></div><section data-contract-sign-panel ${signing?'':'hidden'}><label style="display:flex;gap:10px;margin:16px 0"><input id="ndContractEmployerConfirmed" type="checkbox" style="width:20px;height:20px;flex:none"/>${administrative?'I confirm the identities, document details and recorded terms are correct.':customer?'I confirm the company details, customer choice and permitted scope are correct. Refusal does not affect customer services.':'I confirm that the company named above is the actual contracting entity and that the stated pay or fees, working arrangements and payment authorisations are accurate and meet applicable minimum-wage, working-time and foreign-worker requirements.'}</label><label for="ndContractRepresentative">Company Representative Name *</label><select id="ndContractRepresentative" required disabled style="width:100%;margin:8px 0"><option value="">Select representative</option></select>${inputMarkup((a.party_label||(customer?'Customer':'Employee / Counterparty'))+' Signature','signature','ContractEmployee')}${inputMarkup('Company Representative Signature','signature','ContractCompany')}<label style="display:flex;gap:10px;margin:16px 0"><input type="checkbox" id="ndContractAccept" style="width:20px;height:20px;flex:none"/>Both parties have read and ${customer?'acknowledge the recorded consent decision and scope':'agree to this contract'}${a.appendices?.length?' and all included appendices':''}.</label></section><div class="nd-items-actions">${saved?ndContractDownloadsMarkup(a)+(a.contract_type==='onboarding'&&row.form_data?.__nd_contract_source?.kind==='interview'?'<button class="btn primary" type="button" data-contract-onboard>Continue to Employee Items</button>':''):signing?'<button class="btn" type="button" data-contract-back>Back to Review</button><button class="btn" type="button" data-contract-save>'+(customer?'Save Signed Consent':'Save Signed Contract')+'</button>':'<button class="btn" type="button" data-contract-sign>Continue to Sign</button>'}</div><p role="status" data-contract-status></p>`;
+ const onboardButton=dialog.querySelector('[data-contract-onboard]');
+ if(onboardButton){const sourceId=row.form_data?.__nd_contract_source?.id;onboardButton.disabled=true;onboardButton.textContent='Checking onboarding status…';void (async()=>{try{const check=await client().from('employees').select('id').eq('source_interview_id',String(sourceId)).maybeSingle();if(check.error)throw check.error;if(!onboardButton.isConnected)return;onboardButton.disabled=!!check.data;onboardButton.textContent=check.data?'Onboarding Completed':'Continue to Employee Items';}catch(error){if(onboardButton.isConnected){onboardButton.disabled=true;onboardButton.textContent='Status unavailable';dialog.querySelector('[data-contract-status]').textContent='Unable to check onboarding status: '+error.message;}}})();}
  dialog.querySelector('[data-contract-onboard]')?.addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await window.ndContinueSignedOnboarding(row);dialog.close();}catch(error){dialog.querySelector('[data-contract-status]').textContent=error.message;}finally{button.disabled=false;}});
  const preview=dialog.querySelector('[data-contract-preview]');preview.innerHTML=window.ndContractDocumentMarkup(a);if(a.reference_layout){const fit=()=>{const width=preview.clientWidth||Math.min(860,innerWidth-48);preview.querySelectorAll('.nd-reference-page:not(.nd-uploaded-template-page)').forEach(p=>p.style.zoom=String(Math.min(1,(width-24)/794)));};requestAnimationFrame(fit);}if(a.reference_layout&&window.ndPrepareReferencePreview)void window.ndPrepareReferencePreview(a,preview).catch(error=>{if(!preview.isConnected)return;preview.textContent='Unable to display document: '+error.message;const button=dialog.querySelector('[data-contract-sign]');if(button)button.disabled=true;});preview.hidden=signing;dialog.querySelector('[data-contract-close]').onclick=()=>dialog.close();if(signing){initSignatures(dialog.querySelector('[data-contract-sign-panel]'));void window.ndLoadContractRepresentatives($('ndContractRepresentative'),a.employee.branch,dialog.querySelector('[data-contract-status]'));}
  dialog.querySelector('[data-contract-update-template]')?.addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await ndUpdateSubmittedContractTemplate(row);}catch(error){dialog.querySelector('[data-contract-status]').textContent='Unable to update template: '+error.message;button.disabled=false;}});
