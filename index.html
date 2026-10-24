@@ -31439,7 +31439,7 @@ body[data-nd-visible-page="forms"] #ndStaffFormsPage{display:block!important}
 (function(){'use strict';
 const $=id=>document.getElementById(id), TABLE='nd_staff_forms', ADMIN='umo1017@gmail.com';
 let tab='interview',userEmail='',db=null,templates={};
-const defaults={interview:[["Candidate Name", "text"], ["IC / Passport", "text"], ["IC Photo Front", "file"], ["IC Photo Back", "file"], ["Date of Birth", "date"], ["Gender", "select:|Male|Female"], ["Nationality", "text"], ["Marital Status", "select:|Single|Married|Divorced|Widowed"], ["Home Address", "textarea"], ["Phone", "tel"], ["Email Address", "email"], ["Emergency Contact Name", "text"], ["Emergency Contact Phone", "tel"], ["Spouse Name", "text"], ["Spouse IC No", "text"], ["Position Applied", "text"], ["Preferred Branch", "select:|Eco Botanic|Nusa Bestari"], ["Employment Type", "select:|Full Time|Part Time"], ["Start Date", "date"], ["Probation Period", "text"], ["Working Days", "number"], ["Working Hours", "text"], ["Rest Days", "number"], ["Bank Name", "text"], ["Bank Account No", "text"], ["KWSP (EPF) No", "text"], ["SOCSO No", "text"], ["EIS No", "text"], ["Employee Signature", "signature"], ["Signature Date", "date"], ["Administrative / Finance Signature", "signature"], ["Company Stamp", "file"], ["President Signature", "signature"], ["Interview Date", "date"], ["Interviewer", "text"], ["Experience", "textarea"], ["Availability", "text"], ["Expected Salary (RM)", "number"], ["Assessment", "textarea"], ["Interview Result", "select:Pending|Shortlisted|Accepted|Rejected"]],contract:[['Employee Name','text'],['IC / Passport','text'],['Position','text'],['Branch','text'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation (Months)','number'],['Notice Period','text'],['Contract Terms','textarea'],['Employee Acknowledgement','textarea']]};
+const defaults={interview:[["Candidate Name", "text"], ["IC / Passport", "text"], ["IC Photo Front", "file"], ["IC Photo Back", "file"], ["Date of Birth", "date"], ["Gender", "select:|Male|Female"], ["Nationality", "text"], ["Marital Status", "select:|Single|Married|Divorced|Widowed"], ["Home Address", "textarea"], ["Phone", "tel"], ["Email Address", "email"], ["Emergency Contact Name", "text"], ["Emergency Contact Phone", "tel"], ["Spouse Name", "text"], ["Spouse Phone Number", "tel"], ["Position Applied", "text"], ["Preferred Branch", "select:|Eco Botanic|Nusa Bestari"], ["Employment Type", "select:|Full Time|Part Time"], ["Start Date", "date"], ["Probation Period", "text"], ["Working Hours", "text"], ["Rest Days", "number"], ["Bank Name", "text"], ["Bank Account No", "text"], ["KWSP (EPF) No", "text"], ["SOCSO No", "text"], ["EIS No", "text"], ["Employee Signature", "signature"], ["Signature Date", "date"], ["Administrative / Finance Signature", "signature"], ["Company Stamp", "file"], ["President Signature", "signature"], ["Interview Date", "date"], ["Interviewer", "text"], ["Experience", "textarea"], ["Availability", "text"], ["Expected Salary (RM)", "number"], ["Assessment", "textarea"], ["Interview Result", "select:Pending|Shortlisted|Accepted|Rejected"]],contract:[['Employee Name','text'],['IC / Passport','text'],['Position','text'],['Branch','text'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation (Months)','number'],['Notice Period','text'],['Contract Terms','textarea'],['Employee Acknowledgement','textarea']]};
 const ND_INTERVIEW_COMPANY_ADDRESS='Unit 02-02, Level 2, CIMB Leadership Academy, No. 3 Jalan Medini Utara 1, Medini Iskandar, 79200 Iskandar Puteri, Johor.';
 let interviewCategory='local',interviewBranchNames=['Eco Botanic','Nusa Bestari','Collaboration'];
 async function loadInterviewBranches(){
@@ -31454,23 +31454,42 @@ async function loadInterviewBranches(){
 window.ndGetStaffFormBranches=async()=>{await loadInterviewBranches();return [...interviewBranchNames];};
 const interviewSections=[
  ['SECTION A : EMPLOYEE INFORMATION', [['Full Name','text'],['IC No','text'],['IC Photo Front','file'],['IC Photo Back','file'],['Date of Birth','date'],['Gender','select:|Male|Female'],['Nationality','select:|China|Myanmar|Vietnam|Indonesia|Thailand'],['Married Status','select:|Single|Married|Divorced|Widowed'],['Home Address','textarea'],['Contact Number','tel'],['Email Address','email']]],
- ['SECTION B : EMERGENCY INFORMATION', [['Spouse Name','text'],['Spouse IC No','text']]],
- ['SECTION C : EMPLOYMENT INFORMATION', [['Branch','select:|Eco Botanic|Nusa Bestari'],['Department','select:|Therapist|Beautician|Manager|Front Desk|Other'],['Other Department','text'],['Employment Type','select:|Full Time|Part Time'],['Start Date','date'],['Basic Salary (RM)','number'],['Probation Period','text'],['Working Day','number'],['Rest Day','select:|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday']]],
+ ['SECTION B : EMERGENCY INFORMATION', [['Spouse Name','text'],['Spouse Phone Number','tel']]],
+ ['SECTION C : EMPLOYMENT INFORMATION', [['Branch','select:|Eco Botanic|Nusa Bestari'],['Department','select:|Therapist|Beautician|Manager|Front Desk|Other'],['Other Department','text'],['Employment Type','select:|Full Time|Part Time'],['Start Date','date'],['Basic Salary (RM)','number'],['Probation Period','text'],['Rest Day','select:|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday']]],
  ['SECTION D: BANK & STATUTORY INFORMATION', [['Payment Method','select:|Cash|Bank Transfer|TNG'],['Bank Name','text'],['Bank Account No','text'],['KWSP (EPF) No','text'],['SOCSO No','text'],['EIS No','text']]],
  ['SECTION E: SIGNATURES / COMPANY STAMPING', [['Employee Signature','signature'],['Date','date'],['Administrative / Finance Signature','signature'],['Company Stamp','file'],['President Signature','signature']]]
 ];
 function interviewGroups(){return interviewSections.map(([title,fields])=>{
  const mapped=fields.flatMap(f=>{
-  if(interviewCategory!=='non_local')return f[0]==='Nationality'?[['Nationality','select:|Malaysia|China|Myanmar|Vietnam|Indonesia|Thailand']]:[f];
+  if(interviewCategory!=='non_local')return f[0]==='Nationality'?[['Nationality','fixed:Malaysia']]:[f];
   if(f[0]==='IC No')return [['Passport No','text']];
   if(f[0]==='IC Photo Front')return [];
   if(f[0]==='IC Photo Back')return [];
-  if(f[0]==='Spouse IC No')return [['Spouse IC / Passport No','text']];
   return [f];
  });
  if(interviewCategory==='non_local'&&title.startsWith('SECTION A'))mapped.push(['Passport Photo Front','file'],['Passport Photo Back','file']);
  return [title,mapped];
 })}
+function syncInterviewPayment(root,isLocal){
+ const field=label=>[...root.querySelectorAll('.nd-form-field')].find(node=>node.querySelector('label')?.textContent===label)?.querySelector('input,select');
+ const payment=field('Payment Method');if(!payment)return;
+ const sync=()=>{
+  for(const label of ['Bank Name','Bank Account No']){
+   const input=field(label);if(!input)continue;
+   const cash=payment.value==='Cash',hide=cash||(payment.value==='TNG'&&label==='Bank Name');
+   input.disabled=hide;input.required=!hide&&isLocal;
+   const box=input.closest('.nd-form-field');box.hidden=hide;box.style.display=hide?'none':'';box.classList.toggle('nd-required',input.required);
+  }
+ };
+ if(payment.ndInterviewPaymentSync)payment.removeEventListener('change',payment.ndInterviewPaymentSync);
+ payment.ndInterviewPaymentSync=sync;payment.addEventListener('change',sync);sync();
+}
+function ndNormalizeInterviewPayment(values){
+ if(values['Payment Method']==='Cash'){values['Bank Name']='';values['Bank Account No']='';}
+ else if(values['Payment Method']==='TNG')values['Bank Name']='';
+ if(/^Local\b/i.test(String(values['Applicant Type']||'')))values.Nationality='Malaysia';
+ return values;
+}
 function syncInterviewWorkingHours(root){
  const field=label=>Array.from(root.querySelectorAll('.nd-form-field')).find(node=>node.querySelector('label')?.textContent===label)?.querySelector('input,select');
  const branch=field('Branch'),hours=field('Working Hours');if(!branch||!hours)return;
@@ -31486,6 +31505,7 @@ function syncInterviewDepartment(root){
 }
 const ND_INTERVIEW_EMPLOYMENT_REQUIRED=['Branch','Department','Employment Type','Start Date','Basic Salary (RM)'];
 function ndValidateInterviewEmployment(values){
+ ndNormalizeInterviewPayment(values);
  window.ndInterviewContacts.validate(values);
  for(const key of ND_INTERVIEW_EMPLOYMENT_REQUIRED)if(!String(values[key]??'').trim())throw Error(key+' is required.');
  const salary=Number(values['Basic Salary (RM)']);if(!Number.isFinite(salary)||salary<0)throw Error('Enter a valid non-negative Basic Salary.');
@@ -31502,12 +31522,12 @@ function renderInterview(root){
  form.querySelector('[data-entry-next]').onclick=()=>{for(const input of form.querySelectorAll('[required]')){if(input.closest('fieldset')?.dataset.entrySection==='2')continue;const details=input.closest('details');if(!input.checkValidity()){if(details)details.open=true;input.reportValidity();return}}setStep('manager');form.scrollIntoView({block:'start'})};
  form.querySelector('[data-entry-back]').onclick=()=>setStep('employee');setStep('employee');
  const officer=document.createElement('div');officer.className='nd-form-field';officer.innerHTML='<label>Person in Charge</label><input type="text" data-nd-account-name readonly value="Loading…">';sections[2].prepend(officer);void window.ndLoadCurrentAccountName(client()).then(name=>{if(officer.isConnected)officer.querySelector('input').value=name;}).catch(error=>{if(officer.isConnected){officer.querySelector('input').value='';status(error.message);}});
- form.onsubmit=saveEntry;initSignatures(root);syncInterviewDepartment(root);syncInterviewWorkingHours(root);
+ form.onsubmit=saveEntry;initSignatures(root);syncInterviewDepartment(root);syncInterviewWorkingHours(root);syncInterviewPayment(root,interviewCategory==='local');form.addEventListener('reset',()=>queueMicrotask(()=>syncInterviewPayment(root,interviewCategory==='local')));
  $('ndInterviewCategory').onchange=()=>{
  const saved={};fieldsFor('interview').forEach(([label,kind],n)=>{const el=$('ndField'+n);saved[label]={kind,value:ndFormFieldValue(el),files:el?.files,ink:el?.dataset.ink,data:kind==='signature'&&el?.dataset.ink?el.toDataURL():null}});
  interviewCategory=$('ndInterviewCategory').value;renderInterview(root);
  fieldsFor('interview').forEach(([label,kind],n)=>{const old=saved[label],el=$('ndField'+n);if(!old||!el)return;if(kind==='file'){if(old.files)el.files=old.files}else if(kind==='signature'&&old.data){const img=new Image();img.onload=()=>el.getContext('2d').drawImage(img,0,0);img.src=old.data;el.dataset.ink='1'}else if(kind!=='signature')ndSetFormFieldValue(el,old.value||'')});
- syncInterviewDepartment(root);syncInterviewWorkingHours(root);if(interviewCategory==='non_local'){const index=fieldsFor('interview').findIndex(field=>field[0]==='Payment Method'),payment=root.querySelector('[data-nd-field="'+index+'"]');if(payment&&!payment.value)payment.value='Cash'}
+ syncInterviewDepartment(root);syncInterviewWorkingHours(root);if(interviewCategory==='non_local'){const index=fieldsFor('interview').findIndex(field=>field[0]==='Payment Method'),payment=root.querySelector('[data-nd-field="'+index+'"]');if(payment&&!payment.value)payment.value='Cash'}syncInterviewPayment(root,interviewCategory==='local');
  };
 }
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -31519,14 +31539,16 @@ function fieldsFor(type){return type==='interview'?interviewGroups().slice(0,4).
 const ND_REST_WEEKDAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 function ndRestDays(value){return [...new Set((Array.isArray(value)?value:String(value||'').split(/[,;|]/)).map(v=>String(v).trim()).filter(Boolean))];}
 function ndFormFieldValue(el){return el?.tagName==='SELECT'&&el.multiple?[...el.selectedOptions].map(o=>o.value).filter(Boolean).join(', '):el?.value||'';}
-function ndSetFormFieldValue(el,value){if(!el)return;if(el.dataset.ndFixedProbation){el.value='3 months';return;}if(el.tagName==='SELECT'&&el.multiple){const days=ndRestDays(value);for(const day of days)if(![...el.options].some(o=>o.value===day))el.add(new Option(day,day));for(const option of el.options)option.selected=days.includes(option.value);document.querySelectorAll('[data-nd-rest-option]').forEach(box=>{if(box.dataset.ndRestOption===el.id)box.checked=days.includes(box.value)});}else el.value=value??'';}
+function ndSetFormFieldValue(el,value){if(!el)return;if(el.dataset.ndFixedNationality){el.value='Malaysia';return;}if(el.dataset.ndFixedProbation){el.value='3 months';return;}if(el.tagName==='SELECT'&&el.multiple){const days=ndRestDays(value);for(const day of days)if(![...el.options].some(o=>o.value===day))el.add(new Option(day,day));for(const option of el.options)option.selected=days.includes(option.value);document.querySelectorAll('[data-nd-rest-option]').forEach(box=>{if(box.dataset.ndRestOption===el.id)box.checked=days.includes(box.value)});}else el.value=value??'';}
 document.addEventListener('change',event=>{const box=event.target;if(!box.matches?.('[data-nd-rest-option]'))return;const select=document.getElementById(box.dataset.ndRestOption);if(!select)return;for(const option of select.options)if(option.value===box.value)option.selected=box.checked;select.dispatchEvent(new Event('change',{bubbles:true}));});
 function inputMarkup(label,type,i){
  const required=['Full Name'].includes(label)?' required':'';
  let el;const attr=`data-nd-field="${i}" id="ndField${i}"`;
- if(label==='Probation Period')el=`<input ${attr} type="text" value="3 months" readonly data-nd-fixed-probation="3">`;
+ if(type==='fixed:Malaysia')el=`<input ${attr} type="text" value="Malaysia" readonly data-nd-fixed-nationality="Malaysia">`;
+ else if(label==='Probation Period')el=`<input ${attr} type="text" value="3 months" readonly data-nd-fixed-probation="3">`;
  else if(label==='IC No')el=`<input ${attr} type="text" inputmode="numeric" minlength="12" maxlength="12" pattern="[0-9]{12}" title="Enter exactly 12 digits" autocomplete="off">`;
  else if(label==='Contact Number'||label==='Phone')el=`<input ${attr} type="tel" inputmode="tel" maxlength="24" data-nd-contact-phone placeholder="+60 / +65" autocomplete="tel">`;
+ else if(label==='Spouse Phone Number')el=`<input ${attr} type="tel" inputmode="tel" maxlength="24" autocomplete="tel">`;
  else if(label==='Email Address')el=`<input ${attr} type="email" maxlength="254" data-nd-contact-email autocomplete="email">`;
  else if(label==='Basic Salary (RM)')el=`<input ${attr} type="number" min="0" step="0.01" required>`;
  else if(label==='Branch')el=`<select ${attr} data-nd-interview-branch><option value="">Please select</option>${interviewBranchNames.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}</select>`;
@@ -31903,7 +31925,7 @@ async function openInterviewDocument(row){
  editFields.forEach(([label,kind],i)=>{const input=edit.querySelector('[data-nd-field="Edit'+i+'"]'),group=groups.findIndex(([,fields])=>fields.some(field=>field[0]===label));let required=label!=='Rest Day'&&(ND_INTERVIEW_EMPLOYMENT_REQUIRED.includes(label)||group===0||(!foreignApplicant&&label!=='Other Department'));if(kind==='file'&&interviewDocumentImage(interviewDocumentValue(current.form_data,label)))required=false;input.required=label==='Rest Day'?false:required;input.closest('.nd-form-field')?.classList.toggle('nd-required',required)});
  const department=edit.querySelector(`[data-nd-field="Edit${editFields.findIndex(f=>f[0]==='Department')}"]`),other=edit.querySelector('[data-nd-other-department]');
  if(department&&other){const sync=()=>{other.hidden=department.value!=='Other';other.querySelector('input').required=!other.hidden};sync();department.onchange=sync}
- syncInterviewWorkingHours(edit);
+ syncInterviewWorkingHours(edit);syncInterviewPayment(edit,!foreignApplicant);
  const signing=interviewSections[4][1].filter(([label])=>!['Company Stamp','President Signature'].includes(label));panel.innerHTML=signing.map(([label,kind],i)=>inputMarkup(label,kind,'Doc'+i)).join('');initSignatures(panel);
  signing.forEach(([label,kind],i)=>{const el=panel.querySelector(`[data-nd-field="Doc${i}"]`),value=interviewDocumentValue(current.form_data,label),src=interviewDocumentImage(value);if(kind==='signature'&&src){const image=new Image();image.onload=()=>{window.ndFitSignatureImage(el,image);el.dataset.ink='1'};image.src=src}else if(kind!=='file'&&kind!=='signature')el.value=value||(label==='Date'?new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}):'')});
  panel.querySelectorAll('canvas[data-nd-field]').forEach(canvas=>{canvas.addEventListener('pointerdown',()=>canvas.dataset.modified='1');panel.querySelector(`[data-clear-signature="${canvas.dataset.ndField}"]`).addEventListener('click',()=>canvas.dataset.modified='1')});
