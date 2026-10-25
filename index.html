@@ -31579,16 +31579,101 @@ function ndContractValuesFromSource(row,kind){
  const probation=pick('Probation (Months)','Probation Period').match(/\d+(?:\.\d+)?/);
  return {'Employee Name':kind==='employee'?row.name:row.full_name||pick('Full Name','Candidate Name'),'IC / Passport':kind==='employee'?row.nric_passport||pick('IC No','Passport No','IC / Passport'):pick('IC No','Passport No','IC / Passport'),'Home Address':row.home_address||pick('Home Address'),'Contact Number':row.phone||row.contact_number||pick('Contact Number'),Nationality:row.nationality||pick('Nationality')||(/local.*malaysian/i.test(pick('Applicant Type'))?'Malaysia':''),Branch:kind==='employee'?row.outlet:row.branch||pick('Branch','Preferred Branch'),'Start Date':kind==='employee'?row.join_date||pick('Start Date'):pick('Start Date'),Position:row.position||pick('Other Department','Department','Position','Position Applied'),'Basic Salary (RM)':kind==='employee'&&row.guaranteed_pay!=null?String(row.guaranteed_pay):pick('Basic Salary (RM)','Basic Pay (RM)'),'Allowance (RM)':kind==='employee'&&row.allowance!=null?String(row.allowance):pick('Allowance (RM)')||'0','Probation (Months)':probation?.[0]||'3','Working Hours':row.working_hours||pick('Working Hours')||window.ndBusinessConfig?.contracts?.working_hours,'Payment Authorisation Reference':row.payment_authorisation_reference||pick('Payment Authorisation Reference'),'Rest Day':Array.isArray(row.fixed_rest_weekdays)&&row.fixed_rest_weekdays.length?row.fixed_rest_weekdays.map(n=>['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][n]).filter(Boolean).join(', '):Number.isInteger(row.fixed_rest_weekday)?['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][row.fixed_rest_weekday]||'':pick('Rest Day'),'Payment Method':(row.payment_method||pick('Payment Method')||'').replace(/^bank$/i,'Bank Transfer')};
 }
-async function ndContractSignedPeople(type){if(type==='private_loan')return [];const rows=[];for(let offset=0;;offset+=500){const query=client().rpc('nd_contract_signed_people',{p_type:type}),result=await(typeof query.range==='function'?query.range(offset,offset+499):query);if(result.error)throw result.error;rows.push(...(result.data||[]));if((result.data||[]).length<500||typeof query.range!=='function')return rows;}}
+async function ndContractRequest(build,signal,timeout=15000){
+ const controller=new AbortController();let timer;
+ const abort=()=>controller.abort();
+ if(signal?.aborted)throw Error('Request cancelled.');
+ signal?.addEventListener('abort',abort,{once:true});
+ try{return await Promise.race([
+  Promise.resolve().then(()=>build(controller.signal)),
+  new Promise((_,reject)=>{timer=setTimeout(()=>{reject(Error('Loading timed out. Check your connection and click Retry.'));controller.abort();},timeout);controller.signal.addEventListener('abort',()=>reject(Error('Request cancelled.')),{once:true});})
+ ]);}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+}
+async function ndContractSignedPeople(type,signal){
+ if(type==='private_loan')return [];
+ const rows=[];
+ for(let offset=0;;offset+=500){
+  const result=await ndContractRequest(abortSignal=>{
+   let query=client().rpc('nd_contract_signed_people',{p_type:type});
+   if(typeof query.range==='function')query=query.range(offset,offset+499);
+   if(query.abortSignal)query=query.abortSignal(abortSignal);
+   return query;
+  },signal);
+  if(result.error)throw result.error;
+  rows.push(...(result.data||[]));
+  if((result.data||[]).length<500)return rows;
+ }
+}
 function ndContractPersonSigned(rows,identity,kind,id){const key=String(identity||'').toUpperCase().replace(/[^A-Z0-9]/g,'');return rows.some(row=>(key&&row.identity_key===key)||(row.source_kind===kind&&String(row.source_id)===String(id)));}
 function ndContractSourcePicker(root,form,fields){
- const kind=$('ndContractSourceKind'),select=$('ndContractSourceRecord'),message=$('ndContractSourceStatus'),branch=$('ndContractSourceBranch'),remembered=ndContractSource;let records=[],request=0;
+ const kind=$('ndContractSourceKind'),select=$('ndContractSourceRecord'),message=$('ndContractSourceStatus'),branch=$('ndContractSourceBranch'),remembered=ndContractSource;let records=[],request=0,loadController=null;
+ const retry=document.createElement('button');retry.type='button';retry.className='btn';retry.textContent='Retry';retry.hidden=true;message.after(retry);retry.onclick=()=>void kind.onchange();
  const active=()=>root.isConnected&&$('ndContractEntry')===form;
  const resetDetails=()=>{const representative=$('ndAdvanceRepresentative');if(representative){representative.disabled=true;representative.replaceChildren(new Option('Select an employee first',''));delete representative.dataset.ndRepresentativeUserId;}ndContractSource=null;form.querySelector('.nd-form-grid').hidden=true;form.querySelectorAll('[data-nd-field]').forEach(input=>{input.disabled=true;const label=fields.find((f,i)=>input.dataset.ndField==='Contract'+i)?.[0];input.value=label==='Reason for Cash Request'?'No bank account':label==='Maturity Date'?ndLoanMaturityDate():label==='Disbursement Status'?'Received':label==='Repayment Method'?'Cash':'';});form.querySelector('[type=submit]').disabled=true;const summary=$('ndContractImportedSummary');if(summary)summary.textContent='';};
  function draw(){select.innerHTML='<option value="">Select a person</option>'+records.filter(row=>!branch.value||(row.branch||row.outlet||'')===branch.value).map(row=>'<option value="'+escapeHtml(row.id)+'">'+escapeHtml((row.full_name||row.name||'Unnamed')+' · '+(row.branch||row.outlet||'No branch')+(row.last_working_date?' · Former employee':''))+'</option>').join('');}
- kind.onchange=async()=>{const token=++request;resetDetails();records=[];select.disabled=true;draw();if(!kind.value){message.textContent='Enter details manually or select an existing record.';return;}message.textContent='Loading available records…';const sourceKind=kind.value;try{await identity();if(!userEmail)throw Error('Please sign in.');for(let offset=0;;offset+=500){let query=sourceKind==='interview'?client().from(TABLE).select('id,full_name,branch,created_at,form_data').eq('form_type','interview'):client().from('employees').select('id,name,outlet,employee_no,last_working_date,nric_passport');const result=await query.order(sourceKind==='interview'?'created_at':'name',{ascending:sourceKind!=='interview'}).range(offset,offset+499);if(result.error)throw result.error;if(token!==request||!active())return;records.push(...(result.data||[]).filter(row=>sourceKind!=='interview'||(row.form_type===undefined||row.form_type==='interview')&&!!(row.form_data?.['Full Name']||row.full_name)));if((result.data||[]).length<500)break;}if(sourceKind==='interview'&&records.length){const converted=new Set();for(let start=0;start<records.length;start+=200){const result=await client().from('employees').select('source_interview_id').in('source_interview_id',records.slice(start,start+200).map(row=>String(row.id)));if(result.error)throw result.error;if(token!==request||!active())return;for(const row of result.data||[])if(row.source_interview_id)converted.add(String(row.source_interview_id));}records=records.filter(row=>!converted.has(String(row.id)));}const signed=await ndContractSignedPeople(ndContractType);if(token!==request||!active())return;records=records.filter(row=>!ndContractPersonSigned(signed,ndContractValuesFromSource(row,sourceKind)['IC / Passport'],sourceKind,row.id));branch.innerHTML='<option value="">Select branch</option>'+[...new Set(records.map(r=>r.branch||r.outlet||'').filter(Boolean))].sort().map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');draw();select.disabled=true;if(remembered&&remembered.kind===sourceKind){const row=records.find(r=>String(r.id)===remembered.id);if(row){branch.value=row.branch||row.outlet||'';draw();select.disabled=false;select.value=remembered.id;void select.onchange();}}message.textContent=records.length?'':'No records available to your account.';}catch(error){if(token===request&&active())message.textContent='Unable to load people: '+error.message;}};
+ kind.onchange=async()=>{
+ const token=++request;loadController?.abort();loadController=new AbortController();
+ const signal=loadController.signal,contractType=ndContractType;
+ resetDetails();records=[];select.disabled=true;branch.disabled=true;
+ branch.innerHTML='<option value="">Select branch</option>';retry.hidden=true;draw();
+ if(!kind.value){message.textContent='Enter details manually or select an existing record.';branch.disabled=false;return;}
+ message.textContent='Loading available records…';const sourceKind=kind.value;
+ try{
+  if(!userEmail)await ndContractRequest(()=>identity(),signal);
+  if(!userEmail)throw Error('Please sign in.');
+  const loadRows=async()=>{
+   const rows=[];
+   for(let offset=0;;offset+=500){
+    const result=await ndContractRequest(abortSignal=>{
+     // List only names and identity keys. Photos, signatures and document data load after selection.
+     let query=sourceKind==='interview'
+      ?client().from(TABLE).select('id,full_name,branch,created_at,identity_ic:form_data->>"IC No",identity_passport:form_data->>"Passport No",identity_legacy:form_data->>"IC / Passport"').eq('form_type','interview')
+      :client().from('employees').select('id,name,outlet,employee_no,last_working_date,nric_passport');
+     query=query.order(sourceKind==='interview'?'created_at':'name',{ascending:sourceKind!=='interview'}).order('id',{ascending:true}).range(offset,offset+499);
+     return query.abortSignal?query.abortSignal(abortSignal):query;
+    },signal);
+    if(result.error)throw result.error;
+    if(token!==request||!active())throw Error('Request cancelled.');
+    rows.push(...(result.data||[]).filter(row=>sourceKind!=='interview'||!!row.full_name));
+    if((result.data||[]).length<500)break;
+    message.textContent='Loading available records… '+rows.length+' loaded';
+   }
+   if(sourceKind==='interview'&&rows.length){
+    const converted=new Set(),batches=[];
+    for(let start=0;start<rows.length;start+=200)batches.push(rows.slice(start,start+200).map(row=>String(row.id)));
+    for(let start=0;start<batches.length;start+=4){
+     const results=await Promise.all(batches.slice(start,start+4).map(ids=>ndContractRequest(abortSignal=>{
+      const query=client().from('employees').select('source_interview_id').in('source_interview_id',ids);
+      return query.abortSignal?query.abortSignal(abortSignal):query;
+     },signal)));
+     for(const result of results){if(result.error)throw result.error;for(const row of result.data||[])if(row.source_interview_id)converted.add(String(row.source_interview_id));}
+    }
+    return rows.filter(row=>!converted.has(String(row.id)));
+   }
+   return rows;
+  };
+  const [available,signed]=await Promise.all([loadRows(),ndContractSignedPeople(contractType,signal)]);
+  if(token!==request||!active())return;
+  const identityKeys=new Set(signed.map(row=>row.identity_key).filter(Boolean));
+  const sourceKeys=new Set(signed.map(row=>row.source_kind+'|'+String(row.source_id)));
+  records=available.filter(row=>{
+   const identity=sourceKind==='interview'?(row.identity_ic||row.identity_passport||row.identity_legacy||''):row.nric_passport;
+   const key=String(identity||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+   return !(key&&identityKeys.has(key))&&!sourceKeys.has(sourceKind+'|'+String(row.id));
+  });
+  branch.innerHTML='<option value="">Select branch</option>'+[...new Set(records.map(r=>r.branch||r.outlet||'').filter(Boolean))].sort().map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');
+  draw();select.disabled=true;
+  message.textContent=records.length?'Select a branch, then select a person.':'No records available to your account.';
+  if(remembered&&remembered.kind===sourceKind){
+   const row=records.find(r=>String(r.id)===remembered.id);
+   if(row){branch.value=row.branch||row.outlet||'';draw();select.disabled=false;select.value=remembered.id;void select.onchange();}
+  }
+ }catch(error){
+  if(token===request&&active()){loadController.abort();message.textContent='Unable to load people: '+error.message;retry.hidden=false;}
+ }finally{if(token===request&&active())branch.disabled=false;}
+ };
  branch.onchange=()=>{++request;resetDetails();draw();select.disabled=!branch.value;const summary=$('ndContractImportedSummary');if(summary)summary.textContent='';};
- select.onchange=async()=>{resetDetails();if(!select.value){message.textContent='Select a person before generating a contract.';return;}const token=++request,id=select.value,sourceKind=kind.value;select.disabled=true;message.textContent='Loading person details…';try{const result=await client().from(sourceKind==='interview'?TABLE:'employees').select('*').eq('id',id).single();if(result.error)throw result.error;if(token!==request||!active())return;if(!result.data)throw Error('This record is no longer available.');if(sourceKind==='interview'){if(result.data.form_type!=='interview')throw Error('Select an interview record.');const converted=await client().from('employees').select('id').eq('source_interview_id',String(id)).maybeSingle();if(converted.error)throw converted.error;if(token!==request||!active())return;if(converted.data)throw Error('This person is already an employee. Select Existing Employees.');}const values=ndContractValuesFromSource(result.data,sourceKind);ndContractSource={kind:sourceKind,id:String(id),foreign:ndForeignInterview(result.data,sourceKind)};ndContractDraft['Media Consent']='';if($('ndContractMediaConsent'))$('ndContractMediaConsent').value='';for(const [label]of fields){const input=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]===label)+'"]');const config=window.ndBusinessConfig?.contracts||{},source=result.data.form_data||result.data.interview_profile||{};const defaults={'Maturity Date':ndLoanMaturityDate(values['Disbursement Date']||source['Disbursement Date']),'Disbursement Status':'Received','Repayment Method':'Cash','Scope of Services':config.scope||'Services follow the applicable written Company Policies.','Payment Schedule':config.payment_schedule||'Payment follows the applicable written Company Policies and mandatory legal deadlines.','Probation (Months)':config.probation_months||'3','Purpose of Temporary Submission':config.passport_purpose||'','Custodian Name':config.custodian||'','Expected Return Date':'','Additional Terms':config.additional_terms||''};const edits=ndContractEdits.get(ndContractEditKey(ndContractSource))||{};const value=Object.hasOwn(edits,label)?edits[label]:String(values[label]||source[label]||defaults[label]||(['Start Date','Submission Date','Confirmation Date','Request Date','Disbursement Date'].includes(label)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date()):label==='Notice Period'?'One calendar month':label==='Reason for Cash Request'?'No bank account':''));if(input.tagName==='SELECT'&&value&&![...input.options].some(o=>o.value===value))input.add(new Option(value,value));ndSetFormFieldValue(input,value);ndContractDraft[label]=value;}form.ndSyncPayment?.();form.ndSyncNotice?.();form.querySelector('.nd-form-grid').hidden=false;form.querySelectorAll('[data-nd-field]').forEach(input=>input.disabled=false);form.ndSyncPayment?.();if(ndContractType==='private_loan')await window.ndLoadContractRepresentatives($('ndAdvanceRepresentative'),values.Branch,message);if(token!==request||!active())return;form.querySelector('[type=submit]').disabled=ndContractType==='private_loan'&&!$('ndAdvanceRepresentative')?.value;const summary=$('ndContractImportedSummary');summary.textContent='';if(ndContractType!=='private_loan'||$('ndAdvanceRepresentative')?.value)message.textContent='';}catch(error){if(token===request&&active())message.textContent='Unable to copy details: '+error.message;}finally{if(token===request&&active())select.disabled=false;}};
+ select.onchange=async()=>{resetDetails();if(!select.value){message.textContent='Select a person before generating a contract.';return;}const token=++request,id=select.value,sourceKind=kind.value;select.disabled=true;message.textContent='Loading person details…';try{const result=await ndContractRequest(signal=>{const query=client().from(sourceKind==='interview'?TABLE:'employees').select('*').eq('id',id).single();return query.abortSignal?query.abortSignal(signal):query;});if(result.error)throw result.error;if(token!==request||!active())return;if(!result.data)throw Error('This record is no longer available.');if(sourceKind==='interview'){if(result.data.form_type!=='interview')throw Error('Select an interview record.');const converted=await ndContractRequest(signal=>{const query=client().from('employees').select('id').eq('source_interview_id',String(id)).maybeSingle();return query.abortSignal?query.abortSignal(signal):query;});if(converted.error)throw converted.error;if(token!==request||!active())return;if(converted.data)throw Error('This person is already an employee. Select Existing Employees.');}const values=ndContractValuesFromSource(result.data,sourceKind);ndContractSource={kind:sourceKind,id:String(id),foreign:ndForeignInterview(result.data,sourceKind)};ndContractDraft['Media Consent']='';if($('ndContractMediaConsent'))$('ndContractMediaConsent').value='';for(const [label]of fields){const input=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]===label)+'"]');const config=window.ndBusinessConfig?.contracts||{},source=result.data.form_data||result.data.interview_profile||{};const defaults={'Maturity Date':ndLoanMaturityDate(values['Disbursement Date']||source['Disbursement Date']),'Disbursement Status':'Received','Repayment Method':'Cash','Scope of Services':config.scope||'Services follow the applicable written Company Policies.','Payment Schedule':config.payment_schedule||'Payment follows the applicable written Company Policies and mandatory legal deadlines.','Probation (Months)':config.probation_months||'3','Purpose of Temporary Submission':config.passport_purpose||'','Custodian Name':config.custodian||'','Expected Return Date':'','Additional Terms':config.additional_terms||''};const edits=ndContractEdits.get(ndContractEditKey(ndContractSource))||{};const value=Object.hasOwn(edits,label)?edits[label]:String(values[label]||source[label]||defaults[label]||(['Start Date','Submission Date','Confirmation Date','Request Date','Disbursement Date'].includes(label)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date()):label==='Notice Period'?'One calendar month':label==='Reason for Cash Request'?'No bank account':''));if(input.tagName==='SELECT'&&value&&![...input.options].some(o=>o.value===value))input.add(new Option(value,value));ndSetFormFieldValue(input,value);ndContractDraft[label]=value;}form.ndSyncPayment?.();form.ndSyncNotice?.();form.querySelector('.nd-form-grid').hidden=false;form.querySelectorAll('[data-nd-field]').forEach(input=>input.disabled=false);form.ndSyncPayment?.();if(ndContractType==='private_loan')await window.ndLoadContractRepresentatives($('ndAdvanceRepresentative'),values.Branch,message);if(token!==request||!active())return;form.querySelector('[type=submit]').disabled=ndContractType==='private_loan'&&!$('ndAdvanceRepresentative')?.value;const summary=$('ndContractImportedSummary');summary.textContent='';if(ndContractType!=='private_loan'||$('ndAdvanceRepresentative')?.value)message.textContent='';}catch(error){if(token===request&&active())message.textContent='Unable to copy details: '+error.message;}finally{if(token===request&&active())select.disabled=false;}};
 }
 function ndForeignInterview(row,kind){const v=kind==='interview'?(row.form_data||{}):(row.interview_profile||{}),app=String(v['Applicant Type']||''),nat=String(row.nationality||v.Nationality||'').trim().toLowerCase();if(/^Local\b/i.test(app)||['malaysia','malaysian','malaysian citizen'].includes(nat))return false;return /foreign|non.local/i.test(app)||row.staff_category==='non_local'||!!nat;}
 function ndContractBaseFields(type){if(type==='passport')return [['Employee Name','text'],['IC / Passport','text'],['Nationality','select:|Malaysia|China|Myanmar|Vietnam|Indonesia|Thailand|Other'],['Branch','text'],['Custodian Name','text'],['Submission Date','date'],['Expected Return Date','date'],['Additional Terms','textarea']];const shared=[['Employee Name','text'],['IC / Passport','text'],['Home Address','textarea'],['Nationality','select:|Malaysia|China|Myanmar|Vietnam|Indonesia|Thailand|Other'],['Branch','text'],['Start Date','date']];return shared.concat(type==='collaboration'?[['Scope of Services','textarea'],['Payment Schedule','textarea'],['Notice Period','text']]:[['Position','text'],['Basic Salary (RM)','number'],...(type==='onboarding'?[['Probation (Months)','number']]:[]),['Rest Day','select:|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'],['Payment Method','select:|Bank Transfer|Cash|TNG']],[['Additional Terms','textarea']]);}
