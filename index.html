@@ -10652,7 +10652,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 </div>
 <div class="full"><label for="ndResignAttachment">Resignation Document</label><input id="ndResignAttachment" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"><label style="display:flex;align-items:center;gap:8px;margin-top:10px"><input id="ndResignNA" type="checkbox">N/A — No Document</label></div>
 <section id="ndResignItems" class="nd-items-panel"></section><section id="ndResignPassport" class="nd-items-panel" aria-live="polite"></section>
-<div class="helper" style="margin:12px 0">Salary remains visible through the month of the last working day. Historical salary is retained.</div>
+
 <div class="helper" id="ndResignMessage" role="status"></div>
 <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button class="btn" id="ndResignationCancelBtn" style="flex:1;min-width:120px" type="button">Close</button><button class="btn" id="ndConfirmResignationBtn" style="flex:2;min-width:180px" type="button">Confirm Resignation</button></div>
 </div></div>
@@ -15816,7 +15816,7 @@ async function ndPerformResignation(){
   if(!byId("ndResignNA").checked&&!byId("ndResignAttachment").files.length){msg.textContent="Upload the resignation document or select N/A.";return;}
   try{const fresh=await ndFetchItemsEmployee(emp.id);if(!ndItemsCleared(fresh.notes)){ndRenderResignItems();msg.textContent="Complete employee item returns before confirming resignation. Open Employee Items to review.";return;}emp.notes=fresh.notes;}catch(err){msg.textContent="Unable to check item clearance: "+err.message;return;}
   try{const stock=await salaryDb.from('staff_stock_issues').select('issued_qty,returned_qty,damaged_qty,consumed_qty,return_required').eq('employee_id',empId);if(stock.error)throw stock.error;if((stock.data||[]).some(r=>r.return_required!==false&&Number(r.issued_qty)-Number(r.returned_qty||0)-Number(r.damaged_qty||0)-Number(r.consumed_qty||0)>0)){msg.textContent='Return outstanding products in Inventory > More > Staff Stock before confirming resignation.';return;}}catch(error){msg.textContent='Unable to check stock returns: '+error.message;return;}
-  try{const check=await salaryDb.rpc('nd_passport_resignation_check',{p_employee:Number(emp.id)});if(check.error)throw check.error;if(check.data?.required){void window.ndLoadResignationPassport?.(emp);byId('ndResignPassport')?.scrollIntoView({block:'nearest'});msg.textContent='Use Passport Return / Sign above to complete the return acknowledgement, then confirm resignation.';return;}}catch(error){msg.textContent='Unable to check passport return: '+error.message;return;}
+  try{const check=await salaryDb.rpc('nd_passport_resignation_check',{p_employee:Number(emp.id)});if(check.error)throw check.error;if(check.data?.required){void window.ndLoadResignationPassport?.(emp);byId('ndResignPassport')?.scrollIntoView({block:'nearest'});msg.textContent='';return;}}catch(error){msg.textContent='Unable to check passport return: '+error.message;return;}
   if(!confirm(`Confirm resignation for ${emp.name}?\nLast Working Day: ${lastDay}\nSalary will remain visible for ${lastDay.slice(0,7)}.`))return;
   const btn=byId("ndConfirmResignationBtn");btn.disabled=true;let resignationSaved=false;
   try{
@@ -34024,7 +34024,7 @@ window.ndLoadResignationPassport=async employee=>{
  if(!employee){message.textContent='Select an employee to check passport return.';return;}
  message.textContent='Checking passport return…';
  const button=document.createElement('button');button.type='button';button.className='btn primary';button.textContent='Passport Return / Sign';panel.append(button);
- const refresh=async()=>{if(active())await window.ndLoadResignationPassport(employee);const status=$('ndResignMessage');if(status&&String($('ndResignEmployee')?.value)===String(employee.id))status.textContent='Passport return saved. Review the clearance status, then confirm resignation.';};
+ const refresh=async()=>{if(active())await window.ndLoadResignationPassport(employee);const status=$('ndResignMessage');if(status&&String($('ndResignEmployee')?.value)===String(employee.id))status.textContent='';};
  button.onclick=()=>window.ndOpenEmployeePassportReturn(employee,refresh);
  try{
   const check=await window.salaryDb.rpc('nd_passport_resignation_check',{p_employee:Number(employee.id)});
