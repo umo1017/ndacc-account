@@ -7163,8 +7163,9 @@ return `<div class="history-date-card">
       return;
     }
     $("syncState").textContent="Saving...";
+    $("syncState").className="helper";
     const p=payload();
-    if(!p) return;
+    if(!p){$("syncState").textContent="Please correct the highlighted payment details before submitting.";$("syncState").className="bad";return;}
     const oldRow=allRows.find(r=>r.branch===p.branch&&r.settlement_date===p.settlement_date);
     const statuses={...(oldRow?.payment_statuses||{})};
 
@@ -7235,12 +7236,24 @@ return `<div class="history-date-card">
     setDailyDirty();
   }
 
+  let dailySubmitting=false;
   async function submitDailySettlement(){
+    if(dailySubmitting)return;
+    dailySubmitting=true;
+    try{await performDailySettlementSubmit();}
+    catch(err){
+      const message="Unable to save: "+(err?.message||String(err));
+      const state=$("dailySubmitState"),sync=$("syncState"),btn=$("dailySubmitBtn");
+      if(state){state.textContent=message;state.className="helper bad";}
+      if(sync){sync.textContent=message;sync.className="bad";}
+      if(btn){btn.disabled=false;btn.textContent="Retry Submit";}
+    }finally{dailySubmitting=false;}
+  }
+  async function performDailySettlementSubmit(){
     const transferInput=$("cashToPettyAmount");
-    if(transferInput && Number(transferInput.value||0)>0){
-      transferInput.dispatchEvent(new Event("change"));
-      if(Number(transferInput.value||0)>0) return;
-    }
+    // This field holds the day's transfer total, including saved transfers.
+    // Validate/stage it once; a positive total must not cancel submission.
+    if(transferInput && transferInput.onchange?.()===false)return;
     const btn=$("dailySubmitBtn");
     const state=$("dailySubmitState");
     if(!dailyDirty){
@@ -7312,7 +7325,7 @@ return `<div class="history-date-card">
         btn.textContent="Retry Submit";
       }
       if(state){
-        state.textContent="Save failed — please retry";
+        state.textContent=sync?.textContent||"Save failed — please retry";
         state.className="helper bad";
       }
     }
@@ -8324,13 +8337,14 @@ return `<div class="history-date-card">
       cashToPettyInput.oninput=()=>setDailyDirty();
       cashToPettyInput.onchange=()=>{
         const amount=Number(cashToPettyInput.value||0),previous=ndPettyTransferTotal();
-        if(!Number.isFinite(amount)||amount<0){alert('Please enter a valid amount.');cashToPettyInput.value=previous||'';return;}
+        if(!Number.isFinite(amount)||amount<0){alert('Please enter a valid amount.');cashToPettyInput.value=previous||'';return false;}
         const remaining=Number(String($('todayTotalCash')?.textContent||'0').replace(/[^0-9.-]/g,''))||0;
-        if(amount-previous>remaining+0.005){alert('Amount exceeds available Total Cash.');cashToPettyInput.value=previous||'';return;}
+        if(amount-previous>remaining+0.005){alert('Amount exceeds available Total Cash.');cashToPettyInput.value=previous||'';return false;}
         const delta=Math.round((amount-previous)*100)/100;
         if(delta>0)pettyEntries.push({type:'in',amount:delta,reason:'Cash Withdrawal to Petty Cash',transfer_to_petty:true,created_at:new Date().toISOString()});
         else if(delta<0){let reduce=-delta;for(let i=pettyEntries.length-1;i>=0&&reduce>0;i--){const e=pettyEntries[i];if(e.type!=='in'||!(e.transfer_to_petty===true||e.reason==='Cash Withdrawal to Petty Cash'))continue;const used=Math.min(reduce,Number(e.amount||0));e.amount=Math.round((Number(e.amount)-used)*100)/100;reduce=Math.round((reduce-used)*100)/100;if(!e.amount)pettyEntries.splice(i,1);}}
-        calc();renderPetty();scheduleSave();
+        if(delta!==0){calc();renderPetty();scheduleSave();}
+        return true;
       };
     }
 
@@ -33905,54 +33919,86 @@ window.ndSignatureRoleSection=function(role,title,name,content){
 'use strict';
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let sequence=0;
-const identityKey=value=>String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-const hasPassport=a=>a?.contract_type==='passport'||(a?.appendices||[]).some(x=>x.contract_type==='passport');
+const metadata=notes=>{try{const value=JSON.parse(notes||'');if(value?.nd_staff_metadata===1)return value;}catch(_){}return {nd_staff_metadata:1,text:String(notes||'')};};
+const receipt=notes=>metadata(notes).passport_return_acknowledgement||null;
+const matches=(r,e)=>!!r&&r.acknowledged===true&&String(r.employee_id)===String(e.id)&&String(r.staff_identity||'')===String(e.nric_passport||'')&&String(r.staff_join_date||'')===String(e.join_date||'').slice(0,10)&&r.employee_signature&&r.company_signature;
+const summary=r=>'<article class="nd-passport-receipt"><h2>Passport Return Acknowledgement</h2><p><strong>Employee:</strong> '+esc(r.employee_name)+'</p><p><strong>Passport Number:</strong> '+esc(r.passport_number)+'</p><p><strong>Return Date:</strong> '+esc(r.return_date)+'</p><p>I confirm that I have received the passport identified above.</p><div class="nd-return-signatures"><section><h3>Employee Signature</h3><img alt="Employee signature" src="'+esc(r.employee_signature)+'"></section><section><h3>Person in Charge Signature</h3><p>'+esc(r.representative_name)+'</p><img alt="Person in charge signature" src="'+esc(r.company_signature)+'"></section></div><p>Recorded by '+esc(r.recorded_by)+' · '+esc(r.signed_at)+'</p></article>';
+async function employeeRecord(id){const r=await window.salaryDb.from('employees').select('id,name,outlet,nric_passport,join_date,notes').eq('id',id).single();if(r.error)throw r.error;if(!r.data)throw Error('Employee not found.');return r.data;}
+window.ndOpenEmployeePassportReturn=async(employee,afterSave)=>{
+ const db=window.salaryDb;let d=$('ndEmployeePassportReturnDialog');
+ if(!d){d=document.createElement('dialog');d.id='ndEmployeePassportReturnDialog';d.className='nd-ops-dialog';document.body.append(d);}
+ if(d.dataset.busy==='1')return;
+ const token=String(employee.id);d.dataset.employeeId=token;
+ d.innerHTML='<header><h2>Passport Return</h2><button class="btn" type="button" data-close>Close</button></header><div data-body>Loading employee…</div><p role="status"></p>';
+ d.querySelector('[data-close]').onclick=()=>{if(d.dataset.busy!=='1')d.close();};if(!d.open)d.showModal();
+ const body=d.querySelector('[data-body]'),message=d.querySelector('[role=status]');
+ const active=()=>d.open&&d.dataset.employeeId===token;
+ try{
+  const e=await employeeRecord(employee.id);if(!active())return;
+  const check=await db.rpc('nd_passport_resignation_check',{p_employee:Number(e.id)});if(check.error)throw check.error;if(!active())return;
+  const existing=receipt(e.notes);
+  if(matches(existing,e)&&!check.data?.required){body.innerHTML=summary(existing);return;}
+  body.innerHTML='<p><strong>Employee:</strong> '+esc(e.name)+'</p><p><strong>Branch:</strong> '+esc(e.outlet)+'</p><label>Passport Number *<input data-passport-number value="'+esc(e.nric_passport||'')+'" maxlength="80"></label><label>Return Date *<input data-return-date type="date" value="'+new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date())+'"></label>'+
+   window.ndSignatureRoleSection('employee','Employee Signature',e.name,'<canvas data-sign="employee" width="1000" height="400"></canvas><button type="button" class="btn" data-clear="employee">Clear Employee Signature</button>')+
+   window.ndSignatureRoleSection('company','Person in Charge Signature','','<label>Person in Charge Name *<input data-representative maxlength="200"></label><canvas data-sign="company" width="1000" height="400"></canvas><button type="button" class="btn" data-clear="company">Clear Person in Charge Signature</button>')+
+   '<label class="nd-passport-ack"><input type="checkbox" data-ack> I confirm that I have received the passport identified above.</label><button class="btn primary" type="button" data-save>Confirm Return & Save Signatures</button>';
+  if(window.ndLoadCurrentAccountName)void window.ndLoadCurrentAccountName(db).then(name=>{if(active()&&!body.querySelector('[data-representative]').value)body.querySelector('[data-representative]').value=name;}).catch(()=>{});
+  for(const canvas of body.querySelectorAll('canvas')){
+   const c=canvas.getContext('2d');let down=false;c.lineWidth=3;c.lineCap='round';c.strokeStyle='#173b2d';
+   const point=event=>{const box=canvas.getBoundingClientRect();return [(event.clientX-box.left)*canvas.width/box.width,(event.clientY-box.top)*canvas.height/box.height];};
+   canvas.onpointerdown=event=>{down=true;canvas.setPointerCapture(event.pointerId);c.beginPath();const [x,y]=point(event);c.moveTo(x,y);c.lineTo(x+.1,y+.1);c.stroke();canvas.dataset.ink='1';};
+   canvas.onpointermove=event=>{if(down){c.lineTo(...point(event));c.stroke();}};
+   canvas.onpointerup=canvas.onpointercancel=()=>down=false;
+   body.querySelector('[data-clear="'+canvas.dataset.sign+'"]').onclick=()=>{c.clearRect(0,0,canvas.width,canvas.height);delete canvas.dataset.ink;};
+  }
+  let attempt=null;
+  body.querySelector('[data-save]').onclick=async event=>{
+   if(d.dataset.busy==='1')return;
+   const button=event.currentTarget,person=body.querySelector('[data-sign="employee"]'),company=body.querySelector('[data-sign="company"]'),number=body.querySelector('[data-passport-number]').value.trim(),date=body.querySelector('[data-return-date]').value,name=body.querySelector('[data-representative]').value.trim();
+   if(!number||!date||!name||!person.dataset.ink||!company.dataset.ink||!body.querySelector('[data-ack]').checked){message.textContent='Enter the passport number, return date and person in charge, confirm receipt and provide both signatures.';return;}
+   if(date>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date())){message.textContent='The return date cannot be in the future.';return;}
+   button.disabled=true;d.dataset.busy='1';message.textContent='Saving passport return…';let saved=false;
+   try{
+    const auth=await db.auth.getUser();if(auth.error||!auth.data?.user)throw Error('Please sign in again.');
+    const fresh=await employeeRecord(e.id),current=receipt(fresh.notes);
+    const details={passport_number:number,return_date:date,representative_name:name,employee_signature:person.toDataURL('image/png'),company_signature:company.toDataURL('image/png')};
+    const key=JSON.stringify(details);
+    if(!attempt||attempt.key!==key)attempt={key,id:crypto.randomUUID()};
+    if(current?.request_id===attempt.id){saved=true;}
+    else{
+     const signed={...details,version:1,request_id:attempt.id,employee_id:e.id,employee_name:fresh.name,branch:fresh.outlet,staff_identity:fresh.nric_passport||'',staff_join_date:String(fresh.join_date||'').slice(0,10),acknowledged:true,signed_at:new Date().toISOString(),recorded_by:String(auth.data.user.email||'').toLowerCase(),recorded_by_user_id:auth.data.user.id};
+     const envelope=metadata(fresh.notes);
+     if(envelope.passport_return_acknowledgement)envelope.passport_return_history=[...(envelope.passport_return_history||[]),envelope.passport_return_acknowledgement];
+     envelope.passport_return_acknowledgement=signed;
+     const result=await db.rpc('nd_staff_update_safe',{p_employee_id:Number(e.id),p_expected_notes:fresh.notes??null,p_changes:{notes:JSON.stringify(envelope)}});
+     if(result.error)throw result.error;if(result.data?.saved!==true)throw Error('Passport return was not confirmed.');saved=true;
+    }
+    window.dispatchEvent(new CustomEvent('nd-staff-items-changed',{detail:{employee_id:e.id}}));await afterSave?.();d.close();
+   }catch(error){
+    if(!saved&&attempt&&/load failed|failed to fetch|network|timeout/i.test(String(error.message||error))){
+     try{const fresh=await employeeRecord(e.id);if(receipt(fresh.notes)?.request_id===attempt.id){saved=true;await afterSave?.();d.close();return;}}catch(_){}
+    }
+    message.textContent=(saved?'Passport return saved. Unable to refresh: ':'Unable to save passport return: ')+error.message;
+   }finally{d.dataset.busy='0';if(button.isConnected)button.disabled=false;}
+  };
+ }catch(error){message.textContent='Unable to open passport return: '+error.message;}
+};
 window.ndLoadResignationPassport=async employee=>{
  const panel=$('ndResignPassport');if(!panel)return;const run=++sequence;
- const current=()=>run===sequence&&String($('ndResignEmployee')?.value||'')===String(employee?.id||'');
- panel.innerHTML='<h4>Passport Return</h4>';
- if(!employee){panel.insertAdjacentHTML('beforeend','<p class="helper">Select an employee to check passport return.</p>');return;}
- panel.insertAdjacentHTML('beforeend','<p class="helper" data-passport-status>Checking passport return…</p>');
- const message=panel.querySelector('[data-passport-status]'),db=window.salaryDb;
- const retry=()=>{let b=panel.querySelector('[data-passport-retry]');if(!b){b=document.createElement('button');b.type='button';b.className='btn';b.dataset.passportRetry='';b.textContent='Retry';b.onclick=()=>void window.ndLoadResignationPassport(employee);panel.append(b);}};
+ const active=()=>run===sequence&&String($('ndResignEmployee')?.value||'')===String(employee?.id||'');
+ panel.innerHTML='<h4>Passport Return</h4><p class="helper" data-passport-status></p>';
+ const message=panel.querySelector('[data-passport-status]');
+ if(!employee){message.textContent='Select an employee to check passport return.';return;}
+ message.textContent='Checking passport return…';
+ const button=document.createElement('button');button.type='button';button.className='btn primary';button.textContent='Passport Return / Sign';panel.append(button);
+ const refresh=async()=>{if(active())await window.ndLoadResignationPassport(employee);const status=$('ndResignMessage');if(status&&String($('ndResignEmployee')?.value)===String(employee.id))status.textContent='Passport return saved. Review the clearance status, then confirm resignation.';};
+ button.onclick=()=>window.ndOpenEmployeePassportReturn(employee,refresh);
  try{
-  const check=await db.rpc('nd_passport_resignation_check',{p_employee:Number(employee.id)});
-  if(!current())return;if(check.error)throw check.error;
-  if(!check.data?.required){message.textContent='No outstanding passport return.';return;}
-  message.textContent='Passport return acknowledgement is required. Complete both signatures here.';
-  const button=document.createElement('button');button.type='button';button.className='btn primary';button.textContent='Passport Return / Sign';panel.append(button);
-  button.onclick=async()=>{
-   if(button.disabled)return;button.disabled=true;message.textContent='Loading passport agreement…';
-   try{
-    const person=await db.from('employees').select('id,name,nric_passport,source_interview_id').eq('id',employee.id).single();
-    if(person.error)throw person.error;if(!current())return;
-    const e=person.data,filters=[['form_data->__nd_contract_source->>id',String(e.id)]];
-    if(e.source_interview_id)filters.push(['form_data->__nd_contract_source->>id',String(e.source_interview_id)]);
-    if(e.nric_passport)filters.push(['form_data->__nd_signed_contract->employee->>identity',String(e.nric_passport)]);
-    const results=await Promise.all(filters.map(([key,value])=>db.from('nd_staff_forms').select('id,form_type,form_data,created_at').eq('form_type','contract').eq(key,value).order('created_at',{ascending:false}).limit(100)));
-    if(!current())return;
-    const rows=new Map();
-    for(const result of results){if(result.error)throw result.error;for(const row of result.data||[]){
-     const a=row.form_data?.__nd_signed_contract,source=row.form_data?.__nd_contract_source;
-     const sameIdentity=identityKey(e.nric_passport)&&identityKey(a?.employee?.identity)===identityKey(e.nric_passport);
-     const sameSource=source?.kind==='employee'&&String(source.id)===String(e.id)||source?.kind==='interview'&&e.source_interview_id&&String(source.id)===String(e.source_interview_id);
-     if(a?.signed_at&&hasPassport(a)&&(sameIdentity||sameSource))rows.set(String(row.id),row);
-    }}
-    const candidates=[...rows.values()].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
-    if(!candidates.length)throw Error('The linked signed passport agreement could not be found. Check this employee’s contract records.');
-    const returned=await db.from('nd_passport_returns').select('form_id').in('form_id',candidates.map(r=>String(r.id)));
-    if(returned.error)throw returned.error;if(!current())return;
-    const completed=new Set((returned.data||[]).map(r=>String(r.form_id))),row=candidates.find(r=>!completed.has(String(r.id)));
-    if(!row){await window.ndLoadResignationPassport(employee);return;}
-    await window.ndOpenPassportReturn(row,row.form_data.__nd_signed_contract,{onSaved:async()=>{
-     if(current())await window.ndLoadResignationPassport(employee);
-     const status=$('ndResignMessage');if(status&&String($('ndResignEmployee')?.value)===String(employee.id))status.textContent='Passport return saved. Review the clearance status, then confirm resignation.';
-    }});
-    if(current())message.textContent='Complete the passport return signatures in the open window.';
-   }catch(error){if(current())message.textContent='Unable to open passport return: '+error.message;}
-   finally{if(button.isConnected)button.disabled=false;}
-  };
- }catch(error){if(current()){message.textContent='Unable to check passport return: '+error.message;retry();}}
+  const check=await window.salaryDb.rpc('nd_passport_resignation_check',{p_employee:Number(employee.id)});
+  if(!active())return;if(check.error)throw check.error;
+  if(check.data?.required)message.textContent='Complete the employee and person in charge signatures here after the passport is returned.';
+  else{message.textContent='No outstanding passport return.';button.textContent='View / Sign Passport Return';}
+ }catch(error){if(active())message.textContent='Unable to check passport return: '+error.message;}
 };
 })();
 </script>
@@ -33962,4 +34008,15 @@ window.ndLoadResignationPassport=async employee=>{
 #ndResignPassport .btn{position:static!important;margin-top:10px;white-space:normal}
 #ndResignationModal #ndResignNA{width:20px!important;min-width:20px!important;height:20px!important;min-height:20px!important;flex:0 0 20px!important;margin:0!important}
 #ndResignationModal input[type=date]{box-sizing:border-box;min-width:0;max-width:100%}
+</style>
+
+<style id="nd-direct-passport-receipt-style">
+#ndEmployeePassportReturnDialog{width:min(860px,95vw);max-height:92dvh;overflow:auto}
+#ndEmployeePassportReturnDialog>header{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#ndEmployeePassportReturnDialog [data-body]>label{display:block;margin:12px 0;font-size:14px;font-weight:700}
+#ndEmployeePassportReturnDialog input:not([type=checkbox]){box-sizing:border-box;width:100%;min-height:44px;padding:10px;border:1px solid #b6cbbc;border-radius:9px;font-size:16px}
+#ndEmployeePassportReturnDialog canvas{display:block;width:100%;height:200px;touch-action:none;background:white}
+#ndEmployeePassportReturnDialog .nd-passport-ack{display:flex!important;align-items:flex-start;gap:8px}
+#ndEmployeePassportReturnDialog [data-ack]{flex:0 0 20px;width:20px!important;height:20px!important}
+.nd-passport-receipt img{display:block;max-width:100%;max-height:130px;object-fit:contain}
 </style>
