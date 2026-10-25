@@ -12610,15 +12610,25 @@ window.ndBirthdayCanView=(e,email)=>['umo1017@gmail.com','mars83002566@gmail.com
 window.ndRefreshEmployeeItemChoices=()=>ndRefreshOnboardStock();
 async function ndFetchItemsEmployee(id){
  const local=salaryEmployees.find(e=>String(e.id)===String(id));if(!ndCanViewItems(local))throw Error('Employee access denied.');
- const {data,error}=await salaryDb.from('employees').select('*').eq('id',id).single();if(error)throw error;if(!data||!ndCanViewItems(data))throw Error('Employee not found or access denied.');Object.assign(local,data);return local;
+ const {data,error}=await salaryDb.from('employees').select('id,name,outlet,notes,last_working_date').eq('id',id).single();if(error)throw error;if(!data||!ndCanViewItems(data))throw Error('Employee not found or access denied.');Object.assign(local,data);return local;
+}
+async function ndSaveStaffNotes(emp,notes){
+ try{
+  const {data,error}=await salaryDb.rpc('nd_staff_update_safe',{p_employee_id:Number(emp.id),p_expected_notes:emp.notes??null,p_changes:{notes}});
+  if(error)throw error;if(data?.saved!==true)throw Error('The employee update was not confirmed.');
+  emp.notes=notes;return;
+ }catch(error){
+  if(/load failed|failed to fetch|network|timeout|connection/i.test(String(error.message||error))){
+   try{const fresh=await ndFetchItemsEmployee(emp.id);if(fresh.notes===notes)return;}catch(_){}
+  }
+  throw error;
+ }
 }
 async function ndWriteItems(emp,ledger){
  if(ledger.issues?.some(i=>i.sku_id))await window.ndEnsureStaffStockReady();
  const {data:{user}}=await salaryDb.auth.getUser();if(!user||String(user.email||'').toLowerCase()!==String(currentSalaryUserEmail).toLowerCase()||!canEditStaffRecord(emp))throw Error('Staff management access required.');
  const notes=JSON.stringify(ndItemsEnvelope(emp.notes,ledger));
- let q=salaryDb.from('employees').update({notes}).eq('id',emp.id);
- q=emp.notes==null?q.is('notes',null):q.eq('notes',emp.notes);
- const {data,error}=await q.select('id,notes').single();if(error)throw error;if(!data)throw Error('Record changed. Reopen Employee Items and try again.');emp.notes=data.notes;
+ await ndSaveStaffNotes(emp,notes);
  window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));
  window.dispatchEvent(new CustomEvent('nd-staff-items-changed',{detail:{employee_id:emp.id}}));
 }
@@ -12630,7 +12640,7 @@ async function ndOpenStaffItems(id,mode="issue"){
 }
 function ndRenderStaffItems(e){
  const modal=byId('ndStaffItemsModal'),ledger=ndReadItems(e.notes),edit=canEditStaffRecord(e),active=!e.last_working_date,returnMode=modal.dataset.itemsMode==='return'||!active;modal.querySelector('h3').textContent=returnMode?'Return Employee Items':'Issue Employee Items';
- modal.querySelector('[data-items-body]').innerHTML=`<p><strong>${staffSafe(e.name)}</strong> · ${staffSafe(e.outlet)}</p><p class="helper">${ledger?.confirmed_at?'Confirmed '+staffSafe(ledger.confirmed_at.slice(0,10)):'Existing employee: confirm previously issued items or No items issued.'}</p><section class="nd-items-panel">${(ledger?.issues||[]).map(i=>`<div class="nd-item-card"><strong>${staffSafe(i.name)}</strong><div class="nd-item-count">Issued ${Number(i.quantity)} · Returned ${(i.returns||[]).reduce((n,r)=>n+Number(r.quantity||0),0)} · To Return ${i.return_required===false?0:ndItemRemaining(i)}</div><div class="nd-item-log">Issued ${staffSafe(i.issued_at?.slice(0,10)||'')} · ${staffSafe(i.issued_by||'')}</div>${(i.returns||[]).map(r=>`<div class="nd-item-log">Returned ${Number(r.quantity)} · ${staffSafe(r.returned_at.slice(0,10))} · ${staffSafe(r.returned_by)}</div>`).join('')}${!i.sku_id?'<div class="nd-item-log">Historical item: not linked to a stock SKU.</div>':''}${i.return_required===false?'<div class="nd-item-log">Consumable · return not required</div>':''}${edit&&returnMode&&i.return_required!==false&&ndItemRemaining(i)>0?`<div class="nd-items-actions"><input type="number" min="1" max="${ndItemRemaining(i)}" step="1" value="${ndItemRemaining(i)}" data-return-qty="${staffSafe(i.id)}" aria-label="Return quantity" style="width:85px"/><button class="btn" type="button" data-return-item="${staffSafe(i.id)}">Confirm Return</button></div>`:''}</div>`).join('')||'<p>'+ (ledger?.confirmed_at?'No items issued.':'No items recorded yet.')+'</p>'}</section>${edit&&active&&!returnMode?`<section class="nd-items-panel"><h4>Issue Items</h4><p class="helper">New issues deduct available stock from this branch.</p><div class="nd-items-actions"><select id="ndIssueType" aria-label="Stock item" style="width:100%">${ndStockSelectMarkup(e.outlet)}</select><select id="ndIssueReturn" aria-label="Item type"><option value="true">Return Required</option><option value="false">Consumable</option></select><input id="ndIssueQty" type="number" min="1" max="999" step="1" value="1" style="width:80px" aria-label="Issue quantity"/><button class="btn" type="button" data-items-issue>Issue &amp; Deduct Stock</button></div>${!ledger?.confirmed_at?'<button class="btn" type="button" data-items-none style="margin-top:12px">Confirm No Items Issued</button>':''}</section>`:''}${edit&&returnMode&&!ledger?.confirmed_at&&!(ledger?.issues||[]).length?'<button class="btn" type="button" data-items-none>Confirm No Items to Return</button>':''}<p><strong>${ndItemsCleared(e.notes)?'✓ All items cleared':ledger?.confirmed_at?'Items must be returned before resignation.':'Item confirmation required.'}</strong></p>`;
+ modal.querySelector('[data-items-body]').innerHTML=`<p><strong>${staffSafe(e.name)}</strong> · ${staffSafe(e.outlet)}</p><p class="helper">${ledger?.confirmed_at?'Confirmed '+staffSafe(ledger.confirmed_at.slice(0,10)):'Existing employee: confirm previously issued items or No items issued.'}</p><section class="nd-items-panel">${(ledger?.issues||[]).map(i=>`<div class="nd-item-card"><strong>${staffSafe(i.name)}</strong><div class="nd-item-count">Issued ${Number(i.quantity)} · Returned ${(i.returns||[]).reduce((n,r)=>n+Number(r.quantity||0),0)} · To Return ${i.return_required===false?0:ndItemRemaining(i)}</div><div class="nd-item-log">Issued ${staffSafe(i.issued_at?.slice(0,10)||'')} · ${staffSafe(i.issued_by||'')}</div>${(i.returns||[]).map(r=>`<div class="nd-item-log">Returned ${Number(r.quantity)} · ${staffSafe(r.returned_at.slice(0,10))} · ${staffSafe(r.returned_by)}</div>`).join('')}${!i.sku_id?'<div class="nd-item-log">Historical item: not linked to a stock SKU.</div>':''}${i.return_required===false?'<div class="nd-item-log">Consumable · return not required</div>':''}${edit&&returnMode&&i.return_required!==false&&ndItemRemaining(i)>0?`<div class="nd-items-actions"><input type="number" min="1" max="${ndItemRemaining(i)}" step="1" value="${ndItemRemaining(i)}" data-return-qty="${staffSafe(i.id)}" aria-label="Return quantity" style="width:85px"/><button class="btn" type="button" data-return-item="${staffSafe(i.id)}">Confirm Return</button></div>`:''}</div>`).join('')||'<p>'+ (ledger?.confirmed_at?'No items issued.':'No items recorded yet.')+'</p>'}</section>${edit&&active&&!returnMode?`<section class="nd-items-panel"><h4>Issue Items</h4><p class="helper">New issues deduct available stock from this branch.</p><div class="nd-items-actions"><select id="ndIssueType" aria-label="Stock item" style="width:100%">${ndStockSelectMarkup(e.outlet)}</select><select id="ndIssueReturn" aria-label="Item type"><option value="true">Return Required</option><option value="false">Consumable</option></select><input id="ndIssueQty" type="number" min="1" max="999" step="1" value="1" style="width:80px" aria-label="Issue quantity"/><button class="btn" type="button" data-items-issue>Issue &amp; Deduct Stock</button></div>${!ledger?.confirmed_at?'<button class="btn" type="button" data-items-none style="margin-top:12px">Confirm No Items Issued</button>':''}</section>`:''}${edit&&returnMode&&!ledger?.confirmed_at&&!(ledger?.issues||[]).length?'<button class="btn" type="button" data-items-none>Confirm No Items to Return</button>':''}<p><strong>${ndItemsCleared(e.notes)?'✓ All items cleared':ledger?.confirmed_at?'Outstanding items remain. Confirm each returned quantity below.':'Item confirmation required.'}</strong></p>`;
 }
 
 document.addEventListener('click',async ev=>{
@@ -12643,7 +12653,7 @@ document.addEventListener('click',async ev=>{
  else if(btn.hasAttribute('data-items-issue')){if(modal.dataset.itemsMode==='return')throw Error('This screen only accepts item returns.');if(e.last_working_date)throw Error('Cannot issue items to a resigned employee.');const product=ndStockOptions(e.outlet).find(p=>String(p.sku_id)===byId('ndIssueType').value),quantity=Number(byId('ndIssueQty').value);if(!product||!Number.isInteger(quantity)||quantity<1||quantity>999)throw Error('Select a stock item and a whole quantity from 1 to 999.');ledger.issues.push({id:ndItemId(),sku_id:String(product.sku_id),name:product.product_name,brand:product.brand||'',quantity,return_required:byId('ndIssueReturn').value==='true',issued_at:now,issued_by:currentSalaryUserEmail,returns:[]});Object.assign(ledger,{confirmed_at:ledger.confirmed_at||now,confirmed_by:ledger.confirmed_by||currentSalaryUserEmail,no_items:false});}
  else{if(modal.dataset.itemsMode!=='return'&&!e.last_working_date)throw Error('Open resignation item clearance to return items.');const item=ledger.issues.find(i=>i.id===btn.dataset.returnItem),input=[...modal.querySelectorAll('[data-return-qty]')].find(el=>el.dataset.returnQty===btn.dataset.returnItem),quantity=Number(input?.value);if(!item||!Number.isInteger(quantity)||quantity<1||quantity>ndItemRemaining(item))throw Error('Return quantity must not exceed outstanding items.');if(!confirm(`Confirm receipt of ${quantity} × ${item.name}?`))return;(item.returns||(item.returns=[])).push({id:ndItemId(),quantity,returned_at:now,returned_by:currentSalaryUserEmail});}
  await ndWriteItems(e,ledger);if(modal.dataset.itemsMode!=='return')await ndLoadItemOptions(e.outlet);ndRenderStaffItems(e);ndRenderResignItems();renderStaffList();msg.textContent='Saved ✓';
- }catch(err){msg.textContent='Unable to save: '+(err.message||err);}finally{modal.dataset.busy='0';btn.disabled=false;}
+ }catch(err){msg.textContent='Unable to save employee items: '+(err.message||err)+' Reopen Employee Items to check the saved return before retrying.';}finally{modal.dataset.busy='0';btn.disabled=false;}
 });
 
 // Signed notice agreements retain their own identity and wording snapshot.
@@ -12699,7 +12709,7 @@ async function ndNoticeImage(file){if(typeof file==='string')return file;if(!fil
 async function ndSaveNoticeToEmployee(e,a){
  const {data:{user}}=await salaryDb.auth.getUser();if(!user||String(user.email||'').toLowerCase()!==String(currentSalaryUserEmail).toLowerCase()||!canEditStaffRecord(e))throw Error('Staff management access required.');
  if(ndNoticeIsSigned(ndReadNotice(e.notes)))throw Error('A signed agreement is already saved. It cannot be overwritten.');
- const notes=JSON.stringify({...ndItemsEnvelope(e.notes,ndReadItems(e.notes)),employment_notice_agreement:a});let q=salaryDb.from('employees').update({notes}).eq('id',e.id);q=e.notes==null?q.is('notes',null):q.eq('notes',e.notes);const {data,error}=await q.select('id,notes').single();if(error)throw error;if(!data)throw Error('Employee record changed. Reopen the agreement and try again.');e.notes=data.notes;return a;
+ const notes=JSON.stringify({...ndItemsEnvelope(e.notes,ndReadItems(e.notes)),employment_notice_agreement:a});await ndSaveStaffNotes(e,notes);return a;
 }
 /*
 ND Notice Sans is a renamed Latin subset of Liberation Sans.
@@ -15339,7 +15349,7 @@ async function saveStaff(){
   }
   saveStage='Save employee item records';
   // The interview conversion RPC may whitelist employee fields. Persist and verify the ledger separately.
-  if(!ndReadItems(pending.notes)?.confirmed_at||!ndReadNotice(pending.notes)){const intended=JSON.parse(pending._notes);const notes=JSON.stringify({...ndItemsEnvelope(pending.notes,ndReadItems(pending.notes)||intended.issued_items),employment_notice_agreement:intended.employment_notice_agreement});let q=salaryDb.from('employees').update({notes}).eq('id',pending.id);q=pending.notes==null?q.is('notes',null):q.eq('notes',pending.notes);const {data,error}=await q.select('id,notes').single();if(error||!data)throw Error('Employee created; item confirmation not saved. Retry Save. '+(error?.message||'Record changed.'));pending.notes=data.notes;if(!ndReadItems(pending.notes)?.confirmed_at||!ndReadNotice(pending.notes))throw Error('Onboarding records could not be verified. Retry Save.');}
+  if(!ndReadItems(pending.notes)?.confirmed_at||!ndReadNotice(pending.notes)){const intended=JSON.parse(pending._notes);const notes=JSON.stringify({...ndItemsEnvelope(pending.notes,ndReadItems(pending.notes)||intended.issued_items),employment_notice_agreement:intended.employment_notice_agreement});await ndSaveStaffNotes(pending,notes);if(!ndReadItems(pending.notes)?.confirmed_at||!ndReadNotice(pending.notes))throw Error('Onboarding records could not be verified. Retry Save.');}
   const number=pending.employee_no||'';if(draft)window.dispatchEvent(new CustomEvent('nd-interview-converted'));
   byId('staffReviewModal').classList.remove('open');resetSubmitStaffForm();byId('staffSaveMsg').textContent='Employee onboarded ✓ '+number;await refreshSalaryStayHere();window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));renderStaffList();window.ndOpenStaffManagement?.();
  }catch(err){byId('staffReviewMsg').textContent='Save failed ['+saveStage+']: '+(err.message||err);}finally{button.disabled=button.dataset.onboardingLocked==='1';}
@@ -15758,7 +15768,8 @@ async function ndSaveResignation(){
   const btn=byId("ndConfirmResignationBtn");btn.disabled=true;
   try{
     const attachment=await window.ndResignationAttachment(empId);
-    const {data,error}=await salaryDb.from("employees").update({resignation_date:resignationDate,last_working_date:lastDay,resignation_reason:reason,resignation_attachment:attachment}).eq("id",empId).eq("notes",emp.notes).is("last_working_date",null).select("id").single();
+    const {data,error}=await salaryDb.rpc('nd_staff_update_safe',{p_employee_id:Number(empId),p_expected_notes:emp.notes??null,p_changes:{resignation_date:resignationDate,last_working_date:lastDay,resignation_reason:reason,resignation_attachment:attachment}});
+    if(!error&&data?.saved!==true)throw Error('Resignation was not confirmed.');
     if(error)throw error;
     if(!data)throw Error("Employee record changed. Review item clearance and try again.");
     Object.assign(emp,{resignation_date:resignationDate,last_working_date:lastDay,resignation_reason:reason,resignation_attachment:attachment});
