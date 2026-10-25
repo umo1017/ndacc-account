@@ -31502,14 +31502,27 @@ let tab='interview',userEmail='',db=null,templates={};
 const defaults={interview:[["Candidate Name", "text"], ["IC / Passport", "text"], ["IC Photo Front", "file"], ["IC Photo Back", "file"], ["Date of Birth", "date"], ["Gender", "select:|Male|Female"], ["Nationality", "text"], ["Marital Status", "select:|Single|Married|Divorced|Widowed"], ["Home Address", "textarea"], ["Phone", "tel"], ["Email Address", "email"], ["Emergency Contact Name", "text"], ["Emergency Contact Phone", "tel"], ["Spouse Name", "text"], ["Spouse Phone Number", "tel"], ["Position Applied", "text"], ["Preferred Branch", "select:|Eco Botanic|Nusa Bestari"], ["Employment Type", "select:|Full Time|Part Time"], ["Start Date", "date"], ["Probation Period", "text"], ["Working Hours", "text"], ["Rest Days", "number"], ["Bank Name", "text"], ["Bank Account No", "text"], ["KWSP (EPF) No", "text"], ["SOCSO No", "text"], ["EIS No", "text"], ["Employee Signature", "signature"], ["Signature Date", "date"], ["Administrative / Finance Signature", "signature"], ["Company Stamp", "file"], ["President Signature", "signature"], ["Interview Date", "date"], ["Interviewer", "text"], ["Experience", "textarea"], ["Availability", "text"], ["Expected Salary (RM)", "number"], ["Assessment", "textarea"], ["Interview Result", "select:Pending|Shortlisted|Accepted|Rejected"]],contract:[['Employee Name','text'],['IC / Passport','text'],['Position','text'],['Branch','text'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation (Months)','number'],['Notice Period','text'],['Contract Terms','textarea'],['Employee Acknowledgement','textarea']]};
 const ND_INTERVIEW_COMPANY_ADDRESS='Unit 02-02, Level 2, CIMB Leadership Academy, No. 3 Jalan Medini Utara 1, Medini Iskandar, 79200 Iskandar Puteri, Johor.';
 let interviewCategory='local',interviewBranchNames=['Eco Botanic','Nusa Bestari','Collaboration'];
-async function loadInterviewBranches(){
+let ndFormMetadataEpoch=0,ndBranchRead=null,ndBranchReadAt=0,ndBranchOwner='',ndTemplateRead=null,ndTemplateReadAt=0,ndTemplateOwner='';
+const ndFormMetadataOwner=()=>String(userEmail||window.currentUserEmail||'').toLowerCase();
+async function loadInterviewBranches(force=false){
+ const owner=ndFormMetadataOwner();
+ if(!force&&ndBranchReadAt&&ndBranchOwner===owner&&Date.now()-ndBranchReadAt<300000)return;
+ if(ndBranchRead&&ndBranchRead.owner===owner)return ndBranchRead.promise;
+ const epoch=ndFormMetadataEpoch;
+ const promise=ndFetchInterviewBranches(epoch).then(ok=>{if(ok&&epoch===ndFormMetadataEpoch){ndBranchReadAt=Date.now();ndBranchOwner=owner;}});
+ const state={owner,promise};ndBranchRead=state;
+ try{return await promise;}finally{if(ndBranchRead===state)ndBranchRead=null;}
+}
+async function ndFetchInterviewBranches(epoch){
  try{
  const results=await Promise.allSettled([client().from('salary_outlets').select('name,is_global').order('id',{ascending:true}),client().from('daily_outlets').select('name,is_active').eq('is_active',true).order('id',{ascending:true}),client().from('order_branches').select('branch_name,is_active').eq('is_active',true).order('sort_order',{ascending:true})]);
+ if(epoch!==ndFormMetadataEpoch)return false;
+ const successful=results.some(r=>r.status==='fulfilled'&&!r.value.error&&Array.isArray(r.value.data));
  const names=[];for(const result of results){if(result.status!=='fulfilled'||result.value.error||!Array.isArray(result.value.data))continue;for(const row of result.value.data){const name=String(row.name||row.branch_name||'').trim();if(name&&name.toLowerCase()!=='global'&&!row.is_global&&row.is_active!==false&&!names.includes(name))names.push(name)}}
  if(!names.includes('Collaboration'))names.push('Collaboration');
  if(names.length)interviewBranchNames=names;
- document.querySelectorAll('[data-nd-interview-branch]').forEach(select=>{const value=select.value;select.innerHTML='<option value="">Please select</option>'+interviewBranchNames.map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');if(value&&!interviewBranchNames.includes(value))select.add(new Option(value,value));select.value=value});
- }catch(e){console.warn('[Interview] branches:',e.message)}
+ document.querySelectorAll('[data-nd-interview-branch]').forEach(select=>{const value=select.value;select.innerHTML='<option value="">Please select</option>'+interviewBranchNames.map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');if(value&&!interviewBranchNames.includes(value))select.add(new Option(value,value));select.value=value});return successful;
+ }catch(e){console.warn('[Interview] branches:',e.message);return false;}
 }
 window.ndGetStaffFormBranches=async()=>{await loadInterviewBranches();return [...interviewBranchNames];};
 const interviewSections=[
@@ -31594,7 +31607,14 @@ function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;',
 function status(v){$('ndStaffFormStatus').textContent=v||''}
 function isAdmin(){return userEmail===ADMIN}
 function client(){if(!db){if(window.salaryDb?.from)db=window.salaryDb;else if(window.supabase?.createClient)db=window.ndGetDatabase('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');}return db}
-async function identity(){try{const {data}=await client().auth.getUser();userEmail=String(data?.user?.email||'').toLowerCase()}catch(e){userEmail=''}return userEmail}
+let ndFormIdentityRead=null;
+async function identity(){
+ if(ndFormIdentityRead)return ndFormIdentityRead;
+ const epoch=ndFormMetadataEpoch;
+ const task=(async()=>{try{const {data,error}=await client().auth.getUser();if(epoch!==ndFormMetadataEpoch)return '';if(error)throw error;userEmail=String(data?.user?.email||'').toLowerCase();}catch(e){if(epoch===ndFormMetadataEpoch)userEmail='';}return userEmail;})();
+ ndFormIdentityRead=task;
+ try{return await task;}finally{if(ndFormIdentityRead===task)ndFormIdentityRead=null;}
+}
 function fieldsFor(type){return type==='interview'?interviewGroups().slice(0,4).flatMap(g=>g[1]):templates[type]||defaults[type];}
 const ND_REST_WEEKDAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 function ndRestDays(value){return [...new Set((Array.isArray(value)?value:String(value||'').split(/[,;|]/)).map(v=>String(v).trim()).filter(Boolean))];}
@@ -31929,7 +31949,7 @@ async function ndOpenContractDocument(row,readOnly=true){
  const onboardButton=dialog.querySelector('[data-contract-onboard]');
  if(onboardButton){const sourceId=row.form_data?.__nd_contract_source?.id;onboardButton.disabled=true;onboardButton.textContent='Checking onboarding status…';void (async()=>{try{const check=await client().from('employees').select('id').eq('source_interview_id',String(sourceId)).maybeSingle();if(check.error)throw check.error;if(!onboardButton.isConnected)return;onboardButton.disabled=!!check.data;onboardButton.textContent=check.data?'Onboarding Completed':'Continue to Employee Items';}catch(error){if(onboardButton.isConnected){onboardButton.disabled=true;onboardButton.textContent='Status unavailable';dialog.querySelector('[data-contract-status]').textContent='Unable to check onboarding status: '+error.message;}}})();}
  dialog.querySelector('[data-contract-onboard]')?.addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await window.ndContinueSignedOnboarding(row);dialog.close();}catch(error){dialog.querySelector('[data-contract-status]').textContent=error.message;}finally{button.disabled=false;}});
- const preview=dialog.querySelector('[data-contract-preview]');preview.innerHTML=window.ndContractDocumentMarkup(a);if(a.reference_layout){const fit=()=>{const width=preview.clientWidth||Math.min(860,innerWidth-48);preview.querySelectorAll('.nd-reference-page:not(.nd-uploaded-template-page)').forEach(p=>p.style.zoom=String(Math.min(1,(width-24)/794)));};requestAnimationFrame(fit);}if(a.reference_layout&&window.ndPrepareReferencePreview)void window.ndPrepareReferencePreview(a,preview).catch(error=>{if(!preview.isConnected)return;preview.textContent='Unable to display document: '+error.message;const button=dialog.querySelector('[data-contract-sign]');if(button)button.disabled=true;});preview.hidden=signing;dialog.querySelector('[data-contract-close]').onclick=()=>dialog.close();if(signing){initSignatures(dialog.querySelector('[data-contract-sign-panel]'));void window.ndLoadContractRepresentatives($('ndContractRepresentative'),a.employee.branch,dialog.querySelector('[data-contract-status]'));}
+ const preview=dialog.querySelector('[data-contract-preview]');if(!signing){if(a.reference_layout&&window.ndPrepareReferencePreview)preview.textContent='Loading document preview…';else preview.innerHTML=window.ndContractDocumentMarkup(a);}if(a.reference_layout){const fit=()=>{const width=preview.clientWidth||Math.min(860,innerWidth-48);preview.querySelectorAll('.nd-reference-page:not(.nd-uploaded-template-page)').forEach(p=>p.style.zoom=String(Math.min(1,(width-24)/794)));};requestAnimationFrame(fit);}if(!signing&&a.reference_layout&&window.ndPrepareReferencePreview)void window.ndPrepareReferencePreview(a,preview).catch(error=>{if(!preview.isConnected)return;preview.textContent='Unable to display document: '+error.message;const button=dialog.querySelector('[data-contract-sign]');if(button)button.disabled=true;});preview.hidden=signing;dialog.querySelector('[data-contract-close]').onclick=()=>dialog.close();if(signing){initSignatures(dialog.querySelector('[data-contract-sign-panel]'));void window.ndLoadContractRepresentatives($('ndContractRepresentative'),a.employee.branch,dialog.querySelector('[data-contract-status]'));}
  dialog.querySelector('[data-contract-update-template]')?.addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await ndUpdateSubmittedContractTemplate(row);}catch(error){dialog.querySelector('[data-contract-status]').textContent='Unable to update template: '+error.message;button.disabled=false;}});
  dialog.querySelector('[data-passport-return]')?.addEventListener('click',()=>window.ndOpenPassportReturn(row,a));
  dialog.querySelector('[data-contract-sign]')?.addEventListener('click',()=>draw(true));dialog.querySelector('[data-contract-back]')?.addEventListener('click',()=>draw(false));dialog.querySelector('[data-contract-pdf]')?.addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await ndDownloadContractPart(a,'main');}catch(error){dialog.querySelector('[data-contract-status]').textContent=error.message}finally{button.disabled=false}});
@@ -31941,7 +31961,7 @@ async function ndOpenContractDocument(row,readOnly=true){
  };draw(false);if(!dialog.open)dialog.showModal();
 }
 
-function show(next){if(next==='onboarding')next='interview';if(next==='templates'&&!isAdmin())next='interview';tab=next;status('');document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.ndFormTab===tab);b.style.display=(b.dataset.ndFormTab==='templates'&&!isAdmin())?'none':''});const root=$('ndStaffFormContent');if(!root)return;
+function show(next,force=false){if(next==='onboarding')next='interview';if(next==='templates'&&!isAdmin())next='interview';const currentRoot=$('ndStaffFormContent');if(!force&&next===tab&&currentRoot?.children.length&&currentRoot.dataset.ndFormTab===next)return;tab=next;if(currentRoot)currentRoot.dataset.ndFormTab=next;status('');document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.ndFormTab===tab);b.style.display=(b.dataset.ndFormTab==='templates'&&!isAdmin())?'none':''});const root=$('ndStaffFormContent');if(!root)return;
 if(tab==='history'){root.innerHTML='<h3>Form History</h3><div class="nd-form-history" id="ndFormHistoryList">Loading...</div>';loadHistory();return}
 if(tab==='templates'){root.innerHTML=`<h3>Form Templates</h3><p class="helper">One field per line: Field Name | text, date, number, tel, textarea, or select:Option1|Option2</p><label>Interview Template</label><textarea id="ndInterviewTemplate" style="min-height:240px"></textarea><label>Contract Template</label><textarea id="ndContractTemplate" style="min-height:280px"></textarea><div style="margin-top:12px"><button class="btn" id="ndSaveTemplates">Save Templates</button></div>`;['interview','contract'].forEach(t=>{$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value=fieldsFor(t).map(f=>f.join(' | ')).join('\n')});$('ndSaveTemplates').onclick=saveTemplates;renderInterviewBranding(root);return}
 if(tab==='interview'){renderInterview(root);return}
@@ -31963,7 +31983,20 @@ async function saveEntry(e){
  if(form.isConnected){form.reset();form.querySelectorAll('[data-clear-signature]').forEach(b=>b.click())}status('Saved successfully.');
  }catch(err){status('Unable to save: '+err.message)}finally{button.disabled=false}
 }
-async function loadTemplates(){try{const {data,error}=await client().from('nd_staff_form_templates').select('form_type,fields').eq('is_active',true);if(error)throw error;(data||[]).forEach(r=>{if(defaults[r.form_type]&&Array.isArray(r.fields))templates[r.form_type]=r.fields})}catch(e){console.warn('[Staff Forms] templates:',e.message)}}
+async function loadTemplates(force=false){
+ const owner=ndFormMetadataOwner();
+ if(!force&&ndTemplateReadAt&&ndTemplateOwner===owner&&Date.now()-ndTemplateReadAt<300000)return;
+ if(ndTemplateRead&&ndTemplateRead.owner===owner)return ndTemplateRead.promise;
+ const epoch=ndFormMetadataEpoch;
+ const promise=(async()=>{try{
+ const {data,error}=await client().from('nd_staff_form_templates').select('form_type,fields').eq('is_active',true);
+ if(error)throw error;if(epoch!==ndFormMetadataEpoch)return;
+ (data||[]).forEach(r=>{if(defaults[r.form_type]&&Array.isArray(r.fields))templates[r.form_type]=r.fields});
+ ndTemplateReadAt=Date.now();ndTemplateOwner=owner;
+ }catch(e){console.warn('[Staff Forms] templates:',e.message);}})();
+ const state={owner,promise};ndTemplateRead=state;
+ try{return await promise;}finally{if(ndTemplateRead===state)ndTemplateRead=null;}
+}
 const ND_BRANDING_KEY='__ND_INTERVIEW_BRANDING__';
 function interviewBranding(){const base={'Company Name':"NATURE'S DAO GLOBAL HOLDINGS SDN BHD",'Company Registration No':'202501043436','Company Address':ND_INTERVIEW_COMPANY_ADDRESS};try{return {...base,...JSON.parse((templates.interview||[]).find(field=>field[0]===ND_BRANDING_KEY)?.[1]||'{}')}}catch(_){return base}}
 window.ndGetCompanyDocumentBranding=async()=>{await loadTemplates();return interviewBranding();};
@@ -31980,7 +32013,7 @@ function renderInterviewBranding(root){
  const existingSignature=interviewDocumentImage(draft['President Signature']);if(existingSignature){const image=new Image();image.onload=()=>{if(!president.dataset.modified){window.ndFitSignatureImage(president,image);president.dataset.ink='1'}};image.src=existingSignature}
  box.querySelector('[data-brand-save]').onclick=async event=>{const button=event.currentTarget;button.disabled=true;try{await identity();if(!isAdmin())throw Error('Management access only.');if(president.dataset.modified)draft['President Signature']=president.dataset.ink?{name:'President Signature',data:president.toDataURL('image/png')}:'';['Company Name','Company Registration No','Company Address'].forEach((label,i)=>draft[label]=box.querySelector('#ndBrandCompany'+i).value.trim());const fields=(templates.interview||fieldsFor('interview')).filter(field=>field[0]!==ND_BRANDING_KEY);fields.push([ND_BRANDING_KEY,JSON.stringify(draft)]);const {error}=await client().rpc('nd_staff_form_template_save',{p_form_type:'interview',p_template_name:'Interview Template',p_fields:fields});if(error)throw error;templates.interview=fields;message.textContent='Company template saved.'}catch(error){message.textContent=/nd_staff_form_template_save|schema cache/i.test(error.message||'')?'Company template saving is not installed. Run the latest SQL update, then save again.':'Unable to save company template: '+error.message}finally{button.disabled=false}};
 }
-async function saveTemplates(){if(!isAdmin())return;try{for(const t of ['interview','contract']){const raw=$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value;const fields=raw.split('\n').map(x=>{const at=x.indexOf(' | ');return at<0?null:[x.slice(0,at).trim(),x.slice(at+3).trim()]}).filter(x=>x&&x[0]&&x[1]);if(!fields.length)throw Error('Template must contain fields.');if(t==='interview'){const branding=(templates.interview||[]).find(field=>field[0]===ND_BRANDING_KEY);if(branding)fields.push(branding)}const {error}=await client().rpc('nd_staff_form_template_save',{p_form_type:t,p_template_name:t==='interview'?'Interview Template':'Contract Template',p_fields:fields});if(error)throw error;templates[t]=fields}status('Templates saved successfully.')}catch(e){status('Unable to save templates: '+e.message)}}
+async function saveTemplates(){if(!isAdmin())return;try{for(const t of ['interview','contract']){const raw=$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value;const fields=raw.split('\n').map(x=>{const at=x.indexOf(' | ');return at<0?null:[x.slice(0,at).trim(),x.slice(at+3).trim()]}).filter(x=>x&&x[0]&&x[1]);if(!fields.length)throw Error('Template must contain fields.');if(t==='interview'){const branding=(templates.interview||[]).find(field=>field[0]===ND_BRANDING_KEY);if(branding)fields.push(branding)}const {error}=await client().rpc('nd_staff_form_template_save',{p_form_type:t,p_template_name:t==='interview'?'Interview Template':'Contract Template',p_fields:fields});if(error)throw error;templates[t]=fields}ndTemplateReadAt=Date.now();ndTemplateOwner=ndFormMetadataOwner();status('Templates saved successfully.')}catch(e){status('Unable to save templates: '+e.message)}}
 function interviewDocumentValue(values,label){
  const aliases={'Passport Photo Front':'Passport Photo','Full Name':'Candidate Name','IC No':'IC / Passport','Contact Number':'Phone','Married Status':'Marital Status','Position':'Position Applied','Working Day':'Working Days','Rest Day':'Rest Days','Date':'Signature Date'};
  const value=values[label]??values[aliases[label]]??'';return Array.isArray(value)?value.join(', '):value;
@@ -32184,9 +32217,33 @@ async function loadHistory(){
 }
 window.addEventListener('nd-interview-converted',()=>{if(tab==='history')loadHistory()});
 let ndReferenceTemplateReady=Promise.resolve();
-async function openForms(e,initialTab='interview'){if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';try{sessionStorage.setItem('nd_last_page_v2','forms');sessionStorage.setItem('nd_last_page_v3','forms');const email=String(window.currentUserEmail||userEmail||'').toLowerCase();if(email){localStorage.setItem('nd_last_authorized_page_v4::'+email,'forms');localStorage.setItem('nd_last_authorized_page_v5::'+email,'forms')}}catch(_){}$('ndStaffFormsPage').hidden=false;$('ndStaffFormsPage').style.setProperty('display','block','important');document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));$('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');show(initialTab);await identity();await Promise.all([loadTemplates(),loadInterviewBranches()]);document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{if(b.dataset.ndFormTab==='templates')b.style.display=isAdmin()?'':'none'});return false}
+let ndFormsOpening=null;
+async function openForms(e,initialTab=null){
+ if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();}
+ const wasVisible=document.body.dataset.ndVisiblePage==='forms',root=$('ndStaffFormContent');
+ document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';
+ try{sessionStorage.setItem('nd_last_page_v2','forms');sessionStorage.setItem('nd_last_page_v3','forms');const email=String(window.currentUserEmail||userEmail||'').toLowerCase();if(email){localStorage.setItem('nd_last_authorized_page_v4::'+email,'forms');localStorage.setItem('nd_last_authorized_page_v5::'+email,'forms');}}catch(_){}
+ $('ndStaffFormsPage').hidden=false;$('ndStaffFormsPage').style.setProperty('display','block','important');
+ document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));
+ $('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');
+ const target=initialTab||(root?.children.length?tab:'interview');
+ if(initialTab||!wasVisible||!root?.children.length)show(target,!!initialTab);
+ if(!ndFormsOpening){
+  const epoch=ndFormMetadataEpoch;
+  const task=(async()=>{
+   await identity();if(epoch!==ndFormMetadataEpoch)return;
+   await Promise.all([loadTemplates(),loadInterviewBranches()]);
+   if(epoch!==ndFormMetadataEpoch)return;
+   document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{if(b.dataset.ndFormTab==='templates')b.style.display=isAdmin()?'':'none';});
+   if(tab==='history'&&document.body.dataset.ndVisiblePage==='forms'&&!$('ndFormHistoryList')?.querySelector('table'))void loadHistory();
+  })();
+  ndFormsOpening=task;
+  task.finally(()=>{if(ndFormsOpening===task)ndFormsOpening=null;}).catch(error=>status('Unable to load form options: '+error.message));
+ }
+ await ndFormsOpening;return false;
+}
 window.ndOpenStaffForms=openForms;
-window.ndStartInterviewOnboardingContract=async(row)=>{await openForms();ndContractType='onboarding';ndContractDraft={};ndContractSource={kind:'interview',id:String(row.id),foreign:ndForeignInterview(row,'interview')};show('contract');};
+window.ndStartInterviewOnboardingContract=async(row)=>{await openForms();ndContractType='onboarding';ndContractDraft={};ndContractSource={kind:'interview',id:String(row.id),foreign:ndForeignInterview(row,'interview')};show('contract',true);};
 window.ndOpenReferenceContract=async(type)=>{
  if(type==='private_loan')return window.ndOpenSalaryAdvance();
  document.body.classList.remove('nd-records-visible');$('ndStaffFinancePage')?.classList.remove('nd-open');
@@ -32199,7 +32256,19 @@ window.ndOpenReferenceContract=async(type)=>{
 window.ndViewReferenceContract=row=>ndOpenContractDocument(row,true);
 window.ndGetCompanyDocumentTemplate=async()=>{await loadTemplates();return {...interviewBranding()}};
 window.addEventListener('click',e=>{if(e.target.closest?.('#sidebarForms'))openForms(e)},true);
-function init(){document.querySelectorAll('[data-nd-form-tab]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.ndFormTab==='templates'&&!isAdmin())return;show(b.dataset.ndFormTab)}));const staff=$('sidebarStaff'),forms=$('sidebarForms');if(staff&&forms){staff.insertAdjacentElement('afterend',forms)} }
+function init(){
+ let metadataUser=null;
+ client()?.auth.onAuthStateChange?.((event,session)=>{
+  const id=session?.user?.id||null;
+  if(event==='TOKEN_REFRESHED')return;
+  if(event==='SIGNED_OUT'||metadataUser!==null&&id!==metadataUser){
+   ndFormMetadataEpoch++;ndBranchReadAt=ndTemplateReadAt=0;ndBranchRead=ndTemplateRead=ndFormIdentityRead=ndFormsOpening=null;
+   ndBranchOwner=ndTemplateOwner='';userEmail='';templates={};ndContractSource=null;ndContractDraft={};ndContractEdits.clear();
+   const root=$('ndStaffFormContent');if(root){root.replaceChildren();delete root.dataset.ndFormTab;}
+  }
+  metadataUser=id;
+ });
+ document.querySelectorAll('[data-nd-form-tab]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.ndFormTab==='templates'&&!isAdmin())return;show(b.dataset.ndFormTab)}));const staff=$('sidebarStaff'),forms=$('sidebarForms');if(staff&&forms){staff.insertAdjacentElement('afterend',forms)} }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
@@ -33296,7 +33365,8 @@ const oldMarkup=window.ndReferenceMarkup,oldPDF=window.ndReferencePDF;
 function templateFor(a){if(a.document_template==='salary-advance-v1')return null;const kind=/^uploaded-/.test(a.reference_layout||'')&&kinds[a.contract_type];if(!kind)return null;const current=window.ndUploadedContractTemplates[kind];if(!a.template_sha256||a.template_sha256===current.sha256)return current;const historic=window.ndUploadedTemplateVersions?.[a.template_sha256];if(historic)return historic;throw Error('The original signed template version is unavailable. Restore that template before opening this record.');}
 let metrics=null,ready=null;
 async function fontMetrics(){if(metrics)return metrics;if(!ready)ready=(async()=>{const lib=window.PDFLib,pdf=await lib.PDFDocument.create();metrics={regular:await pdf.embedFont(lib.StandardFonts.Helvetica),bold:await pdf.embedFont(lib.StandardFonts.HelveticaBold)};return metrics;})().catch(e=>{ready=null;throw e;});return ready;}
-function measure(text,size,bold,font){if(font){try{return font.widthOfTextAtSize(text,size);}catch(e){if(!/cannot encode|WinAnsi/i.test(e.message))throw e;}}if(typeof document!=='undefined'&&typeof document.createElement==='function'){const c=document.createElement('canvas').getContext('2d');if(c?.measureText){c.font=(bold?'bold ':'')+size+'px Arial';return c.measureText(text).width;}}return [...text].reduce((n,ch)=>n+(/[MW@]/.test(ch)?.86:/[il .,:;!]/.test(ch)?.28:ch.charCodeAt(0)>255?1:.55),0)*size;}
+let ndContractTextContext=null;
+function measure(text,size,bold,font){if(font){try{return font.widthOfTextAtSize(text,size);}catch(e){if(!/cannot encode|WinAnsi/i.test(e.message))throw e;}}if(typeof document!=='undefined'&&typeof document.createElement==='function'){const c=ndContractTextContext||(ndContractTextContext=document.createElement('canvas').getContext('2d'));if(c?.measureText){c.font=(bold?'bold ':'')+size+'px Arial';return c.measureText(text).width;}}return [...text].reduce((n,ch)=>n+(/[MW@]/.test(ch)?.86:/[il .,:;!]/.test(ch)?.28:ch.charCodeAt(0)>255?1:.55),0)*size;}
 function fitField(f,font=metrics?.[f.bold?'bold':'regular']){const width=(text,size)=>measure(text,size,f.bold,font);function wrap(size){const lines=[];for(const paragraph of f.text.split('\n')){let line='';for(const word of paragraph.split(/\s+/)){if(!word)continue;if(width(word,size)>f.w){if(line){lines.push(line);line='';}for(const ch of word){if(line&&width(line+ch,size)>f.w){lines.push(line);line='';}line+=ch;}continue;}const next=line?line+' '+word:word;if(line&&width(next,size)>f.w){lines.push(line);line=word;}else line=next;}lines.push(line);}return lines;}let size=f.size,lines=wrap(size);while(lines.length*size*1.17>f.h&&size>7){size=Math.max(7,size-.25);lines=wrap(size);}if(lines.length*size*1.17>f.h)throw Error('Document field is too long. Shorten the source details before signing.');return {...f,size,lines,lineHeight:size*1.17};}
 window.ndFitUploadedField=fitField;
 window.ndReferenceMarkup=function(a){const template=templateFor(a);if(!template)return oldMarkup(a);const all=fields(a).map(f=>f.role?f:fitField(f,metrics?.[f.bold?'bold':'regular']));return '<div class="nd-reference-document nd-uploaded-document">'+template.pages.map((p,index)=>'<article class="nd-reference-page nd-uploaded-template-page" style="width:100%;max-width:'+p.width+'pt;height:auto;min-height:0;padding:0;position:relative;zoom:1"><svg xmlns="http://www.w3.org/2000/svg" class="nd-contract-page-svg" viewBox="0 0 '+p.width+' '+p.height+'" role="img" aria-label="Contract page '+(index+1)+'" style="display:block;width:100%;height:auto;overflow:visible;-webkit-text-size-adjust:none;text-size-adjust:none"><image href="'+p.image+'" x="0" y="0" width="'+p.width+'" height="'+p.height+'" preserveAspectRatio="none"/>'+all.filter(f=>f.page===index).map(f=>f.role?(f.image?'<image href="'+esc(f.image)+'" x="'+f.x+'" y="'+f.y+'" width="'+f.w+'" height="'+f.h+'" preserveAspectRatio="xMidYMid meet"/>':''):'<g data-field-size="'+f.size+'"><rect x="'+f.x+'" y="'+f.y+'" width="'+f.w+'" height="'+f.h+'" fill="white"/><text fill="#111" style="font-family:Arial,Helvetica,sans-serif!important;font-size:'+f.size+'px!important;font-weight:'+(f.bold?700:400)+'!important;letter-spacing:0!important">'+f.lines.map((line,i)=>'<tspan x="'+f.x+'" y="'+(f.y+f.size+i*f.lineHeight)+'" style="font-size:'+f.size+'px!important">'+esc(line)+'</tspan>').join('')+'</text></g>').join('')+'</svg></article>').join('')+'</div>';};
