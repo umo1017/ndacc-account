@@ -15737,6 +15737,7 @@ function ndResignationUpdateEmployees(){
 }
 let ndResignationOpenToken=0;
 async function ndOpenResignation(){
+ if(ndResignationSaving)return;
  const token=++ndResignationOpenToken,branch=byId('ndResignBranch'),employee=byId('ndResignEmployee'),msg=byId('ndResignMessage'),confirmButton=byId('ndConfirmResignationBtn');
  byId('ndResignationModal').classList.add('open');branch.disabled=true;employee.disabled=true;confirmButton.disabled=true;
  branch.innerHTML='<option value="">Loading branches…</option>';employee.innerHTML='<option value="">Loading employees…</option>';msg.textContent='Loading staff records…';
@@ -15748,7 +15749,19 @@ async function ndOpenResignation(){
   msg.textContent=permitted.length?'':'No branches available with staff management access.';
  }catch(error){if(token!==ndResignationOpenToken)return;branch.innerHTML='<option value="">Unable to load branches</option>';employee.innerHTML='<option value="">Unable to load employees</option>';msg.textContent='Unable to load staff records: '+error.message+' Close and reopen to retry.';}
 }
+let ndResignationSaving=false;
 async function ndSaveResignation(){
+ if(ndResignationSaving)return;
+ const modal=byId('ndResignationModal'),button=byId('ndConfirmResignationBtn');
+ if(!modal||!button||button.disabled)return;
+ ndResignationSaving=true;
+ const controls=[...modal.querySelectorAll('input,select,textarea,#ndConfirmResignationBtn')];
+ const states=controls.map(control=>[control,control.disabled]);
+ controls.forEach(control=>control.disabled=true);
+ try{return await ndPerformResignation();}
+ finally{ndResignationSaving=false;for(const [control,disabled]of states)if(control.isConnected)control.disabled=disabled;}
+}
+async function ndPerformResignation(){
   const msg=byId("ndResignMessage");
   const branch=byId("ndResignBranch").value;
   const empId=Number(byId("ndResignEmployee").value);
@@ -15765,19 +15778,24 @@ async function ndSaveResignation(){
   try{const stock=await salaryDb.from('staff_stock_issues').select('issued_qty,returned_qty,damaged_qty,consumed_qty,return_required').eq('employee_id',empId);if(stock.error)throw stock.error;if((stock.data||[]).some(r=>r.return_required!==false&&Number(r.issued_qty)-Number(r.returned_qty||0)-Number(r.damaged_qty||0)-Number(r.consumed_qty||0)>0)){msg.textContent='Return outstanding products in Inventory > More > Staff Stock before confirming resignation.';return;}}catch(error){msg.textContent='Unable to check stock returns: '+error.message;return;}
   try{const check=await salaryDb.rpc('nd_passport_resignation_check',{p_employee:Number(emp.id)});if(check.error)throw check.error;if(check.data?.required){void window.ndLoadResignationPassport?.(emp);byId('ndResignPassport')?.scrollIntoView({block:'nearest'});msg.textContent='Use Passport Return / Sign above to complete the return acknowledgement, then confirm resignation.';return;}}catch(error){msg.textContent='Unable to check passport return: '+error.message;return;}
   if(!confirm(`Confirm resignation for ${emp.name}?\nLast Working Day: ${lastDay}\nSalary will remain visible for ${lastDay.slice(0,7)}.`))return;
-  const btn=byId("ndConfirmResignationBtn");btn.disabled=true;
+  const btn=byId("ndConfirmResignationBtn");btn.disabled=true;let resignationSaved=false;
   try{
     const attachment=await window.ndResignationAttachment(empId);
-    const {data,error}=await salaryDb.rpc('nd_staff_update_safe',{p_employee_id:Number(empId),p_expected_notes:emp.notes??null,p_changes:{resignation_date:resignationDate,last_working_date:lastDay,resignation_reason:reason,resignation_attachment:attachment}});
+    let {data,error}=await salaryDb.rpc('nd_staff_update_safe',{p_employee_id:Number(empId),p_expected_notes:emp.notes??null,p_changes:{resignation_date:resignationDate,last_working_date:lastDay,resignation_reason:reason,resignation_attachment:attachment}});
+    if(error&&/load failed|failed to fetch|network|timeout|connection/i.test(String(error.message||error))){
+      const verified=await salaryDb.from('employees').select('id,resignation_date,last_working_date,resignation_reason,resignation_attachment').eq('id',empId).maybeSingle();
+      const saved=verified.data;
+      if(!verified.error&&saved&&String(saved.resignation_date).slice(0,10)===resignationDate&&String(saved.last_working_date).slice(0,10)===lastDay&&saved.resignation_reason===reason&&Object.keys(attachment||{}).every(key=>JSON.stringify(saved.resignation_attachment?.[key])===JSON.stringify(attachment[key]))){data={id:empId,saved:true};error=null;}
+    }
     if(!error&&data?.saved!==true)throw Error('Resignation was not confirmed.');
     if(error)throw error;
     if(!data)throw Error("Employee record changed. Review item clearance and try again.");
-    Object.assign(emp,{resignation_date:resignationDate,last_working_date:lastDay,resignation_reason:reason,resignation_attachment:attachment});
+    resignationSaved=true;Object.assign(emp,{resignation_date:resignationDate,last_working_date:lastDay,resignation_reason:reason,resignation_attachment:attachment});
     byId("ndResignationModal").classList.remove("open");
     byId("ndResignAttachment").value="";byId("ndResignAttachment").ndSaved=null;byId("ndResignNA").checked=false;byId("ndResignAttachment").disabled=false;
     await refreshSalaryStayHere();
     renderStaffList();
-  }catch(err){msg.textContent="Save failed: "+(err?.message||err);}
+  }catch(err){if(resignationSaved){renderStaffList();alert("Resignation saved. The staff list could not refresh: "+(err?.message||err));}else msg.textContent="Save failed: "+(err?.message||err);}
   finally{btn.disabled=false;}
 }
 document.addEventListener("click",ev=>{
@@ -31700,6 +31718,8 @@ function ndContractSourcePicker(root,form,fields){
  const kind=$('ndContractSourceKind'),select=$('ndContractSourceRecord'),message=$('ndContractSourceStatus'),branch=$('ndContractSourceBranch'),remembered=ndContractSource;let records=[],request=0,loadController=null;
  const retry=document.createElement('button');retry.type='button';retry.className='btn';retry.textContent='Retry';retry.hidden=true;message.after(retry);retry.onclick=()=>void kind.onchange();
  const active=()=>root.isConnected&&$('ndContractEntry')===form;
+ const stopLoading=()=>{++request;loadController?.abort();};
+ root.addEventListener('nd-contract-picker-dispose',stopLoading,{once:true});
  const resetDetails=()=>{const representative=$('ndAdvanceRepresentative');if(representative){representative.disabled=true;representative.replaceChildren(new Option('Select an employee first',''));delete representative.dataset.ndRepresentativeUserId;}ndContractSource=null;form.querySelector('.nd-form-grid').hidden=true;form.querySelectorAll('[data-nd-field]').forEach(input=>{input.disabled=true;const label=fields.find((f,i)=>input.dataset.ndField==='Contract'+i)?.[0];input.value=label==='Reason for Cash Request'?'No bank account':label==='Maturity Date'?ndLoanMaturityDate():label==='Disbursement Status'?'Received':label==='Repayment Method'?'Cash':'';});form.querySelector('[type=submit]').disabled=true;const summary=$('ndContractImportedSummary');if(summary)summary.textContent='';};
  function draw(){select.innerHTML='<option value="">Select a person</option>'+records.filter(row=>!branch.value||(row.branch||row.outlet||'')===branch.value).map(row=>'<option value="'+escapeHtml(row.id)+'">'+escapeHtml((row.full_name||row.name||'Unnamed')+' · '+(row.branch||row.outlet||'No branch')+(row.last_working_date?' · Former employee':''))+'</option>').join('');}
  kind.onchange=async()=>{
@@ -31771,6 +31791,7 @@ function ndContractBaseFields(type){if(type==='passport')return [['Employee Name
 function ndLoanMaturityDate(value){const match=String(value||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date())).match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!match)return '';const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]),last=new Date(Date.UTC(year,month+1,0)).getUTCDate(),date=new Date(Date.UTC(year,month,Math.min(day,last)));return date.toISOString().slice(0,10);}
 window.ndLoanMaturityDate=ndLoanMaturityDate;
 function ndRenderContractForm(root){
+ root.dispatchEvent(new Event('nd-contract-picker-dispose'));
  const fields=ndContractFields(ndContractType);root.innerHTML=`<h3>Contract</h3><label for="ndContractType">Contract Type</label><select id="ndContractType">${Object.entries(ND_CONTRACT_TYPES).filter(([key])=>key!=='private_loan').map(([key,label])=>`<option value="${key}" ${key===ndContractType?'selected':''}>${label}</option>`).join('')}</select><section class="nd-contract-source"><h4>Select Person &amp; Import Details</h4><div class="nd-form-grid"><div><label for="ndContractSourceKind">Person Source</label><select id="ndContractSourceKind"><option value="interview">Completed Interview Forms</option><option value="employee">Existing Employees</option></select></div><div><label for="ndContractSourceBranch">Branch</label><select id="ndContractSourceBranch"><option value="">Select branch</option></select></div><div><label for="ndContractSourceRecord">Select Person</label><select id="ndContractSourceRecord" disabled><option value="">Select a person</option></select></div></div><p id="ndContractSourceStatus" class="helper" role="status"></p></section><div id="ndContractImportedSummary" class="nd-contract-review-summary"></div><form id="ndContractEntry"><div class="nd-form-grid" hidden>${fields.map(([label,kind],i)=>inputMarkup(label,label==='Branch'?'select:|'+interviewBranchNames.join('|'):kind,'Contract'+i)).join('')}</div>${ndContractType==='onboarding'?'<label style="display:flex;gap:10px;margin:20px 0"><input type="checkbox" id="ndContractPassport" style="width:20px;height:20px;flex:none"/>Include Passport Handling &amp; Return Agreement (optional)</label>':''}<label id="ndContractCashOption" hidden style="display:flex;gap:10px;margin:16px 0"><input type="checkbox" id="ndContractCashRequest" checked disabled style="width:20px;height:20px;flex:none">Include Request to Receive Salary in Cash</label><button class="btn" type="submit" style="margin-top:16px">Generate Document &amp; Review</button></form>`;
  if(ndContractType==='private_loan'){
  const kind=$('ndContractSourceKind');kind.innerHTML='<option value="employee">Existing Employees</option>';kind.value='employee';kind.closest('div').hidden=true;kind.closest('div').style.setProperty('display','none','important');
@@ -31972,7 +31993,7 @@ async function ndOpenContractDocument(row,readOnly=true){
  };draw(false);if(!dialog.open)dialog.showModal();
 }
 
-function show(next,force=false){if(next==='onboarding')next='interview';if(next==='templates'&&!isAdmin())next='interview';const currentRoot=$('ndStaffFormContent');if(!force&&next===tab&&currentRoot?.children.length&&currentRoot.dataset.ndFormTab===next)return;tab=next;if(currentRoot)currentRoot.dataset.ndFormTab=next;status('');document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.ndFormTab===tab);b.style.display=(b.dataset.ndFormTab==='templates'&&!isAdmin())?'none':''});const root=$('ndStaffFormContent');if(!root)return;
+function show(next,force=false){if(next==='onboarding')next='interview';if(next==='templates'&&!isAdmin())next='interview';const currentRoot=$('ndStaffFormContent');if(!force&&next===tab&&currentRoot?.children.length&&currentRoot.dataset.ndFormTab===next)return;if(tab==='contract'&&next!=='contract')currentRoot?.dispatchEvent(new Event('nd-contract-picker-dispose'));tab=next;if(currentRoot)currentRoot.dataset.ndFormTab=next;status('');document.querySelectorAll('[data-nd-form-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.ndFormTab===tab);b.style.display=(b.dataset.ndFormTab==='templates'&&!isAdmin())?'none':''});const root=$('ndStaffFormContent');if(!root)return;
 if(tab==='history'){root.innerHTML='<h3>Form History</h3><div class="nd-form-history" id="ndFormHistoryList">Loading...</div>';loadHistory();return}
 if(tab==='templates'){root.innerHTML=`<h3>Form Templates</h3><p class="helper">One field per line: Field Name | text, date, number, tel, textarea, or select:Option1|Option2</p><label>Interview Template</label><textarea id="ndInterviewTemplate" style="min-height:240px"></textarea><label>Contract Template</label><textarea id="ndContractTemplate" style="min-height:280px"></textarea><div style="margin-top:12px"><button class="btn" id="ndSaveTemplates">Save Templates</button></div>`;['interview','contract'].forEach(t=>{$('nd'+(t==='interview'?'Interview':'Contract')+'Template').value=fieldsFor(t).map(f=>f.join(' | ')).join('\n')});$('ndSaveTemplates').onclick=saveTemplates;renderInterviewBranding(root);return}
 if(tab==='interview'){renderInterview(root);return}
@@ -31991,20 +32012,21 @@ async function ndRecoverFormSave(pending){
 async function saveEntry(e){
  e.preventDefault();const form=e.target,button=form.querySelector('[type=submit]'),type=tab,fields=fieldsFor(type);
  if(button.disabled||type==='interview'&&form.dataset.entryStep!=='manager')return;
- button.disabled=true;let phase='Checking sign-in',saved=null,attempt=null;
+ button.disabled=true;const saveEpoch=ndFormMetadataEpoch;let saveOwner='',phase='Checking sign-in',saved=null,attempt=null;
+ const ensureAccount=()=>{if(saveEpoch!==ndFormMetadataEpoch||saveOwner&&userEmail!==saveOwner)throw Error('The account changed. Reopen the form before continuing.');};
  const finish=async record=>{
-  phase='Opening saved form';status('Form saved. Opening review…');
-  if(type==='interview')await openInterviewDocument(record);
+  ensureAccount();phase='Opening saved form';status('Form saved. Opening review…');
+  if(type==='interview')await openInterviewDocument(record);ensureAccount();
   if(form.isConnected){form.reset();form.querySelectorAll('[data-clear-signature]').forEach(b=>b.click());}
   form.ndPendingFormSave=null;status('Saved successfully.');
  };
  try{
-  await identity();if(!userEmail)throw Error('Please sign in again.');
+  await identity();ensureAccount();if(!userEmail)throw Error('Please sign in again.');saveOwner=userEmail;
   const prior=form.ndPendingFormSave;
   if(prior){
    if(prior.owner!==userEmail)throw Error('The account changed. Reopen the form before saving.');
    phase='Checking previous save';status('Checking previous save…');
-   saved=prior.saved||await ndRecoverFormSave(prior);
+   saved=prior.saved||await ndRecoverFormSave(prior);ensureAccount();
    if(saved){prior.saved=saved;await finish(saved);return;}
   }
   phase='Preparing form and images';status('Preparing form and images…');
@@ -32013,10 +32035,11 @@ async function saveEntry(e){
    const [label,kind]=fields[i],el=form.querySelector(`[data-nd-field="${i}"]`);
    values[label]=kind==='file'?(el?.files?.[0]?await readFile(el.files[0]):''):kind==='signature'?(el?.dataset.ink?{name:label,data:el.toDataURL('image/png')}:''):ndFormFieldValue(el);
   }
+  ensureAccount();
   if(type==='interview'){
    ndValidateInterviewEmployment(values);
-   phase='Checking contact details';status('Checking contact details…');await window.ndInterviewContacts.check(client(),values);
-   phase='Loading person in charge';values['Person in Charge']=await window.ndLoadCurrentAccountName(client());
+   phase='Checking contact details';status('Checking contact details…');await window.ndInterviewContacts.check(client(),values);ensureAccount();
+   phase='Loading person in charge';values['Person in Charge']=await window.ndLoadCurrentAccountName(client());ensureAccount();
    applyInterviewBranding(values);
   }
   if(type==='interview'&&values.Department!=='Other')values['Other Department']='';
@@ -32026,16 +32049,17 @@ async function saveEntry(e){
   const request=crypto.randomUUID();values.__nd_save_request=request;
   const payload={form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'};
   attempt={request,owner:userEmail,payload,saved:null};form.ndPendingFormSave=attempt;
-  phase='Saving form';status('Saving form…');
+  ensureAccount();phase='Saving form';status('Saving form…');
   // Return metadata only; the complete photos/signatures are already available locally.
   const result=await client().from(TABLE).insert(payload).select('id,form_type,full_name,branch,form_date').single();
   if(result.error)throw result.error;if(!result.data?.id)throw Error('The server did not confirm the saved form.');
   saved={...result.data,form_data:values};attempt.saved=saved;
   await finish(saved);
  }catch(err){
-  if(!saved&&attempt&&/load failed|failed to fetch|network|timeout|connection|fetch failed/i.test(String(err.message||err))){
+  if(saveEpoch===ndFormMetadataEpoch&&userEmail===saveOwner&&!saved&&attempt&&/load failed|failed to fetch|network|timeout|connection|fetch failed/i.test(String(err.message||err))){
    try{saved=await ndRecoverFormSave(attempt);if(saved){attempt.saved=saved;await finish(saved);return;}}catch(_){}
   }
+  if(saveEpoch!==ndFormMetadataEpoch||saveOwner&&userEmail!==saveOwner)return;
   const detail=String(err.message||err)+(err.code?' ('+err.code+')':'');
   if(saved)status('Form saved. Unable to open review: '+detail+' Click Save again to reopen the saved form.');
   else status('Unable to save ['+phase+']: '+detail+(attempt?' Your input is kept. Check Form History before retrying.':' Your input is kept.'));
@@ -32143,7 +32167,8 @@ function interviewDocumentFileName(row){
 }
 
 async function openInterviewDocument(row){
- await loadInterviewBranches();
+ const documentEpoch=ndFormMetadataEpoch;
+ await loadInterviewBranches();if(documentEpoch!==ndFormMetadataEpoch)return;
  let dialog=$('ndInterviewDocumentDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndInterviewDocumentDialog';dialog.style.cssText='width:min(900px,94vw);max-height:90dvh;padding:20px;border:1px solid #ddd;border-radius:16px';document.body.append(dialog)}
  let current={...row,form_data:{...(row.form_data||{})}};
  dialog.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button" data-doc-close>Close</button><button class="btn" type="button" data-doc-save>Save &amp; Review</button><button class="btn" type="button" data-doc-print>Download PDF</button><button class="btn" type="button" data-doc-next>Continue to Signatures</button><button class="btn" type="button" data-doc-back>Back to Details</button></div><p role="status" data-doc-status>Review the details before signing.</p><div data-doc-preview></div><fieldset style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px"><legend>Sign Document</legend><div class="nd-form-grid" data-doc-signatures></div></fieldset>';
