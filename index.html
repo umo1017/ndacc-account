@@ -32347,7 +32347,20 @@ async function openForms(e,initialTab=null){
  const wasVisible=document.body.dataset.ndVisiblePage==='forms',root=$('ndStaffFormContent');
  document.body.dataset.ndVisiblePage='forms';window.activeMainPage='forms';
  try{sessionStorage.setItem('nd_last_page_v2','forms');sessionStorage.setItem('nd_last_page_v3','forms');const email=String(window.currentUserEmail||userEmail||'').toLowerCase();if(email){localStorage.setItem('nd_last_authorized_page_v4::'+email,'forms');localStorage.setItem('nd_last_authorized_page_v5::'+email,'forms');}}catch(_){}
- $('ndStaffFormsPage').hidden=false;$('ndStaffFormsPage').style.setProperty('display','block','important');
+ // This window-capture handler owns the transition; it stops the shared router.
+ // Explicitly deactivate the previous screen, including the Records layer.
+ document.body.classList.remove('nd-records-visible');
+ document.body.style.removeProperty('--nd-finance-open');
+ $('ndStaffFinancePage')?.classList.remove('nd-open');
+ for(const id of ['appView','ndStaffFinancePage','aiReceiptPage','salaryPage','rosterPage','bonusPage','settlementPage','ordersPage','socialPage','settingsPage','ndAnnouncementsPage','ndStaffManagementPage']){
+  const page=$(id);if(!page)continue;
+  page.classList.remove('active');page.style.setProperty('display','none','important');
+  if(id==='appView')page.classList.add('hidden');
+ }
+ const formsPage=$('ndStaffFormsPage');
+ if(!formsPage)throw Error('The Form page is unavailable. Please reload the page.');
+ formsPage.hidden=false;formsPage.classList.add('active');formsPage.style.setProperty('display','block','important');
+ if(!wasVisible)window.scrollTo(0,0);
  document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));
  $('sidebarForms')?.classList.add('active');$('mainSidebar')?.classList.remove('open');
  const target=initialTab||(root?.children.length?tab:'interview');
@@ -32379,7 +32392,7 @@ window.ndOpenReferenceContract=async(type)=>{
 };
 window.ndViewReferenceContract=row=>ndOpenContractDocument(row,true);
 window.ndGetCompanyDocumentTemplate=async()=>{await loadTemplates();return {...interviewBranding()}};
-window.addEventListener('click',e=>{if(e.target.closest?.('#sidebarForms'))openForms(e)},true);
+window.addEventListener('click',e=>{if(e.target.closest?.('#sidebarForms'))void openForms(e).catch(error=>{status('Unable to open Form: '+(error?.message||error));});},true);
 function init(){
  let metadataUser=null;
  client()?.auth.onAuthStateChange?.((event,session)=>{
