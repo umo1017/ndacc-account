@@ -228,6 +228,44 @@ function ndLocalMonthISO(d=new Date()){
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script id="nd-shared-data-runtime">
+(()=>{
+ 'use strict';
+ const clients=new Map(),pending=new Map(),nativeFetch=window.fetch.bind(window);
+ async function boundedRead(input,init={}){
+  const controller=new AbortController(),source=init.signal||(typeof Request!=='undefined'&&input instanceof Request?input.signal:null);
+  const abort=()=>controller.abort(source?.reason);
+  if(source?.aborted)throw source.reason||new DOMException('Request cancelled','AbortError');
+  source?.addEventListener('abort',abort,{once:true});let timer;
+  try{return await Promise.race([
+   nativeFetch(input,{...init,signal:controller.signal}),
+   new Promise((_,reject)=>{timer=setTimeout(()=>{reject(new Error('Loading timed out. Check your connection and try again.'));controller.abort();},20000);controller.signal.addEventListener('abort',()=>reject(controller.signal.reason||new DOMException('Request cancelled','AbortError')),{once:true});})
+  ]);}finally{clearTimeout(timer);source?.removeEventListener('abort',abort);}
+ }
+ window.ndReadFetch=async(input,init={})=>{
+  const url=typeof input==='string'?input:input.url||String(input),method=String(init.method||input.method||'GET').toUpperCase();
+  // No caching or automatic retries for writes, RPCs or uploads.
+  if(method!=='GET'||!(/\/rest\/v1\//.test(url)||/\/auth\/v1\/user(?:\?|$)/.test(url)))return nativeFetch(input,init);
+  if(init.signal||(typeof Request!=='undefined'&&input instanceof Request))return boundedRead(input,init);
+  const headers=[...new Headers(init.headers||{}).entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const key=JSON.stringify([url,headers,init.credentials||'same-origin',init.cache||'default']);
+  let task=pending.get(key);
+  if(!task){task=boundedRead(input,init);pending.set(key,task);task.then(()=>{if(pending.get(key)===task)pending.delete(key);},()=>{if(pending.get(key)===task)pending.delete(key);});}
+  return (await task).clone();
+ };
+ window.ndGetDatabase=(url,key)=>{
+  const id=url+'|'+key;
+  if(!clients.has(id))clients.set(id,window.supabase.createClient(url,key,{global:{fetch:window.ndReadFetch}}));
+  return clients.get(id);
+ };
+ window.ndMapLimited=async(items,limit,work)=>{
+  const results=new Array(items.length);let next=0;
+  await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{for(;;){const i=next++;if(i>=items.length)return;results[i]=await work(items[i],i);}}));
+  return results;
+ };
+})();
+</script>
+
 <script id="nd-instagram-binding-v10-diagnostic">
 /* Read-only diagnostics: identify the deployed build and unexpected direct REST writes. */
 window.ND_SOCIAL_BUILD = 'IG-RPC-V10-20261012';
@@ -2921,11 +2959,14 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
     root.style.setProperty('overflow','visible','important');
   }
 
+  let ndPayslipFitFrame=0;
   function queueFit(){
-    requestAnimationFrame(()=>{
+    if(ndPayslipFitFrame)return;
+    ndPayslipFitFrame=requestAnimationFrame(()=>{
+      ndPayslipFitFrame=0;
+      const modal=document.getElementById('salaryPayslipModal');
+      if(!modal||getComputedStyle(modal).display==='none')return;
       fit7thPayslip();
-      setTimeout(fit7thPayslip,60);
-      setTimeout(fit7thPayslip,220);
     });
   }
 
@@ -4899,7 +4940,7 @@ window.ndEmployeeFullName = function(employee){
   "use strict";
   const SUPABASE_URL = 'https://cofmjwsejcbfsgdrswku.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU';
-  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const db = window.ndGetDatabase(SUPABASE_URL, SUPABASE_KEY);
 
   const CASH_WITHDRAWAL_MANAGERS = new Set([
     "mars83002566@gmail.com",
@@ -8535,7 +8576,12 @@ return `<div class="history-date-card">
     }
   }
 
+  let ndDailyAuthUser=null;
   db.auth.onAuthStateChange((event,session)=>{
+    const id=session?.user?.id||null;
+    if(event==="INITIAL_SESSION"){ndDailyAuthUser=id;return;}
+    if(event==="SIGNED_IN"&&id===ndDailyAuthUser)return;
+    if(event==="SIGNED_IN"||event==="SIGNED_OUT")ndDailyAuthUser=id;
     if(event==="PASSWORD_RECOVERY"){
       $("authView").classList.remove("hidden");
       $("appView").classList.add("hidden");
@@ -9107,7 +9153,7 @@ async function ndRenderCashPettyHistory(){
   if(!/^\d{4}-\d{2}$/.test(ym||'')){root.textContent='Select a month.';return;}
   root.textContent='Loading cash to petty cash history…';
   try{
-    const client=window.supabase.createClient('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');
+    const client=window.ndGetDatabase('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');
     const next=new Date(ym+'-01T12:00:00');next.setMonth(next.getMonth()+1);
     const until=next.getFullYear()+'-'+String(next.getMonth()+1).padStart(2,'0')+'-01';
     let query=client.from('daily_settlements').select('id,settlement_date,branch,staff,petty_entries').gte('settlement_date',ym+'-01').lt('settlement_date',until).in('branch',['Eco Botanic','Nusa Bestari']).order('settlement_date',{ascending:false}).limit(1000);
@@ -10051,7 +10097,7 @@ const DEFAULT=`你是天之道 NATURE’S DAO 的专业品牌设计师、健康�
 const CLOUD_URL='https://cofmjwsejcbfsgdrswku.supabase.co';
 const CLOUD_KEY='sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU';
 let cloud=null,loadSeq=0;
-function client(){if(!cloud){if(!window.supabase?.createClient)throw new Error('Supabase SDK 未加载');cloud=window.supabase.createClient(CLOUD_URL,CLOUD_KEY);}return cloud;}
+function client(){if(!cloud){if(!window.supabase?.createClient)throw new Error('Supabase SDK 未加载');cloud=window.ndGetDatabase(CLOUD_URL,CLOUD_KEY);}return cloud;}
 function status(message){$('ndAiSaveState').textContent=message;}
 function validBrand(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id||'');}
 function populate(){const from=$('ndSocialActiveBrand'),to=$('ndAiBrand');if(!to)return;const prev=to.value;to.replaceChildren();if(from){for(const option of from.options){if(!validBrand(option.value))continue;to.add(new Option(option.textContent,option.value));}}if(!to.options.length)to.add(new Option('尚未找到品牌 UUID',''));to.value=[...to.options].some(o=>o.value===prev)?prev:([...to.options].some(o=>o.value===from?.value)?from.value:to.options[0].value);load();}
@@ -10115,7 +10161,7 @@ const URL='https://cofmjwsejcbfsgdrswku.supabase.co';
 const KEY='sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU';
 let db=null,records=[],editing=null,seq=0;
 const valid=id=>/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id||'');
-function client(){if(!db){if(!window.supabase?.createClient)throw Error('Supabase SDK 未加载');db=window.supabase.createClient(URL,KEY);}return db;}
+function client(){if(!db){if(!window.supabase?.createClient)throw Error('Supabase SDK 未加载');db=window.ndGetDatabase(URL,KEY);}return db;}
 function message(v){$('ndTypeStatus').textContent=v;}
 function brand(){return $('ndAiBrand')?.value||'';}
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
@@ -10647,7 +10693,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 (function(){
 "use strict";
 
-const salaryDb = window.supabase.createClient("https://cofmjwsejcbfsgdrswku.supabase.co", "sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU");
+const salaryDb = window.ndGetDatabase("https://cofmjwsejcbfsgdrswku.supabase.co", "sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU");
 window.salaryDb=salaryDb;
 // Statutory contribution basis aligned to Payroll.my 2026 published tables:
  // EPF Third Schedule, SOCSO 2026 incl. LINDUNG 24 JAM, EIS table,
@@ -11654,6 +11700,7 @@ function showDaily(){
   try{closeMobileSidebar();}catch(_){}
 }
 
+let ndSalaryNavigationLoad=null,ndSalaryNavigationKey='';
 function showSalary(){
   try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
   // Salary navigation remains visible; protected payroll data is scoped by outlet access.
@@ -11670,7 +11717,12 @@ function showSalary(){
   setSidebarActive("salary");
   closeMobileSidebar();
   byId("salaryContent").style.display="grid";
-  loadSalaryData();
+  const key=monthKey()+'|'+String(currentSalaryUserEmail||'');
+  if(!ndSalaryNavigationLoad||ndSalaryNavigationKey!==key){
+    ndSalaryNavigationKey=key;
+    const task=loadSalaryData();ndSalaryNavigationLoad=task;
+    task.catch(error=>{byId('salarySyncState').textContent='Unable to load salary: '+error.message;}).finally(()=>{if(ndSalaryNavigationLoad===task)ndSalaryNavigationLoad=null;});
+  }
 }
 
 async function renderOwnerSettings(){
@@ -13132,7 +13184,6 @@ async function loadSalaryData(){
   salaryEmployees=(empsRes.data||[])
     .filter(e=>{
       if(isGlobalAdmin) return true;
-  setTimeout(()=>{try{window.ndRefreshDailyBirthdayReminder?.(true);}catch(_){}},0);
 
       if(isPayrollManager) return true;
       return accessibleSalaryOutlets.includes(e.outlet);
@@ -13141,6 +13192,7 @@ async function loadSalaryData(){
       const branchCompare=String(a.outlet||"").localeCompare(String(b.outlet||""));
       return branchCompare || salaryStaffSort(a,b);
     });
+  setTimeout(()=>{try{window.ndRefreshDailyBirthdayReminder?.();}catch(_){}},0);
   salaryMonthly=monthlyRes.data||[];
   salarySnapshots=snapRes.data||[];
   salaryCommissionSnapshots=commissionRes.data||[];
@@ -13223,7 +13275,7 @@ async function loadSalaryData(){
   salaryQuarter3BonusMap=new Map();
   try{
     if(window.ndQuarter3Bonus?.isPayoutMonth?.(month)){
-      await Promise.all(salaryEmployees.map(async e=>{
+      await window.ndMapLimited(salaryEmployees,4,async e=>{
         try{
           const amount=await window.ndQuarter3Bonus.calculateEmployee(Number(e.id),month);
           salaryQuarter3BonusMap.set(Number(e.id),Number(amount||0));
@@ -13231,7 +13283,7 @@ async function loadSalaryData(){
           console.warn("3-Bonus load failed",e.id,err);
           salaryQuarter3BonusMap.set(Number(e.id),0);
         }
-      }));
+      });
     }
   }catch(err){
     console.warn("3-Bonus preload failed",err);
@@ -16001,8 +16053,8 @@ async function openPayslip(empId,type){
     }
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}${rawC.payment_done===true ? "" : payslipLine("7th Unpaid Refund (+)",recalculated.seventh_deduction_refund)}${rawC.payment_done===true ? "" : (Math.abs(Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0))>0.005 ? payslipLine("Manual Net Pay Adjustment",Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0)) : "")}${payslipLine("W-Bonus (included)",c.w_bonus||0)}<div style="height:180px"></div><div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div style="height:190px"></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
-<div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}${rawC.payment_done===true ? "" : payslipLine("7th Unpaid Refund (+)",recalculated.seventh_deduction_refund)}${rawC.payment_done===true ? "" : (Math.abs(Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0))>0.005 ? payslipLine("Manual Net Pay Adjustment",Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0)) : "")}${payslipLine("W-Bonus (included)",c.w_bonus||0)}<div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
+<div class="payslip-net-grid"><div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
   }
@@ -16389,7 +16441,11 @@ byId("salaryLogoutBtn").onclick=async()=>{
   }
 }
 
+let ndSalaryAuthUser=null;
 salaryDb.auth.onAuthStateChange((event,session)=>{
+  const id=session?.user?.id||null;
+  if(event==="TOKEN_REFRESHED"||(event==="SIGNED_IN"&&id===ndSalaryAuthUser))return;
+  ndSalaryAuthUser=id;
   if(!session){
     byId("mainSidebar").classList.add("hidden");
     byId("salaryPage").classList.remove("active","sidebar-offset");
@@ -29749,7 +29805,11 @@ document.addEventListener("DOMContentLoaded",function(){
   },true);
 
   // Rebind if the Salary page is rebuilt.
-  const observer=new MutationObserver(bindSalaryViewButtons);
+  let ndSalaryBindQueued=false;
+  const observer=new MutationObserver(records=>{
+    if(ndSalaryBindQueued||!records.some(r=>[...r.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('#salaryView7Btn,#salaryView14Btn,#salaryViewTotalBtn')||n.querySelector?.('#salaryView7Btn,#salaryView14Btn,#salaryViewTotalBtn')))))return;
+    ndSalaryBindQueued=true;requestAnimationFrame(()=>{ndSalaryBindQueued=false;bindSalaryViewButtons();});
+  });
   document.addEventListener("DOMContentLoaded",function(){
     const page=document.getElementById("salaryPage");
     if(page) observer.observe(page,{childList:true,subtree:true});
@@ -31108,7 +31168,7 @@ if(unread(row))try{await markRead(row.id)}catch(error){if(token===detailToken)di
 }
 function setup(){if(!$('sidebarAnnouncements'))return;$('ndAnnMonth').value=thisMonth();$('sidebarAnnouncements').addEventListener('click',event=>{event.preventDefault();event.stopPropagation();show()});$('ndCompanyPolicyView').onclick=viewCompanyPolicy;$('ndCompanyPolicyDownload').onclick=downloadCompanyPolicy;$('ndAnnClose').onclick=()=>{window.showDaily?.();document.body.dataset.ndVisiblePage='daily'};$('ndAnnSave').onclick=save;$('ndAnnCancel').onclick=reset;$('ndAnnPhotos').onchange=()=>{$('ndAnnSelectedPhotos').textContent=Array.from($('ndAnnPhotos').files||[]).map(file=>file.name).join(', ')};$('ndAnnMode').onclick=event=>{const button=event.target.closest('[data-ann-mode]');if(button)setMode(button.dataset.annMode)};$('ndAnnMonth').onchange=render;for(const [id,step] of [['ndAnnPrev',-1],['ndAnnNext',1]])$(id).onclick=()=>{const [year,month]=($('ndAnnMonth').value||thisMonth()).split('-').map(Number);$('ndAnnMonth').value=new Date(Date.UTC(year,month-1+step,1)).toISOString().slice(0,7);render()};$('ndAnnTabs').onclick=event=>{const button=event.target.closest('[data-cat]');if(button){cat=button.dataset.cat;render()}};
 $('ndAnnList').onclick=async event=>{const button=event.target.closest('[data-ann-open],[data-ann-edit],[data-ann-delete],[data-ann-download]');if(!button){const card=event.target.closest('[data-ann-card]');const row=card&&items.find(row=>String(row.id)===card.dataset.annCard);if(row)await openAnnouncement(row);return;}const id=button.dataset.annOpen||button.dataset.annEdit||button.dataset.annDelete||button.dataset.annDownload,row=items.find(row=>String(row.id)===String(id));if(!row)return;try{if(button.hasAttribute('data-ann-download')){button.disabled=true;const photo=decode(row).photos[Number(button.dataset.photoIndex)],response=await fetch(await receiptURL(photo));if(!response.ok)throw Error('Photo download failed.');const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=photo.name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);return}if(button.hasAttribute('data-ann-open'))return await openAnnouncement(row);await auth();if(!admin)return;if(button.hasAttribute('data-ann-edit')){editing=row.id;const content=decode(row);keptPhotos=content.photos;$('ndAnnCategory').value=announcementCategory(row);$('ndAnnTitle').value=row.title;$('ndAnnContent').value=content.text;$('ndAnnPhotos').value='';$('ndAnnSelectedPhotos').textContent=keptPhotos.length+' saved files';$('ndAnnEditHeading').textContent='Edit Announcement';setMode('publish')}else if(confirm('Delete announcement?')){const {error}=await db().from('nd_announcements').update({active:false}).eq('id',row.id);if(error)throw error;await load()}}catch(error){notice(error.message)}finally{button.disabled=false}};
-const mount=document.createElement('div');mount.id='ndAnnDailyMount';mount.className='nd-ann-daily';mount.hidden=true;mount.onclick=show;$('appView')?.prepend(mount);auth();db()?.auth.onAuthStateChange?.(()=>{$('ndAnnouncementDetailDialog')?.close();admin=false;setMode('history');setTimeout(auth,0)});document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.body.dataset.ndVisiblePage==='announcements')auth()})}
+const mount=document.createElement('div');mount.id='ndAnnDailyMount';mount.className='nd-ann-daily';mount.hidden=true;mount.onclick=show;$('appView')?.prepend(mount);auth();db()?.auth.onAuthStateChange?.((event)=>{if(event==='TOKEN_REFRESHED')return;$('ndAnnouncementDetailDialog')?.close();admin=false;setMode('history');setTimeout(auth,0)});document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.body.dataset.ndVisiblePage==='announcements')auth()})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
@@ -31533,7 +31593,7 @@ function renderInterview(root){
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function status(v){$('ndStaffFormStatus').textContent=v||''}
 function isAdmin(){return userEmail===ADMIN}
-function client(){if(!db){if(window.salaryDb?.from)db=window.salaryDb;else if(window.supabase?.createClient)db=window.supabase.createClient('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');}return db}
+function client(){if(!db){if(window.salaryDb?.from)db=window.salaryDb;else if(window.supabase?.createClient)db=window.ndGetDatabase('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');}return db}
 async function identity(){try{const {data}=await client().auth.getUser();userEmail=String(data?.user?.email||'').toLowerCase()}catch(e){userEmail=''}return userEmail}
 function fieldsFor(type){return type==='interview'?interviewGroups().slice(0,4).flatMap(g=>g[1]):templates[type]||defaults[type];}
 const ND_REST_WEEKDAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -32100,16 +32160,27 @@ async function becomeEmployee(row,button){
  await window.ndStartInterviewEmployee(row);status('Interview details copied. Complete the employment details and save.');
  }catch(e){status('Unable to prepare employee: '+e.message)}finally{if(button.isConnected)button.disabled=false}
 }
+let ndFormHistorySequence=0;
+async function ndFetchHistoryForm(id){
+ const {data,error}=await ndContractRequest(signal=>{
+  const query=client().from(TABLE).select('id,form_type,form_data,created_by,created_at,full_name,branch,form_date').eq('id',id).single();
+  return query.abortSignal?query.abortSignal(signal):query;
+ });
+ if(error)throw error;if(!data)throw Error('This form is no longer available.');return data;
+}
 async function loadHistory(){
+ const sequence=++ndFormHistorySequence;
  if(!userEmail){status('Please sign in to view form history.');return}const node=$('ndFormHistoryList');
- try{const {data,error}=await client().from(TABLE).select('id,form_type,form_data,created_by,created_at,full_name,branch,form_date').order('created_at',{ascending:false}).limit(300);if(error)throw error;
+ try{const {data:list,error}=await client().from(TABLE).select('id,form_type,created_by,created_at,full_name,branch,form_date,applicant_type:form_data->>"Applicant Type",contract_type:form_data->>"Contract Type",signed_type:form_data->__nd_signed_contract->>contract_type,reference_layout:form_data->__nd_signed_contract->>reference_layout,revision_of:form_data->>__nd_revision_of').order('created_at',{ascending:false}).order('id',{ascending:false}).limit(300);if(error)throw error;
+ const data=(list||[]).map(row=>({...row,form_data:{'Applicant Type':row.applicant_type,'Contract Type':row.contract_type,__nd_revision_of:row.revision_of,...(row.signed_type?{__nd_signed_contract:{contract_type:row.signed_type,reference_layout:row.reference_layout}}:{})}}));
  const interviews=(data||[]).filter(r=>r.form_type==='interview').map(r=>String(r.id));let employees=[];
  if(interviews.length){const result=await client().from('employees').select('id,employee_no,source_interview_id').in('source_interview_id',interviews);if(result.error)throw result.error;employees=result.data||[]}
- if(!node?.isConnected)return;
+ if(sequence!==ndFormHistorySequence||!node?.isConnected)return;
  node.innerHTML=`<table><thead><tr><th>Date</th><th>Type</th><th>Name</th><th>Submitted By</th>${isAdmin()?'<th>Action</th>':''}</tr></thead><tbody>${(data||[]).map(r=>{const employee=employees.find(x=>x.source_interview_id===String(r.id));return `<tr><td>${escapeHtml(new Date(r.created_at).toLocaleString('en-MY'))}</td><td>${escapeHtml(r.form_type==='interview'?(r.form_data?.['Applicant Type']||'Interview'):String(r.form_data?.['Contract Type']||r.form_type).replace('Permanent Employment Contract','Starting Salary Agreement').replace(/(Passport[\s\S]*?)\s*\(English\)/i,'$1'))}</td><td><button class="mini" type="button" data-form-view="${escapeHtml(r.id)}">${escapeHtml(r.full_name||'View')}</button></td><td>${escapeHtml(r.created_by)}</td>${isAdmin()?`<td><button class="btn" type="button" data-form-delete="${escapeHtml(r.id)}">Delete</button> ${r.form_type==='interview'?(employee?`<span>Employee Created · ${escapeHtml(employee.employee_no||employee.id)}</span>`:`<button class="btn" type="button" data-hire-id="${escapeHtml(r.id)}">Start Onboarding</button>`):''}</td>`:''}</tr>`}).join('')||'<tr><td colspan="5">No records</td></tr>'}</tbody></table>`;
- if(String(userEmail||'').toLowerCase()==='umo1017@gmail.com')for(const row of data||[]){const a=row.form_data?.__nd_signed_contract;if(row.form_type!=='contract'||!a||!['passport','cash_request','private_loan'].includes(a.contract_type)||/^uploaded-.*-20261022$/.test(a.reference_layout||''))continue;if((data||[]).some(x=>String(x.form_data?.__nd_revision_of||'')===String(row.id)))continue;const view=[...node.querySelectorAll('[data-form-view]')].find(b=>b.dataset.formView===String(row.id));if(!view)continue;const button=document.createElement('button');button.className='btn';button.type='button';button.textContent='Update Template';button.style.marginLeft='8px';button.onclick=async event=>{event.stopPropagation();button.disabled=true;try{await ndUpdateSubmittedContractTemplate(row);}catch(error){status('Unable to update template: '+error.message);}finally{button.disabled=false;}};view.closest('tr').lastElementChild.append(button);}
- node.onclick=async e=>{const button=e.target.closest('[data-form-id],[data-form-view],[data-hire-id],[data-form-delete]');if(!button)return;if(button.dataset.formDelete){await identity();if(!isAdmin())return;if(!confirm('Delete this form record?'))return;button.disabled=true;try{const {error}=await client().from(TABLE).delete().eq('id',button.dataset.formDelete);if(error)throw error;await loadHistory()}catch(error){status('Unable to delete form: '+error.message);button.disabled=false}return;}const row=(data||[]).find(r=>String(r.id)===(button.dataset.formId||button.dataset.formView||button.dataset.hireId));if(!row)return;if(button.dataset.hireId)becomeEmployee(row,button);else if(row.form_type==='interview'){if(isAdmin())openInterviewDocument(row);else{let detail=$('ndInterviewReadOnly');if(!detail){detail=document.createElement('dialog');detail.id='ndInterviewReadOnly';detail.style.cssText='width:min(900px,94vw);max-height:90dvh;overflow:auto';document.body.append(detail)}detail.innerHTML='<button type="button" class="btn">Close</button><style>'+ND_INTERVIEW_DOC_STYLE+'</style>'+interviewDocumentMarkup(row.form_data||{});detail.querySelector('button').onclick=()=>detail.close();detail.showModal()}}else if(row.form_type==='contract'&&row.form_data?.__nd_signed_contract)ndOpenContractDocument(row,true);else showProfile(row.form_data,row.full_name+' · '+row.form_type)};
- }catch(e){if(node?.isConnected)node.textContent='Unable to load history: '+e.message}
+ if(String(userEmail||'').toLowerCase()==='umo1017@gmail.com')for(const row of data||[]){const a=row.form_data?.__nd_signed_contract;if(row.form_type!=='contract'||!a||!['passport','cash_request','private_loan'].includes(a.contract_type)||/^uploaded-.*-20261022$/.test(a.reference_layout||''))continue;if((data||[]).some(x=>String(x.form_data?.__nd_revision_of||'')===String(row.id)))continue;const view=[...node.querySelectorAll('[data-form-view]')].find(b=>b.dataset.formView===String(row.id));if(!view)continue;const button=document.createElement('button');button.className='btn';button.type='button';button.textContent='Update Template';button.style.marginLeft='8px';button.onclick=async event=>{event.stopPropagation();button.disabled=true;try{await ndUpdateSubmittedContractTemplate(await ndFetchHistoryForm(row.id));}catch(error){status('Unable to update template: '+error.message);}finally{button.disabled=false;}};view.closest('tr').lastElementChild.append(button);}
+ node.onclick=async e=>{const button=e.target.closest('[data-form-id],[data-form-view],[data-hire-id],[data-form-delete]');if(!button)return;if(button.dataset.formDelete){await identity();if(!isAdmin())return;if(!confirm('Delete this form record?'))return;button.disabled=true;try{const {error}=await client().from(TABLE).delete().eq('id',button.dataset.formDelete);if(error)throw error;await loadHistory()}catch(error){status('Unable to delete form: '+error.message);button.disabled=false}return;}const summary=(data||[]).find(r=>String(r.id)===(button.dataset.formId||button.dataset.formView||button.dataset.hireId));if(!summary||button.disabled)return;button.disabled=true;
+ try{const row=await ndFetchHistoryForm(summary.id);if(sequence!==ndFormHistorySequence||!node.isConnected)return;if(button.dataset.hireId)await becomeEmployee(row,button);else if(row.form_type==='interview'){if(isAdmin())openInterviewDocument(row);else{let detail=$('ndInterviewReadOnly');if(!detail){detail=document.createElement('dialog');detail.id='ndInterviewReadOnly';detail.style.cssText='width:min(900px,94vw);max-height:90dvh;overflow:auto';document.body.append(detail)}detail.innerHTML='<button type="button" class="btn">Close</button><style>'+ND_INTERVIEW_DOC_STYLE+'</style>'+interviewDocumentMarkup(row.form_data||{});detail.querySelector('button').onclick=()=>detail.close();detail.showModal()}}else if(row.form_type==='contract'&&row.form_data?.__nd_signed_contract)ndOpenContractDocument(row,true);else showProfile(row.form_data,row.full_name+' · '+row.form_type)}catch(error){status('Unable to open form: '+error.message);}finally{if(button.isConnected)button.disabled=false;}};
+ }catch(e){if(sequence===ndFormHistorySequence&&node?.isConnected)node.textContent='Unable to load history: '+e.message}
 }
 window.addEventListener('nd-interview-converted',()=>{if(tab==='history')loadHistory()});
 let ndReferenceTemplateReady=Promise.resolve();
@@ -32485,7 +32556,7 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
  }
  function queue(){if(!scheduled){scheduled=true;queueMicrotask(layout);}}
  window.ndRebuildExpenseRows=async()=>layout();
- const start=()=>{layout();const form=document.getElementById('settlementExpenseForm');if(form)new MutationObserver(queue).observe(form,{childList:true,subtree:true});};
+ const start=()=>{layout();const form=document.getElementById('settlementExpenseForm');if(form)new MutationObserver(records=>{if(records.some(r=>[...r.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('.settlement-expense-row,.settlement-expense-head')||n.querySelector?.('.settlement-expense-row,.settlement-expense-head')))))queue();}).observe(form,{childList:true,subtree:true});};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
 </script>
@@ -32620,7 +32691,7 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
  const modes={ordersMonthlyBtn:'monthly',ordersManageBtn:'manage',ordersLoanBtn:'loan',ordersInventoryBtn:'inventory',ordersTotalQtyBtn:'total',ordersStaffStockBtn:'staff',ordersTransferBtn:'transfer',ordersChannelsBtn:'channels'};for(const [id,mode]of Object.entries(modes))$(id)?.addEventListener('click',()=>moveOrderFilters(mode));$('ordersBranch')?.addEventListener('change',()=>{renderExpiry();});
  // Keep contextual selectors with whichever panel is selected by legacy refresh/navigation code.
  const toolbar=$('ordersMonthlyBtn')?.parentElement;if(toolbar)toolbar.classList.add('nd-order-nav');let current='';const sync=()=>{const active=Object.entries(modes).find(([id])=>$(id)?.classList.contains('active'));if(active&&active[1]!==current){current=active[1];moveOrderFilters(current);}};if(toolbar)new MutationObserver(sync).observe(toolbar,{subtree:true,attributes:true,attributeFilter:['class']});sync();
- ensureExpiryPanel();auth().then(()=>{ready=true;void poll();if(db()?.channel){channel=db().channel('nd-operations-notifications').on('postgres_changes',{event:'INSERT',schema:'public',table:'nd_ops_issues'},()=>void poll()).on('postgres_changes',{event:'*',schema:'public',table:'nd_product_expiry'},()=>void poll()).subscribe();}}).catch(()=>{});setInterval(()=>void poll(),30000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)void poll()});window.addEventListener('focus',()=>void poll());db()?.auth.onAuthStateChange?.(()=>{user=null;reads.clear();$('ndOperationsAlertDialog')?.close();$('ndIssuesPanel')?.remove();setTimeout(()=>void poll(),0);});
+ ensureExpiryPanel();auth().then(()=>{ready=true;void poll();if(db()?.channel){channel=db().channel('nd-operations-notifications').on('postgres_changes',{event:'INSERT',schema:'public',table:'nd_ops_issues'},()=>void poll()).on('postgres_changes',{event:'*',schema:'public',table:'nd_product_expiry'},()=>void poll()).subscribe();}}).catch(()=>{});setInterval(()=>{if(!window.ndNotifications)void poll();},30000);document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!window.ndNotifications)void poll()});window.addEventListener('focus',()=>{if(!window.ndNotifications)void poll();});db()?.auth.onAuthStateChange?.((event)=>{if(event==='TOKEN_REFRESHED')return;user=null;reads.clear();$('ndOperationsAlertDialog')?.close();$('ndIssuesPanel')?.remove();setTimeout(()=>void poll(),0);});
  window.addEventListener('nd-issue-media-updated',renderIssues);window.ndOps={openIssues,reloadIssues:loadIssues,refreshExpiry,poll,limitDate,reminderDate,expiryState};
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
@@ -32658,7 +32729,7 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
  function optionsTabs(values,selected,attr){return values.map(v=>'<button type="button" '+attr+'="'+escape(v)+'" aria-pressed="'+(v===selected)+'">'+escape(v)+'</button>').join('');}
  function ensure(inputId,resultId,type){const input=$(inputId),root=$(resultId);if(!input||!root)return null;input.closest('.field')?.classList.add('nd-order-product-field');let state=states.get(inputId);if(state&&state.input===input)return state;state={input,root,inputId,resultId,type,brand:'All Brands',category:'All',query:'',picked:''};states.set(inputId,state);const controls=document.createElement('div');controls.className='nd-brand-picker';controls.dataset.brandFor=inputId;controls.innerHTML='<label>1 · Select Brand</label><div class="nd-brand-tabs" data-brands></div><div data-categories hidden><label>2 · Product Category</label><div class="nd-brand-tabs nd-brand-categories"></div></div>';input.before(controls);root.classList.add('nd-product-result');state.controls=controls;input.placeholder='Search products';input.disabled=false;input.setAttribute('aria-label','Search products in selected brand');
  controls.onclick=e=>{const brandButton=e.target.closest('[data-brand-value]'),catButton=e.target.closest('[data-category-value]');if(!brandButton&&!catButton)return;if(brandButton){state.brand=brandButton.dataset.brandValue;state.category='All';state.picked='';input.value='';resetSelection(type);}else{state.category=catButton.dataset.categoryValue;state.picked='';input.value='';resetSelection(type);}draw(state);void loadBalances();};
- input.addEventListener('input',()=>{state.picked='';resetSelection(type);draw(state);});root.addEventListener('click',event=>{const button=event.target.closest('[data-pick-'+type+']');if(!button)return;const sku=button.getAttribute('data-pick-'+type);if(!state.brand||!catalog().some(p=>String(p.sku_id)===sku&&brand(p)===state.brand)){event.stopImmediatePropagation();return;}state.picked=sku;},true);draw(state);return state;}
+ input.addEventListener('input',()=>{state.picked='';resetSelection(type);if(state.searchFrame)return;state.searchFrame=requestAnimationFrame(()=>{state.searchFrame=0;if(input.isConnected)draw(state);});});root.addEventListener('click',event=>{const button=event.target.closest('[data-pick-'+type+']');if(!button)return;const sku=button.getAttribute('data-pick-'+type);if(!state.brand||!catalog().some(p=>String(p.sku_id)===sku&&brand(p)===state.brand)){event.stopImmediatePropagation();return;}state.picked=sku;},true);draw(state);return state;}
  function draw(state){
  const {input,root,controls}=state;
  if(state.type==='transfer'&&!transferReady()){controls.hidden=true;input.disabled=true;root.innerHTML='<p class="nd-brand-empty">'+escape(!transferSource()?'Select a source branch first.':transferError?'Unable to load source stock: '+transferError: 'Loading source branch stock…')+'</p>';window.ndMultiPick?.decorate(state);return;}
@@ -32673,8 +32744,8 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
  window.ndBrandProductPicker=(inputId,resultId,type)=>{const state=ensure(inputId,resultId,type);if(state)draw(state);};
  async function loadBalances(){const wanted=branch(),seq=++balanceSeq;try{const database=window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);if(!database)return;let q=database.from('inventory_movements').select('sku_id,qty_change');if(wanted!=='__ALL__')q=q.eq('outlet',wanted);const {data,error}=await window.ndOrdersAllResult(()=>q);if(seq!==balanceSeq||wanted!==branch())return;if(error){balanceBranch=null;return;}balances=new Map();for(const r of data||[])balances.set(String(r.sku_id),(balances.get(String(r.sku_id))||0)+Number(r.qty_change||0));balanceBranch=wanted;for(const s of states.values())if(s.brand&&!s.picked)draw(s);}catch(_){balanceBranch=null;}}
  function filterRows(key,rows,rerender){const target=$(key);if(!target)return rows;let state=listStates.get(key);if(!state){const controls=document.createElement('div');controls.className='nd-stock-brand-controls';controls.innerHTML='<label>Brand</label><div class="nd-brand-tabs" data-list-brands></div><label>Category</label><div class="nd-brand-tabs nd-category-tabs" data-list-categories></div>';const holder=target.closest('.orders-list-wrap')||target;holder.before(controls);state={brand:'All Brands',category:'All',controls};listStates.set(key,state);controls.onclick=e=>{const b=e.target.closest('[data-list-brand]'),c=e.target.closest('[data-list-category]');if(b){state.brand=b.dataset.listBrand;state.category='All';rerender();}else if(c){state.category=c.dataset.listCategory;rerender();}};}
- state.rerender=rerender;const enriched=rows.map(p=>({...catalog().find(c=>String(c.sku_id)===String(p.sku_id)),...p})),brands=['All Brands',...[...new Set([...catalog(),...enriched].map(brand))].sort((a,b)=>a.localeCompare(b))];if(!brands.includes(state.brand))state.brand='All Brands';state.controls.querySelector('[data-list-brands]').innerHTML=taxonomyTabs(brands,state.brand,'data-list-brand',enriched,'brand');const brandRows=state.brand==='All Brands'?enriched:enriched.filter(p=>brand(p)===state.brand),categories=['All',...[...new Set([...brandRows.map(category),...(window.ndCategoryUI?.names(state.brand)||[])])].sort()];if(!categories.includes(state.category))state.category='All';state.controls.querySelectorAll('label')[1].innerHTML=window.ndCategoryUI?.plus(state.brand)||'Category';state.controls.querySelector('[data-list-categories]').innerHTML=taxonomyTabs(categories,state.category,'data-list-category',brandRows,'category');const filtered=brandRows.filter(p=>state.category==='All'||category(p)===state.category);
- if(['inventoryBody','staffStockAvailable'].includes(key)){if(!state.grid){state.grid=document.createElement('div');const holder=target.closest('.orders-list-wrap')||target;holder.before(state.grid);holder.hidden=true;state.grid.onclick=event=>{const button=event.target.closest('[data-stock-card]');if(!button)return;const item=state.displayRows.find(p=>String(p.sku_id)===button.dataset.stockCard&&(!p.outlet||button.textContent.includes(p.outlet)));if(!item)return;let d=$('ndStockProductDialog');if(!d){d=document.createElement('dialog');d.id='ndStockProductDialog';d.className='nd-ops-dialog';document.body.append(d);}d.innerHTML='<h3>'+escape(item.product_name)+'</h3><p>'+escape(brand(item))+' · '+escape(category(item))+'</p><p>'+escape(item.outlet||$('ordersBranch')?.value||'')+'</p><h2>Available '+Number(item.available||0)+'</h2><p>RM '+Number(item.price||0).toFixed(2)+'</p>'+['pending','in_transfer_out','received','out','returned'].filter(k=>item[k]!=null).map(k=>'<p>'+escape(({pending:'Pending Order',in_transfer_out:'In Transfer',received:'Received',out:'Issued / Out',returned:'Returned'})[k])+': '+Number(item[k])+'</p>').join('')+'<button type="button" class="btn">Close</button>';d.querySelector('button').onclick=()=>d.close();const edit=document.createElement('button');edit.className='btn';edit.type='button';edit.textContent='Edit Product';edit.dataset.editSku=item.sku_id;if(window.ndCanEditProducts?.())d.append(edit);d.showModal();};}state.displayRows=filtered.map(p=>({...catalog().find(c=>String(c.sku_id)===String(p.sku_id)),...p}));state.grid.innerHTML=state.brand?cards(state.displayRows,'data-stock-card')+(filtered.length?'':'<div class="nd-brand-empty">No stock records for this brand and branch.</div>'):'<div class="nd-brand-empty">Choose a brand to view stock cards.</div>';}
+ state.rerender=rerender;const catalogIndex=new Map(catalog().map(p=>[String(p.sku_id),p])),enriched=rows.map(p=>({...catalogIndex.get(String(p.sku_id)),...p})),brands=['All Brands',...[...new Set([...catalog(),...enriched].map(brand))].sort((a,b)=>a.localeCompare(b))];if(!brands.includes(state.brand))state.brand='All Brands';state.controls.querySelector('[data-list-brands]').innerHTML=taxonomyTabs(brands,state.brand,'data-list-brand',enriched,'brand');const brandRows=state.brand==='All Brands'?enriched:enriched.filter(p=>brand(p)===state.brand),categories=['All',...[...new Set([...brandRows.map(category),...(window.ndCategoryUI?.names(state.brand)||[])])].sort()];if(!categories.includes(state.category))state.category='All';state.controls.querySelectorAll('label')[1].innerHTML=window.ndCategoryUI?.plus(state.brand)||'Category';state.controls.querySelector('[data-list-categories]').innerHTML=taxonomyTabs(categories,state.category,'data-list-category',brandRows,'category');const filtered=brandRows.filter(p=>state.category==='All'||category(p)===state.category);
+ if(['inventoryBody','staffStockAvailable'].includes(key)){if(!state.grid){state.grid=document.createElement('div');const holder=target.closest('.orders-list-wrap')||target;holder.before(state.grid);holder.hidden=true;state.grid.onclick=event=>{const button=event.target.closest('[data-stock-card]');if(!button)return;const item=state.displayRows.find(p=>String(p.sku_id)===button.dataset.stockCard&&(!p.outlet||button.textContent.includes(p.outlet)));if(!item)return;let d=$('ndStockProductDialog');if(!d){d=document.createElement('dialog');d.id='ndStockProductDialog';d.className='nd-ops-dialog';document.body.append(d);}d.innerHTML='<h3>'+escape(item.product_name)+'</h3><p>'+escape(brand(item))+' · '+escape(category(item))+'</p><p>'+escape(item.outlet||$('ordersBranch')?.value||'')+'</p><h2>Available '+Number(item.available||0)+'</h2><p>RM '+Number(item.price||0).toFixed(2)+'</p>'+['pending','in_transfer_out','received','out','returned'].filter(k=>item[k]!=null).map(k=>'<p>'+escape(({pending:'Pending Order',in_transfer_out:'In Transfer',received:'Received',out:'Issued / Out',returned:'Returned'})[k])+': '+Number(item[k])+'</p>').join('')+'<button type="button" class="btn">Close</button>';d.querySelector('button').onclick=()=>d.close();const edit=document.createElement('button');edit.className='btn';edit.type='button';edit.textContent='Edit Product';edit.dataset.editSku=item.sku_id;if(window.ndCanEditProducts?.())d.append(edit);d.showModal();};}state.displayRows=filtered;state.grid.innerHTML=state.brand?cards(state.displayRows,'data-stock-card')+(filtered.length?'':'<div class="nd-brand-empty">No stock records for this brand and branch.</div>'):'<div class="nd-brand-empty">Choose a brand to view stock cards.</div>';}
  if(state.grid)window.ndDecorateStockExpiry?.(state.grid,state.displayRows||[]);
  return filtered;}
  window.ndBrandStockRows=filterRows;
@@ -32803,7 +32874,7 @@ const section=document.createElement('section');section.className='settings-sect
 function fill(key){const def=definitions[key],form=document.querySelector('[data-business-setting="'+key+'"]');if(!form)return;for(const [name,label,type,defaultValue]of def.fields)form.querySelector('[data-config-field="'+name+'"]').value=saved.get(key)?.value?.[name]??defaultValue;}
 async function deleted(){try{await identify();if(String(actor.email).toLowerCase()!=='umo1017@gmail.com')throw Error('Only UMO can view deleted advances.');const r=await db().rpc('nd_salary_advance_deleted_list');if(r.error)throw r.error;$('ndDeletedAdvances').innerHTML=(r.data||[]).map(row=>'<article class="nd-ops-record"><strong>'+esc(row.advance_record.employee_name)+' · RM '+Number(row.advance_record.amount).toFixed(2)+'</strong><p>'+esc(row.advance_record.outlet)+' · '+esc(row.advance_record.deduction_month)+'</p>'+(row.restored_at?'<span>Restored</span>':'<button class="btn" data-restore-advance="'+esc(row.advance_id)+'">Restore Advance</button>')+'</article>').join('')||'No deleted advances.';$('ndDeletedAdvances').onclick=async event=>{const b=event.target.closest('[data-restore-advance]');if(!b||b.disabled)return;if(!confirm('Restore this advance and add its deduction back to unconfirmed payroll?'))return;b.disabled=true;try{const r=await db().rpc('nd_salary_advance_restore',{p_id:b.dataset.restoreAdvance});if(r.error)throw r.error;await deleted();$('ndDeletedAdvanceStatus').textContent='Advance and payroll deduction restored.';}catch(error){$('ndDeletedAdvanceStatus').textContent=error.message;b.disabled=false;}};}catch(error){$('ndDeletedAdvanceStatus').textContent=error.message;}}
 async function opened(){mount();try{await identify();await window.ndLoadBusinessConfig();for(const key of Object.keys(definitions))fill(key);}catch(error){for(const form of document.querySelectorAll('[data-business-setting]'))form.querySelector('[data-config-status]').textContent='Settings unavailable: '+error.message;}}
-function setup(){const old=window.ndSettingsV2?.open;if(old){window.ndSettingsV2.open=async(...args)=>{await old(...args);await opened();};}document.addEventListener('click',event=>{if(event.target.closest('#sidebarSettings'))setTimeout(()=>void opened(),100);});window.ndLoadBusinessConfig().catch(()=>{});db()?.auth.onAuthStateChange?.(()=>{window.ndBusinessConfig={};saved.clear();setTimeout(()=>window.ndLoadBusinessConfig().catch(()=>{}),100);});let resumeTimer=0;const resumeConfig=()=>{if(document.hidden)return;clearTimeout(resumeTimer);resumeTimer=setTimeout(()=>window.ndLoadBusinessConfig().catch(()=>{}),200);};window.addEventListener('focus',resumeConfig);document.addEventListener('visibilitychange',resumeConfig);window.ndBusinessControl={open:opened};}
+function setup(){const old=window.ndSettingsV2?.open;if(old){window.ndSettingsV2.open=async(...args)=>{await old(...args);await opened();};}document.addEventListener('click',event=>{if(event.target.closest('#sidebarSettings'))setTimeout(()=>void opened(),100);});window.ndLoadBusinessConfig().catch(()=>{});db()?.auth.onAuthStateChange?.((event)=>{if(event==='TOKEN_REFRESHED')return;window.ndBusinessConfig={};saved.clear();setTimeout(()=>window.ndLoadBusinessConfig().catch(()=>{}),100);});let resumeTimer=0;const resumeConfig=()=>{if(document.hidden)return;clearTimeout(resumeTimer);resumeTimer=setTimeout(()=>window.ndLoadBusinessConfig().catch(()=>{}),200);};window.addEventListener('focus',resumeConfig);document.addEventListener('visibilitychange',resumeConfig);window.ndBusinessControl={open:opened};}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();})();
 </script>
 <style>#settingsPage .btn,#settlementPage .btn,#aiReceiptPage .btn,#ndStaffFormsPage .btn{border-radius:var(--nd-admin-radius);border-color:#c8d9d0}#settingsPage .settings-section-head,#ndStaffFormsPage .nd-contract-source h4{color:var(--nd-admin-accent)}#settingsPage [type=submit],#aiReceiptPage .primary,#ndContractEntry [type=submit]{background:var(--nd-admin-accent)!important;color:#fff!important}#settingsPage [data-business-setting]{padding:4px}#settingsPage [data-business-setting] label{display:flex;flex-direction:column;gap:6px;font-size:13px}#settingsPage [data-business-setting] input,#settingsPage [data-business-setting] select,#settingsPage [data-business-setting] textarea{width:100%;box-sizing:border-box}</style><style id="nd-large-signature-pads">
@@ -33309,7 +33380,7 @@ async function management(){if(!ownerOnly)return;const db=database(),date=today(
 async function setStateByKey(key,patch){const task=mutation.then(async()=>{if(!await auth())return;const n=rows.find(n=>n.event_key===key);if(n)await update(n,patch);});mutation=task.catch(()=>{});return task;}
 
 async function poll(force=false){if(document.hidden)return;if(loading){if(force)pollAgain=true;return;}if(!force&&Date.now()-lastPollAt<15000)return;loading=true;try{if(!await auth())return;lastPollAt=Date.now();await read();lastError='';if(ownerOnly)try{await management();sourceErrors.delete('management');}catch(e){sourceErrors.set('management','Management reminders: '+e.message);}if(force||Date.now()-performanceAt>300000)try{await performance();performanceAt=Date.now();sourceErrors.delete('performance');}catch(e){sourceErrors.set('performance','Achievements: '+e.message);}draw();}catch(e){lastError='Unable to load notifications: '+e.message;draw();}finally{loading=false;if(pollAgain){pollAgain=false;setTimeout(()=>void poll(true),250);}else void pump();}}
-function init(){$('ndNotificationsButton')?.remove();const heading=document.querySelector('#ndAnnouncementsPage .topbar');if(heading&&!$('ndAnnouncementNotificationsButton')){const actions=document.createElement('div');actions.className='nd-ann-buttons';actions.id='ndAnnNotificationActions';const b=document.createElement('button');b.id='ndAnnouncementNotificationsButton';b.type='button';b.textContent='Notifications';b.onclick=()=>void open();actions.append(b);heading.after(actions);}draw();setTimeout(()=>void poll(),1500);setInterval(()=>void poll(),60000);database()?.auth.onAuthStateChange?.((event,session)=>{if(event==='SIGNED_OUT'){rows=[];user=null;current=null;$('ndNotificationPopup')?.close();$('ndNotificationsPage')?.close();draw();}else setTimeout(()=>void poll(true),0);});}
+function init(){$('ndNotificationsButton')?.remove();const heading=document.querySelector('#ndAnnouncementsPage .topbar');if(heading&&!$('ndAnnouncementNotificationsButton')){const actions=document.createElement('div');actions.className='nd-ann-buttons';actions.id='ndAnnNotificationActions';const b=document.createElement('button');b.id='ndAnnouncementNotificationsButton';b.type='button';b.textContent='Notifications';b.onclick=()=>void open();actions.append(b);heading.after(actions);}draw();setTimeout(()=>void poll(),1500);setInterval(()=>void poll(),60000);database()?.auth.onAuthStateChange?.((event,session)=>{if(event==='TOKEN_REFRESHED')return;if(event==='SIGNED_OUT'){rows=[];user=null;current=null;$('ndNotificationPopup')?.close();$('ndNotificationsPage')?.close();draw();}else setTimeout(()=>void poll(true),0);});}
 window.ndNotifications={record,birthdays,open,poll,awards,monthAdd,expiryLimit,setStateByKey,get rows(){return rows;}};window.addEventListener('focus',()=>void poll());window.addEventListener('nd-cash-transfer-updated',()=>void poll(true));window.addEventListener('nd-staff-inventory-changed',()=>void poll(true));document.addEventListener('visibilitychange',()=>{if(!document.hidden)void poll();});document.addEventListener('close',()=>{if(current&&!$('ndNotificationPopup')?.open&&!$('ndBirthdayPopup')?.open)current=null;setTimeout(()=>void pump(),0);},true);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
@@ -33510,7 +33581,7 @@ window.ndBudgetUI={ensure:budgets,total:budgetTotal};
 function setup(){
  const channel=$('ordersChannelsBtn');channel.textContent='Purchase Channels';$('ordersPage').querySelector('.salary-right').append(channel);const summary=$('ordersTotalQtyBtn');summary.hidden=true;summary.remove();
  const history=$('ordersMonthlyBtn'),tabs=document.createElement('div');tabs.id='ndArrivalHistoryTabs';tabs.hidden=true;tabs.className='nd-ops-actions';const pending=document.createElement('button');pending.className='btn';pending.type='button';pending.textContent='Arrivals';pending.onclick=()=>setOrdersMode('arrival');tabs.append(pending,history);$('ordersNavigationCard').after(tabs);
- const menu=$('ndInventoryMenuDialog')?.querySelector('.nd-inventory-menu')||$('ndInventoryMore').querySelector('.nd-inventory-menu'),button=document.createElement('button');button.className='btn';button.type='button';button.id='ndCreditButton';button.textContent='Credit';button.hidden=true;button.onclick=()=>{$('ndInventoryMenuDialog')?.close();void credit();};menu.append(button);async function access(){const auth=await db()?.auth.getUser();button.hidden=String(auth?.data?.user?.email||'').toLowerCase()!=='umo1017@gmail.com';if(button.hidden){creditSeq++;for(const id of ['ndCreditDialog','ndCreditEditDialog']){const d=$(id);if(d){if(d.open)d.close();d.replaceChildren();}}}}void access();db()?.auth.onAuthStateChange?.(()=>void access());
+ const menu=$('ndInventoryMenuDialog')?.querySelector('.nd-inventory-menu')||$('ndInventoryMore').querySelector('.nd-inventory-menu'),button=document.createElement('button');button.className='btn';button.type='button';button.id='ndCreditButton';button.textContent='Credit';button.hidden=true;button.onclick=()=>{$('ndInventoryMenuDialog')?.close();void credit();};menu.append(button);async function access(){const auth=await db()?.auth.getUser();button.hidden=String(auth?.data?.user?.email||'').toLowerCase()!=='umo1017@gmail.com';if(button.hidden){creditSeq++;for(const id of ['ndCreditDialog','ndCreditEditDialog']){const d=$(id);if(d){if(d.open)d.close();d.replaceChildren();}}}}void access();db()?.auth.onAuthStateChange?.((event)=>{if(event!=='TOKEN_REFRESHED')setTimeout(()=>void access(),0);});
  $('ordersMonth')?.addEventListener('click',e=>{try{e.currentTarget.showPicker?.();}catch(_){}});
  const form=$('settlementExpenseForm');budgets();if(form)new MutationObserver(()=>{if([...form.querySelectorAll('[data-expense-payment-key]')].some(r=>!r.querySelector('[data-report-budget]'))||!form.querySelector('[data-budget-heading]'))budgets();}).observe(form,{childList:true,subtree:true});
  const loanCard=$('ordersLoanPanel')?.querySelector('.salary-card');if(loanCard){const btn=document.createElement('button');btn.type='button';btn.className='btn';btn.textContent='+ Add Loan';$('ordersLoanPanel').querySelectorAll('.salary-card')[1]?.querySelector('.outlet-title')?.append(btn);const loanDialog=document.createElement('dialog');loanDialog.className='nd-refresh-dialog';loanDialog.id='ndLoanEntryDialog';loanDialog.innerHTML='<button class="btn" type="button" data-close>Close</button>';const branchLabel=document.createElement('label');branchLabel.textContent='Branch';const select=document.createElement('select');select.id='ndLoanEntryBranch';select.innerHTML='<option value="">Select Branch</option>'+[...$('ordersBranch').options].filter(o=>o.value&&o.value!=='__ALL__'&&o.value!=='Global').map(o=>'<option value="'+esc(o.value)+'">'+esc(o.textContent)+'</option>').join('');select.value=ordersIsAllBranches()?'':ordersBranch();select.onchange=()=>{$('ordersBranch').value=select.value;$('ordersBranch').dispatchEvent(new Event('change',{bubbles:true}));};branchLabel.append(select);loanDialog.append(branchLabel,loanCard);document.body.append(loanDialog);loanDialog.querySelector('[data-close]').onclick=()=>loanDialog.close();btn.onclick=()=>{const v=ordersBranch();select.innerHTML='<option value="">Select Branch</option>'+[...$('ordersBranch').options].filter(o=>o.value&&o.value!=='__ALL__'&&o.value!=='Global').map(o=>'<option value="'+esc(o.value)+'">'+esc(o.textContent)+'</option>').join('');select.value=v==='__ALL__'?'':v;loanDialog.showModal();};}
@@ -33532,6 +33603,8 @@ const owner=()=>String(user?.email||'').toLowerCase()===OWNER;
 async function auth(){const r=await db()?.auth.getUser();if(r?.error)throw r.error;const next=r?.data?.user||null;if(next?.id!==user?.id){epoch++;rows=[];pendingCreate=null;lastError='';for(const id of ['ndTasksDialog','ndTaskCreateDialog','ndTaskCompleteDialog']){const d=$(id);if(d?.open)d.close();d?.replaceChildren();}user=next;drawBadge();}user=next;return !!user;}
 async function rpc(name,args){const r=await db().rpc(name,args);if(r.error)throw r.error;return r.data;}
 function drawBadge(){const b=$('ndAnnouncementTasksButton');if(!b)return;const count=rows.filter(r=>r.assigned_to===user?.id&&!r.completed_at).length;const markup='My Tasks <span class="nd-notification-count" '+(count?'':'hidden')+'>'+count+'</span>';if(b.innerHTML!==markup)b.innerHTML=markup;b.setAttribute('aria-label','My Tasks · '+count+' pending');}
+let lastBackgroundLoad=0;
+async function backgroundLoad(){if(document.hidden||Date.now()-lastBackgroundLoad<45000)return;lastBackgroundLoad=Date.now();await load();}
 async function load(){if(document.hidden||loading||!db())return;loading=true;try{if(!await auth()){rows=[];draw();return;}const id=user.id,run=epoch,result=[];for(let offset=0;;offset+=500){let query=db().from('nd_account_tasks').select('*');if(!owner())query=query.eq('assigned_to',id);const r=await query.order('created_at',{ascending:false}).order('id').range(offset,offset+499);if(r.error)throw r.error;result.push(...(r.data||[]));if((r.data||[]).length<500)break;}if(run!==epoch||id!==user?.id)return;rows=result.filter(r=>r.assigned_to===id||owner());lastError='';draw();const mine=rows.filter(r=>r.assigned_to===id);if(window.ndNotifications){await window.ndNotifications.record(mine.map(r=>({event_key:'task:'+r.id,kind:'task',title:'New Task: '+r.title,message:r.description,payload:{task_id:r.id,due_date:r.due_date},...(r.completed_at?{resolved_at:r.completed_at,read_at:r.completed_at}:{})})));}}catch(error){lastError=/nd_account_tasks|schema cache|PGRST/.test(error.message||'')?'Tasks setup is required. Run the Tasks SQL update, then refresh.':error.message;draw();}finally{loading=false;}}
 function shell(id,title){let d=$(id);if(!d){d=document.createElement('dialog');d.id=id;d.className='nd-tasks-dialog';document.body.append(d);}d.innerHTML='<header><div><small>NATURE’S DAO</small><h2>'+esc(title)+'</h2></div><button class="btn" type="button" data-close>Close</button></header><div class="nd-task-body"></div>';d.querySelector('[data-close]').onclick=()=>d.close();return d;}
 function draw(){drawBadge();const d=$('ndTasksDialog');if(!d?.open||!d.querySelector('.nd-task-body'))return;const root=d.querySelector('.nd-task-body'),mine=rows.filter(r=>r.assigned_to===user?.id),published=mode==='published'&&owner(),shown=(published?rows:mine).filter(r=>published||(mode==='history'?!!r.completed_at:!r.completed_at));root.innerHTML='<div class="nd-task-tabs"><button class="btn" data-task-mode="pending" aria-pressed="'+(mode==='pending')+'">My Tasks</button><button class="btn" data-task-mode="history" aria-pressed="'+(mode==='history')+'">Completed History</button>'+(owner()?'<button class="btn" data-task-mode="published" aria-pressed="'+published+'">Published Tasks</button><button class="btn primary" data-create-task>+ Assign Task</button>':'')+'<button class="btn" data-refresh-tasks>Refresh</button></div><p role="status">'+esc(lastError)+'</p><div>'+shown.map(r=>'<article class="nd-task-record" data-task-record="'+esc(r.id)+'" '+(r.id===highlight?'data-highlight':'')+'><div class="nd-task-record-head"><h3>'+esc(r.title)+'</h3><span class="nd-task-state '+(r.completed_at?'done':'')+'">'+(r.completed_at?'Completed':'Pending')+'</span></div><p class="nd-task-description">'+esc(r.description)+'</p><small>'+(published?esc(r.assigned_email)+' · ':'')+'Assigned '+esc(date(r.created_at))+(r.due_date?' · Due '+esc(r.due_date):'')+(r.completed_at?' · Completed '+esc(date(r.completed_at)):'')+'</small>'+(r.completed_at&&r.completion_note?'<div class="nd-task-completion-note"><strong>Completion Note</strong><p style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(r.completion_note)+'</p></div>':'')+(!r.completed_at&&r.assigned_to===user?.id?'<div class="nd-task-actions"><button class="btn primary" data-complete-task="'+esc(r.id)+'">Mark Completed</button></div>':'')+'</article>').join('')+(shown.length?'':'<p class="nd-task-empty">'+(mode==='history'?'No completed tasks.':published?'No published tasks.':'No pending tasks.')+'</p>')+'</div>';
@@ -33546,7 +33619,7 @@ async function complete(button){
  }catch(error){lastError=error.message;draw();}
 }
 function setup(){// Notifications lives exclusively inside Announcements.
- $('ndNotificationsButton')?.remove();const header=$('ndAnnouncementsPage')?.querySelector('.topbar'),anchor=$('ndAnnouncementNotificationsButton');if(!header)return;let b=$('ndAnnouncementTasksButton');if(!b){b=document.createElement('button');b.id='ndAnnouncementTasksButton';b.type='button';b.className='btn';b.textContent='My Tasks';b.onclick=()=>void open();if(anchor)anchor.after(b);else header.after(b);}void load();db()?.auth.onAuthStateChange?.((event,session)=>{if(event==='SIGNED_OUT'||session?.user&&session.user.id!==user?.id){epoch++;rows=[];user=null;pendingCreate=null;for(const id of ['ndTasksDialog','ndTaskCreateDialog','ndTaskCompleteDialog']){const d=$(id);if(d?.open)d.close();d?.replaceChildren();}drawBadge();}queueMicrotask(()=>void load());});setInterval(()=>void load(),45000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)void load();});window.addEventListener('focus',()=>void load());}
+ $('ndNotificationsButton')?.remove();const header=$('ndAnnouncementsPage')?.querySelector('.topbar'),anchor=$('ndAnnouncementNotificationsButton');if(!header)return;let b=$('ndAnnouncementTasksButton');if(!b){b=document.createElement('button');b.id='ndAnnouncementTasksButton';b.type='button';b.className='btn';b.textContent='My Tasks';b.onclick=()=>void open();if(anchor)anchor.after(b);else header.after(b);}void load();db()?.auth.onAuthStateChange?.((event,session)=>{if(event==='TOKEN_REFRESHED')return;if(event==='SIGNED_OUT'||session?.user&&session.user.id!==user?.id){epoch++;rows=[];user=null;pendingCreate=null;for(const id of ['ndTasksDialog','ndTaskCreateDialog','ndTaskCompleteDialog']){const d=$(id);if(d?.open)d.close();d?.replaceChildren();}drawBadge();}setTimeout(()=>void load(),0);});setInterval(()=>void backgroundLoad(),45000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)void backgroundLoad();});window.addEventListener('focus',()=>void backgroundLoad());}
 window.ndTasks={open,load,get rows(){return rows;}};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
@@ -33614,4 +33687,14 @@ window.ndContractDocumentMarkup=function(a){if(!['salary-advance-v1','salary-adv
 #ndStaffStockDialog .nd-staff-stock-item [data-staff-stock-add]{font-size:22px!important;padding:3px 10px!important}
 #ndStaffStockDialog .nd-stock-scroll-hint{display:none}
 @media(max-width:600px){#ndStaffStockDialog #ndStaffStockPage{padding:10px}#ndStaffStockDialog .salary-card{padding:10px}#ndStaffStockDialog .staff-stock-top{padding:16px;margin-bottom:12px}#ndStaffStockDialog .nd-staff-stock-cards{gap:8px}}
+</style>
+
+<style id="nd-14th-payslip-totals-alignment">
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-main-grid{grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,.9fr)!important;min-height:260px}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-col{display:flex!important;flex-direction:column!important;min-width:0;min-height:0!important;box-sizing:border-box}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-col-total{margin-top:auto!important;width:100%;box-sizing:border-box}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-net-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,.9fr);padding:0 1px;box-sizing:border-box}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-net-box{grid-column:2;width:auto!important;min-width:0!important;max-width:none!important;margin:-1px 0 0!important;box-sizing:border-box}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-net-row{grid-template-columns:minmax(0,1fr) 70px!important;gap:6px;padding:5px 12px!important;align-items:center}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-net-row .amt{white-space:nowrap;text-align:right!important}
 </style>
