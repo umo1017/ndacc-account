@@ -31969,19 +31969,66 @@ if(tab==='customer-media'){ndRenderCustomerMediaForm(root);return}
 if(tab==='contract'){ndRenderContractForm(root);return}
 const fields=fieldsFor(tab);root.innerHTML=`<h3>${tab==='interview'?'Interview Form':'Employment Contract Form'}</h3><form id="ndStaffEntryForm"><div class="nd-form-grid">${fields.map((f,i)=>inputMarkup(f[0],f[1],i)).join('')}</div><div style="margin-top:16px"><button class="btn" type="submit">Save ${tab==='interview'?'Interview':'Contract'}</button></div></form>`;$('ndStaffEntryForm').onsubmit=saveEntry;initSignatures(root);
 }
+async function ndRecoverFormSave(pending){
+ const {data,error}=await ndContractRequest(signal=>{
+  const query=client().from(TABLE).select('id,form_type,full_name,branch,form_date').eq('form_data->>__nd_save_request',pending.request).maybeSingle();
+  return query.abortSignal?query.abortSignal(signal):query;
+ });
+ if(error)throw error;
+ return data?{...data,form_data:pending.payload.form_data}:null;
+}
 async function saveEntry(e){
- e.preventDefault();const form=e.target,button=form.querySelector('[type=submit]'),type=tab,fields=fieldsFor(type);if(type==='interview'&&form.dataset.entryStep!=='manager')return;button.disabled=true;status('Saving...');
- try{await identity();if(!userEmail)throw Error('Please sign in again.');const values=type==='interview'?{'Applicant Type':interviewCategory==='local'?'Local (Malaysian)':'Non-local (Foreign National)'}:{};
- for(let i=0;i<fields.length;i++){const [label,kind]=fields[i],el=form.querySelector(`[data-nd-field="${i}"]`);values[label]=kind==='file'?(el?.files?.[0]?await readFile(el.files[0]):''):kind==='signature'?(el?.dataset.ink?{name:label,data:el.toDataURL('image/png')}: ''):ndFormFieldValue(el)}
- if(type==='interview'){ndValidateInterviewEmployment(values);await window.ndInterviewContacts.check(client(),values);values['Person in Charge']=await window.ndLoadCurrentAccountName(client());applyInterviewBranding(values);}
- if(type==='interview'&&values['Department']!=='Other')values['Other Department']='';
- const branch=String(values['Preferred Branch']||values['Branch']||'Eco Botanic').trim();
- const fullName=String(values['Full Name']||values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');
- const formDate=values['Interview Date']||values['Start Date']||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
- const {data:saved,error}=await client().from(TABLE).insert({form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'}).select('id,form_type,full_name,form_data,branch,form_date').single();if(error)throw error;
- if(type==='interview')await openInterviewDocument(saved);
- if(form.isConnected){form.reset();form.querySelectorAll('[data-clear-signature]').forEach(b=>b.click())}status('Saved successfully.');
- }catch(err){status('Unable to save: '+err.message)}finally{button.disabled=false}
+ e.preventDefault();const form=e.target,button=form.querySelector('[type=submit]'),type=tab,fields=fieldsFor(type);
+ if(button.disabled||type==='interview'&&form.dataset.entryStep!=='manager')return;
+ button.disabled=true;let phase='Checking sign-in',saved=null,attempt=null;
+ const finish=async record=>{
+  phase='Opening saved form';status('Form saved. Opening review…');
+  if(type==='interview')await openInterviewDocument(record);
+  if(form.isConnected){form.reset();form.querySelectorAll('[data-clear-signature]').forEach(b=>b.click());}
+  form.ndPendingFormSave=null;status('Saved successfully.');
+ };
+ try{
+  await identity();if(!userEmail)throw Error('Please sign in again.');
+  const prior=form.ndPendingFormSave;
+  if(prior){
+   if(prior.owner!==userEmail)throw Error('The account changed. Reopen the form before saving.');
+   phase='Checking previous save';status('Checking previous save…');
+   saved=prior.saved||await ndRecoverFormSave(prior);
+   if(saved){prior.saved=saved;await finish(saved);return;}
+  }
+  phase='Preparing form and images';status('Preparing form and images…');
+  const values=type==='interview'?{'Applicant Type':interviewCategory==='local'?'Local (Malaysian)':'Non-local (Foreign National)'}:{};
+  for(let i=0;i<fields.length;i++){
+   const [label,kind]=fields[i],el=form.querySelector(`[data-nd-field="${i}"]`);
+   values[label]=kind==='file'?(el?.files?.[0]?await readFile(el.files[0]):''):kind==='signature'?(el?.dataset.ink?{name:label,data:el.toDataURL('image/png')}:''):ndFormFieldValue(el);
+  }
+  if(type==='interview'){
+   ndValidateInterviewEmployment(values);
+   phase='Checking contact details';status('Checking contact details…');await window.ndInterviewContacts.check(client(),values);
+   phase='Loading person in charge';values['Person in Charge']=await window.ndLoadCurrentAccountName(client());
+   applyInterviewBranding(values);
+  }
+  if(type==='interview'&&values.Department!=='Other')values['Other Department']='';
+  const branch=String(values['Preferred Branch']||values.Branch||'Eco Botanic').trim();
+  const fullName=String(values['Full Name']||values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');
+  const formDate=values['Interview Date']||values['Start Date']||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
+  const request=crypto.randomUUID();values.__nd_save_request=request;
+  const payload={form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'};
+  attempt={request,owner:userEmail,payload,saved:null};form.ndPendingFormSave=attempt;
+  phase='Saving form';status('Saving form…');
+  // Return metadata only; the complete photos/signatures are already available locally.
+  const result=await client().from(TABLE).insert(payload).select('id,form_type,full_name,branch,form_date').single();
+  if(result.error)throw result.error;if(!result.data?.id)throw Error('The server did not confirm the saved form.');
+  saved={...result.data,form_data:values};attempt.saved=saved;
+  await finish(saved);
+ }catch(err){
+  if(!saved&&attempt&&/load failed|failed to fetch|network|timeout|connection|fetch failed/i.test(String(err.message||err))){
+   try{saved=await ndRecoverFormSave(attempt);if(saved){attempt.saved=saved;await finish(saved);return;}}catch(_){}
+  }
+  const detail=String(err.message||err)+(err.code?' ('+err.code+')':'');
+  if(saved)status('Form saved. Unable to open review: '+detail+' Click Save again to reopen the saved form.');
+  else status('Unable to save ['+phase+']: '+detail+(attempt?' Your input is kept. Check Form History before retrying.':' Your input is kept.'));
+ }finally{button.disabled=false;}
 }
 async function loadTemplates(force=false){
  const owner=ndFormMetadataOwner();
