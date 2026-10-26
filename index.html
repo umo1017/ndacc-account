@@ -8643,6 +8643,63 @@ return `<div class="history-date-card">
   });
 
 
+
+  // Monday summary is a Sunday closing-balance snapshot, not Monday sales.
+  const ndWeeklyCashSeen=new Set();let ndWeeklyCashBusy=false;
+  function ndWeeklyCashSnapshot(daily,transfers,cutoff,start=ND_CASH_LEDGER_START){
+    const branches=new Map(),days=new Set(),ids=new Set();
+    const get=branch=>{if(!branches.has(branch))branches.set(branch,{branch,cash:0,withdrawals:0,verified:0,pending:0,balance:0,toBank:0});return branches.get(branch);};
+    for(const r of daily){const branch=String(r.branch||'').trim(),day=String(r.settlement_date||''),key=branch+'|'+day;
+      if(!branch||branch==='Global'||day<start||day>cutoff||days.has(key))continue;
+      days.add(key);const item=get(branch);item.cash+=Number(r.cash)||0;item.withdrawals+=Number(r.cash_withdrawal)||0;
+    }
+    for(const r of transfers){const branch=String(r.branch||'').trim(),day=String(r.remittance_date||''),id=String(r.id),status=String(r.status||'').toLowerCase();
+      if(!branch||branch==='Global'||day<start||day>cutoff||ids.has(id))continue;
+      ids.add(id);const item=get(branch);if(status==='verified')item.verified+=Number(r.amount)||0;else if(status==='pending')item.pending+=Number(r.amount)||0;
+    }
+    return [...branches.values()].map(x=>({...x,balance:Math.round((x.cash-x.withdrawals-x.verified)*100)/100,toBank:Math.max(0,Math.round((x.cash-x.withdrawals-x.verified)*100)/100)})).sort((a,b)=>a.branch.localeCompare(b.branch));
+  }
+  async function ndWeeklyCashRead(make){
+    const rows=[];for(let offset=0;;offset+=500){const r=await make().range(offset,offset+499);if(r.error)throw r.error;rows.push(...(r.data||[]));if((r.data||[]).length<500)return rows;}
+  }
+  async function ndWeeklyCashCheck(){
+    const existing=$('ndWeeklyCashDialog');
+    if(!currentUserEmail||!canViewDailySettlement){if(existing?.open)existing.close();return;}
+    if(ndWeeklyCashBusy||document.hidden)return;
+    const monday=ndVerifyMalaysiaNow().ymd,day=new Date(monday+'T12:00:00Z');
+    if(day.getUTCDay()!==1)return;
+    if(document.querySelector('dialog[open],.salary-modal.open,#ndPettyGlobalAck.nd-show'))return;
+    const actor=String(currentUserEmail).toLowerCase(),key='nd_weekly_cash_ack_v1::'+actor+'::'+monday;
+    if(ndWeeklyCashSeen.has(key))return;
+    try{if(localStorage.getItem(key)==='1')return;}catch(_){}
+    ndWeeklyCashBusy=true;
+    try{
+      const auth=await db.auth.getUser();if(auth.error||!auth.data?.user||String(auth.data.user.email||'').toLowerCase()!==actor)return;
+      day.setUTCDate(day.getUTCDate()-1);const cutoff=day.toISOString().slice(0,10);
+      const [daily,transfers]=await Promise.all([
+        ndWeeklyCashRead(()=>db.from('daily_settlements').select('id,branch,settlement_date,cash,cash_withdrawal').gte('settlement_date',ND_CASH_LEDGER_START).lte('settlement_date',cutoff).order('settlement_date').order('id')),
+        ndWeeklyCashRead(()=>db.from('cash_remittances').select('id,branch,remittance_date,amount,status').gte('remittance_date',ND_CASH_LEDGER_START).lte('remittance_date',cutoff).order('remittance_date').order('id'))
+      ]);
+      const check=await db.auth.getUser();
+      if(check.error||check.data?.user?.id!==auth.data.user.id||String(currentUserEmail).toLowerCase()!==actor||ndVerifyMalaysiaNow().ymd!==monday)return;
+      if(document.querySelector('dialog[open],.salary-modal.open,#ndPettyGlobalAck.nd-show'))return;
+      const items=ndWeeklyCashSnapshot(daily,transfers,cutoff);if(!items.length)return;
+      let dialog=$('ndWeeklyCashDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndWeeklyCashDialog';document.body.append(dialog);}
+      dialog.dataset.actor=actor;dialog.setAttribute('aria-label','Weekly Cash to Bank');
+      const total=items.reduce((sum,x)=>sum+x.toBank,0);
+      dialog.innerHTML='<header><small>NATURE’S DAO</small><h2>Weekly Cash to Bank</h2><p>Today Cash through Sunday · '+escHtml(cutoff)+'</p></header><div class="nd-weekly-cash-body">'+items.map(x=>'<article><h3>'+escHtml(x.branch)+'</h3><dl><dt>Cash received</dt><dd>'+money(x.cash)+'</dd><dt>Cash withdrawals</dt><dd>'+money(x.withdrawals)+'</dd><dt>Verified bank deposits</dt><dd>'+money(x.verified)+'</dd><dt>Cash balance through Sunday</dt><dd><strong>'+money(x.balance)+'</strong></dd>'+(x.pending>0?'<dt>Deposits awaiting verification</dt><dd>'+money(x.pending)+'</dd>':'')+'</dl></article>').join('')+'<div class="nd-weekly-cash-total"><span>Cash awaiting verified bank deposit</span><strong>'+money(total)+'</strong></div><p class="helper">Includes earlier cash carried forward. Monday sales are excluded. Deposits awaiting verification are already submitted; check their receipts before making another deposit.</p><button type="button" class="btn" data-weekly-cash-ack>I Understand</button></div>';
+      dialog.querySelector('[data-weekly-cash-ack]').onclick=()=>{ndWeeklyCashSeen.add(key);try{localStorage.setItem(key,'1');}catch(_){}dialog.close();};
+      dialog.oncancel=()=>{ndWeeklyCashSeen.add(key);try{localStorage.setItem(key,'1');}catch(_){}};
+      dialog.showModal();
+    }catch(error){console.warn('Weekly cash summary unavailable:',error?.message||error);}
+    finally{ndWeeklyCashBusy=false;}
+  }
+  setTimeout(()=>void ndWeeklyCashCheck(),2500);
+  setInterval(()=>void ndWeeklyCashCheck(),60000);
+  window.addEventListener('focus',()=>void ndWeeklyCashCheck());
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)void ndWeeklyCashCheck();});
+  document.addEventListener('close',()=>setTimeout(()=>void ndWeeklyCashCheck(),0),true);
+
   /* UMO verification queue: shares History's actual payment_statuses and remittance status. */
   const ndVerifyItems=[['visa_master','VISA / MASTER',r=>Number(r.visa||0)+Number(r.master||0)],['tng','TNG',r=>Number(r.tng||0)],['bank_transfer','Bank Transfer',r=>Number(r.bank_transfer||0)],['tips','Tips',r=>Number(r.tips||0)],['alipay','ZFB / ALIPAY',r=>Number(r.alipay||0)],['online_card','Online Credit Card',r=>Number(r.online_card||0)],['amex','AMEX',r=>Number(r.amex||0)]];
   let ndVerifyPage=0,ndVerifyQueue=[],ndVerifyBusy=false,ndVerifyDismissed='';
@@ -8652,20 +8709,10 @@ return `<div class="history-date-card">
     return {ymd:x.year+'-'+x.month+'-'+x.day,hour:Number(x.hour)};
   }
   function ndVerifyEligible(date){
-    const clock=ndVerifyMalaysiaNow();
-    const ymd=clock.ymd;if(!date||date>=ymd)return false;
-    const dt=new Date(date+'T12:00:00');if(!Number.isFinite(dt.getTime()))return false;
-    const day=dt.getDay();
-    // Friday-Sunday held until Monday 22:00; old unverified records remain pending.
-    if(day===5||day===6||day===0){
-      const monday=new Date(dt);monday.setDate(dt.getDate()+((8-day)%7));
-      const mondayIso=monday.getFullYear()+'-'+String(monday.getMonth()+1).padStart(2,'0')+'-'+String(monday.getDate()).padStart(2,'0');
-      if(ymd<mondayIso || (ymd===mondayIso && clock.hour<22))return false;
-    }
-    // Every other date becomes eligible at 22:00 on the next calendar day.
-    const due=new Date(dt);due.setDate(dt.getDate()+1);
-    const dueIso=due.getFullYear()+'-'+String(due.getMonth()+1).padStart(2,'0')+'-'+String(due.getDate()).padStart(2,'0');
-    return ymd>dueIso || (ymd===dueIso && clock.hour>=22);
+    const today=ndVerifyMalaysiaNow().ymd;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||'')))return false;
+    const age=Date.parse(today+'T00:00:00Z')-Date.parse(date+'T00:00:00Z');
+    return Number.isFinite(age)&&age>7*86400000;
   }
   function ndVerifyBuildQueue(){
     const q=[];
@@ -8697,7 +8744,7 @@ return `<div class="history-date-card">
   function ndVerifyModal(){
     let m=document.getElementById('ndUmoVerifyModal');if(m)return m;
     m=document.createElement('div');m.id='ndUmoVerifyModal';m.className='salary-modal';m.style.zIndex='20020';
-    m.innerHTML='<div class="salary-dialog" style="width:min(800px,96vw);max-height:88dvh"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Daily Settlement Verification</h3><div class="helper">Eco Botanic · Nusa Bestari · History Synced</div></div><button type="button" class="mini" id="ndVerifyLater">Close · Hide Today</button></div><div id="ndVerifyCount" class="helper" style="margin:12px 0"></div><div id="ndVerifyList"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><button type="button" class="btn" id="ndVerifyPrev">Previous</button><span id="ndVerifyPages" class="helper"></span><button type="button" class="btn" id="ndVerifyNext">Next</button></div></div>';
+    m.innerHTML='<div class="salary-dialog" style="width:min(800px,96vw);max-height:88dvh"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Overdue Payment Verification</h3><div class="helper">Unverified for more than 7 days · History Synced</div></div><button type="button" class="mini" id="ndVerifyLater">Close · Hide Today</button></div><div id="ndVerifyCount" class="helper" style="margin:12px 0"></div><div id="ndVerifyList"></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><button type="button" class="btn" id="ndVerifyPrev">Previous</button><span id="ndVerifyPages" class="helper"></span><button type="button" class="btn" id="ndVerifyNext">Next</button></div></div>';
     document.body.appendChild(m);
     m.querySelector('#ndVerifyLater').onclick=()=>{
       ndVerifyDismissed=ndVerifyMalaysiaNow().ymd;
@@ -8750,6 +8797,7 @@ return `<div class="history-date-card">
   }
   async function ndVerifyCheck(){
     if(String(currentUserEmail||'').toLowerCase()!=='umo1017@gmail.com')return;
+    if(document.querySelector('dialog[open],#ndPettyGlobalAck.nd-show'))return;
     const clock=ndVerifyMalaysiaNow();
     let hiddenDate=ndVerifyDismissed;
     try{hiddenDate=localStorage.getItem('nd_verify_hide_today_v1')||hiddenDate;}catch(_e){}
@@ -8774,6 +8822,7 @@ return `<div class="history-date-card">
     if(m.classList.contains('open')){ndVerifyRender();return;}
     ndVerifyPage=0;ndVerifyRender();m.classList.add('open');
   }
+  db.auth.onAuthStateChange?.((_event,session)=>{const dialog=$('ndWeeklyCashDialog');if(dialog?.open&&String(session?.user?.email||'').toLowerCase()!==dialog.dataset.actor)dialog.close();});
   // Refresh from History while the popup is open, so externally verified items disappear.
   setInterval(()=>{ndVerifyCheck().catch(console.warn)},60000);
   setTimeout(()=>{ndVerifyCheck().catch(console.warn)},8000);
@@ -33575,7 +33624,7 @@ async function read(){const readerId=user.id;const fetched=await all(()=>databas
 function record(items){const intendedUser=user?.id;const task=mutation.then(async()=>{if(!items.length||!await auth()||intendedUser&&user.id!==intendedUser)return;const known=new Set(rows.map(n=>n.event_key));const payload=items.map(x=>({...x,user_id:user.id})).filter(x=>allowed(x)&&!known.has(x.event_key));if(!payload.length)return;const r=await database().from('nd_notifications').upsert(payload,{onConflict:'user_id,event_key',ignoreDuplicates:true});if(r.error){lastError='Unable to save notifications: '+r.error.message;draw();throw r.error;}lastError='';await read();});mutation=task.catch(()=>{});return task.then(()=>{void pump();});}
 async function update(n,patch){const r=await database().from('nd_notifications').update(patch).eq('id',n.id).eq('user_id',user.id);if(r.error)throw r.error;Object.assign(n,patch);const cached=rows.find(x=>x.id===n.id);if(cached)Object.assign(cached,patch);draw();}
 function active(n){if(n.resolved_at||!allowed(n))return false;if(n.kind==='birthday'&&n.payload?.date!==today())return false;return true;}
-function pending(n){return n.kind!=='topup'&&active(n)&&!n.read_at&&(!n.snoozed_until||Date.parse(n.snoozed_until)<=Date.now());}
+function pending(n){return !['topup','bank'].includes(n.kind)&&active(n)&&!n.read_at&&(!n.snoozed_until||Date.parse(n.snoozed_until)<=Date.now());}
 function messageFor(n){if(n.kind==='expiry'&&n.payload?.expiry_date){const date=n.payload.expiry_date;return (date<today()?'This product has expired.\nExpired on ':date===today()?'This product expires today.\nExpiry date: ':'This product expires within 3 months.\nExpiry date: ')+date;}return n.message||'';}
 function makePopup(){let d=$('ndNotificationPopup');if(!d){d=document.createElement('dialog');d.id='ndNotificationPopup';d.className='nd-notification-dialog';document.body.append(d);}return d;}
 async function finish(n,snooze=false){await update(n,snooze?{snoozed_until:new Date(Date.now()+10800000).toISOString()}:{read_at:new Date().toISOString(),snoozed_until:null});current=null;($('ndBirthdayPopup')?.open?$('ndBirthdayPopup'):$('ndNotificationPopup'))?.close();setTimeout(()=>void pump(),0);}
@@ -34130,4 +34179,22 @@ body #ndStaffFormsPage{width:auto!important;min-width:0!important;max-width:none
 #ndStaffFormsPage .nd-form-history{width:100%;max-width:100%;min-width:0;overflow-x:auto}
 @media(max-width:900px){body #ndStaffFormsPage{margin:70px 14px 24px!important;padding:18px!important}}
 @media(max-width:600px){body #ndStaffFormsPage{margin:68px 10px 20px!important;padding:14px!important}#ndStaffFormsPage .nd-form-tabs{gap:6px!important}#ndStaffFormsPage .nd-form-tabs button{flex:1 1 100px;font-size:12px!important;padding:9px 10px!important}#ndStaffFormsPage #ndInterviewCategory{max-width:100%;font-size:16px}#ndStaffFormsPage .nd-interview-row-layout .nd-form-field{grid-template-columns:minmax(0,100px) minmax(0,1fr)!important}#ndStaffFormsPage input[type=file]{font-size:11px!important;padding:6px!important}}
+</style>
+
+<style id="nd-weekly-cash-style">
+#ndWeeklyCashDialog{width:min(620px,calc(100vw - 28px));max-height:88dvh;overflow:auto;border:1px solid #cbd9cf;border-radius:20px;padding:0;color:#264737;background:#fffdf7;box-sizing:border-box}
+#ndWeeklyCashDialog::backdrop{background:#17372e99}
+#ndWeeklyCashDialog header{background:linear-gradient(120deg,#193f32,#376650);color:#fff;padding:24px}
+#ndWeeklyCashDialog header small{font-size:10px;letter-spacing:2px;color:#e9d9b1}
+#ndWeeklyCashDialog h2{font-size:25px!important;line-height:1.3;margin:10px 0!important;color:#fff!important}
+#ndWeeklyCashDialog header p{font-size:13px;margin:0;color:#e4eee5}
+#ndWeeklyCashDialog .nd-weekly-cash-body{padding:22px}
+#ndWeeklyCashDialog article{border-bottom:1px solid #e0e7dc;padding:0 0 14px;margin:0 0 16px}
+#ndWeeklyCashDialog h3{font-size:17px;margin:0 0 12px;color:#2b533c}
+#ndWeeklyCashDialog dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 16px;font-size:13px;margin:0}
+#ndWeeklyCashDialog dt{color:#66745f}#ndWeeklyCashDialog dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+#ndWeeklyCashDialog .nd-weekly-cash-total{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;background:#eaf2e6;border-radius:12px;padding:15px;font-size:14px}
+#ndWeeklyCashDialog .nd-weekly-cash-total strong{font-size:22px}
+#ndWeeklyCashDialog .helper{font-size:12px;line-height:1.6;margin:14px 0;color:#6c7764}
+#ndWeeklyCashDialog [data-weekly-cash-ack]{width:100%;min-height:46px;background:#28543d;color:#fff;font-size:14px}
 </style>
