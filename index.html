@@ -180,23 +180,24 @@ window.addEventListener('click',function(event){
 function id(k){return document.getElementById(k)}
 function openStaff(e){
  if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation()}
- var page=id('ndStaffManagementPage'); if(!page)return false;
- document.body.classList.remove('nd-records-visible');
+ var page=id('ndStaffManagementPage');if(!page)return false;
+ var wasVisible=document.body.dataset.ndVisiblePage==='staff';
+ document.body.classList.remove('nd-records-visible');document.body.style.removeProperty('--nd-finance-open');
  id('ndStaffFinancePage')?.classList.remove('nd-open');
- document.body.dataset.ndVisiblePage='staff';
- window.activeMainPage='staff';
- page.hidden=false;page.style.setProperty('display','block','important');
+ document.body.dataset.ndVisiblePage='staff';window.activeMainPage='staff';
+ for(var key of ['appView','ndStaffFinancePage','aiReceiptPage','salaryPage','rosterPage','bonusPage','settlementPage','ordersPage','socialPage','settingsPage','ndAnnouncementsPage','ndStaffFormsPage']){
+  var other=id(key);if(!other)continue;other.classList.remove('active');other.style.setProperty('display','none','important');if(key==='appView')other.classList.add('hidden');
+ }
+ page.hidden=false;page.classList.add('active');page.style.setProperty('display','block','important');
+ var list=id('staffListModal');if(list){if(list.parentElement!==page)page.appendChild(list);list.classList.add('open');list.setAttribute('aria-label','Staff Records');}
  document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(function(b){b.classList.remove('active')});
  id('sidebarStaff')?.classList.add('active');id('mainSidebar')?.classList.remove('open');
- try{sessionStorage.setItem('nd_last_page_v2','staff')}catch(_){}
- // Open authorized employee records immediately; use the existing filtered renderer.
- var listButton=id('staffListBtn');
- if(listButton && typeof listButton.onclick==='function'){
-   try{listButton.onclick();}catch(err){console.error('[Staff] list open:',err)}
- }else{
-   var listModal=id('staffListModal');
-   if(listModal){listModal.classList.add('open');console.warn('[Staff] Employee list renderer not initialized yet')}
- }
+ if(!wasVisible)window.scrollTo(0,0);
+ try{sessionStorage.setItem('nd_last_page_v2','staff');sessionStorage.setItem('nd_last_page_v3','staff');const email=String(window.currentUserEmail||'').toLowerCase();if(email){localStorage.setItem('nd_last_authorized_page_v4::'+email,'staff');localStorage.setItem('nd_last_authorized_page_v5::'+email,'staff');}}catch(_){}
+ var content=id('staffListContent');
+ function failed(error){if(document.body.dataset.ndVisiblePage!=='staff'||!content)return;content.replaceChildren();var message=document.createElement('p');message.setAttribute('role','status');message.textContent='Unable to open Staff: '+(error?.message||error);var retry=document.createElement('button');retry.type='button';retry.className='btn';retry.textContent='Retry';retry.onclick=function(){openStaff()};content.append(message,retry);}
+ if(typeof window.ndOpenStaffDirectory==='function')void window.ndOpenStaffDirectory().catch(failed);
+ else failed(Error('Staff tools are not ready. Please reload the page.'));
  return false;
 }
 window.ndOpenStaffManagement=openStaff;
@@ -15813,6 +15814,23 @@ window.ndRefreshStaffDirectory=async function(){
   return salaryEmployees;
  })().finally(()=>{ndStaffDirectoryLoading=null});
  return ndStaffDirectoryLoading;
+};
+let ndStaffPageLoading=null,ndStaffPageRun=0;
+window.ndOpenStaffDirectory=function(){
+ if(ndStaffPageLoading)return ndStaffPageLoading;
+ const run=++ndStaffPageRun,content=byId('staffListContent');
+ if(content)content.textContent='Loading staff records…';
+ const task=(async()=>{
+  const auth=await salaryDb.auth.getUser();if(auth.error||!auth.data?.user)throw Error('Please sign in again.');
+  await window.ndRefreshStaffDirectory();
+  const current=await salaryDb.auth.getUser();if(current.error||current.data?.user?.id!==auth.data.user.id)throw Error('Your account changed. Reopen Staff.');
+  if(run!==ndStaffPageRun||document.body.dataset.ndVisiblePage!=='staff')return;
+  renderStaffList();
+  if(content&&!content.children.length)content.textContent='No staff records are available for your permitted branches.';
+ })();
+ ndStaffPageLoading=task;
+ task.finally(()=>{if(ndStaffPageLoading===task)ndStaffPageLoading=null;}).catch(()=>{});
+ return task;
 };
 function ndResignationBranches(){
  const candidates=isGlobalAdmin?[...salaryBranches.map(b=>b.name),...salaryEmployees.map(e=>e.outlet)]:(accessibleSalaryOutlets||[]);
