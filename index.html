@@ -17520,6 +17520,19 @@ const SETTLEMENT_EXPENSE_FIELDS=[
 ];
 window.SETTLEMENT_EXPENSE_FIELDS=SETTLEMENT_EXPENSE_FIELDS;
 
+function settlementFixedMachineApplies(outlet,monthDate){
+  return String(outlet||'').trim()==='Nusa Bestari'&&String(monthDate||'').slice(0,7)>='2026-10';
+}
+function settlementMachineDefaults(record,outlet,monthDate){
+  if(!settlementFixedMachineApplies(outlet,monthDate))return record;
+  return {...(record||{}),machine_fee:694,
+    budget_amounts:{...(record?.budget_amounts||{}),machine_fee:694},
+    payment_meta:{...(record?.payment_meta||{}),machine_fee:{...(record?.payment_meta?.machine_fee||{}),paid:true}}};
+}
+function settlementIsAutoPaidKey(key){
+  return key==='petty_cash'||key==='machine_fee'&&settlementFixedMachineApplies(settlementCurrentOutlet,settlementMonthDate());
+}
+
 function settlementDb(){
   if(window.salaryDb) return window.salaryDb;
   throw new Error("Database connection is not ready.");
@@ -17829,16 +17842,17 @@ function settlementRenderPaymentMeta(){
     }
     if(btn){
       const isPettyCash=(key==="petty_cash");
-      if(isPettyCash) meta.paid=true;
-      const paid=isPettyCash ? true : meta.paid===true;
+      const autoPaid=settlementIsAutoPaidKey(key);
+      if(autoPaid)meta.paid=true;
+      const paid=autoPaid?true:meta.paid===true;
       btn.textContent=paid?"Paid ✓":"Not Paid";
       btn.classList.toggle("paid",paid);
       btn.classList.toggle("unpaid",!paid);
-      if(isPettyCash){
+      if(autoPaid){
         btn.disabled=true;
-        btn.title="Petty Cash is fixed as Paid";
+        btn.title=isPettyCash?"Petty Cash is fixed as Paid":"Machine is fixed at RM694 per month and marked Paid";
       }else{
-        btn.disabled=false;
+        btn.disabled=false;btn.title='';
       }
 
       if(method){
@@ -17888,7 +17902,7 @@ function settlementCollectPaymentMeta(){
 
     // Transfer is the fixed payment method. Save transfer name and account number.
     out[key]={
-      paid:key==="petty_cash" ? true : Boolean(paid),
+      paid:settlementIsAutoPaidKey(key)?true:Boolean(paid),
       date:String(date||""),
       payment_method:String(payment_method||""),
       payment_account:String(payment_account||"")
@@ -17918,7 +17932,7 @@ function settlementApplyMonthlyExpenseValues(effective){
     const el=document.querySelector(`[data-finance-field="${field}"]`);
     if(!el) return;
     el.value=Number(effective?.[field]||0);
-    el.readOnly=false;
+    el.readOnly=field==='machine_fee'&&settlementFixedMachineApplies(settlementCurrentOutlet,settlementMonthDate());
     el.inputMode="decimal";
   });
 }
@@ -18408,8 +18422,8 @@ async function loadSettlementMonth(){
   settlementAuto={revenue:+latestRevenue.toFixed(2),petty_cash:+latestPetty.toFixed(2),salary:0,salary7:0,salary14:0,epf_total:0,socso_eis_total:0,taxpcb_employee:0};
   const manualValues=recordRes.data?.manual_report_amounts||{};
   for(const input of document.querySelectorAll('[data-report-manual]')){input.value=Number(manualValues[input.dataset.reportManual]||0);input.disabled=false;input.readOnly=false;}
-  settlementRecord=recordRes.data||null;
-  for(const input of document.querySelectorAll("[data-report-budget]"))input.value=settlementRecord?.budget_amounts?.[input.dataset.reportBudget]??"";
+  settlementRecord=settlementMachineDefaults(recordRes.data||null,settlementCurrentOutlet,monthDate);
+  for(const input of document.querySelectorAll("[data-report-budget]")){input.value=settlementRecord?.budget_amounts?.[input.dataset.reportBudget]??"";input.readOnly=input.dataset.reportBudget==='machine_fee'&&settlementFixedMachineApplies(settlementCurrentOutlet,monthDate);}
   window.ndBudgetUI?.total();
   settlementCarrySource=null;
 
@@ -18584,7 +18598,7 @@ async function settlementEffectiveExpenseRecord(outlet,monthDate){
   if(current?.payment_meta!==undefined) effective.payment_meta=current.payment_meta;
 
   effective.__budget_source_month = rows[0]?.month_date || null;
-  return effective;
+  return settlementMachineDefaults(effective,outlet,monthDate);
 }
 function settlementExpenseRecordTotals(record){
   let manual=0;
@@ -19437,7 +19451,7 @@ document.addEventListener("DOMContentLoaded",()=>{
       const row=paidBtn.closest('[data-expense-payment-key]'),key=row?.dataset.expensePaymentKey,original=JSON.parse(JSON.stringify(settlementPaymentMeta?.[key]||{})),wasPaid=paidBtn.classList.contains('paid'),context=settlementCurrentOutlet+'|'+settlementCurrentMonth();
       paidBtn.dataset.saving='1';paidBtn.disabled=true;
       try{paidBtn.classList.toggle('paid',!wasPaid);paidBtn.classList.toggle('unpaid',wasPaid);paidBtn.textContent=!wasPaid?'Paid ✓':'Not Paid';settlementCollectPaymentMeta();const saved=await saveSettlementMonth();if(!saved&&context===settlementCurrentOutlet+'|'+settlementCurrentMonth()){settlementPaymentMeta[key]=original;settlementRenderPaymentMeta();}}
-      finally{delete paidBtn.dataset.saving;paidBtn.disabled=key==='petty_cash';}
+      finally{delete paidBtn.dataset.saving;paidBtn.disabled=settlementIsAutoPaidKey(key);}
       return;
     }
     const nameBtn=e.target.closest("[data-expense-name-edit]");
