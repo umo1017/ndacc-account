@@ -16,6 +16,15 @@ document.addEventListener('blur',event=>{const el=event.target;if(el.matches?.('
 })();
 
 </script>
+<script id="nd-active-staff-selection-20261028">
+window.ndStaffSelectableForNewEntry=function(employee){
+  if(!employee || !employee.id)return false;
+  if(employee.nd_archived_at || employee.last_working_date || employee.resignation_date)return false;
+  if(employee.is_resigned===true)return false;
+  const status=String(employee.employment_status||'').trim().toLowerCase();
+  return !['resigned','terminated','dismissed','left','former','inactive'].includes(status);
+};
+</script>
 <script id="nd-simple-salary-advance">
 (function(){
 'use strict';
@@ -47,7 +56,7 @@ h.querySelector('[data-sa-rows]').onclick=async e=>{const b=e.target.closest('[d
 function renderAdvanceCashPreview(){const el=$('ndSimpleAdvanceCashPreview');if(!el)return;const raw=$('ndSimpleAdvanceAmount').value,amount=Number(raw);if(!raw||!Number.isFinite(amount)||amount<=0){el.textContent='Effective from 26 Oct 2026. E.g. RM600 payroll deduction = RM500 cash paid out + RM100 (20% added).';return;}const cents=Math.round(amount*100),baseCents=Math.round(cents/1.2),addedCents=cents-baseCents,rm=n=>'RM '+(n/100).toFixed(2);el.textContent='Cash paid out: '+rm(baseCents)+' · 20% added: '+rm(addedCents)+' · Payroll deduction: '+rm(cents);}
 function renderEmployees(){const branch=$('ndSimpleAdvanceBranch').value,s=$('ndSimpleAdvanceEmployee'),items=employees.filter(e=>e.outlet===branch);s.innerHTML='<option value="">Select employee</option>'+items.map(e=>'<option value="'+Number(e.id)+'">'+esc(e.name)+'</option>').join('');s.disabled=!branch||!items.length;$('ndSimpleAdvanceConfirm').disabled=busy||!actor||!items.length;message(branch&&!items.length?'No current employees available for this branch.':'');}
 async function loadEmployees(){const seq=++loading;loadError='';$('ndSimpleAdvanceConfirm').disabled=true;$('ndSimpleAdvanceRetry').hidden=true;message('Loading employees…');try{const client=db();if(!client)throw Error('Please sign in.');const auth=await wait(client.auth.getUser(),'Account');if(auth.error||!auth.data?.user?.email)throw Error('Please sign in.');if(seq!==loading)return;actor=auth.data.user.email.toLowerCase();$('ndSimpleAdvanceEmail').value=await wait(window.ndLoadCurrentAccountName(client),'Account full name');
-const result=await wait(client.from('employees').select('*').order('name',{ascending:true}).limit(5000),'Employee list');if(seq!==loading)return;if(result.error)throw result.error;const today=myDate();employees=(result.data||[]).filter(e=>Number(e.id)>0&&e.name&&e.outlet&&!e.nd_archived_at&&(!e.last_working_date||String(e.last_working_date).slice(0,10)>=today));
+const result=await wait(client.from('employees').select('*').order('name',{ascending:true}).limit(5000),'Employee list');if(seq!==loading)return;if(result.error)throw result.error;employees=(result.data||[]).filter(e=>Number(e.id)>0&&e.name&&e.outlet&&window.ndStaffSelectableForNewEntry(e));
 const branches=[...new Set(employees.map(e=>e.outlet))].sort();$('ndSimpleAdvanceBranch').innerHTML='<option value="">Select branch</option>'+branches.map(b=>'<option>'+esc(b)+'</option>').join('');renderEmployees();if(!branches.length)message('No current employees available.');
 }catch(error){if(seq===loading){loadError=error.message;message('Unable to load employees: '+error.message);$('ndSimpleAdvanceRetry').hidden=false;}}}
 function setBusy(v){busy=v;for(const id of ['ndSimpleAdvanceClose','ndSimpleAdvanceBranch','ndSimpleAdvanceEmployee','ndSimpleAdvanceAmount','ndSimpleAdvanceHistoryOpen','ndSimpleAdvanceConfirm','ndSimpleAdvanceBack','ndSimpleAdvanceClearSignature','ndSimpleAdvanceSignSave'])$(id).disabled=v;if(!v){$('ndSimpleAdvanceConfirm').disabled=!!loadError||!actor;renderEmployeesPreserve();for(const id of ['ndSimpleAdvanceBack','ndSimpleAdvanceClearSignature'])$(id).disabled=!!pendingPayload;}}
@@ -4908,7 +4917,7 @@ window.ndEmployeeFullName = function(employee){
 <span class="helper" id="dailySubmitState" style="display:block;text-align:center;margin-top:6px"></span>
 </div>
 <div class="card span12">
-<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><span class="nd-cash-summary-label">Today’s Cash Balance</span><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong><div class="helper" id="ndCashAdvanceBalanceNote" aria-live="polite"></div></div></div>
+<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><span class="nd-cash-summary-label">Today’s Cash Balance</span><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong><div class="helper" id="ndTodayCashNegativeHint" aria-live="polite" style="color:#b42318;display:none"></div><div class="helper" id="ndCashAdvanceBalanceNote" aria-live="polite"></div></div></div>
 <details id="ndCashAdvanceHistoryPanel" style="margin-top:12px;border:1px solid #d9e5dd;border-radius:12px;padding:12px;background:#fbfdfb"><summary style="cursor:pointer;font-weight:800">Salary Advance Cash History</summary><div id="ndCashAdvanceHistoryRows" class="table-wrap" aria-live="polite"></div></details>
 <div class="card" id="cashToPettyPanel" style="background:var(--soft);margin-top:12px">
 <label for="cashToPettyAmount">Cash Withdrawal to Petty Cash</label>
@@ -5705,15 +5714,34 @@ window.ndEmployeeFullName = function(employee){
     }
     // Keep history to the month of the Daily Settlement date, without a separate Month selector.
     const historyMonth=String($('settlementDate')?.value||today()).slice(0,7);
-    const rows=ndCashAdvanceEntries.filter(e=>
+    // A successfully deleted salary advance must disappear from the visible
+    // Cash History, including its original debit and its later refund entry.
+    // Preserve both movements in ndCashAdvanceEntries: cash balance and
+    // weekly/monthly carry-forward MUST still reconcile on their actual dates.
+    // A later restoration makes the advance visible again.
+    const advanceDeletionState=new Map();
+    ndCashAdvanceEntries.filter(e=>
+      e.event_type==='refund'||e.event_type==='restored'
+    ).sort((a,b)=>
+      String(a.created_at||'').localeCompare(String(b.created_at||'')) ||
+      (a.event_type==='restored'?1:0)-(b.event_type==='restored'?1:0)
+    ).forEach(e=>{
+      advanceDeletionState.set(String(e.record_source||'')+':'+String(e.record_id||''),e.event_type==='refund');
+    });
+    const allMonthEntries=ndCashAdvanceEntries.filter(e=>
       String(e.branch||'').trim()===String(currentBranch||'').trim() &&
       String(e.advance_date||'').slice(0,7)===historyMonth
+    );
+    const rows=allMonthEntries.filter(e=>
+      !advanceDeletionState.get(String(e.record_source||'')+':'+String(e.record_id||''))
     ).sort((a,b)=>String(b.advance_date||'').localeCompare(String(a.advance_date||''))||String(b.created_at||'').localeCompare(String(a.created_at||'')));
-    const total=rows.reduce((v,r)=>v+Number(r.cash_deduction||0),0);
+    // The displayed total is the actual ledger movement, not just the
+    // visible rows, so archival never changes a Cash Balance calculation.
+    const total=allMonthEntries.reduce((v,r)=>v+Number(r.cash_deduction||0),0);
     if(note){const d=String($('settlementDate')?.value||today());const advance=ndCashAdvanceTotal(currentBranch,d);note.textContent=advance!==0?'Net salary advance cash movements through '+d+': '+money(advance):'';}
     root.innerHTML='<div class="helper" style="margin-bottom:8px">'+escHtml(currentBranch)+' · '+escHtml(historyMonth)+' · Monthly net cash movement: '+(total>=0?'− ':'+ ')+money(Math.abs(total))+'</div>'+
       (rows.length?'<table><thead><tr><th>Date</th><th>Type</th><th>Employee</th><th>Payroll Deduction (120%)</th><th>20% Included</th><th>Cash Movement (Base)</th></tr></thead><tbody>'+
-      rows.map(r=>{const returned=r.event_type==='refund';const restored=r.event_type==='restored';const amount=Number(r.cash_deduction||0);return '<tr><td>'+escHtml(r.advance_date)+'</td><td>'+(returned?'Cash Returned':restored?'Advance Restored':'Advance Paid')+'</td><td>'+escHtml(r.employee_name||'Staff advance')+'</td><td>'+money(r.advance_amount)+'</td><td>'+money(r.markup_20_percent??r.adjustment_20_percent)+'</td><td style="font-weight:800;color:'+(returned?'#18754b':'#aa4730')+'">'+(amount<0?'+ ':'− ')+money(Math.abs(amount))+'</td></tr>';}).join('')+'</tbody></table>':'<div class="helper">No salary advance cash movements this month.</div>');
+      rows.map(r=>{const returned=r.event_type==='refund';const restored=r.event_type==='restored';const amount=Number(r.cash_deduction||0);return '<tr><td>'+escHtml(r.advance_date)+'</td><td>'+(returned?'Cash Returned':restored?'Advance Restored':'Advance Paid')+'</td><td>'+escHtml(r.employee_name||'Staff advance')+'</td><td>'+money(r.advance_amount)+'</td><td>'+money(r.markup_20_percent??r.adjustment_20_percent)+'</td><td style="font-weight:800;color:'+(returned?'#18754b':'#aa4730')+'">'+(amount<0?'+ ':'− ')+money(Math.abs(amount))+'</td></tr>';}).join('')+'</tbody></table>':'<div class="helper">No active salary advance cash movements this month. Cash balances include automatic reversals of deleted advances.</div>');
   }
 
 function computedCarryBefore(branch,date,sourceRows=allRows){
@@ -8338,7 +8366,7 @@ return `<div class="history-date-card">
     const el=$("todayTotalCash"); if(!el) return;
     const selectedDate=$("settlementDate")?.value||getActiveDailyDate();
     if(String(selectedDate)<ND_CASH_LEDGER_START){
-      el.textContent=money(0);el.title='Cash balance starts from zero on 1 September 2026.';
+      el.textContent=money(0);el.style.color='';if($('ndTodayCashNegativeHint'))$('ndTodayCashNegativeHint').style.display='none';el.title='Cash balance starts from zero on 1 September 2026.';
       el.dataset.cashBreakdown=el.title;
       document.getElementById('ndCashBalanceAudit')?.remove();return;
     }
@@ -8360,11 +8388,20 @@ return `<div class="history-date-card">
     balance+=(num("cash")-savedCash)-(ndDailyWithdrawalTotal()-savedWithdrawal);
 
     if(!ndCashAdvanceReady){
-      el.textContent='Unavailable';
+      el.textContent='Unavailable';el.style.color='';if($('ndTodayCashNegativeHint'))$('ndTodayCashNegativeHint').style.display='none';
       el.title=ndCashAdvanceError?'Salary Advance Cash SQL required: '+ndCashAdvanceError:'Loading salary advance deductions';
       ndRenderCashAdvanceHistory();return;
     }
+    // An advance can be paid before today's sales are posted. A negative cash
+    // balance is valid as an interim ledger result and must not be clamped.
     el.textContent=money(balance);
+    const negative=balance < -0.005;
+    el.style.color=negative?'#b42318':'';
+    const hint=$('ndTodayCashNegativeHint');
+    if(hint){
+      hint.style.display=negative?'block':'none';
+      hint.textContent=negative?'Negative balance is allowed until today’s cash sales are recorded.':'';
+    }
     const breakdown=ndCashLedgerBreakdown(currentBranch,allRows,selectedDate);
     const pendingCash=num("cash")-(existing?Number(existing.cash||0):0);
     const pendingWithdrawal=ndDailyWithdrawalTotal()-(existing?Number(existing.cash_withdrawal||0):0);
@@ -31009,9 +31046,9 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  async function populateEmployees(){
   const select=el('ndAdvanceEmployee');select.innerHTML='<option value="">Loading employees...</option>';
   let emps=[],err='';const db=client();
-  if(db){try{const result=await db.from('employees').select('id,name,outlet').order('name',{ascending:true}).limit(1000);if(result.error)throw result.error;emps=Array.isArray(result.data)?result.data:[];}catch(e){err=e.message||String(e);}}
+  if(db){try{const result=await db.from('employees').select('id,name,outlet,last_working_date,resignation_date,nd_archived_at').order('name',{ascending:true}).limit(1000);if(result.error)throw result.error;emps=Array.isArray(result.data)?result.data:[];}catch(e){err=e.message||String(e);}}
   if(!emps.length){try{emps=typeof salaryEmployees!=='undefined'&&Array.isArray(salaryEmployees)?salaryEmployees:[];}catch(_){}}
-  allEmployees=emps.filter(e=>Number(e.id)>0&&String(e.name||'').trim()).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  allEmployees=emps.filter(e=>Number(e.id)>0&&String(e.name||'').trim()&&window.ndStaffSelectableForNewEntry(e)).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
   renderEmployees();if(!allEmployees.length)status('No employees available. '+(err?'Database: '+err:'Check employee access or refresh Salary staff list.'));
  }
 async function open(){el('ndAdvanceModal').classList.add('open');el('ndAdvanceDate').value=dateMY();dateChanged();el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;requestAnimationFrame(resize);await populateEmployees();}
@@ -31168,6 +31205,17 @@ async function load(){
  const entry=await db().rpc('nd_staff_deduction_entry_options');
  if(entry.error)throw Error('Unable to load deduction entry options: '+entry.error.message);
  people=entry.data?.employees||[];reasons=entry.data?.reasons||[];
+ // RPC may return only id/name/outlet. Validate IDs against the staff table
+ // when readable; never remove previous deduction history.
+ const staffState=await db().from('employees')
+   .select('id,last_working_date,resignation_date,nd_archived_at').limit(5000);
+ if(!staffState.error){
+   const allowed=new Set((staffState.data||[]).filter(window.ndStaffSelectableForNewEntry).map(e=>String(e.id)));
+   people=people.filter(e=>allowed.has(String(e.id)));
+ }else{
+   people=people.filter(window.ndStaffSelectableForNewEntry);
+ }
+
  const selected=historyMonth||month();let historyError='';
  try{for(let offset=0;;offset+=500){
   const h=await db().from('nd_staff_incidents').select('*').or('and(incident_date.gte.'+selected+'-01,incident_date.lt.'+nextMonth(selected)+'-01),review_status.eq.pending').order('incident_date',{ascending:false}).order('id',{ascending:false}).range(offset,offset+499);
@@ -31483,7 +31531,7 @@ const localToday=()=>{const d=new Date();return [d.getFullYear(),String(d.getMon
 let type='complaint', records=[],loading=false, active=false, performanceEmployees=[],performanceStaffLoaded=false;
 const db=()=>window.salaryDb||null;
 const staffList=()=>performanceStaffLoaded?performanceEmployees:(()=>{try{return typeof salaryEmployees!=='undefined'&&Array.isArray(salaryEmployees)?salaryEmployees:[]}catch(_){return []}})();
-const isCurrentStaff=e=>!e.nd_archived_at&&(!e.last_working_date||String(e.last_working_date).slice(0,10)>=localToday());
+const isCurrentStaff=e=>window.ndStaffSelectableForNewEntry(e);
 const selectableStaff=()=>staffList().filter(isCurrentStaff);
 async function fetchPerformanceStaff(){const client=db();if(!client)return;try{const {data,error}=await client.from('employees').select('*').order('name',{ascending:true}).limit(1000);if(error)throw error;performanceEmployees=(data||[]).filter(e=>e.id!=null&&String(e.name||'').trim());performanceStaffLoaded=true;fillStaff();render();if(!performanceEmployees.length)status('No employees found in employees table.',true)}catch(e){status('Unable to load staff: '+(e.message||e),true)}}
 const currentEmail=()=>{try{return String(currentSalaryUserEmail||'').trim().toLowerCase()}catch(_){return ''}};
@@ -33808,7 +33856,22 @@ async function rpc(name,args={}){const r=await db().rpc(name,args);if(r.error)th
 function message(text){const el=$('ndDailyRestStatus');if(el)el.textContent=text;}
 function controls(){const d=$('ndDailyRestDialog');if(!d)return;d.querySelector('[data-rest-save]').disabled=busy||!state||(!selected.size&&!noOne);d.querySelector('[data-rest-branch]').disabled=busy;d.querySelector('[data-rest-none]').disabled=busy||!state;d.querySelector('[data-rest-close]').disabled=busy;d.querySelectorAll('[data-rest-id],[data-rest-days]').forEach(b=>b.disabled=busy);}
 function drawPeople(){const root=$('ndDailyRestPeople');root.innerHTML=(state?.employees||[]).map(e=>'<label class="nd-rest-person"><input type="checkbox" data-rest-id="'+esc(e.id)+'" '+(selected.has(String(e.id))?'checked':'')+'><span><strong>'+esc(e.nickname||e.name)+'</strong>'+(e.nickname?'<small>'+esc(e.name)+'</small>':'')+'</span><select aria-label="Rest duration for '+esc(e.name)+'" data-rest-days="'+esc(e.id)+'"><option value="1">Full Day · 1</option><option value="0.5" '+(selected.get(String(e.id))===0.5?'selected':'')+'>Half Day · 0.5</option></select></label>').join('')||'<p>No active salary employees in this branch.</p>';const none=$('ndDailyRestDialog').querySelector('[data-rest-none]');none.setAttribute('aria-pressed',String(noOne));none.classList.toggle('selected',noOne);const total=[...selected.values()].reduce((a,b)=>a+b,0);$('ndDailyRestTotal').textContent=selected.size+' selected · '+total+' rest day'+(total===1?'':'s');controls();}
-async function load(branch){const run=++sequence;state=null;selected.clear();noOne=false;drawPeople();message('Loading employees…');try{const data=await rpc('nd_daily_rest_load',{p_branch:branch});if(run!==sequence)return;state=data;selected=new Map((data.revision>0?data.entries||[]:data.default_entries||data.entries||[]).map(e=>[String(e.employee_id),Number(e.days)]));noOne=data.revision>0&&!selected.size;$('ndDailyRestDate').textContent=data.date;drawPeople();message(data.revision?'Today’s saved record · edit and save to update.':'');}catch(e){if(run===sequence)message('Unable to load rest days: '+e.message);}finally{controls();}}
+async function load(branch){const run=++sequence;state=null;selected.clear();noOne=false;drawPeople();message('Loading employees…');try{const data=await rpc('nd_daily_rest_load',{p_branch:branch});if(run!==sequence)return;state=data;
+ // The rest RPC can include employees with a future last working date.
+ // Resignation is registered already, so do not show them in the popup.
+ const staffCheck=await db().from('employees')
+   .select('id,last_working_date,resignation_date,nd_archived_at')
+   .eq('outlet',branch).limit(1000);
+ if(run!==sequence)return;
+ if(!staffCheck.error && (staffCheck.data||[]).length){
+   const activeIds=new Set((staffCheck.data||[])
+     .filter(window.ndStaffSelectableForNewEntry).map(e=>String(e.id)));
+   state={...data,employees:(data.employees||[]).filter(e=>activeIds.has(String(e.id)))};
+ }
+ const shown=new Set((state.employees||[]).map(e=>String(e.id)));
+ selected=new Map((data.revision>0?data.entries||[]:data.default_entries||data.entries||[])
+   .filter(e=>shown.has(String(e.employee_id)))
+   .map(e=>[String(e.employee_id),Number(e.days)]));noOne=data.revision>0&&!selected.size;$('ndDailyRestDate').textContent=data.date;drawPeople();message(data.revision?'Today’s saved record · edit and save to update.':'');}catch(e){if(run===sequence)message('Unable to load rest days: '+e.message);}finally{controls();}}
 function dialog(){let d=$('ndDailyRestDialog');if(d)return d;d=document.createElement('dialog');d.id='ndDailyRestDialog';d.innerHTML='<header><div><small>DAILY TEAM CHECK-IN</small><h2>Who Is Resting Today?</h2><span id="ndDailyRestDate"></span></div><button type="button" class="btn" data-rest-close aria-label="Close">×</button></header><div class="nd-rest-body"><label class="nd-rest-branch-label">Branch<select data-rest-branch></select></label><button type="button" class="btn" data-rest-none aria-pressed="false">No One Resting</button><div id="ndDailyRestPeople"></div><div id="ndDailyRestTotal"></div><p id="ndDailyRestStatus" role="status"></p><button type="button" class="btn primary" data-rest-save>Save Rest Days</button></div>';document.body.append(d);
  d.querySelector('[data-rest-close]').onclick=()=>{if(!busy){acknowledge();d.close();}};d.oncancel=e=>{if(busy)e.preventDefault();else acknowledge();};d.querySelector('[data-rest-branch]').onchange=e=>void load(e.target.value);
  d.querySelector('[data-rest-none]').onclick=()=>{noOne=!noOne;if(noOne)selected.clear();drawPeople();};
