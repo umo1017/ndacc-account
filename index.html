@@ -4909,7 +4909,7 @@ window.ndEmployeeFullName = function(employee){
 </div>
 <div class="card span12">
 <div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><span class="nd-cash-summary-label">Today’s Cash Balance</span><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong><div class="helper" id="ndCashAdvanceBalanceNote" aria-live="polite"></div></div></div>
-<details id="ndCashAdvanceHistoryPanel" style="margin-top:12px;border:1px solid #d9e5dd;border-radius:12px;padding:12px;background:#fbfdfb"><summary style="cursor:pointer;font-weight:800">Salary Advance Cash History</summary><div style="margin:12px 0;max-width:190px"><label for="ndCashAdvanceMonth">Month</label><input type="month" id="ndCashAdvanceMonth"></div><div id="ndCashAdvanceHistoryRows" class="table-wrap" aria-live="polite"></div></details>
+<details id="ndCashAdvanceHistoryPanel" style="margin-top:12px;border:1px solid #d9e5dd;border-radius:12px;padding:12px;background:#fbfdfb"><summary style="cursor:pointer;font-weight:800">Salary Advance Cash History</summary><div id="ndCashAdvanceHistoryRows" class="table-wrap" aria-live="polite"></div></details>
 <div class="card" id="cashToPettyPanel" style="background:var(--soft);margin-top:12px">
 <label for="cashToPettyAmount">Cash Withdrawal to Petty Cash</label>
 <div class="money-wrap" style="margin-top:8px"><span class="rm-prefix">RM</span><input class="money-field" id="cashToPettyAmount" min="0" placeholder="0.00" step="0.01" type="number"/></div>
@@ -5703,16 +5703,18 @@ window.ndEmployeeFullName = function(employee){
       if(note)note.textContent=ndCashAdvanceError?'Cash balance requires the Salary Advance Cash SQL update.':'Loading salary advance cash…';
       return;
     }
-    const month=$('ndCashAdvanceMonth')?.value||String($('settlementDate')?.value||today()).slice(0,7);
-    const rows=ndCashAdvanceEntries.filter(e=>String(e.branch||'').trim()===String(currentBranch||'').trim()&&String(e.advance_date||'').slice(0,7)===month)
-      .sort((a,b)=>String(b.advance_date||'').localeCompare(String(a.advance_date||'')));
+    // Keep history to the month of the Daily Settlement date, without a separate Month selector.
+    const historyMonth=String($('settlementDate')?.value||today()).slice(0,7);
+    const rows=ndCashAdvanceEntries.filter(e=>
+      String(e.branch||'').trim()===String(currentBranch||'').trim() &&
+      String(e.advance_date||'').slice(0,7)===historyMonth
+    ).sort((a,b)=>String(b.advance_date||'').localeCompare(String(a.advance_date||''))||String(b.created_at||'').localeCompare(String(a.created_at||'')));
     const total=rows.reduce((v,r)=>v+Number(r.cash_deduction||0),0);
     if(note){const d=String($('settlementDate')?.value||today());const advance=ndCashAdvanceTotal(currentBranch,d);note.textContent=advance!==0?'Net salary advance cash movements through '+d+': '+money(advance):'';}
-    root.innerHTML='<div class="helper" style="margin-bottom:8px">'+escHtml(currentBranch)+' · '+escHtml(month)+' · Net cash movement: '+(total>=0?'− ':'+ ')+money(Math.abs(total))+'</div>'+
+    root.innerHTML='<div class="helper" style="margin-bottom:8px">'+escHtml(currentBranch)+' · '+escHtml(historyMonth)+' · Monthly net cash movement: '+(total>=0?'− ':'+ ')+money(Math.abs(total))+'</div>'+
       (rows.length?'<table><thead><tr><th>Date</th><th>Type</th><th>Employee</th><th>Payroll Deduction (120%)</th><th>20% Included</th><th>Cash Movement (Base)</th></tr></thead><tbody>'+
       rows.map(r=>{const returned=r.event_type==='refund';const restored=r.event_type==='restored';const amount=Number(r.cash_deduction||0);return '<tr><td>'+escHtml(r.advance_date)+'</td><td>'+(returned?'Cash Returned':restored?'Advance Restored':'Advance Paid')+'</td><td>'+escHtml(r.employee_name||'Staff advance')+'</td><td>'+money(r.advance_amount)+'</td><td>'+money(r.markup_20_percent??r.adjustment_20_percent)+'</td><td style="font-weight:800;color:'+(returned?'#18754b':'#aa4730')+'">'+(amount<0?'+ ':'− ')+money(Math.abs(amount))+'</td></tr>';}).join('')+'</tbody></table>':'<div class="helper">No salary advance cash movements this month.</div>');
   }
-  $('ndCashAdvanceMonth')?.addEventListener('change',ndRenderCashAdvanceHistory);
 
 function computedCarryBefore(branch,date,sourceRows=allRows){
     const rows=(sourceRows||[])
@@ -8428,7 +8430,7 @@ return `<div class="history-date-card">
     const activeDate=getActiveDailyDate();$("settlementDate").value=activeDate;$("reviewMonth").value=activeDate.slice(0,7);$("branchRecordState").textContent=currentBranch;
     renderDailyBranchButtons();
     $("cash")?.closest(".grid")?.querySelectorAll("input").forEach(el=>{if(!["reviewMonth","settlementDate","pettyAmount","pettyReason"].includes(el.id))el.oninput=()=>{calc();scheduleSave();};});
-    $("settlementDate").onchange=async()=>{const d=$("settlementDate").value;rememberActiveDailyDate(d);await loadDate(d);$("reviewMonth").value=d.slice(0,7);renderMonth();setDailyClean();};
+    $("settlementDate").onchange=async()=>{const d=$("settlementDate").value;rememberActiveDailyDate(d);await loadDate(d);$("reviewMonth").value=d.slice(0,7);renderMonth();ndRenderCashAdvanceHistory();setDailyClean();};
     $("reviewMonth").onchange=renderMonth;
     $("cash").oninput=()=>{calc();scheduleSave();};
     $("cashWithdrawal").oninput=()=>{calc();scheduleSave();};
