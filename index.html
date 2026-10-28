@@ -31426,6 +31426,23 @@ body[data-nd-visible-page="announcements"] #appView,body[data-nd-visible-page="a
 <div class="nd-ann-buttons" id="ndAnnTabs"><button class="selected" data-cat="all">All</button><button data-cat="promotion">Promotions</button><button data-cat="treatment">New Treatments</button><button data-cat="policy">Policies</button><button data-cat="commission">Commission</button><button data-cat="menu">Menu</button></div><nav id="ndMenuSubTabs" class="nd-menu-subtabs" aria-label="Menu categories" hidden></nav>
 <div class="nd-ann-panel" hidden="" id="ndAnnEditor"><h3 id="ndAnnEditHeading">New Announcement</h3><label>Category</label><select id="ndAnnCategory"><option value="promotion">Promotions</option><option value="treatment">New Treatments</option><option value="policy">Policies</option><option value="commission">Commission</option><option value="menu">Menu</option></select><div id="ndMenuEditorGroup" class="nd-menu-editor-group" hidden><label for="ndMenuGroup">Menu Section</label><div class="nd-menu-edit-row"><select id="ndMenuGroup"></select><button type="button" class="btn" id="ndMenuGroupAdd" title="Add menu category" aria-label="Add menu category">+</button></div></div><label>Title</label><input id="ndAnnTitle" maxlength="160"/><label>Content</label><textarea id="ndAnnContent" maxlength="10000"></textarea><label for="ndAnnPhotos">Photos / PDF Files</label><input id="ndAnnPhotos" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" multiple><div id="ndAnnSelectedPhotos" class="nd-ann-muted"></div><div class="actions" style="margin-top:10px"><button class="btn" id="ndAnnSave" type="button">Publish</button><button class="btn" id="ndAnnCancel" type="button">Cancel Edit</button></div></div>
 <article class="nd-ann-panel" id="ndCompanyPolicyCard"><h3>Company Policies</h3><div class="actions"><button class="btn" type="button" id="ndCompanyPolicyView">View Policy</button><button class="btn" type="button" id="ndCompanyPolicyDownload">Download PDF</button></div></article><div id="ndAnnStatus" role="status"></div><div id="ndAnnList"></div></div></section>
+
+<style id="nd-ann-category-unread-grouping-v1">
+#ndAnnouncementsPage #ndAnnList .nd-ann-category-section{margin:22px 0 28px;min-width:0}
+#ndAnnouncementsPage #ndAnnList .nd-ann-category-section-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:0 2px}
+#ndAnnouncementsPage #ndAnnList .nd-ann-category-section-heading h3{font-size:18px!important;font-weight:800;line-height:1.25;margin:0 4px 0 0!important;color:#284b38}
+#ndAnnouncementsPage #ndAnnList .nd-ann-section-unread{display:inline-flex;align-items:center;justify-content:center;border-radius:50px;background:#a95040;color:#fff;font-weight:800;font-size:12px;padding:5px 10px;white-space:nowrap}
+#ndAnnouncementsPage #ndAnnList .nd-ann-section-read{font-size:12px;font-weight:650;color:#577462;background:#e9f1e9;border-radius:50px;padding:5px 10px}
+#ndAnnouncementsPage #ndAnnList .nd-ann-section-total{font-size:12px;color:#7a857b;margin-left:auto}
+#ndAnnouncementsPage #ndAnnList .nd-ann-card-meta{display:flex;align-items:center;flex-wrap:wrap;gap:7px}
+#ndAnnouncementsPage #ndAnnList .nd-ann-card-meta .nd-ann-muted{margin-left:auto}
+#ndAnnouncementsPage #ndAnnList .nd-ann-card-unread-tag{border-radius:50px;padding:4px 9px;background:#a95040;color:#fff;font-size:11px;font-weight:800;letter-spacing:.025em}
+#ndAnnouncementsPage #ndAnnList .nd-ann-card-read-tag{border-radius:50px;padding:4px 9px;background:#eef2ed;color:#61786a;font-size:11px;font-weight:700}
+#ndAnnouncementsPage #ndAnnList .nd-ann-premium-card.nd-ann-unread{border-left:4px solid #b49b61!important;background:#fffefa!important}
+#ndAnnouncementsPage #ndAnnTabs .nd-ann-cat-count,#ndAnnouncementsPage #ndMenuSubTabs .nd-ann-cat-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:1px 5px;margin-left:6px;border-radius:50px;background:#a95040;color:#fff;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
+#ndAnnouncementsPage #ndAnnTabs .selected .nd-ann-cat-count,#ndAnnouncementsPage #ndMenuSubTabs .selected .nd-ann-cat-count{background:#fff;color:#a95040}
+@media(max-width:600px){#ndAnnouncementsPage #ndAnnList .nd-ann-category-section-heading h3{font-size:16px!important}#ndAnnouncementsPage #ndAnnList .nd-ann-section-total{font-size:11px}}
+</style>
 <script id="nd-ann-feature">
 (()=>{'use strict';
 const $=id=>document.getElementById(id),db=()=>window.salaryDb,OWNER='umo1017@gmail.com',BUCKET='petty-receipts';
@@ -31470,15 +31487,92 @@ const defaultMenuGroups=['Wellness','Beauty','Other'];
 function readCustomMenuGroups(){try{const data=JSON.parse(localStorage.getItem(ND_MENU_GROUP_KEY)||'[]');return Array.isArray(data)?data.filter(x=>typeof x==='string'&&/^[\p{L}\p{N} _&-]{1,40}$/u.test(x)):[]}catch(_){return []}}
 function menuGroups(){const groups=[...defaultMenuGroups];for(const label of [...readCustomMenuGroups(),...items.filter(r=>announcementCategory(r)==='menu').map(r=>decode(r).menu_group)]){const v=String(label||'').trim();if(v&&!groups.some(x=>x.toLowerCase()===v.toLowerCase()))groups.push(v)}return groups;}
 function addMenuGroup(){if(!admin)return null;const name=window.prompt('New menu category name (max 40 characters)');if(name===null)return null;const value=name.trim();if(!/^[\p{L}\p{N} _&-]{1,40}$/u.test(value)||value.toLowerCase()==='all'){notice('Enter a category name of 1–40 letters or numbers.');return null}const existing=menuGroups().find(x=>x.toLowerCase()===value.toLowerCase());if(existing)return existing;const next=[...readCustomMenuGroups(),value];try{localStorage.setItem(ND_MENU_GROUP_KEY,JSON.stringify(next))}catch(_){}return value;}
-function renderMenuGroups(){const groups=menuGroups(),tabs=$('ndMenuSubTabs'),selector=$('ndMenuGroup');if(!groups.includes(menuGroup))menuGroup='All';tabs.hidden=cat!=='menu'||mode!=='history';tabs.innerHTML=['All',...groups].map(group=>'<button type="button" data-menu-group="'+esc(group)+'" class="'+(menuGroup===group?'selected':'')+'">'+esc(group)+'</button>').join('')+(admin?'<button type="button" data-menu-add aria-label="Add menu category" title="Add menu category">+</button>':'');const selected=selector.value||'Other';selector.innerHTML=groups.map(group=>'<option value="'+esc(group)+'">'+esc(group)+'</option>').join('');selector.value=groups.includes(selected)?selected:'Other';$('ndMenuEditorGroup').hidden=$('ndAnnCategory').value!=='menu'||mode!=='publish';}
+function renderMenuGroups(){
+ const groups=menuGroups(),tabs=$('ndMenuSubTabs'),selector=$('ndMenuGroup');
+ if(!groups.includes(menuGroup))menuGroup='All';
+ tabs.hidden=cat!=='menu'||mode!=='history';
+ const menuUnread=allUnread().filter(row=>announcementCategory(row)==='menu');
+ tabs.innerHTML=['All',...groups].map(group=>{
+  const n=group==='All'?menuUnread.length:menuUnread.filter(row=>(decode(row).menu_group||'Other')===group).length;
+  return '<button type="button" data-menu-group="'+esc(group)+'" class="'+(menuGroup===group?'selected':'')+'">'+esc(group)+(n?'<span class="nd-ann-cat-count" aria-label="'+n+' unread">'+(n>99?'99+':n)+'</span>':'')+'</button>';
+ }).join('')+(admin?'<button type="button" data-menu-add aria-label="Add menu category" title="Add menu category">+</button>':'');
+ const selected=selector.value||'Other';
+ selector.innerHTML=groups.map(group=>'<option value="'+esc(group)+'">'+esc(group)+'</option>').join('');
+ selector.value=groups.includes(selected)?selected:'Other';
+ $('ndMenuEditorGroup').hidden=$('ndAnnCategory').value!=='menu'||mode!=='publish';
+}
 
 function setMode(value){mode=admin?value:'history';renderTopCategories();$('ndAnnMode').hidden=!admin;$('ndAnnEditor').hidden=!admin||mode!=='publish';$('ndAnnList').hidden=mode!=='history';$('ndCompanyPolicyCard').hidden=mode!=='history'||!['all','policy'].includes(cat);$('ndAnnTabs').hidden=mode!=='history';$('ndAnnMonth').closest('.nd-ann-buttons').hidden=mode!=='history';$('ndAnnMode').querySelectorAll('[data-ann-mode]').forEach(button=>button.classList.toggle('selected',button.dataset.annMode===mode));window.ndCommissionNoticeCard?.(cat,mode);renderMenuGroups()}
 async function receiptURL(photo){const {data,error}=await window.ndReceiptSignedUrl(db(),BUCKET,photo.path,300);if(error||!data?.signedUrl)throw Error(error?.message||'Photo is unavailable.');return data.signedUrl}
-function render(){const token=++renderToken,m=$('ndAnnMonth').value||thisMonth(),current=unreadOnly?allUnread():items.filter(row=>monthOf(row.created_at)===m),selected=current.filter(row=>(cat==='all'||announcementCategory(row)===cat)&&(cat!=='menu'||menuGroup==='All'||decode(row).menu_group===menuGroup));const count=unreadTotal(),monthCount=items.filter(row=>monthOf(row.created_at)===m&&unread(row)).length;$('ndAnnMonthUnread').textContent=count+' unread in total'+(unreadOnly?'':' · '+monthCount+' this month');const unreadButton=$('ndAnnViewUnread');if(unreadButton){unreadButton.textContent=unreadOnly?'Back to Month':'All Unread'+(count?' ('+count+')':'');unreadButton.setAttribute('aria-pressed',String(unreadOnly));unreadButton.classList.toggle('selected',unreadOnly)}if($('ndAnnSidebarCount'))$('ndAnnSidebarCount').textContent=count?String(count):'';const navCount=$('ndWorkspaceAnnUnread');if(navCount){navCount.textContent=count>99?'99+':String(count);navCount.hidden=!count;}window.ndAnnouncementUnreadTotal=count;
-$('ndAnnTabs').querySelectorAll('[data-cat]').forEach(button=>button.classList.toggle('selected',button.dataset.cat===cat));
-if(document.body.dataset.ndVisiblePage==='announcements'){$('ndAnnList').innerHTML=selected.map(row=>{const content=decode(row);return '<article class="nd-ann-panel nd-ann-premium-card '+(unread(row)?'nd-ann-unread':'')+'" data-ann-card="'+esc(row.id)+'"><div class="nd-ann-card-meta"><span class="nd-ann-category">'+esc(topCategoryLabel(announcementCategory(row)||'Announcement'))+'</span><span class="nd-ann-muted">'+esc(new Date(row.updated_at||row.created_at).toLocaleDateString('en-MY',{timeZone:'Asia/Kuala_Lumpur',day:'numeric',month:'short',year:'numeric'}))+'</span></div><h3><button type="button" class="nd-ann-title-link" data-ann-open="'+esc(row.id)+'">'+esc(row.title)+'</button></h3><div class="nd-ann-text nd-ann-excerpt">'+esc(content.text)+'</div><div class="nd-ann-photo-grid">'+content.photos.slice(0,1).map((photo,i)=>'<div>'+(isPDF(photo)?'<strong>PDF · '+esc(photo.name)+'</strong>':'<img loading="lazy" data-ann-photo="'+esc(row.id)+'" data-photo-index="'+i+'" alt="'+esc(photo.name)+'">')+'<button type="button" class="mini" data-ann-download="'+esc(row.id)+'" data-photo-index="'+i+'">Download File</button></div>').join('')+'</div><div class="actions"><button type="button" class="mini nd-ann-view-button" data-ann-open="'+esc(row.id)+'">View Announcement <span aria-hidden="true">→</span></button>'+(admin?'<button type="button" class="mini" data-ann-edit="'+esc(row.id)+'">Edit</button><button type="button" class="mini" data-ann-delete="'+esc(row.id)+'">Delete</button>':'')+'</div></article>'}).join('')||'<div class="nd-ann-panel nd-ann-empty">'+(unreadOnly?'No unread announcements.':'No announcements for this month.')+'</div>';
-$('ndAnnList').querySelectorAll('[data-ann-photo]').forEach(async image=>{const row=items.find(row=>String(row.id)===image.dataset.annPhoto),photo=decode(row).photos[Number(image.dataset.photoIndex)];try{const url=await receiptURL(photo);if(token===renderToken&&image.isConnected)image.src=url}catch(error){image.alt='Photo unavailable'}});
-}const mount=$('ndAnnDailyMount');if(mount){mount.hidden=!count;mount.textContent=count+' unread announcements · View all unread';}setMode(mode)}
+function render(){
+ const token=++renderToken;
+ const m=$('ndAnnMonth').value||thisMonth();
+ const current=unreadOnly?allUnread():items.filter(row=>monthOf(row.created_at)===m);
+ const selected=current.filter(row=>(cat==='all'||announcementCategory(row)===cat)&&(cat!=='menu'||menuGroup==='All'||decode(row).menu_group===menuGroup));
+ const count=unreadTotal(),monthCount=items.filter(row=>monthOf(row.created_at)===m&&unread(row)).length;
+ $('ndAnnMonthUnread').textContent=count+' unread in total'+(unreadOnly?'':' · '+monthCount+' this month');
+ const unreadButton=$('ndAnnViewUnread');
+ if(unreadButton){unreadButton.textContent=unreadOnly?'Back to Month':'All Unread'+(count?' ('+count+')':'');unreadButton.setAttribute('aria-pressed',String(unreadOnly));unreadButton.classList.toggle('selected',unreadOnly)}
+ if($('ndAnnSidebarCount'))$('ndAnnSidebarCount').textContent=count?String(count):'';
+ const navCount=$('ndWorkspaceAnnUnread');if(navCount){navCount.textContent=count>99?'99+':String(count);navCount.hidden=!count;}
+ window.ndAnnouncementUnreadTotal=count;
+ $('ndAnnTabs').querySelectorAll('[data-cat]').forEach(button=>button.classList.toggle('selected',button.dataset.cat===cat));
+
+ function announcementCard(row){
+  const content=decode(row),isUnread=unread(row),date=new Date(row.updated_at||row.created_at).toLocaleDateString('en-MY',{timeZone:'Asia/Kuala_Lumpur',day:'numeric',month:'short',year:'numeric'});
+  return '<article class="nd-ann-panel nd-ann-premium-card '+(isUnread?'nd-ann-unread':'nd-ann-is-read')+'" data-ann-card="'+esc(row.id)+'">'
+  +'<div class="nd-ann-card-meta"><span class="nd-ann-category">'+esc(topCategoryLabel(announcementCategory(row)||'Announcement'))+'</span>'
+  +(isUnread?'<span class="nd-ann-card-unread-tag">Unread</span>':'<span class="nd-ann-card-read-tag">Read</span>')
+  +'<span class="nd-ann-muted">'+esc(date)+'</span></div>'
+  +'<h3><button type="button" class="nd-ann-title-link" data-ann-open="'+esc(row.id)+'">'+esc(row.title)+'</button></h3>'
+  +'<div class="nd-ann-text nd-ann-excerpt">'+esc(content.text)+'</div>'
+  +'<div class="nd-ann-photo-grid">'+content.photos.slice(0,1).map((photo,i)=>'<div>'+(isPDF(photo)?'<strong>PDF · '+esc(photo.name)+'</strong>':'<img loading="lazy" data-ann-photo="'+esc(row.id)+'" data-photo-index="'+i+'" alt="'+esc(photo.name)+'">')+'<button type="button" class="mini" data-ann-download="'+esc(row.id)+'" data-photo-index="'+i+'">Download File</button></div>').join('')+'</div>'
+  +'<div class="actions"><button type="button" class="mini nd-ann-view-button" data-ann-open="'+esc(row.id)+'">View Announcement <span aria-hidden="true">→</span></button>'
+  +(admin?'<button type="button" class="mini" data-ann-edit="'+esc(row.id)+'">Edit</button><button type="button" class="mini" data-ann-delete="'+esc(row.id)+'">Delete</button>':'')+'</div></article>';
+ }
+ function groupedCards(){
+  if(!selected.length)return '<div class="nd-ann-panel nd-ann-empty">'+(unreadOnly?'No unread announcements.':'No announcements for this month.')+'</div>';
+  const groups=new Map(),mainOrder=[...ND_TOP_BUILTINS.slice(1).map(pair=>pair[0]),...customTopCategories()];
+  const groupLabel=(key,subgroup)=>topCategoryLabel(key)+(subgroup?' / '+subgroup:'');
+  for(const row of selected){
+   const key=announcementCategory(row)||'Other';
+   const subgroup=key==='menu'?String(decode(row).menu_group||'Other'):'';
+   const groupId=JSON.stringify([key,subgroup]);
+   if(!groups.has(groupId))groups.set(groupId,{key,subgroup,rows:[]});
+   groups.get(groupId).rows.push(row);
+  }
+  const ordered=[...groups.values()].sort((a,b)=>{
+   const aIndex=mainOrder.indexOf(a.key),bIndex=mainOrder.indexOf(b.key);
+   if(aIndex!==bIndex)return (aIndex<0?999:aIndex)-(bIndex<0?999:bIndex);
+   if(a.key==='menu'&&b.key==='menu'){
+    const categories=menuGroups(),aSub=categories.indexOf(a.subgroup),bSub=categories.indexOf(b.subgroup);
+    if(aSub!==bSub)return (aSub<0?999:aSub)-(bSub<0?999:bSub);
+   }
+   return groupLabel(a.key,a.subgroup).localeCompare(groupLabel(b.key,b.subgroup));
+  });
+  return ordered.map(group=>{
+   const unreadCount=group.rows.filter(unread).length;
+   const rows=[...group.rows].sort((a,b)=>Number(unread(b))-Number(unread(a)));
+   return '<section class="nd-ann-category-section" aria-label="'+esc(groupLabel(group.key,group.subgroup))+'">'
+    +'<div class="nd-ann-category-section-heading"><h3>'+esc(groupLabel(group.key,group.subgroup))+'</h3>'
+    +(unreadCount?'<span class="nd-ann-section-unread" aria-label="'+unreadCount+' unread">'+unreadCount+' Unread</span>':'<span class="nd-ann-section-read">All Read</span>')
+    +'<span class="nd-ann-section-total">'+group.rows.length+' total</span></div>'
+    +rows.map(announcementCard).join('')+'</section>';
+  }).join('');
+ }
+ if(document.body.dataset.ndVisiblePage==='announcements'){
+  $('ndAnnList').innerHTML=groupedCards();
+  $('ndAnnList').querySelectorAll('[data-ann-photo]').forEach(async image=>{
+   const row=items.find(row=>String(row.id)===image.dataset.annPhoto);
+   if(!row)return;
+   const photo=decode(row).photos[Number(image.dataset.photoIndex)];
+   try{const url=await receiptURL(photo);if(token===renderToken&&image.isConnected)image.src=url}catch(error){image.alt='Photo unavailable'}
+  });
+ }
+ const mount=$('ndAnnDailyMount');
+ if(mount){mount.hidden=!count;mount.textContent=count+' unread announcements · View all unread';}
+ setMode(mode);
+}
 async function load(){
  if(loading||!db()||!userId)return;
  loading=true;
