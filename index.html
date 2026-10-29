@@ -18651,6 +18651,7 @@ async function loadSettlementMonth(){
   renderSettlementProjects();
   settlementRenderPaymentMeta();
   settlementRecalculate();
+  window.ndReportExpenseReceiptPaint?.();
   await window.ndPayrollBudget?.load(budgetOutlet,monthDate);
 
   if(state && window.ndPayrollBudget?.values) state.textContent=`${settlementCurrentOutlet} · ${settlementCurrentMonth()} · Salary budgets updated`;
@@ -34274,6 +34275,12 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
 #ndAnnDailyMount{font-weight:700}
 </style>
 <style id="nd-report-linked-receipt-style">
+#settlementExpenseForm .nd-report-cash-only [data-report-receipt-status]{color:#526b5a!important;font-weight:650}
+/* Only Amount (not Budget) is color-coded after receipt lookup is verified. */
+#settlementExpenseForm .settlement-expense-row[data-nd-receipt-amount="uploaded"] .nd-expense-amount input{color:#00877f!important;-webkit-text-fill-color:#00877f!important;border-color:#64b8b0!important;background-color:#effbf9!important}
+#settlementExpenseForm .settlement-expense-row[data-nd-receipt-amount="missing"] .nd-expense-amount input{color:#c43636!important;-webkit-text-fill-color:#c43636!important;border-color:#e6a1a1!important;background-color:#fff3f2!important}
+#settlementExpenseForm .settlement-expense-row[data-nd-receipt-amount="cash"] .nd-expense-amount input{color:#365647!important;-webkit-text-fill-color:#365647!important}
+
 #settlementExpenseForm [data-payment-paid]{display:none!important}
 #settlementExpenseForm .nd-report-receipt-actions{display:flex;flex-direction:column;gap:6px;width:100%;min-width:0}
 #settlementExpenseForm .nd-report-receipt-actions button{width:100%;white-space:normal;font-size:12px;min-height:40px}
@@ -34294,7 +34301,12 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
  const form=document.getElementById('settlementExpenseForm');
  if(!form)return;
  const cache=new Map();
+ // These report expenses are paid in cash; do not accept uploaded receipts from this page.
+ const cashOnlyExpenseKeys=new Set(['salary7','salary14','petty_cash']);
  let loadToken=0, busy=false, picked=null;
+ // Receipt validation is scoped to the current branch and month.
+ // An unloaded or failed lookup must never imply a missing receipt.
+ let receiptScope='', receiptReady=false;
  const $=id=>document.getElementById(id);
  const client=()=>window.salaryDb||window.db;
  const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -34324,7 +34336,19 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
      const area=row.querySelector('.nd-expense-payment')||row;
      const paid=row.querySelector('[data-payment-paid]');
      if(paid){paid.hidden=true;paid.setAttribute('aria-hidden','true');paid.tabIndex=-1;}
-     if(area.querySelector('[data-report-receipt-upload]'))continue;
+     const existing=row.querySelector('.nd-report-receipt-actions');
+     if(cashOnlyExpenseKeys.has(key)){
+       // Preserve an existing receipt's View option, but never offer Upload / Replace.
+       const actions=existing||document.createElement('div');
+       actions.className='nd-report-receipt-actions nd-report-cash-only';
+       if(actions.dataset.cashOnly!=='true'){
+         actions.innerHTML='<small data-report-receipt-status aria-live="polite">Cash Payment · No Receipt Required</small><button type="button" class="btn" data-report-receipt-view="'+safe(key)+'" hidden>View Existing Receipt</button>';
+         actions.dataset.cashOnly='true';
+       }
+       if(!existing)area.appendChild(actions);
+       continue;
+     }
+     if(existing)continue;
      const actions=document.createElement('div');actions.className='nd-report-receipt-actions';
      actions.innerHTML='<button type="button" class="btn" data-report-receipt-upload="'+safe(key)+'">Upload Receipt</button><button type="button" class="btn" data-report-receipt-view="'+safe(key)+'" hidden>View</button><small data-report-receipt-status aria-live="polite"></small>';
      area.appendChild(actions);
@@ -34333,20 +34357,38 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
  function updateLabels(){
    attachRows();
    const state=current();
+   // Clear the confirmed state whenever branch or month changes.
+   if(receiptScope!==state.id){receiptScope=state.id;receiptReady=false;}
+   const valid=!!state.branch&&state.branch!=='__TOTAL__'&&/^\d{4}-(0[1-9]|1[0-2])$/.test(state.month);
    for(const row of form.querySelectorAll('[data-expense-payment-key]')){
      const key=row.dataset.expensePaymentKey,ref=sourceRef(state.branch,state.month,key);
-     const record=cache.get(ref);
+     const record=cache.get(ref),hasFile=!!record?.receipt_file?.path,hasAmount=amountOf(row)>0;
      const upload=row.querySelector('[data-report-receipt-upload]'),view=row.querySelector('[data-report-receipt-view]');
+     // Only the Amount cell changes color: never the Budget input.
+     // Cash-paid salary and petty cash always stay neutral, regardless of evidence.
+     row.dataset.ndReceiptAmount=cashOnlyExpenseKeys.has(key)?'cash':
+       !hasAmount?'empty':!valid?'unavailable':!receiptReady?'loading':hasFile?'uploaded':'missing';
+     if(cashOnlyExpenseKeys.has(key)){
+       if(upload)upload.remove();
+       if(view){view.hidden=!hasFile;view.disabled=busy;}
+       statusOf(row,'Cash Payment · No Receipt Required');
+       continue;
+     }
      if(!upload||!view)continue;
-     upload.textContent=record?.receipt_file?.path?'Replace Receipt':'Upload Receipt';
-     upload.disabled=busy||!state.branch||state.branch==='__TOTAL__'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(state.month);
-     view.hidden=!record?.receipt_file?.path;view.disabled=busy;
-     statusOf(row,record?.receipt_file?.path?'Receipt Uploaded ✓':(cache.has(ref)?'No attachment':''));
+     upload.textContent=hasFile?'Replace Receipt':'Upload Receipt';
+     upload.disabled=busy||!valid;
+     // A stale cache is not displayed as confirmed while the month is loading.
+     view.hidden=!receiptReady||!hasFile;view.disabled=busy;
+     statusOf(row,receiptReady?(hasFile?'Receipt Uploaded ✓':hasAmount?'Receipt Missing':''): '');
    }
  }
  async function refresh(){
-   const state=current();updateLabels();if(!state.branch||state.branch==='__TOTAL__'||!/^\d{4}-\d{2}$/.test(state.month))return;
-   const token=++loadToken;const db=client();if(!db)return;
+   const state=current();
+   const token=++loadToken; // Discard responses from earlier branch/month selections.
+   if(receiptScope!==state.id){receiptScope=state.id;receiptReady=false;}
+   updateLabels();
+   if(!state.branch||state.branch==='__TOTAL__'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(state.month))return;
+   const db=client();if(!db)return;
    const prefix='monthly_report:'+encodeURIComponent(state.branch)+':'+state.month+':';
    const refs=[...form.querySelectorAll('.settlement-expense-row[data-expense-payment-key]')].map(row=>sourceRef(state.branch,state.month,row.dataset.expensePaymentKey));
    if(!refs.length)return;
@@ -34359,11 +34401,16 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
      if(token!==loadToken||current().id!==state.id)return;
      for(const key of [...cache.keys()])if(key.startsWith(prefix))cache.delete(key);
      for(const record of data||[])if(!cache.has(record.source_ref))cache.set(record.source_ref,record);
+     receiptReady=true;
      updateLabels();
    }catch(error){
      if(token===loadToken&&current().id===state.id){
+       receiptReady=false;
        console.warn('Monthly receipt lookup:',error);
-       for(const row of form.querySelectorAll('[data-expense-payment-key]'))statusOf(row,'Unable to load receipts',true);
+       updateLabels(); // A lookup failure must never be shown as an unpaid / missing receipt.
+       for(const row of form.querySelectorAll('[data-expense-payment-key]')){
+         if(!cashOnlyExpenseKeys.has(row.dataset.expensePaymentKey))statusOf(row,'Receipt status unavailable',true);
+       }
      }
    }
  }
@@ -34387,6 +34434,9 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
  }
  function openUpload(row){
    const state=current(),key=row.dataset.expensePaymentKey;
+   if(cashOnlyExpenseKeys.has(key)){
+     alert('Cash Payment · No Receipt Required for this expense.');return;
+   }
    if(!state.branch||state.branch==='__TOTAL__'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(state.month)){
      alert('Select a single branch and report month first.');return;
    }
@@ -34409,6 +34459,10 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
  }
  async function save(){
    if(busy||!picked)return;
+   if(cashOnlyExpenseKeys.has(picked.key)){
+     $('ndRrStatus').textContent='Cash payment: uploading a receipt is disabled for this expense.';
+     return;
+   }
    const selected=$('ndRrFile').files[0],date=$('ndRrDate').value;
    if(!selected){$('ndRrStatus').textContent='Choose a receipt first.';return;}
    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){$('ndRrStatus').textContent='Enter a valid receipt date.';return;}
@@ -34441,6 +34495,8 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
      else{response=await db.from('ai_receipt_records').insert({...payload,created_by:String(window.currentUserEmail||'')}).select('id,source_ref,receipt_file,receipt_date,total_amount').single();}
      if(response.error)throw response.error;
      cache.set(ref,response.data);
+     receiptScope=current().id;
+     receiptReady=true; // The newly uploaded receipt is now confirmed by Supabase.
      $('ndRrStatus').textContent='Saved ✓ · Included in Expense History and Monthly Receipts PDF';
      dialog.close();
      // No settlement expense amount or salary Payment DONE fields are changed.
@@ -34454,6 +34510,14 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
      busy=false;dialog.querySelector('[data-rr-save]').disabled=false;updateLabels();
    }
  }
+ // Update Amount colors immediately as a user types an expense amount.
+ // Excludes the Budget field and does not write to the database.
+ form.addEventListener('input',e=>{
+   if(e.target?.closest?.('.nd-expense-amount'))updateLabels();
+ });
+ form.addEventListener('change',e=>{
+   if(e.target?.closest?.('.nd-expense-amount'))updateLabels();
+ });
  form.addEventListener('click',e=>{
    const btn=e.target.closest('[data-report-receipt-upload],[data-report-receipt-view]');if(!btn)return;
    e.preventDefault();e.stopPropagation();
@@ -34467,11 +34531,13 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.body.dataset.ndVisiblePage==='settlement')void refresh();});
  let queued=false;
  new MutationObserver(events=>{
-   if(!events.some(e=>[...e.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('.settlement-expense-row,.nd-expense-payment')||n.querySelector?.('.settlement-expense-row,.nd-expense-payment')))))return;
+   if(!events.some(e=>[...e.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('.settlement-expense-row,.nd-expense-payment,.nd-expense-amount')||n.querySelector?.('.settlement-expense-row,.nd-expense-payment,.nd-expense-amount')))))return;
    if(!queued){queued=true;queueMicrotask(()=>{queued=false;updateLabels();});}
  }).observe(form,{childList:true,subtree:true});
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate);else activate();
  window.ndReportExpenseReceiptRefresh=refresh;
+ // Called after the current month's inputs have been populated programmatically.
+ window.ndReportExpenseReceiptPaint=updateLabels;
 })();
 
 </script>
