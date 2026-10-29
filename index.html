@@ -29,7 +29,7 @@ window.ndStaffSelectableForNewEntry=function(employee){
 (function(){
 'use strict';
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let employees=[],rows=[],actor='',request=null,loading=0,historyToken=0,busy=false,loadError='',pendingPayload=null;
+let employees=[],rows=[],actor='',request=null,loading=0,historyToken=0,busy=false,loadError='',pendingPayload=null,representativeNameReady=false;
 const db=()=>typeof salaryDb!=='undefined'?salaryDb:null;
 const myDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const uuid=()=>{if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const h=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);};
@@ -54,14 +54,78 @@ h.querySelector('[data-sa-rows]').onclick=async e=>{const b=e.target.closest('[d
  setupSigning();
 }
 function renderAdvanceCashPreview(){const el=$('ndSimpleAdvanceCashPreview');if(!el)return;const raw=$('ndSimpleAdvanceAmount').value,amount=Number(raw);if(!raw||!Number.isFinite(amount)||amount<=0){el.textContent='Effective from 26 Oct 2026. E.g. RM600 payroll deduction = RM500 cash paid out + RM100 (20% added).';return;}const cents=Math.round(amount*100),baseCents=Math.round(cents/1.2),addedCents=cents-baseCents,rm=n=>'RM '+(n/100).toFixed(2);el.textContent='Cash paid out: '+rm(baseCents)+' · 20% added: '+rm(addedCents)+' · Payroll deduction: '+rm(cents);}
-function renderEmployees(){const branch=$('ndSimpleAdvanceBranch').value,s=$('ndSimpleAdvanceEmployee'),items=employees.filter(e=>e.outlet===branch);s.innerHTML='<option value="">Select employee</option>'+items.map(e=>'<option value="'+Number(e.id)+'">'+esc(e.name)+'</option>').join('');s.disabled=!branch||!items.length;$('ndSimpleAdvanceConfirm').disabled=busy||!actor||!items.length;message(branch&&!items.length?'No current employees available for this branch.':'');}
-async function loadEmployees(){const seq=++loading;loadError='';$('ndSimpleAdvanceConfirm').disabled=true;$('ndSimpleAdvanceRetry').hidden=true;message('Loading employees…');try{const client=db();if(!client)throw Error('Please sign in.');const auth=await wait(client.auth.getUser(),'Account');if(auth.error||!auth.data?.user?.email)throw Error('Please sign in.');if(seq!==loading)return;actor=auth.data.user.email.toLowerCase();$('ndSimpleAdvanceEmail').value=await wait(window.ndLoadCurrentAccountName(client),'Account full name');
-const result=await wait(client.from('employees').select('*').order('name',{ascending:true}).limit(5000),'Employee list');if(seq!==loading)return;if(result.error)throw result.error;employees=(result.data||[]).filter(e=>Number(e.id)>0&&e.name&&e.outlet&&window.ndStaffSelectableForNewEntry(e));
-const branches=[...new Set(employees.map(e=>e.outlet))].sort();$('ndSimpleAdvanceBranch').innerHTML='<option value="">Select branch</option>'+branches.map(b=>'<option>'+esc(b)+'</option>').join('');renderEmployees();if(!branches.length)message('No current employees available.');
-}catch(error){if(seq===loading){loadError=error.message;message('Unable to load employees: '+error.message);$('ndSimpleAdvanceRetry').hidden=false;}}}
+function renderEmployees(){
+ const branch=$('ndSimpleAdvanceBranch').value,s=$('ndSimpleAdvanceEmployee');
+ const items=employees.filter(e=>e.outlet===branch);
+ s.innerHTML='<option value="">Select employee</option>'+items.map(e=>'<option value="'+Number(e.id)+'">'+esc(e.name)+'</option>').join('');
+ s.disabled=!branch||!items.length;
+ $('ndSimpleAdvanceConfirm').disabled=busy||!actor||!representativeNameReady||!items.length;
+ if(branch&&!items.length)message('No active employees available in this branch. Check staff access and employment status.');
+ else if(!representativeNameReady&&loadError)message('Person in Charge cannot be verified: '+loadError);
+ else if(representativeNameReady)message('');
+}
+async function loadEmployees(){
+ const seq=++loading,branchSelect=$('ndSimpleAdvanceBranch'),employeeSelect=$('ndSimpleAdvanceEmployee');
+ const previousBranch=branchSelect.value;
+ loadError='';representativeNameReady=false;
+ $('ndSimpleAdvanceConfirm').disabled=true;
+ $('ndSimpleAdvanceRetry').hidden=true;
+ branchSelect.innerHTML='<option value="">Loading branches…</option>';
+ employeeSelect.innerHTML='<option value="">Select branch first</option>';
+ employeeSelect.disabled=true;
+ message('Loading branch and employee list…');
+ try{
+  const client=db();if(!client)throw Error('Salary database is not ready. Please sign in again.');
+  const auth=await wait(client.auth.getUser(),'Account');
+  if(auth.error||!auth.data?.user?.email)throw auth.error||Error('Please sign in again.');
+  if(seq!==loading)return;
+  actor=String(auth.data.user.email).trim().toLowerCase();
+  // Do not block the branch/employee list on the representative-name lookup.
+  // A missing staff full name must not leave the branch selector on Loading.
+  const result=await wait(client.from('employees').select('*').order('name',{ascending:true}).limit(5000),'Employee list');
+  if(seq!==loading)return;
+  if(result.error)throw result.error;
+  employees=(result.data||[]).filter(e=>Number(e.id)>0&&e.name&&e.outlet&&window.ndStaffSelectableForNewEntry(e));
+  const branches=[...new Set(employees.map(e=>String(e.outlet)))].sort();
+  branchSelect.innerHTML='<option value="">Select branch</option>'+branches.map(b=>'<option value="'+esc(b)+'">'+esc(b)+'</option>').join('');
+  if(previousBranch&&branches.includes(previousBranch))branchSelect.value=previousBranch;
+  renderEmployees();
+  if(!branches.length){
+   message('No active employees were returned. Your account may not have permission to read the staff list. Ask UMO to check access.');
+   $('ndSimpleAdvanceRetry').hidden=false;
+   return;
+  }
+  message('Loading Person in Charge name…');
+  try{
+   const fullName=await wait(window.ndLoadCurrentAccountName(client),'Account full name');
+   if(seq!==loading)return;
+   if(!String(fullName||'').trim()||String(fullName).includes('@'))throw Error('Full name is missing.');
+   $('ndSimpleAdvanceEmail').value=fullName;
+   representativeNameReady=true;
+   loadError='';
+   renderEmployees();
+  }catch(nameError){
+   if(seq!==loading)return;
+   loadError=String(nameError?.message||nameError);
+   $('ndSimpleAdvanceEmail').value='';
+   $('ndSimpleAdvanceConfirm').disabled=true;
+   message('Person in Charge name unavailable: '+loadError+' Check Full Name in Salary Duty Access / Staff, install the Duty Full Name SQL, then select Reload Employees.');
+   $('ndSimpleAdvanceRetry').hidden=false;
+  }
+ }catch(error){
+  if(seq!==loading)return;
+  loadError=String(error?.message||error);
+  branchSelect.innerHTML='<option value="">Unable to load branches</option>';
+  employeeSelect.innerHTML='<option value="">Unable to load employees</option>';
+  employeeSelect.disabled=true;
+  $('ndSimpleAdvanceConfirm').disabled=true;
+  message('Unable to load branch / employees: '+loadError);
+  $('ndSimpleAdvanceRetry').hidden=false;
+ }
+}
 function setBusy(v){busy=v;for(const id of ['ndSimpleAdvanceClose','ndSimpleAdvanceBranch','ndSimpleAdvanceEmployee','ndSimpleAdvanceAmount','ndSimpleAdvanceHistoryOpen','ndSimpleAdvanceConfirm','ndSimpleAdvanceBack','ndSimpleAdvanceClearSignature','ndSimpleAdvanceSignSave'])$(id).disabled=v;if(!v){$('ndSimpleAdvanceConfirm').disabled=!!loadError||!actor;renderEmployeesPreserve();for(const id of ['ndSimpleAdvanceBack','ndSimpleAdvanceClearSignature'])$(id).disabled=!!pendingPayload;}}
-function renderEmployeesPreserve(){const branch=$('ndSimpleAdvanceBranch').value;$('ndSimpleAdvanceEmployee').disabled=!branch;$('ndSimpleAdvanceConfirm').disabled=!!loadError||!actor||!branch;}
-async function open(){mount();const d=$('ndSimpleAdvance');if(d.hasAttribute('open'))return;if(busy)return;if(pendingPayload){showDialog(d);reviewMode(true);$('ndSimpleAdvanceSigningStatus').textContent='Check History before retrying an unconfirmed submission.';return;}draft=null;employeeSigned=false;reviewMode(false);request=null;actor='';employees=[];$('ndSimpleAdvanceAmount').value='';renderAdvanceCashPreview();$('ndSimpleAdvanceEmail').value='';$('ndSimpleAdvanceBranch').innerHTML='<option value="">Loading branches…</option>';$('ndSimpleAdvanceEmployee').innerHTML='<option value="">Select branch first</option>';$('ndSimpleAdvanceEmployee').disabled=true;showDialog(d);void loadEmployees();}
+function renderEmployeesPreserve(){const branch=$('ndSimpleAdvanceBranch').value;const hasEmployees=employees.some(e=>e.outlet===branch);$('ndSimpleAdvanceEmployee').disabled=!branch||!hasEmployees;$('ndSimpleAdvanceConfirm').disabled=!!loadError||!representativeNameReady||!actor||!branch||!hasEmployees;}
+async function open(){mount();const d=$('ndSimpleAdvance');if(d.hasAttribute('open'))return;if(busy)return;if(pendingPayload){showDialog(d);reviewMode(true);$('ndSimpleAdvanceSigningStatus').textContent='Check History before retrying an unconfirmed submission.';return;}draft=null;employeeSigned=false;reviewMode(false);request=null;actor='';employees=[];representativeNameReady=false;loadError='';$('ndSimpleAdvanceAmount').value='';renderAdvanceCashPreview();$('ndSimpleAdvanceEmail').value='';$('ndSimpleAdvanceBranch').innerHTML='<option value="">Loading branches…</option>';$('ndSimpleAdvanceEmployee').innerHTML='<option value="">Select branch first</option>';$('ndSimpleAdvanceEmployee').disabled=true;showDialog(d);void loadEmployees();}
 const advanceConsent='I acknowledge receipt of the salary advance specified above. I request that the advance be applied against my salary for the same calendar month as the advance date, subject to applicable Malaysian employment laws and statutory deduction limits. I understand that the deduction will be recorded on my payslip.';
 let draft=null,employeeSigned=false,pen=false,lastPoint=null;
 function reviewMode(on){$('ndSimpleAdvanceForm').hidden=on;$('ndSimpleAdvanceReview').hidden=!on;$('ndSimpleAdvance').classList.toggle('nd-sa-reviewing',on);$('ndSimpleAdvance').scrollTop=0;}
@@ -5695,7 +5759,7 @@ window.ndEmployeeFullName = function(employee){
 // Cash ledger starts from zero on 1 September 2026. Historical receipts remain intact.
   const ND_CASH_LEDGER_START='2026-09-01';
   const ND_CASH_ADVANCE_START='2026-10-26'; // Exclude advances dated before 26 Oct 2026.
-  let ndCashAdvanceEntries=[],ndCashAdvanceReady=false,ndCashAdvanceError='';
+  let ndCashAdvanceEntries=[],ndCashAdvanceReady=false,ndCashAdvanceError='',ndCashRemittanceError='';
   function ndCashAdvanceTotal(branch,date,inclusive=true){
     if(!ndCashAdvanceReady)return 0;
     const key=String(branch||'').trim(),cutoff=String(date||'');
@@ -5950,7 +6014,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
         </div>
         <div class="salary-card nd-unverified-card">
           <div class="helper">Total Cash Remaining for Withdrawal</div>
-          <strong>${money(withdrawalRemaining)}</strong>
+          <strong>${!ndCashAdvanceReady||ndCashRemittanceError?'Unavailable':money(withdrawalRemaining)}</strong>
           <div class="helper" style="margin-top:5px">${cashBranchBreakdown.join(" &nbsp; · &nbsp; ")}</div>
         </div>
         <div class="salary-card nd-unverified-card">
@@ -6864,14 +6928,19 @@ return `<div class="history-date-card">
     allRows=dailyRes.data||[];
     if(remittanceRes.error){
       console.warn("cash_remittances unavailable:",remittanceRes.error.message);
+      ndCashRemittanceError=String(remittanceRes.error.message||remittanceRes.error);
       cashRemittances=[];
-      renderMyCashRemittanceHistory(remittanceRes.error.message);
+      renderMyCashRemittanceHistory(ndCashRemittanceError);
     }else{
+      ndCashRemittanceError='';
       cashRemittances=remittanceRes.data||[];
       await loadSelectedCashTransferHistory();
     }
     renderDailyBranchButtons();
-    $("syncState").textContent="云端已同步 ✓";$("syncState").className="ok";return true;
+    const cashProblems=[ndCashAdvanceError&&('Salary Advance: '+ndCashAdvanceError),ndCashRemittanceError&&('Cash Remittance: '+ndCashRemittanceError)].filter(Boolean);
+    $("syncState").textContent=cashProblems.length?'Partial sync - Cash Balance unavailable: '+cashProblems.join(' | '):'云端已同步 ✓';
+    $("syncState").className=cashProblems.length?'bad':'ok';
+    return true;
   }
 
   let ndAdvanceLedgerReloading=false;
@@ -8387,9 +8456,9 @@ return `<div class="history-date-card">
     const savedWithdrawal=existing ? Number(existing.cash_withdrawal||0) : 0;
     balance+=(num("cash")-savedCash)-(ndDailyWithdrawalTotal()-savedWithdrawal);
 
-    if(!ndCashAdvanceReady){
+    if(!ndCashAdvanceReady||ndCashRemittanceError){
       el.textContent='Unavailable';el.style.color='';if($('ndTodayCashNegativeHint'))$('ndTodayCashNegativeHint').style.display='none';
-      el.title=ndCashAdvanceError?'Salary Advance Cash SQL required: '+ndCashAdvanceError:'Loading salary advance deductions';
+      el.title=ndCashRemittanceError?'Cash Remittance data unavailable: '+ndCashRemittanceError:(ndCashAdvanceError?'Salary Advance Cash unavailable: '+ndCashAdvanceError:'Loading salary advance deductions');
       ndRenderCashAdvanceHistory();return;
     }
     // An advance can be paid before today's sales are posted. A negative cash
@@ -8655,7 +8724,7 @@ return `<div class="history-date-card">
     const saveOutletBtn=$("saveDailyOutletBtn"); if(saveOutletBtn) saveOutletBtn.onclick=saveDailyOutlet;
     const dailyOutletInput=$("dailyOutletName"); if(dailyOutletInput) dailyOutletInput.onkeydown=e=>{if(e.key==="Enter")saveDailyOutlet();};
 
-    const hb=$("historyRecordsBtn"); if(hb) hb.onclick=async()=>{ await refreshDailyHistoryPermission(); if(!canViewDailyHistory){alert("History access is not enabled for this account.");return;} await fetchRows(); if(isSystemAdmin) await repairAllHistoricalCarryForwardBalances({silent:true}); if($("historyMonth")) $("historyMonth").value=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7)); renderCombinedHistory(); $("historyModal").classList.add("open"); };
+    const hb=$("historyRecordsBtn"); if(hb) hb.onclick=async()=>{ await refreshDailyHistoryPermission(); if(!canViewDailyHistory){alert("History access is not enabled for this account.");return;} await fetchRows(); /* Historical ledger remains read-only during navigation. */ if($("historyMonth")) $("historyMonth").value=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7)); renderCombinedHistory(); $("historyModal").classList.add("open"); };
     const hc=$("closeHistoryModal"); if(hc) hc.onclick=()=>$("historyModal").classList.remove("open");
     const hm=$("historyMonth"); if(hm) hm.onchange=renderCombinedHistory;
 
@@ -8691,7 +8760,7 @@ return `<div class="history-date-card">
     if(phb) phb.onclick=async()=>{
       if(!isSystemAdmin){alert("Admin only.");return;}
       await fetchRows();
-      try{await cleanupExpiredPettyReceipts();}catch(e){console.warn("Receipt cleanup failed:",e);}
+      /* Receipt history is read-only; cleanup requires a separate explicit action. */
       const month=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7));
       if($("pettyHistoryMonth")) $("pettyHistoryMonth").value=month;
       pettyHistoryBranch=currentBranch;
@@ -8710,16 +8779,8 @@ return `<div class="history-date-card">
     const haa=$("addHistoryAccessBtn"); if(haa) haa.onclick=async()=>{ if(!isSystemAdmin)return; const email=$("historyAccessEmail").value.trim().toLowerCase(); if(!email)return; const {error}=await db.from("daily_history_access").upsert({email},{onConflict:"email"}); $("historyAccessMsg").textContent=error?error.message:"Added ✓"; if(!error){$("historyAccessEmail").value="";await renderHistoryAccessManager();} };
     if(canViewDailySettlement){
       if(await fetchRows()){
-        if(isSystemAdmin){
-          try{
-            const repairKey="nd_carry_repair_v20261005_same_formula_v4";
-            if(!sessionStorage.getItem(repairKey)){
-              await repairAllHistoricalCarryForwardBalances({silent:true});
-              sessionStorage.setItem(repairKey,"1");
-              try{await cleanupExpiredPettyReceipts();}catch(e){console.warn("Receipt cleanup failed:",e);}
-            }
-          }catch(e){ console.warn("Historical carry-forward check failed:",e); }
-        }
+        // Avoid recalculating and overwriting historical records at login.
+        // The current cash figures are derived from the source ledger read-only.
         const d=getActiveDailyDate();
         $("settlementDate").value=d;
         $("reviewMonth").value=d.slice(0,7);
@@ -9101,17 +9162,17 @@ $("dailyOrderDoneBtn")?.addEventListener("click",()=>saveDailyOrderRecord(true))
 </div>
 <div class="salary-card" style="margin-top:14px">
 <div class="outlet-title">
-<strong>Expense History</strong><span class="branch-chip">Petty Cash receipts auto-import</span>
+<strong>Expense History</strong><span class="branch-chip">Petty Cash + Monthly Report receipts auto-import</span>
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
 <input id="aiReceiptHistoryMonth" style="width:auto" type="month"/>
 <button class="btn" id="aiReceiptExportCsvBtn" type="button">Export CSV</button>
 <select id="aiReceiptPdfBranch" aria-label="Monthly PDF branch" style="width:auto"><option value="">Select PDF Branch</option><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option></select>
-<button class="btn" id="aiReceiptMonthlyPdfBtn" type="button">Monthly Receipts PDF</button>
+<button class="btn" id="aiReceiptMonthlyPdfBtn" type="button">Export Combined Monthly Receipts PDF</button>
 <a class="btn" id="aiReceiptMonthlyPdfDownload" hidden>Download PDF</a>
 <span class="helper" id="aiReceiptMonthlyPdfState" role="status" style="flex-basis:100%"></span>
 </div>
 </div>
-<div class="ai-receipt-kpis" style="margin-top:12px">
+<p class="helper" style="margin:10px 0">Monthly Report uploads are supporting receipts only. They are included in the PDF export, but excluded from duplicate expense totals.</p><div class="ai-receipt-kpis" style="margin-top:12px">
 <div class="ai-receipt-kpi"><span class="helper">Records</span><strong id="aiReceiptKpiCount">0</strong></div>
 <div class="ai-receipt-kpi"><span class="helper">Subtotal</span><strong id="aiReceiptKpiSubtotal">RM 0.00</strong></div>
 <div class="ai-receipt-kpi"><span class="helper">SST / Tax</span><strong id="aiReceiptKpiSst">RM 0.00</strong></div>
@@ -9845,7 +9906,7 @@ document.getElementById('ndCashPettyRefresh')?.addEventListener('click',ndRender
 <div>Expense</div>
 <div>Amount</div>
 <div>Payment Details</div>
-<div>Payment</div>
+<div>Upload Receipt</div>
 </div>
 <div class="settlement-expense-row" data-expense-payment-key="rent">
 <div style="display:flex;align-items:center;gap:6px"><strong id="settlementLabel_rent">Rent</strong><button class="mini" data-expense-name-edit="rent" type="button">✎</button></div>
@@ -24819,7 +24880,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
 
     currentRows=data||[];
     const rows=currentRows;
-    const sum=(k)=>rows.reduce((s,r)=>s+Number(r[k]||0),0);
+    const sum=(k)=>rows.filter(r=>r.source_type!=="report_expense").reduce((s,r)=>s+Number(r[k]||0),0);
     $("aiReceiptKpiCount").textContent=String(rows.length);
     $("aiReceiptKpiSubtotal").textContent=money(sum("subtotal"));
     $("aiReceiptKpiSst").textContent=money(sum("sst_amount"));
@@ -24835,10 +24896,12 @@ Bed Fee: Amlee / + merchant / database memory checked.
         <th>Subtotal</th><th>SST / Tax</th><th>Total</th><th>Payment</th><th>Paid By / Claimant</th><th>Claim Status</th><th>Report</th><th>Receipt</th><th></th>
       </tr></thead>
       <tbody>${rows.map(r=>`<tr>
-        <td>${esc(r.receipt_date||"")}</td>
+        <td>${r.source_type==="report_expense"?esc(String(r.receipt_date||"").slice(0,7))+" (Report)"+(r.payment_date?`<div class="helper">Paid: ${esc(r.payment_date)}</div>`:""):esc(r.receipt_date||"")}</td>
         <td>${esc(r.branch||"")}</td>
         <td>${r.source_type==="petty_cash"
           ? '<span class="receipt-status-pill synced">Petty Cash</span>'
+          :r.source_type==="report_expense"
+          ? '<span class="receipt-status-pill synced">Monthly Report</span>'
           : '<span class="receipt-status-pill">Receipt Scan</span>'}</td>
         <td><strong>${esc(r.merchant||"")}</strong></td>
         <td>${esc(r.invoice_no||"—")}</td>
@@ -24849,10 +24912,10 @@ Bed Fee: Amlee / + merchant / database memory checked.
         <td><span class="receipt-status-pill ${r.payment_status==="paid"?"paid":"unpaid"}">${r.payment_status==="paid"?"Paid ✓":"Not Paid"}</span></td>
         <td>${esc(r.paid_by_name||"—")}</td>
         <td><span class="receipt-status-pill ${String(r.claim_status||"")==="reimbursed"?"paid":String(r.claim_status||"")==="rejected"?"error":["pending","approved"].includes(String(r.claim_status||""))?"unpaid":"synced"}">${esc(({no_claim:"No Claim",pending:"Pending",approved:"Approved",reimbursed:"Reimbursed ✓",rejected:"Rejected"})[r.claim_status]||"No Claim")}</span>${r.reimbursement_date?`<div class="helper">${esc(r.reimbursement_date)}</div>`:""}</td>
-        <td><span class="receipt-status-pill ${r.report_synced?"synced":"unpaid"}">${r.report_synced?"Synced ✓":"Not Synced"}</span></td>
+        <td><span class="receipt-status-pill ${r.source_type==="report_expense"||r.report_synced?"synced":"unpaid"}">${r.source_type==="report_expense"?"Already in Report":r.report_synced?"Synced ✓":"Not Synced"}</span></td>
         <td>${r.receipt_file?.path?`<button class="btn" type="button" data-receipt-view="${r.id}">View</button>`:"—"}</td>
         <td style="display:flex;gap:6px">
-          <button class="btn" type="button" data-receipt-edit="${r.id}">Edit</button>
+          ${r.source_type==="report_expense"?"":`<button class="btn" type="button" data-receipt-edit="${r.id}">Edit</button>`}
           <button class="btn staff-delete-btn" type="button" data-receipt-delete="${r.id}">Delete</button>
         </td>
       </tr>`).join("")}</tbody>
@@ -24874,6 +24937,8 @@ Bed Fee: Amlee / + merchant / database memory checked.
 
     root.querySelectorAll("[data-receipt-delete]").forEach(btn=>{
       btn.onclick=async()=>{
+        const sourceRow=rows.find(r=>Number(r.id)===Number(btn.dataset.receiptDelete));
+        if(sourceRow?.source_type==="petty_cash"){alert("This receipt is linked to the original Petty Cash record. Manage it in Daily Settlement to preserve the source document.");return;}
         if(!confirm("Delete this receipt record?")) return;
         const row=rows.find(r=>Number(r.id)===Number(btn.dataset.receiptDelete));
         if(row?.report_synced) {
@@ -25007,7 +25072,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     const header=["Date","Branch","Source","Merchant","Invoice No.","Category","Subtotal","SST / Tax","Total","Receipt Payment","Payment Method","Paid By / Claimant","Claim Status","Reimbursement Date","Reimbursement Method","Claim Reference","Report Synced","Notes"];
     const lines=[header.map(escCsv).join(",")];
     rows.forEach(r=>lines.push([
-      r.receipt_date,r.branch,r.source_type==="petty_cash"?"Petty Cash":"Receipt Scan",r.merchant,r.invoice_no,r.category,
+      r.receipt_date,r.branch,r.source_type==="petty_cash"?"Petty Cash":r.source_type==="report_expense"?"Monthly Report":"Receipt Scan",r.merchant,r.invoice_no,r.category,
       Number(r.subtotal||0).toFixed(2),Number(r.sst_amount||0).toFixed(2),Number(r.total_amount||0).toFixed(2),
       r.payment_status,r.payment_method,r.paid_by_name,r.claim_status||"no_claim",r.reimbursement_date,r.reimbursement_method,r.claim_reference,
       r.report_synced?"Yes":"No",r.notes
@@ -25066,13 +25131,13 @@ Bed Fee: Amlee / + merchant / database memory checked.
     function text(page,value,x,y,size=11,strong=false){page.drawText(ascii(value),{x,y,size,font:strong?bold:font,color:dark});}
     let summary;
     function summaryPage(){const page=pdf.addPage([595.28,841.89]);text(page,"NATURE'S DAO",32,805,19,true);text(page,(options.card?'Card Settlement Receipts | ':'')+branch+' | '+ym,32,779,options.card?11:13,true);text(page,'Includes records available to the signed-in account.',32,759,10);return page;}
-    summary=summaryPage();text(summary,(options.card?'Card receipts: ':'Expense records: ')+records.length+' | Recorded total: '+money(records.reduce((n,r)=>n+Number(r.total_amount||0),0)),32,735,11,true);
+    summary=summaryPage();text(summary,(options.card?'Card receipts: ':'Attached records: ')+records.length+(options.card?' | Recorded total: '+money(records.reduce((n,r)=>n+Number(r.total_amount||0),0)):' | Evidence only - do not sum as expenses'),32,735,11,true);
     text(summary,'No.   Date          Branch                        Amount / Source',32,710,10,true);let y=689;
     records.forEach((r,i)=>{if(y<48){summary=summaryPage();y=725;}text(summary,String(i+1).padStart(3,'0')+'   '+r.receipt_date+'   '+String(r.branch||'-').slice(0,24).padEnd(24,' ')+'   '+money(r.total_amount),32,y,9);y-=15;});
     const pageCache=new Map();
     for(let i=0;i<records.length;i++){
       const r=records[i],receipt=r.receipt_file;progress?.('Preparing receipt '+(i+1)+' / '+records.length+'...');
-      const info=()=>{const page=pdf.addPage([595.28,841.89]);text(page,'Receipt '+(i+1)+' | '+r.receipt_date+' | '+String(r.branch||'-'),26,813,11,true);text(page,'Amount: '+money(r.total_amount)+' | '+(r.source_type==='card_settlement'?'Card Settlement | '+r.verification:r.source_type==='petty_cash'?'Petty Cash':'Receipt Scan'),26,793,11);return page;};
+      const info=()=>{const page=pdf.addPage([595.28,841.89]);text(page,'Receipt '+(i+1)+' | '+r.receipt_date+' | '+String(r.branch||'-'),26,813,11,true);text(page,'Amount: '+money(r.total_amount)+' | '+(r.source_type==='card_settlement'?'Card Settlement | '+r.verification:r.source_type==='petty_cash'?'Petty Cash':r.source_type==='report_expense'?'Monthly Report - '+String(r.merchant||'').slice(0,38):'Receipt Scan'),26,793,11);return page;};
       try{
         if(!receipt?.path)throw Error('No receipt attached.');
         const key=receipt.path;
@@ -30914,9 +30979,9 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <script id="nd-duty-directory-merge-v2">
 (function(){
  const initial=[
-  {staff_name:'Sam',email:'samchin6006@gmail.com'},
-  {staff_name:'Wendy',email:'yokewong0327@gmail.com'},
-  {staff_name:'Billy',email:'kwongweicheng6608@gmail.com'}
+  {staff_name:'Sam',full_name:'CHIN HEN SAM',email:'samchin6006@gmail.com'},
+  {staff_name:'Wendy',full_name:'WONG PUI YOKE',email:'yokewong0327@gmail.com'},
+  {staff_name:'Billy',full_name:'kwong wei cheng',email:'kwongweicheng6608@gmail.com'}
  ];
  window.ndDutyStaffDirectory=initial.slice();
  window.ndDutyStaffNames=initial.map(x=>x.staff_name);
@@ -30929,7 +30994,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
    const directory=new Map(initial.map(x=>[x.email.toLowerCase(),x]));
    for(const r of records||[]){
      const email=String(r.email||'').trim().toLowerCase(),nickname=String(r.staff_name||'').trim();
-     if(email&&nickname)directory.set(email,{email,staff_name:nickname});
+     if(email&&nickname){const known=directory.get(email);directory.set(email,{email,staff_name:nickname,full_name:String(r.full_name||known?.full_name||'').trim()});}
    }
    window.ndDutyStaffDirectory=[...directory.values()];
    window.ndDutyStaffNames=[...new Set(window.ndDutyStaffDirectory.map(x=>x.staff_name))];
@@ -30938,10 +31003,19 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  window.ndLoadDutyDirectory=function(){
    if(loading)return loading;
    if(typeof salaryDb==='undefined'||!salaryDb)return Promise.resolve(window.ndDutyStaffDirectory);
-   loading=salaryDb.rpc('nd_salary_duty_admin_list').then(({data,error})=>{
-     if(!error)window.ndMergeDutyDirectory(data);
+   loading=(async()=>{
+     const primary=await salaryDb.rpc('nd_salary_duty_admin_list_named');
+     if(!primary.error){window.ndMergeDutyDirectory(primary.data||[]);return window.ndDutyStaffDirectory;}
+     // Backward compatibility before the Salary Duty Full Name SQL is installed.
+     if(/PGRST202|schema cache|Could not find the function/i.test(String(primary.error?.message||''))){
+       const fallback=await salaryDb.rpc('nd_salary_duty_admin_list');
+       if(!fallback.error){window.ndMergeDutyDirectory(fallback.data||[]);return window.ndDutyStaffDirectory;}
+       console.warn('Salary Duty list unavailable:',fallback.error.message);
+     }else if(!/permission|authorized|access|admin|role/i.test(String(primary.error?.message||''))){
+       console.warn('Salary Duty list unavailable:',primary.error.message);
+     }
      return window.ndDutyStaffDirectory;
-   }).catch(()=>window.ndDutyStaffDirectory).finally(()=>{loading=null;});
+   })().catch(error=>{console.warn('Salary Duty directory failed:',error);return window.ndDutyStaffDirectory;}).finally(()=>{loading=null;});
    return loading;
  };
 })();
@@ -30953,13 +31027,20 @@ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',ye
 window.ndDutyNicknamesByDay=window.ndDutyNicknamesByDay||{};
 async function listDuty(){
  const d=document.getElementById('ndDutyList'); if(!d)return;
- const {data,error}=await salaryDb.rpc('nd_salary_duty_admin_list');
- if(error){d.textContent='Cannot load: '+error.message;return;}
+ d.textContent='Loading duty assignments…';delete d.dataset.ndUpgradeNeeded;
+ let result=await salaryDb.rpc('nd_salary_duty_admin_list_named');
+ if(result.error && /PGRST202|schema cache|Could not find the function/i.test(String(result.error.message||''))){
+   result=await salaryDb.rpc('nd_salary_duty_admin_list');
+   if(!result.error)d.dataset.ndUpgradeNeeded='1';
+ }
+ const {data,error}=result;
+ if(error){d.textContent='Cannot load duty assignments: '+error.message+' · Check Supabase permissions and Salary Duty Full Name SQL.';return;}
+ if(d.dataset.ndUpgradeNeeded==='1'){d.textContent='Salary Duty Full Name SQL is required to save full names. Displaying legacy assignments…';}
  window.ndMergeDutyDirectory(data||[]);
  window.ndDutyNicknamesByDay={};
  for(const r of data||[]){const k=String(r.outlet)+'|'+String(r.duty_date).slice(0,10);(window.ndDutyNicknamesByDay[k]??=[]).push(String(r.staff_name||'').trim());}
  if(typeof renderRoster==='function')renderRoster();
- d.innerHTML=(data||[]).map(r=>`<div class="nd-duty-line"><span><b>${esc(r.staff_name)}</b> · ${esc(r.email)}<br>${esc(r.outlet)} · ${esc(r.duty_date)}</span><button class="btn" data-duty-remove="${Number(r.id)}">Remove</button></div>`).join('')||'No salary duty assignments';
+ d.innerHTML=(d.dataset.ndUpgradeNeeded==='1'?'<p role="status" style="color:#a12d22">Install Salary Duty Full Name SQL to enable Full Name saving.</p>':'')+(data||[]).map(r=>`<div class="nd-duty-line"><span><b>${esc(r.staff_name)}</b> · ${esc(r.full_name||'Full Name not set')}<br>${esc(r.email)}<br>${esc(r.outlet)} · ${esc(r.duty_date)}</span><button class="btn" data-duty-remove="${Number(r.id)}">Remove</button></div>`).join('')||'No salary duty assignments';
  d.querySelectorAll('[data-duty-remove]').forEach(b=>b.onclick=async()=>{
    if(!confirm('Remove salary duty access?'))return;
    const {error}=await salaryDb.rpc('nd_salary_duty_remove',{p_id:Number(b.dataset.dutyRemove)});
@@ -30968,18 +31049,28 @@ async function listDuty(){
 }
 async function openDuty(){
  let m=document.getElementById('ndDutyAdminModal');
- if(!m){m=document.createElement('div');m.id='ndDutyAdminModal';m.innerHTML=`<div class="nd-duty-dialog" role="dialog" aria-modal="true"><h2>Salary Duty Access</h2><p>Assign salary access by the current roster branch and selected date. Staff can rotate between branches.</p><label>Staff Name (Nickname)</label><input id="ndDutyName" type="text" autocomplete="off" placeholder="Enter nickname (e.g. Sam)"><label>Login Email</label><input id="ndDutyEmail" type="email" placeholder="name@example.com"><div class="helper" id="ndDutyBranchInfo"></div><label>Duty Date</label><input id="ndDutyDate" type="date"><div style="display:flex;gap:8px"><button class="btn" id="ndDutySave">+ Add Duty Staff</button><button class="btn" id="ndDutyClose">Close</button></div><p id="ndDutyError" role="alert"></p><h3>Authorized Duty Staff</h3><div id="ndDutyList"></div></div>`;document.body.appendChild(m);m.querySelector('#ndDutyClose').onclick=()=>m.classList.remove('open');m.querySelector('#ndDutySave').onclick=async()=>{
- const name=m.querySelector('#ndDutyName').value.trim(),email=m.querySelector('#ndDutyEmail').value.trim(),outlet=rosterActiveOutlet,date=m.querySelector('#ndDutyDate').value;
- if(!name||!email||!date){m.querySelector('#ndDutyError').textContent='Nickname, email and date required';return;}
- const {error}=await salaryDb.rpc('nd_salary_duty_add',{p_staff_name:name,p_email:email,p_outlet:outlet,p_duty_date:date});
- m.querySelector('#ndDutyError').textContent=error?error.message:'Saved';if(!error)await listDuty();
+ if(!m){m=document.createElement('div');m.id='ndDutyAdminModal';m.innerHTML=`<div class="nd-duty-dialog" role="dialog" aria-modal="true"><h2>Salary Duty Access</h2><p>Assign salary access by the current roster branch and selected date. Staff can rotate between branches.</p><label>Full Name</label><input id="ndDutyFullName" type="text" autocomplete="name" placeholder="Official full name"><label>Nickname</label><input id="ndDutyName" type="text" autocomplete="off" placeholder="Roster nickname (e.g. Sam)"><label>Login Email</label><input id="ndDutyEmail" type="email" placeholder="name@example.com"><div class="helper" id="ndDutyBranchInfo"></div><label>Duty Date</label><input id="ndDutyDate" type="date"><div style="display:flex;gap:8px"><button class="btn" id="ndDutySave">+ Add Duty Staff</button><button class="btn" id="ndDutyClose">Close</button></div><p id="ndDutyError" role="alert"></p><h3>Authorized Duty Staff</h3><div id="ndDutyList"></div></div>`;document.body.appendChild(m);m.querySelector('#ndDutyClose').onclick=()=>m.classList.remove('open');m.querySelector('#ndDutySave').onclick=async()=>{
+ const nickname=m.querySelector('#ndDutyName').value.trim(),fullName=m.querySelector('#ndDutyFullName').value.trim(),email=m.querySelector('#ndDutyEmail').value.trim().toLowerCase(),outlet=rosterActiveOutlet,date=m.querySelector('#ndDutyDate').value;
+ const status=m.querySelector('#ndDutyError'),saveBtn=m.querySelector('#ndDutySave');
+ if(!fullName||!nickname||!email||!date){status.textContent='Full Name, Nickname, Gmail and Duty Date are required.';return;}
+ if(fullName.includes('@')||!/^\S+@gmail\.com$/i.test(email)){status.textContent='Enter the official full name and a valid Gmail address.';return;}
+ if(saveBtn.disabled)return;
+ saveBtn.disabled=true;status.textContent='Saving duty…';
+ try{
+  const {error}=await salaryDb.rpc('nd_salary_duty_add_named',{p_full_name:fullName,p_staff_name:nickname,p_email:email,p_outlet:outlet,p_duty_date:date});
+  if(error)throw error;
+  status.textContent='Saved.';await listDuty();
+ }catch(error){status.textContent='Unable to save duty: '+(error?.message||String(error))+(/schema cache|Could not find the function|PGRST202/i.test(error?.message||'')?' Run the Salary Duty Full Name SQL update.':'');}
+ finally{saveBtn.disabled=false;}
  };}
- const picker=m.querySelector('#ndDutyName');
+ const picker=m.querySelector('#ndDutyName'),fullInput=m.querySelector('#ndDutyFullName');
  m.querySelector('#ndDutyBranchInfo').textContent='Duty branch: '+rosterActiveOutlet+' (current roster tab)';
- picker.value='';
+ picker.value='';fullInput.value='';
  const emailInput=m.querySelector('#ndDutyEmail');
  emailInput.value='';
- picker.oninput=()=>{const hit=(window.ndDutyStaffDirectory||[]).find(x=>x.staff_name.toLowerCase()===picker.value.trim().toLowerCase());if(hit)emailInput.value=hit.email;};
+ const matching=()=>window.ndDutyStaffDirectory||[];
+ picker.oninput=()=>{const hit=matching().find(x=>x.staff_name.toLowerCase()===picker.value.trim().toLowerCase());if(hit){emailInput.value=hit.email;fullInput.value=hit.full_name||'';}};
+ emailInput.oninput=()=>{const hit=matching().find(x=>x.email.toLowerCase()===emailInput.value.trim().toLowerCase());if(hit){picker.value=hit.staff_name;fullInput.value=hit.full_name||'';}};
  m.querySelector('#ndDutyDate').value=today();m.classList.add('open');await listDuty();
 }
 function sync(){
@@ -30987,7 +31078,7 @@ function sync(){
  const admin=(typeof isGlobalAdmin!=='undefined' && !!isGlobalAdmin);
  b.style.display=(document.body.dataset.ndVisiblePage==='roster'&&admin)?'inline-flex':'none';
  b.onclick=openDuty;
- if(b.style.display!=='none'&&!window.ndDutyNicknamesLoaded){window.ndDutyNicknamesLoaded=true;salaryDb.rpc('nd_salary_duty_admin_list').then(({data,error})=>{if(error)return;window.ndDutyNicknamesByDay={};for(const r of data||[]){const k=String(r.outlet)+'|'+String(r.duty_date).slice(0,10);(window.ndDutyNicknamesByDay[k]??=[]).push(String(r.staff_name||'').trim());}if(typeof renderRoster==='function')renderRoster();});}
+ if(b.style.display!=='none'&&!window.ndDutyNicknamesLoaded){window.ndDutyNicknamesLoaded=true;window.ndLoadDutyDirectory().then(()=>{const data=window.ndDutyStaffDirectory||[];window.ndDutyNicknamesByDay={};for(const r of data){const k=String(r.outlet)+'|'+String(r.duty_date).slice(0,10);(window.ndDutyNicknamesByDay[k]??=[]).push(String(r.staff_name||'').trim());}if(typeof renderRoster==='function')renderRoster();});}
 }
 document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});});
 })();
@@ -33128,7 +33219,7 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
 </style>
 <style id="nd-ann-owner-history-style">#ndAnnMode[hidden],#ndAnnList[hidden],#ndAnnTabs[hidden],#ndAnnouncementsPage .nd-ann-buttons[hidden]{display:none!important}#ndAnnMode button{padding:9px 13px}#ndAnnMode .selected{background:#244f3e;color:white}.nd-ann-photo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:14px 0}.nd-ann-photo-grid>div{display:flex;flex-direction:column;align-items:flex-start;gap:6px}.nd-ann-text{white-space:pre-wrap;overflow-wrap:anywhere}</style><style id="nd-interview-steps-style">#ndStaffEntryForm .nd-required>label::after{content:' *';color:#a64b35}#ndStaffEntryForm [data-entry-step-label]{font-size:13px;font-weight:700;color:#355b47;margin-top:12px}#ndStaffEntryForm [data-entry-section="2"]{border-color:#a8c4b0!important}#ndStaffEntryForm [hidden],#ndInterviewDocumentDialog [hidden]{display:none!important}#ndInterviewDocumentDialog[data-interview-step="sign"] [data-doc-signatures]{grid-template-columns:1fr!important;max-width:720px;margin:auto}#ndInterviewDocumentDialog[data-interview-step="sign"] [data-doc-signatures] canvas{height:160px!important;width:100%!important}#ndInterviewDocumentDialog [data-doc-next]{background:#244f3e;color:white}</style><style id="nd-repayment-document-links">#ndHistoryDeductions table{min-width:860px}#ndHistoryDeductions .nd-deduction-files{display:flex;gap:6px;flex-wrap:wrap;min-width:170px}#ndHistoryDeductions .nd-deduction-files button{font-size:12px;white-space:nowrap;padding:7px 10px;min-height:34px}#ndHistoryDeductions td:last-child{white-space:normal!important}#ndFineLetterDialog .nd-warning-document,#ndWarningLetterDialog .nd-warning-document{overflow-x:auto}</style><style>#ndCompanyPolicyCard[hidden]{display:none!important}#ndCompanyPolicyCard .actions{display:flex;gap:8px;flex-wrap:wrap}#ndCompanyPolicyCard h3{margin:8px 0}</style>
 <style id="nd-report-expense-layout-v2">#settlementExpenseForm{display:block!important;width:100%!important;overflow-x:auto!important;padding-bottom:6px!important}
-#settlementExpenseForm .settlement-expense-head,#settlementExpenseForm .settlement-expense-row{display:grid!important;grid-template-columns:minmax(180px,1.5fr) minmax(140px,1fr) 125px 105px!important;grid-template-rows:auto!important;gap:12px!important;align-items:center!important;min-width:760px!important;width:100%!important;max-width:none!important;position:static!important;transform:none!important;box-sizing:border-box!important}
+#settlementExpenseForm .settlement-expense-head,#settlementExpenseForm .settlement-expense-row{display:grid!important;grid-template-columns:minmax(180px,1.5fr) minmax(140px,1fr) 125px 150px!important;grid-template-rows:auto!important;gap:12px!important;align-items:center!important;min-width:820px!important;width:100%!important;max-width:none!important;position:static!important;transform:none!important;box-sizing:border-box!important}
 #settlementExpenseForm .settlement-expense-head{padding:12px!important;background:#edf3ef!important;color:#4d6558!important;font-size:12px!important;font-weight:750!important;margin:0!important;border-radius:10px 10px 0 0!important}
 #settlementExpenseForm .settlement-expense-row{height:auto!important;min-height:62px!important;max-height:none!important;padding:12px!important;border:0!important;border-bottom:1px solid #e0e7e2!important;border-radius:0!important;background:#fff!important;margin:0!important;overflow:visible!important}
 #settlementExpenseForm .nd-expense-cell{display:flex!important;align-items:center!important;gap:6px!important;min-width:0!important;max-width:none!important;height:auto!important;position:static!important;grid-column:auto!important;grid-row:auto!important;white-space:normal!important;padding:0!important;overflow:visible!important}
@@ -33140,7 +33231,7 @@ body[data-nd-visible-page="announcements"] #ndAnnouncementsPage,body[data-nd-vis
 #settlementPage .settlement-project-row{display:grid;grid-template-columns:minmax(140px,1fr) 120px 34px;gap:10px;margin-top:10px}#settlementPage .settlement-project-row input{min-width:0}
 </style>
 <script id="nd-report-expense-layout-v2-script">(()=>{
- const labels=['Expense','Budget','Amount','Payment Details','Payment'];let scheduled=false;
+ const labels=['Expense','Budget','Amount','Payment Details','Upload Receipt'];let scheduled=false;
  function layout(){scheduled=false;const form=document.getElementById('settlementExpenseForm');if(!form)return;
   if(typeof settlementEnsurePaymentControls==='function')settlementEnsurePaymentControls();
   form.querySelectorAll('[data-finance-field]').forEach(input=>{input.type='text';input.inputMode='decimal';input.disabled=false;input.readOnly=false;input.removeAttribute('min');input.removeAttribute('step');input.autocomplete='off';input.setAttribute('aria-label',(input.dataset.financeField||'Expense')+' amount (RM)');});
@@ -34182,6 +34273,208 @@ window.ndExpiryHistory={open,refresh:load};if(document.readyState==='loading')do
 #ndAnnDailyReminderDialog .nd-ann-reminder-open{background:#264e3b;color:white}
 #ndAnnDailyMount{font-weight:700}
 </style>
+<style id="nd-report-linked-receipt-style">
+#settlementExpenseForm [data-payment-paid]{display:none!important}
+#settlementExpenseForm .nd-report-receipt-actions{display:flex;flex-direction:column;gap:6px;width:100%;min-width:0}
+#settlementExpenseForm .nd-report-receipt-actions button{width:100%;white-space:normal;font-size:12px;min-height:40px}
+#settlementExpenseForm .nd-report-receipt-actions small{font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+#ndReportReceiptDialog{box-sizing:border-box;width:min(580px,calc(100vw - 26px));max-height:90dvh;overflow:auto;padding:22px;border:1px solid #cbd9d0;border-radius:18px;background:#fffefb;color:#234435}
+#ndReportReceiptDialog::backdrop{background:#0f2a2166}
+#ndReportReceiptDialog header,#ndReportReceiptDialog footer{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px}
+#ndReportReceiptDialog h2{margin:0;font-size:20px}
+#ndReportReceiptDialog label{margin:14px 0;display:block;font-weight:650}
+#ndReportReceiptDialog input{display:block;width:100%;margin-top:6px;font-size:16px;min-height:42px}
+#ndReportReceiptDialog .helper{font-size:12px;color:#63756a;line-height:1.5}
+#ndRrStatus{min-height:1.4em;color:#9f4035;font-size:13px}
+</style>
+<script id="nd-report-linked-receipts">
+/* Nature's Dao: Monthly Report receipt evidence, linked to Expense History. */
+(()=>{
+ 'use strict';
+ const form=document.getElementById('settlementExpenseForm');
+ if(!form)return;
+ const cache=new Map();
+ let loadToken=0, busy=false, picked=null;
+ const $=id=>document.getElementById(id);
+ const client=()=>window.salaryDb||window.db;
+ const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const amountOf=row=>{
+   const el=row.querySelector('[data-finance-field],#settlementSalary7Input,#settlementSalary14Input,#settlementEpfInput,#settlementSocsoEisInput,#settlementTaxPcbInput,#settlementPettyInput');
+   const value=String(el?.value??'').replace(/[,\s]/g,'');
+   const n=Number(value);return Number.isFinite(n)?Math.max(0,n):0;
+ };
+ const sourceRef=(branch,month,key)=>'monthly_report:'+encodeURIComponent(branch)+':'+month+':'+encodeURIComponent(key);
+ const current=()=>{
+   const branch=typeof settlementCurrentOutlet==='string'?settlementCurrentOutlet:'';
+   const month=typeof settlementCurrentMonth==='function'?settlementCurrentMonth():'';
+   return {branch,month,id:branch+'|'+month};
+ };
+ const labelFor=(row,key)=>{
+   const s=row.querySelector('.nd-expense-name strong')||row.querySelector('strong');
+   return String(s?.textContent||key).trim().slice(0,150);
+ };
+ const categorize=key=>({salary7:'Branch Salary 7th',salary14:'Branch Salary 14th',petty_cash:'Petty Cash Record'})[key]||'Monthly Expense';
+ const statusOf=(row,message,error=false)=>{
+   const el=row.querySelector('[data-report-receipt-status]');if(el){el.textContent=message;el.style.color=error?'#aa4035':'#567267';}
+ };
+ function attachRows(){
+   for(const row of form.querySelectorAll('.settlement-expense-row[data-expense-payment-key]')){
+     const key=row.dataset.expensePaymentKey;
+     const area=row.querySelector('.nd-expense-payment')||row;
+     const paid=row.querySelector('[data-payment-paid]');
+     if(paid){paid.hidden=true;paid.setAttribute('aria-hidden','true');paid.tabIndex=-1;}
+     if(area.querySelector('[data-report-receipt-upload]'))continue;
+     const actions=document.createElement('div');actions.className='nd-report-receipt-actions';
+     actions.innerHTML='<button type="button" class="btn" data-report-receipt-upload="'+safe(key)+'">Upload Receipt</button><button type="button" class="btn" data-report-receipt-view="'+safe(key)+'" hidden>View</button><small data-report-receipt-status aria-live="polite"></small>';
+     area.appendChild(actions);
+   }
+ }
+ function updateLabels(){
+   attachRows();
+   const state=current();
+   for(const row of form.querySelectorAll('[data-expense-payment-key]')){
+     const key=row.dataset.expensePaymentKey,ref=sourceRef(state.branch,state.month,key);
+     const record=cache.get(ref);
+     const upload=row.querySelector('[data-report-receipt-upload]'),view=row.querySelector('[data-report-receipt-view]');
+     if(!upload||!view)continue;
+     upload.textContent=record?.receipt_file?.path?'Replace Receipt':'Upload Receipt';
+     upload.disabled=busy||!state.branch||state.branch==='__TOTAL__'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(state.month);
+     view.hidden=!record?.receipt_file?.path;view.disabled=busy;
+     statusOf(row,record?.receipt_file?.path?'Receipt Uploaded ✓':(cache.has(ref)?'No attachment':''));
+   }
+ }
+ async function refresh(){
+   const state=current();updateLabels();if(!state.branch||state.branch==='__TOTAL__'||!/^\d{4}-\d{2}$/.test(state.month))return;
+   const token=++loadToken;const db=client();if(!db)return;
+   const prefix='monthly_report:'+encodeURIComponent(state.branch)+':'+state.month+':';
+   const refs=[...form.querySelectorAll('.settlement-expense-row[data-expense-payment-key]')].map(row=>sourceRef(state.branch,state.month,row.dataset.expensePaymentKey));
+   if(!refs.length)return;
+   try{
+     const {data,error}=await db.from('ai_receipt_records')
+       .select('id,source_ref,receipt_file,receipt_date,merchant,total_amount')
+       .eq('source_type','report_expense').in('source_ref',refs)
+       .order('id',{ascending:false}).limit(150);
+     if(error)throw error;
+     if(token!==loadToken||current().id!==state.id)return;
+     for(const key of [...cache.keys()])if(key.startsWith(prefix))cache.delete(key);
+     for(const record of data||[])if(!cache.has(record.source_ref))cache.set(record.source_ref,record);
+     updateLabels();
+   }catch(error){
+     if(token===loadToken&&current().id===state.id){
+       console.warn('Monthly receipt lookup:',error);
+       for(const row of form.querySelectorAll('[data-expense-payment-key]'))statusOf(row,'Unable to load receipts',true);
+     }
+   }
+ }
+ let dialog;
+ function mountDialog(){
+   if(dialog)return;
+   dialog=document.createElement('dialog');dialog.id='ndReportReceiptDialog';
+   dialog.innerHTML=`<header><h2>Upload Payment Receipt</h2><button type="button" data-rr-close class="btn">Close</button></header>
+     <p id="ndRrContext"></p>
+     <label>Actual Receipt / Payment Date <input id="ndRrDate" type="date" required></label>
+     <label>Receipt Image / PDF <input id="ndRrFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf" required></label>
+     <p class="helper">Linked to the selected report month, even when the actual payment date is in the following month. No duplicate expense will be added. Salary Payment DONE is not changed.</p>
+     <p id="ndRrStatus" role="status" aria-live="polite"></p>
+     <footer><button type="button" data-rr-save class="btn primary">Save Receipt</button><button type="button" data-rr-cancel class="btn">Cancel</button></footer>`;
+   document.body.appendChild(dialog);
+   const close=()=>{if(!busy&&dialog.open)dialog.close();};
+   dialog.querySelector('[data-rr-close]').onclick=close;
+   dialog.querySelector('[data-rr-cancel]').onclick=close;
+   dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
+   dialog.querySelector('[data-rr-save]').onclick=()=>void save();
+ }
+ function openUpload(row){
+   const state=current(),key=row.dataset.expensePaymentKey;
+   if(!state.branch||state.branch==='__TOTAL__'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(state.month)){
+     alert('Select a single branch and report month first.');return;
+   }
+   mountDialog();picked={...state,key,amount:amountOf(row),label:labelFor(row,key)};
+   $('ndRrContext').textContent=state.branch+' · '+state.month+' · '+picked.label+' · RM '+picked.amount.toFixed(2);
+   const scheduled=row.querySelector('[data-payment-date]')?.value||'';
+   const date=$('ndRrDate');date.removeAttribute('min');date.removeAttribute('max');date.value=/^\d{4}-\d{2}-\d{2}$/.test(scheduled)?scheduled:today();
+   $('ndRrFile').value='';$('ndRrStatus').textContent='';
+   dialog.showModal();
+ }
+ async function openView(row){
+   const state=current(),key=row.dataset.expensePaymentKey,record=cache.get(sourceRef(state.branch,state.month,key));
+   if(!record?.receipt_file?.path)return;
+   const db=client();if(!db){alert('Please sign in.');return;}
+   try{
+     const {data,error}=await window.ndReceiptSignedUrl(db,'petty-receipts',record.receipt_file.path,300);
+     if(error||!data?.signedUrl)throw error||Error('Receipt unavailable');
+     window.ndReceiptPreview(data.signedUrl,{amount:record.total_amount});
+   }catch(err){alert('Unable to open receipt: '+(err.message||err));}
+ }
+ async function save(){
+   if(busy||!picked)return;
+   const selected=$('ndRrFile').files[0],date=$('ndRrDate').value;
+   if(!selected){$('ndRrStatus').textContent='Choose a receipt first.';return;}
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){$('ndRrStatus').textContent='Enter a valid receipt date.';return;}
+   const types=['image/jpeg','image/png','image/webp','application/pdf'];
+   if(!types.includes(selected.type)){$('ndRrStatus').textContent='Only JPG, PNG, WebP or PDF supported.';return;}
+   if(selected.size>20*1024*1024||selected.size===0){$('ndRrStatus').textContent='Receipt must be between 1 byte and 20 MB.';return;}
+   if(current().id!==picked.id){$('ndRrStatus').textContent='Report branch/month changed. Close and reopen the upload.';return;}
+   const db=client();if(!db){$('ndRrStatus').textContent='Please sign in.';return;}
+   busy=true;$('ndRrStatus').textContent='Uploading…';dialog.querySelector('[data-rr-save]').disabled=true;updateLabels();
+   let path='';
+   try{
+     const ref=sourceRef(picked.branch,picked.month,picked.key);
+     // Query the database immediately before saving: avoid duplicate rows after a stale tab refresh.
+     const check=await db.from('ai_receipt_records').select('id,source_ref,receipt_file')
+       .eq('source_type','report_expense').eq('source_ref',ref).order('id',{ascending:false}).limit(1);
+     if(check.error)throw check.error;
+     const old=check.data?.[0]||cache.get(ref);
+     const uid=(typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(36).slice(2);
+     const basename=selected.name.replace(/[^\w.-]/g,'_').slice(0,90)||'receipt';
+     path='monthly-report/'+picked.branch.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'/'+picked.month+'/'+picked.key+'/'+uid+'-'+basename;
+     const {error:uploadError}=await db.storage.from('petty-receipts').upload(path,selected,{upsert:false,contentType:selected.type});
+     if(uploadError)throw uploadError;
+     const file={path,name:selected.name,type:selected.type,size:selected.size,uploaded_at:new Date().toISOString(),uploaded_by:String(window.currentUserEmail||'')};
+     const payload={receipt_date:picked.month+'-01',branch:picked.branch,merchant:picked.label,invoice_no:'',category:'Other',subtotal:picked.amount,sst_amount:0,total_amount:picked.amount,
+       notes:'Report Month '+picked.month+' | Actual Receipt Date '+date+' | '+categorize(picked.key)+' | '+picked.key+' | Supporting receipt only; no extra expense posting',
+       ocr_text:'',ocr_confidence:0,receipt_file:file,payment_status:'paid',payment_date:date,payment_method:'',auto_post_report:'no',paid_by_name:'',claim_status:'no_claim',reimbursement_date:null,reimbursement_method:'',claim_reference:'',
+       report_synced:false,report_field:null,report_synced_at:null,source_type:'report_expense',source_ref:ref};
+     let response;
+     if(old?.id){response=await db.from('ai_receipt_records').update(payload).eq('id',old.id).eq('source_type','report_expense').eq('source_ref',ref).select('id,source_ref,receipt_file,receipt_date,total_amount').single();}
+     else{response=await db.from('ai_receipt_records').insert({...payload,created_by:String(window.currentUserEmail||'')}).select('id,source_ref,receipt_file,receipt_date,total_amount').single();}
+     if(response.error)throw response.error;
+     cache.set(ref,response.data);
+     $('ndRrStatus').textContent='Saved ✓ · Included in Expense History and Monthly Receipts PDF';
+     dialog.close();
+     // No settlement expense amount or salary Payment DONE fields are changed.
+     updateLabels();
+     if(typeof window.ndRefreshReceiptHistory==='function')void Promise.resolve(window.ndRefreshReceiptHistory()).catch(()=>{});
+   }catch(err){
+     // Remove only the new, unreferenced upload after database save failed.
+     if(path)try{await db.storage.from('petty-receipts').remove([path]);}catch(_){}
+     $('ndRrStatus').textContent='Unable to save receipt: '+(err?.message||err);
+   }finally{
+     busy=false;dialog.querySelector('[data-rr-save]').disabled=false;updateLabels();
+   }
+ }
+ form.addEventListener('click',e=>{
+   const btn=e.target.closest('[data-report-receipt-upload],[data-report-receipt-view]');if(!btn)return;
+   e.preventDefault();e.stopPropagation();
+   const row=btn.closest('[data-expense-payment-key]');if(!row)return;
+   if(btn.hasAttribute('data-report-receipt-upload'))openUpload(row);else void openView(row);
+ });
+ const activate=()=>{updateLabels();void refresh();};
+ $('settlementMonth')?.addEventListener('change',()=>queueMicrotask(activate));
+ $('settlementRefreshBtn')?.addEventListener('click',()=>setTimeout(activate,120));
+ document.addEventListener('click',e=>{if(e.target.closest('[data-settlement-branch],#sidebarSettlement'))setTimeout(activate,180);});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.body.dataset.ndVisiblePage==='settlement')void refresh();});
+ let queued=false;
+ new MutationObserver(events=>{
+   if(!events.some(e=>[...e.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('.settlement-expense-row,.nd-expense-payment')||n.querySelector?.('.settlement-expense-row,.nd-expense-payment')))))return;
+   if(!queued){queued=true;queueMicrotask(()=>{queued=false;updateLabels();});}
+ }).observe(form,{childList:true,subtree:true});
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate);else activate();
+ window.ndReportExpenseReceiptRefresh=refresh;
+})();
+
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
