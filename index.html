@@ -34720,17 +34720,16 @@ function setup(){
  const approval=$('ndUmoPettyApproval');if(approval)approval.hidden=true;
  const submitPanel=$('dailySubmitBtn')?.closest('.nd-daily-submit-panel'); if(submitPanel?.parentNode){submitPanel.before(expense,bank);}
  const exp=$('ndExpenseExpand'),tr=$('ndTransferExpand');
- if(exp)exp.open=true;
- if(tr)tr.open=true;
+ // Keep action panels collapsed; never force them open.
  history.open=true;
  // The two action headings stay above the submit buttons, and history stays expanded.
  let daily=$('ndCashExpenseDailyHistory');
  if(!daily){
   daily=document.createElement('section');daily.id='ndCashExpenseDailyHistory';
   daily.innerHTML='<strong>Daily Cash Expense Submissions</strong><div id="ndCashExpenseDailyBody" class="helper">Loading...</div>';
-  const fields=expense.querySelector('.nd-petty-fields');
-  if(fields)fields.after(daily);else exp?.appendChild(daily);
+  history.appendChild(daily);
  }
+ if(daily.parentElement!==history)history.appendChild(daily);
  const table=expense.querySelector('.nd-petty-history-table');
  if(table)table.style.display='none';
 }
@@ -34751,7 +34750,7 @@ async function load(){
    const controls=status==='pending'&&email===admin?'<div class="nd-expense-review"><button class="mini" data-expense-id="'+esc(r.id)+'" data-decision="approve">Approve</button><button class="mini" data-expense-id="'+esc(r.id)+'" data-decision="reject">Reject</button></div>':'—';
    return '<tr title="'+esc(r.reason)+'"><td>'+esc(date)+'</td><td>'+esc(r.branch)+'</td><td>RM '+Number(r.amount||0).toFixed(2)+'</td><td class="nd-status">'+esc(status[0].toUpperCase()+status.slice(1))+'</td><td>'+controls+'</td></tr>';
   }).join('')+'</tbody></table>';
- }catch(e){body.textContent='History unavailable: '+(e?.message||e);}
+ }catch(e){body.textContent='History unavailable: '+(e?.message||e)+' (Check nd_petty_expense_history RPC permissions.)';}
  finally{busy=false;}
 }
 document.addEventListener('click',async e=>{
@@ -35258,8 +35257,12 @@ body #ndStaffFormsPage{width:auto!important;min-width:0!important;max-width:none
   if(receipt.nextElementSibling!==expense)receipt.after(expense);
   if(expense.nextElementSibling!==bank)expense.after(bank);
   const exp=$('ndExpenseExpand'),transfer=$('ndTransferExpand');
-  if(exp?.open)exp.open=false;
-  if(transfer?.open)transfer.open=false;
+  // Do not change the open state after initial setup: user controls expansion.
+  if(!window.ndCashActionsInitialCollapsed){
+    if(exp)exp.open=false;
+    if(transfer)transfer.open=false;
+    window.ndCashActionsInitialCollapsed=true;
+  }
   const label=exp?.querySelector('summary strong');if(label)label.textContent='Cash Expense';
   const submit=$('addPettyBtn');if(submit)submit.textContent='Submit';
  }
