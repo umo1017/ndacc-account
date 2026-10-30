@@ -5869,7 +5869,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     // Without a verified opening balance, legacy petty_opening is informational.
     const internalTransferReversal=Math.min(Math.max(0,withdrawals),Math.max(0,legacyPettyTransfers));
     return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,internalTransferReversal,legacyExpenses,legacyOpening,approvedExpenses,
-      balance:cash-withdrawals+internalTransferReversal-transfers-advanceDeductions-legacyExpenses-approvedExpenses};
+      balance:cash-transfers-legacyExpenses-approvedExpenses-advanceDeductions};
   }
   function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
     return ndCashLedgerBreakdown(branch,sourceRows,cutoffDate).balance;
@@ -7048,8 +7048,7 @@ return `<div class="history-date-card">
     const selectedCashDate=$("settlementDate")?.value||today();
     const savedCashRow=(allRows||[]).find(r=>String(r.branch||"").trim()===String(currentBranch||"").trim()&&String(r.settlement_date||"")===String(selectedCashDate));
     const unifiedCash=directCashRemainingForBranch(currentBranch,allRows,selectedCashDate)
-      +num("cash")-Number(savedCashRow?.cash||0)
-      -(ndDailyWithdrawalTotal()-Number(savedCashRow?.cash_withdrawal||0));
+      +num("cash")-Number(savedCashRow?.cash||0);
     const unifiedCashReady=ndCashAdvanceReady&&!ndCashRemittanceError&&!ndApprovedCashExpenseError;
     $("cashBalance").value=unifiedCashReady?money(unifiedCash):'Unavailable';
     $("pettyRemaining").value=money(pettyRemaining);
@@ -8504,7 +8503,7 @@ return `<div class="history-date-card">
     );
     const savedCash=existing ? Number(existing.cash||0) : 0;
     const savedWithdrawal=existing ? Number(existing.cash_withdrawal||0) : 0;
-    balance+=(num("cash")-savedCash)-(ndDailyWithdrawalTotal()-savedWithdrawal);
+    balance+=(num("cash")-savedCash);
 
     if(!ndCashAdvanceReady||ndCashRemittanceError||ndApprovedCashExpenseError){
       el.textContent='Unavailable';el.style.color='';if($('ndTodayCashNegativeHint'))$('ndTodayCashNegativeHint').style.display='none';
@@ -8519,12 +8518,12 @@ return `<div class="history-date-card">
     const hint=$('ndTodayCashNegativeHint');
     if(hint){
       hint.style.display=negative?'block':'none';
-      hint.textContent=negative?'Negative balance is allowed until today’s cash sales are recorded.':'';
+      hint.textContent=negative?'Cash received is less than recorded expenses and bank transfers. Check the selected period.':'';
     }
     const breakdown=ndCashLedgerBreakdown(currentBranch,allRows,selectedDate);
     const pendingCash=num("cash")-(existing?Number(existing.cash||0):0);
     const pendingWithdrawal=ndDailyWithdrawalTotal()-(existing?Number(existing.cash_withdrawal||0):0);
-    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Cash withdrawn: ${money(breakdown.withdrawals+pendingWithdrawal)} | Verified bank transfers: ${money(breakdown.transfers)} | Salary advances (cash paid out): ${money(breakdown.advanceDeductions)} | Internal transfer reversal: ${money(breakdown.internalTransferReversal)} | Legacy petty opening excluded (requires verification): ${money(breakdown.legacyOpening)} | Legacy cash expenses: ${money(breakdown.legacyExpenses)} | UMO approved cash expenses: ${money(breakdown.approvedExpenses)} | Remaining: ${money(balance)}`;
+    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Bank transfers: ${money(breakdown.transfers)} | Cash expenses (legacy): ${money(breakdown.legacyExpenses)} | Cash expenses (UMO approved): ${money(breakdown.approvedExpenses)} | Salary advance cash paid (net): ${money(breakdown.advanceDeductions)} | Remaining: ${money(balance)}`;
     el.dataset.cashBreakdown=el.title;
     // Keep the audit breakdown available for diagnostics, but do not display a note.
     const detail=document.getElementById("ndCashBalanceAudit");
