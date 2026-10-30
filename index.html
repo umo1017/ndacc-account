@@ -4983,11 +4983,6 @@ window.ndEmployeeFullName = function(employee){
 <div class="card span12">
 <div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><span class="nd-cash-summary-label">Today’s Cash Balance</span><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong><div class="helper" id="ndTodayCashNegativeHint" aria-live="polite" style="color:#b42318;display:none"></div><div class="helper" id="ndCashAdvanceBalanceNote" aria-live="polite"></div></div></div>
 <details id="ndCashAdvanceHistoryPanel" style="margin-top:12px;border:1px solid #d9e5dd;border-radius:12px;padding:12px;background:#fbfdfb"><summary style="cursor:pointer;font-weight:800">Salary Advance Cash History</summary><div id="ndCashAdvanceHistoryRows" class="table-wrap" aria-live="polite"></div></details>
-<div class="card" id="cashToPettyPanel" style="background:var(--soft);margin-top:12px">
-<label for="cashToPettyAmount">Cash Withdrawal to Petty Cash</label>
-<div class="money-wrap" style="margin-top:8px"><span class="rm-prefix">RM</span><input class="money-field" id="cashToPettyAmount" min="0" placeholder="0.00" step="0.01" type="number"/></div>
-<div aria-live="polite" class="helper" id="cashToPettyState" style="margin-top:8px"></div>
-</div>
 <div class="card" style="background:var(--soft);margin-top:12px">
 <label>Cash Withdrawal</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashWithdrawal" min="0" step="0.01" type="number" value=""/></div>
@@ -5850,7 +5845,17 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const withdrawals=rows.reduce((s,r)=>s+(Number(r.cash_withdrawal)||0),0);
     const transfers=cutoff&&cutoff<ND_CASH_LEDGER_START?0:ndVerifiedTransfers(target,cutoff).filter(x=>String(x.remittance_date||'')>=ND_CASH_LEDGER_START).reduce((sum,x)=>sum+Number(x.amount||0),0);
     const advanceDeductions=ndCashAdvanceTotal(branch,cutoff||today());
-    return {cash,withdrawals,transfers,advanceDeductions,balance:cash-withdrawals-transfers-advanceDeductions};
+    // Unified company cash: old Cash -> Petty transfers are internal movements.
+    // Preserve their historical records but do not treat them as money leaving the company.
+    const legacyPettyTransfers=rows.reduce((sum,r)=>sum+(Array.isArray(r.petty_entries)?r.petty_entries:[])
+      .filter(e=>e?.type==='in'&&(e?.transfer_to_petty===true||e?.reason==='Cash Withdrawal to Petty Cash'))
+      .reduce((n,e)=>n+(Number(e.amount)||0),0),0);
+    const legacyExpenses=rows.reduce((sum,r)=>sum+(Array.isArray(r.petty_entries)?r.petty_entries:[])
+      .filter(e=>e?.type==='out').reduce((n,e)=>n+(Number(e.amount)||0),0),0);
+    const floatRows=rows.slice().sort((a,b)=>String(a.settlement_date).localeCompare(String(b.settlement_date)));
+    const legacyOpening=floatRows.length?Number(floatRows[0].petty_opening||0):0;
+    return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,legacyExpenses,legacyOpening,
+      balance:cash-withdrawals+legacyPettyTransfers-transfers-advanceDeductions-legacyExpenses+legacyOpening};
   }
   function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
     return ndCashLedgerBreakdown(branch,sourceRows,cutoffDate).balance;
@@ -6848,6 +6853,7 @@ return `<div class="history-date-card">
       const remaining=Number(r.petty_net||0);
 
       entries.forEach((e,entryIndex)=>{
+        if(e?.transfer_to_petty===true || e?.reason==="Cash Withdrawal to Petty Cash")return;
         receiptItems.push({entry:e,rowId:r.id,entryIndex});
         const isIn=String(e.type)==="in";
         const amt=Number(e.amount||0);
@@ -7446,10 +7452,6 @@ return `<div class="history-date-card">
     }finally{dailySubmitting=false;restore();}
   }
   async function performDailySettlementSubmit(){
-    const transferInput=$("cashToPettyAmount");
-    // This field holds the day's transfer total, including saved transfers.
-    // Validate/stage it once; a positive total must not cancel submission.
-    if(transferInput && transferInput.onchange?.()===false)return;
     const btn=$("dailySubmitBtn");
     const state=$("dailySubmitState");
     if(!dailyDirty){
@@ -8088,6 +8090,7 @@ return `<div class="history-date-card">
       return;
     }
     pettyEntries.forEach((e,i)=>{
+      if(e?.transfer_to_petty===true || e?.reason==="Cash Withdrawal to Petty Cash")return;
       const tr=document.createElement("tr");
       const receiptState=e?.receipt?.path
         ? '<span class="helper ok">Uploaded</span>'
@@ -8561,24 +8564,6 @@ return `<div class="history-date-card">
     $("reviewMonth").onchange=renderMonth;
     $("cash").oninput=()=>{calc();scheduleSave();};
     $("cashWithdrawal").oninput=()=>{calc();scheduleSave();};
-    // Cash Withdrawal to Petty Cash behaves like Cash Withdrawal: amount input only.
-    // Stage the transfer on field change, then persist via Submit Daily Settlement.
-    const cashToPettyInput=$("cashToPettyAmount");
-    if(cashToPettyInput){
-      cashToPettyInput.oninput=()=>setDailyDirty();
-      cashToPettyInput.onchange=()=>{
-        const amount=Number(cashToPettyInput.value||0),previous=ndPettyTransferTotal();
-        if(!Number.isFinite(amount)||amount<0){alert('Please enter a valid amount.');cashToPettyInput.value=previous||'';return false;}
-        const remaining=Number(String($('todayTotalCash')?.textContent||'0').replace(/[^0-9.-]/g,''))||0;
-        if(amount-previous>remaining+0.005){alert('Amount exceeds available Total Cash.');cashToPettyInput.value=previous||'';return false;}
-        const delta=Math.round((amount-previous)*100)/100;
-        if(delta>0)pettyEntries.push({type:'in',amount:delta,reason:'Cash Withdrawal to Petty Cash',transfer_to_petty:true,created_at:new Date().toISOString()});
-        else if(delta<0){let reduce=-delta;for(let i=pettyEntries.length-1;i>=0&&reduce>0;i--){const e=pettyEntries[i];if(e.type!=='in'||!(e.transfer_to_petty===true||e.reason==='Cash Withdrawal to Petty Cash'))continue;const used=Math.min(reduce,Number(e.amount||0));e.amount=Math.round((Number(e.amount)-used)*100)/100;reduce=Math.round((reduce-used)*100)/100;if(!e.amount)pettyEntries.splice(i,1);}}
-        if(delta!==0){calc();renderPetty();scheduleSave();}
-        return true;
-      };
-    }
-
     const dailySubmitBtn=$("dailySubmitBtn");
     if(dailySubmitBtn) dailySubmitBtn.onclick=submitDailySettlement;
 
@@ -35082,3 +35067,5 @@ body #ndStaffFormsPage{width:auto!important;min-width:0!important;max-width:none
 #ndStaffDeductionsMount .ndd-warning-choice span{font-size:14px;font-weight:700}
 #ndStaffDeductionsMount .ndd-warning-choice+.helper{font-size:12px;margin:5px 0 0;line-height:1.4}
 </style>
+
+<style id="nd-unified-cash-hide-old-transfer">#cashToPettyPanel,#ndPettyTopupReminder{display:none!important}</style>
