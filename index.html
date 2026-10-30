@@ -4933,7 +4933,7 @@ window.ndEmployeeFullName = function(employee){
 <div id="autoSaveState"></div>
 </div>
 <div id="ndExpenseActionCard" class="card span12 nd-petty-compact" style="background:var(--soft)">
-<details class="nd-action-expand" id="ndExpenseExpand"><summary><span><strong>Petty Cash Expense</strong><div class="nd-petty-balance" style="display:none"><input aria-label="Legacy Petty Cash Balance" id="pettyRemaining" readonly="" type="text"/></div></span><span class="nd-action-plus" aria-hidden="true">›</span></summary><div class="nd-petty-head"><h3 id="pettyInOutTitle">Petty Cash Expense</h3></div>
+<details class="nd-action-expand" id="ndExpenseExpand"><summary><span><strong>Cash Expense</strong><div class="nd-petty-balance"><span>Available Balance</span><input aria-label="Legacy Cash Expense Balance" id="pettyRemaining" readonly="" type="text"/></div></span><span class="nd-action-plus" aria-hidden="true">›</span></summary><div class="nd-petty-head"><h3 id="pettyInOutTitle">Cash Expense</h3></div>
 <div class="nd-petty-fields">
 <div class="nd-petty-field nd-petty-reason"><label for="pettyReason">Reason</label><input id="pettyReason" placeholder="Enter expense reason" required="required" type="text"/></div>
 <div class="nd-petty-field nd-petty-amount"><label for="pettyAmount">Amount</label><div class="nd-petty-money"><span aria-hidden="true">RM</span><input id="pettyAmount" aria-label="Expense amount in RM" inputmode="decimal" autocomplete="off" min="0.01" placeholder="0.00" step="0.01" type="number" value=""/></div></div>
@@ -4944,7 +4944,7 @@ window.ndEmployeeFullName = function(employee){
 <div class="helper" id="pettyReceiptSelected">No receipt selected</div>
 </div></div>
 <input id="pettyType" type="hidden" value="out"/>
-<div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" type="button">Submit for UMO Approval</button></div>
+<div class="petty-action-wrap"><button class="btn primary" id="addPettyBtn" type="button">Add Expense</button></div>
 </div>
 <div class="table-wrap nd-petty-history-table"><table><thead><tr><th>Type</th><th>Reason</th><th>Amount</th><th>Receipt</th><th></th></tr></thead><tbody id="pettyBody"></tbody></table></div>
 </details>
@@ -4981,9 +4981,9 @@ window.ndEmployeeFullName = function(employee){
 <span class="helper" id="dailySubmitState" style="display:block;text-align:center;margin-top:6px"></span>
 </div>
 <div class="card span12">
-<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><span class="nd-cash-summary-label">Today Total Cash</span><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong><div class="helper" id="ndTodayCashNegativeHint" aria-live="polite" style="color:#b42318;display:none"></div><div class="helper" id="ndCashAdvanceBalanceNote" aria-live="polite"></div></div></div>
+<div class="history-launch" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:180px"><span class="nd-cash-summary-label">Today’s Cash Balance</span><strong id="todayTotalCash" style="font-size:20px;display:block;margin-top:3px">RM 0.00</strong><div class="helper" id="ndTodayCashNegativeHint" aria-live="polite" style="color:#b42318;display:none"></div><div class="helper" id="ndCashAdvanceBalanceNote" aria-live="polite"></div></div></div>
 <details id="ndCashAdvanceHistoryPanel" style="margin-top:12px;border:1px solid #d9e5dd;border-radius:12px;padding:12px;background:#fbfdfb"><summary style="cursor:pointer;font-weight:800">Salary Advance Cash History</summary><div id="ndCashAdvanceHistoryRows" class="table-wrap" aria-live="polite"></div></details>
-<div class="card" id="cashToPettyPanel" style="display:none!important;background:var(--soft);margin-top:12px">
+<div class="card" id="cashToPettyPanel" style="background:var(--soft);margin-top:12px">
 <label for="cashToPettyAmount">Cash Withdrawal to Petty Cash</label>
 <div class="money-wrap" style="margin-top:8px"><span class="rm-prefix">RM</span><input class="money-field" id="cashToPettyAmount" min="0" placeholder="0.00" step="0.01" type="number"/></div>
 <div aria-live="polite" class="helper" id="cashToPettyState" style="margin-top:8px"></div>
@@ -8456,40 +8456,6 @@ return `<div class="history-date-card">
     const savedWithdrawal=existing ? Number(existing.cash_withdrawal||0) : 0;
     balance+=(num("cash")-savedCash)-(ndDailyWithdrawalTotal()-savedWithdrawal);
 
-    // One physical cash pool: include the REMAINING legacy Petty Cash float.
-    // Cash -> Petty was already withdrawn from the old Cash ledger, so adding
-    // its Petty counterpart once cancels the internal transfer. Historic Petty
-    // expenses stay deducted. Do not add gross Petty Cash top-ups separately.
-    const branchPettyRows=(allRows||[]).filter(r=>
-      !r._missing && String(r.branch||'').trim()===String(currentBranch||'').trim() &&
-      String(r.settlement_date||'')<=String(selectedDate) &&
-      String(r.settlement_date||'')>=ND_CASH_LEDGER_START
-    ).sort((a,b)=>String(a.settlement_date||'').localeCompare(String(b.settlement_date||'')));
-    const branchFirstPettyRow=(allRows||[]).filter(r=>
-      !r._missing && String(r.branch||'').trim()===String(currentBranch||'').trim()
-    ).sort((a,b)=>String(a.settlement_date||'').localeCompare(String(b.settlement_date||'')))[0];
-    let legacyPettyRemaining=Number(branchFirstPettyRow?.petty_opening||0);
-    const countedPettyDates=new Set();
-    branchPettyRows.forEach(r=>{
-      const d=String(r.settlement_date||'');
-      if(countedPettyDates.has(d))return;
-      countedPettyDates.add(d);
-      const mv=pettyMovementFromRow(r);
-      legacyPettyRemaining+=mv.pin-mv.pout;
-    });
-    // Include unsaved edits to the selected day's Petty entries once.
-    const savedPettyRow=branchPettyRows.find(r=>String(r.settlement_date||'')===String(selectedDate));
-    const savedPettyMovement=savedPettyRow?pettyMovementFromRow(savedPettyRow):{pin:0,pout:0};
-    const editedPettyMovement=(Array.isArray(pettyEntries)?pettyEntries:[]).reduce((m,e)=>{
-      const amount=Number(e?.amount||0);
-      if(e?.type==='in')m.pin+=amount;
-      else if(e?.type==='out')m.pout+=amount;
-      return m;
-    },{pin:0,pout:0});
-    legacyPettyRemaining+=(editedPettyMovement.pin-editedPettyMovement.pout)
-      -(savedPettyMovement.pin-savedPettyMovement.pout);
-    balance+=legacyPettyRemaining;
-
     if(!ndCashAdvanceReady||ndCashRemittanceError){
       el.textContent='Unavailable';el.style.color='';if($('ndTodayCashNegativeHint'))$('ndTodayCashNegativeHint').style.display='none';
       el.title=ndCashRemittanceError?'Cash Remittance data unavailable: '+ndCashRemittanceError:(ndCashAdvanceError?'Salary Advance Cash unavailable: '+ndCashAdvanceError:'Loading salary advance deductions');
@@ -8509,7 +8475,7 @@ return `<div class="history-date-card">
     const pendingCash=num("cash")-(existing?Number(existing.cash||0):0);
     const pendingWithdrawal=ndDailyWithdrawalTotal()-(existing?Number(existing.cash_withdrawal||0):0);
     el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Cash withdrawn: ${money(breakdown.withdrawals+pendingWithdrawal)} | Verified bank transfers: ${money(breakdown.transfers)} | Salary advances (cash paid out): ${money(breakdown.advanceDeductions)} | Remaining: ${money(balance)}`;
-    el.dataset.cashBreakdown=el.title+' | Legacy Petty Cash remaining included: '+money(legacyPettyRemaining);
+    el.dataset.cashBreakdown=el.title;
     // Keep the audit breakdown available for diagnostics, but do not display a note.
     const detail=document.getElementById("ndCashBalanceAudit");
     if(detail)detail.remove();
@@ -8943,10 +8909,10 @@ return `<div class="history-date-card">
         if(amount>0 && !['accepted','adjust'].includes(String(status).trim().toLowerCase()))q.push({kind:'payment',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|'+field,row:r,field,label,amount,status});
       }
       (Array.isArray(r.petty_entries)?r.petty_entries:[]).forEach((e,i)=>{
-        // Petty Cash Expense reminders start on 14 Oct 2026; earlier history stays untouched.
+        // Cash Expense reminders start on 14 Oct 2026; earlier history stays untouched.
         if(String(r.settlement_date||'')<'2026-10-14')return;
         if(e?.type!=='out'||Number(e.amount||0)<=0)return;
-        if(!ndPettyReviewed(e))q.push({kind:'petty',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|petty|'+i,row:r,entry:e,index:i,label:'Petty Cash Expense',amount:Number(e.amount||0),status:'pending'});
+        if(!ndPettyReviewed(e))q.push({kind:'petty',key:String(r.branch)+'|'+String(r.settlement_date)+'|'+String(r.id)+'|petty|'+i,row:r,entry:e,index:i,label:'Cash Expense',amount:Number(e.amount||0),status:'pending'});
       });
     }
     for(const r of cashRemittances||[]){
@@ -30967,7 +30933,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
-<div aria-labelledby="ndPettyTopupReminderTitle" aria-modal="true" id="ndPettyTopupReminder" role="dialog" style="display:none!important">
+<div aria-labelledby="ndPettyTopupReminderTitle" aria-modal="true" id="ndPettyTopupReminder" role="dialog">
 <div class="nd-petty-dialog"><button aria-label="Close" class="nd-petty-close" id="ndPettyReminderClose" type="button">×</button>
 <h3 id="ndPettyTopupReminderTitle" style="margin:7px 0 8px">Petty Cash Top Up Reminder</h3>
 <div class="helper" id="ndPettyReminderBranchDate"></div><div class="helper" style="margin-top:14px">Today's Petty Cash Top Up</div>
@@ -34585,6 +34551,7 @@ function makePanel(){
   card.innerHTML='<div class="outlet-title"><strong>Eco Botanic · No EXP Stock Check (10/2026)</strong><button class="btn" type="button" id="ndEcoNoExpReload">Refresh</button></div>'+ 
     '<p class="helper">No EXP = expiry date not recorded in the paper stock check. Counts shown here are a dated stock-check snapshot, not an adjustment to live inventory totals. Pending SKU items require confirmation before linking.</p>'+ 
     '<div class="orders-toolbar"><div class="field" style="min-width:180px"><label>Find product</label><input type="search" id="ndEcoNoExpSearch" placeholder="Name / SKU / PDF page"></div><div class="field"><label>SKU status</label><select id="ndEcoNoExpFilter"><option value="all">All No EXP</option><option value="matched">Matched SKU</option><option value="pending">Pending SKU</option></select></div></div>'+ 
+    '<p class="helper"><strong>Retail Brightening 4-Piece Set:</strong> 2 complete sets (No EXP). Pages 2–5 are component counts, not additional complete sets. One loose unit remains for each of pages 2, 3 and 4. Retail SKU pending; do not use sample/operation SKU.</p>'+
     '<p id="ndEcoNoExpStatus" role="status">Select Inventory to load.</p><div class="orders-list-wrap" id="ndEcoNoExpList"></div>';
   parent.appendChild(card);
   $('ndEcoNoExpReload').addEventListener('click',()=>void load());
@@ -34613,188 +34580,21 @@ function setup(){makePanel();$('ordersInventoryBtn')?.addEventListener('click',(
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
 })();
 </script>
-<style id="nd-unified-cash-20261031">#ndExpenseActionCard{margin-top:12px}#ndExpenseActionCard .nd-petty-balance,#cashToPettyPanel,#ndPettyTopupReminder{display:none!important}#ndUmoPettyApproval{border:1px solid #dce5df;border-radius:14px;padding:14px;margin:12px 0;background:#fff}#ndUmoPettyApproval table{width:100%}#ndUmoPettyApproval td{white-space:normal}#ndUmoPettyApproval button{margin:3px;padding:8px 12px}#ndUmoPettyApproval [data-status]{font-size:13px;min-height:1.5em}</style>
-<script id="nd-unified-cash-approval-20261031">
+<style id="nd-cash-unified-ui">#ndExpenseActionCard .nd-petty-balance{display:none!important}#ndCashReviewDialog{width:min(920px,96vw);max-height:90dvh;overflow:auto;border:1px solid #ddd;border-radius:16px;padding:20px;background:#fff}#ndCashReviewDialog::backdrop{background:#0008}#ndCashReviewDialog .nd-review-row{padding:14px;border:1px solid #ddd;border-radius:12px;margin:10px 0}#ndCashReviewDialog .nd-review-actions{display:flex;gap:10px;flex-wrap:wrap}#ndCashReviewDialog iframe,#ndCashReviewDialog img{width:100%;height:360px;object-fit:contain;border:1px solid #ddd}#ndCashReviewDialog button{padding:10px;border-radius:8px;cursor:pointer}#ndCashReviewDialog input{max-width:180px}</style>
+<script id="nd-cash-expense-umo-review-v1">
 (()=>{'use strict';
-const $=id=>document.getElementById(id),ADMIN='umo1017@gmail.com';
-const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const client=()=>window.salaryDb||null;
-let loading=false,seen=new Set();
-function move(){const card=$('ndExpenseActionCard'),total=$('todayTotalCash');if(card&&total){const host=total.closest('.card.span12');if(host&&card.parentElement!==host){host.appendChild(card);card.classList.remove('span12');} }const old=$('pettyRemaining');if(old)old.setAttribute('aria-hidden','true');const title=$('pettyInOutTitle');if(title)title.textContent='Petty Cash Expense · UMO Approval Required';}
-function approvalPanel(){if($('ndUmoPettyApproval'))return;const total=$('todayTotalCash');if(!total)return;const box=document.createElement('section');box.id='ndUmoPettyApproval';box.innerHTML='<strong>Cash Expense · Pending Approval</strong><p class="helper">Only UMO can approve. Pending expenses do not reduce Today Total Cash.</p><div data-status role="status"></div><div data-rows></div><button class="btn" data-refresh type="button">Refresh Pending Requests</button>';($('ndTodayCashTransactionHistory')||total.closest('.card.span12'))?.appendChild(box);box.querySelector('[data-refresh]').onclick=refresh;box.addEventListener('click',async e=>{const b=e.target.closest('[data-action]');if(!b)return;const id=b.dataset.id,action=b.dataset.action;if(!confirm((action==='approve'?'Approve and deduct':'Reject')+' this expense?'))return;b.disabled=true;try{const db=client();if(!db)throw Error('Sign in first.');const res=await db.rpc('nd_petty_expense_review',{p_request_id:id,p_decision:action});if(res.error)throw res.error;await refresh();window.dispatchEvent(new Event('nd-petty-expense-changed'));}catch(err){box.querySelector('[data-status]').textContent='Review failed: '+err.message;}finally{b.disabled=false;}});}
-async function refresh(){const box=$('ndUmoPettyApproval');if(!box||loading)return;const history=$('ndTodayCashTransactionHistory');if(history&&box.parentElement!==history)history.appendChild(box);loading=true;const status=box.querySelector('[data-status]');try{const db=client();if(!db)return;const auth=await db.auth.getUser();if(auth.error)throw auth.error;const email=String(auth.data?.user?.email||'').toLowerCase();box.hidden=email!==ADMIN;if(email!==ADMIN)return;const r=await db.rpc('nd_petty_expense_pending');if(r.error)throw r.error;const rows=Array.isArray(r.data)?r.data:[];status.textContent=rows.length?rows.length+' request(s) awaiting UMO approval.':'No pending requests.';box.querySelector('[data-rows]').innerHTML=rows.map(x=>'<div style="padding:10px 0;border-bottom:1px solid #ddd"><strong>'+esc(x.branch||x.outlet)+'</strong> · RM '+Number(x.amount||0).toFixed(2)+' · '+esc(x.reason)+'<div class="helper">'+esc(x.submitted_by||'')+' · '+esc(x.created_at||'')+'</div><button class="btn" data-action="approve" data-id="'+esc(x.id)+'">Approve</button><button class="btn" data-action="reject" data-id="'+esc(x.id)+'">Reject</button></div>').join('');for(const x of rows){if(!seen.has(x.id)){seen.add(x.id);if(document.visibilityState==='visible')status.textContent='UMO: New Petty Cash Expense pending approval · '+rows.length+' request(s).';}}}catch(err){status.textContent='Approval data unavailable: '+err.message+' (install approval SQL).';}finally{loading=false;}}
-async function submit(e){const b=e.target.closest('#addPettyBtn');if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();if(b.disabled)return;const reason=$('pettyReason')?.value.trim(),amount=Number($('pettyAmount')?.value);if(!reason||!Number.isFinite(amount)||amount<=0){alert('Enter an expense reason and valid amount.');return;}const activeBranch=document.querySelector('#dailyBranchToggle .branch-btn.active[data-branch]')?.dataset.branch;const storedBranch=(()=>{try{return localStorage.getItem('nd_daily_branch_v1')}catch(_){return null}})();const branch=String(activeBranch||storedBranch||document.getElementById('branchRecordState')?.textContent?.trim()||'').trim();if(!branch||branch==='Global'){alert('Please select Eco Botanic or Nusa Bestari.');return;}if(!confirm('Submit RM '+amount.toFixed(2)+' for UMO approval? No cash will be deducted until approved.'))return;b.disabled=true;try{const db=client();if(!db)throw Error('Sign in first.');const r=await db.rpc('nd_petty_expense_submit',{p_branch:branch,p_reason:reason,p_amount:amount});if(r.error)throw r.error;alert('Submitted for UMO approval. No cash has been deducted.');$('pettyReason').value='';$('pettyAmount').value='';await refresh();}catch(err){alert('Submission failed: '+err.message+'\nThe expense was not confirmed.');}finally{b.disabled=false;}}
-window.addEventListener('click',submit,true);
-function init(){move();approvalPanel();void refresh();}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-window.addEventListener('focus',()=>void refresh());document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refresh();});
-})();
-</script>
-
-<style id="nd-today-cash-final-layout">
-#ndTodayCashUnified > #ndExpenseActionCard,#ndTodayCashUnified > #cashRemittanceCard{width:100%;max-width:100%;margin:12px 0!important;box-sizing:border-box}
-#ndTodayCashUnified #ndExpenseExpand>summary strong,#ndTodayCashUnified #ndTransferExpand>summary strong{font-weight:750}
-#ndTodayCashUnified .nd-petty-history-table{display:none!important}
-#ndTodayCashUnified #ndTodayCashTransactionHistory{margin-top:12px}
-#ndTodayCashUnified #ndTodayCashTransactionHistory>summary{cursor:pointer;font-weight:750;padding:12px 0}
-#ndTodayCashUnified #ndTodayCashTransactionHistory .nd-history-actions{display:flex;gap:8px;flex-wrap:wrap}
-#ndTodayCashUnified #ndUmoPettyApproval{margin:12px 0}
-</style>
-<script id="nd-today-cash-final-layout-script">
-(()=>{'use strict';
-const $=id=>document.getElementById(id);
-function setup(){
- const total=$('todayTotalCash'),expense=$('ndExpenseActionCard'),bank=$('cashRemittanceCard');
- if(!total||!expense||!bank)return;
- const host=total.closest('.card.span12');if(!host)return;
- host.id='ndTodayCashUnified';
- const expTitle=expense.querySelector('#ndExpenseExpand>summary strong');if(expTitle)expTitle.textContent='Cash Expense';
- const head=$('pettyInOutTitle');if(head)head.textContent='Cash Expense';
- const btn=$('addPettyBtn');if(btn)btn.textContent='Submit';
- const old=host.querySelector('#ndTodayCashTransactionHistory');
- if(!old){
-  const d=document.createElement('details');d.id='ndTodayCashTransactionHistory';
-  const summary=document.createElement('summary');summary.textContent='Transaction History';d.appendChild(summary);
-  const actions=document.createElement('div');actions.className='nd-history-actions';
-  for(const id of ['pettyCashHistoryBtn','bedFeeHistoryBtn','cashRemittanceHistoryBtn','historyRecordsBtn']){
-   const b=$(id);if(b)actions.appendChild(b);
-  }
-  d.appendChild(actions);host.appendChild(d);
- }
- const history=$('ndTodayCashTransactionHistory');
- // Preserve all old elements and event listeners: only move their DOM nodes.
- const approval=$('ndUmoPettyApproval');
- const receiptPanel=$('dailySettlementProofCard');
- if(receiptPanel?.parentNode){receiptPanel.after(expense,bank);}
- if(approval){history.appendChild(approval);approval.setAttribute('data-history-approval','true');}
- // Remove note/remarks inputs only within this unified cash workflow.
- for(const card of [expense,bank]){
-  for(const el of card.querySelectorAll('input,textarea')){
-   const name=[el.id,el.name,el.getAttribute('aria-label')].filter(Boolean).join(' ');
-   if(/\b(?:remarks?|notes?)\b/i.test(name)){
-    const parent=el.closest('.form-group,.field,.nd-petty-field,.money-line')||el.closest('label')||el;
-    parent.style.display='none';el.disabled=true;
-   }
-  }
- }
- const oldPetty=$('pettyRemaining');if(oldPetty)oldPetty.closest('.nd-petty-balance')?.style.setProperty('display','none','important');
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
-// The earlier approval script can insert its panel after DOMContentLoaded.
-let tries=0;const interval=setInterval(()=>{setup();if(++tries>=8)clearInterval(interval);},500);
-})();
-</script>
-
-<style id="nd-cash-history-approval-only-20261031">
-#ndUmoPettyApproval{max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}
-#ndTodayCashUnified>#ndUmoPettyApproval{display:none!important}
-#ndTodayCashTransactionHistory #ndUmoPettyApproval{display:block;position:static;margin:14px 0}
-#ndTodayCashTransactionHistory #ndUmoPettyApproval[hidden]{display:none!important}
-#ndExpenseActionCard #addPettyBtn{max-width:100%;width:100%;white-space:normal!important;overflow-wrap:anywhere;min-height:46px;box-sizing:border-box}
-#ndExpenseActionCard input,#ndExpenseActionCard button{max-width:100%;box-sizing:border-box}
-@media(max-width:650px){#ndExpenseActionCard .nd-petty-row,#ndExpenseActionCard .nd-petty-actions{flex-wrap:wrap!important}#ndExpenseActionCard #addPettyBtn{display:block!important;width:100%!important;flex:1 1 100%!important;font-size:14px!important}}
-</style>
-
-<style id="nd-cash-expense-history-v2-css">
-#ndTodayCashUnified #ndTodayCashTransactionHistory{display:block!important}
-#ndTodayCashUnified #ndTodayCashTransactionHistory>summary{display:list-item!important;cursor:pointer}
-#ndTodayCashUnified #ndUmoPettyApproval{display:none!important}
-#ndTodayCashUnified #ndExpenseActionCard .nd-petty-history-table{display:none!important}
-#ndTodayCashUnified #ndCashExpenseDailyHistory{margin-top:12px}
-#ndCashExpenseDailyHistory table{width:100%;border-collapse:collapse}
-#ndCashExpenseDailyHistory th,#ndCashExpenseDailyHistory td{padding:9px 7px;border-bottom:1px solid #e4e9e5;text-align:left;font-size:13px}
-#ndCashExpenseDailyHistory .nd-status{font-weight:600}
-#ndCashExpenseDailyHistory .nd-expense-review{display:flex;gap:6px;flex-wrap:wrap}
-#ndTodayCashUnified #ndExpenseActionCard #addPettyBtn{width:100%;max-width:100%}
-@media(max-width:650px){#ndCashExpenseDailyHistory{overflow-x:auto}#ndCashExpenseDailyHistory table{min-width:480px}}
-</style>
-
-<style id="nd-actions-before-daily-submit-20261031">
-#ndExpenseActionCard,#cashRemittanceCard{width:100%;max-width:100%;box-sizing:border-box;margin:12px 0!important}
-#ndExpenseActionCard #addPettyBtn{width:100%!important;max-width:100%!important;white-space:normal!important}
-#ndExpenseActionCard .nd-petty-fields{min-width:0}
-@media(max-width:650px){#ndExpenseActionCard #addPettyBtn{display:block!important;flex:1 1 100%!important}}
-</style>
-<style id="nd-replace-petty-history-css">
-#ndCashExpenseHistoryModal{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.48);display:none;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}
-#ndCashExpenseHistoryModal.nd-show{display:flex}
-#ndCashExpenseHistoryModal .nd-cash-dialog{background:#fff;border-radius:18px;padding:20px;width:min(920px,100%);max-height:88dvh;overflow:auto;box-sizing:border-box;color:#263d32}
-#ndCashExpenseHistoryModal .nd-cash-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
-#ndCashExpenseHistoryModal .nd-cash-close{font-size:26px;min-width:44px;min-height:44px;border:1px solid #ddd;background:#fff;border-radius:50%}
-#ndCashExpenseHistoryModal .nd-cash-scroll{overflow:auto;max-width:100%}
-#ndCashExpenseHistoryModal table{width:100%;border-collapse:collapse;min-width:540px}
-#ndCashExpenseHistoryModal td,#ndCashExpenseHistoryModal th{padding:12px 8px;border-bottom:1px solid #e6e6e6;text-align:left;font-size:14px}
-#ndCashExpenseHistoryModal button[data-cash-review]{margin:3px;padding:8px;border-radius:8px;border:1px solid #9ab5a5;background:#eef5f0}
-</style>
-
-
-<style id="nd-cash-logic-canonical-css">
-#ndUmoPettyApproval,#ndCashExpenseDailyHistory{display:none!important}
-#ndExpenseActionCard .nd-petty-history-table{display:none!important}
-#ndExpenseActionCard #addPettyBtn{width:100%!important;max-width:100%!important;white-space:normal!important}
-#ndExpenseExpand:not([open])> :not(summary),#ndTransferExpand:not([open])> :not(summary){display:none!important}
-#ndCashExpenseHistoryModal{position:fixed;inset:0;z-index:2147483000;background:#0008;display:none;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}
-#ndCashExpenseHistoryModal.nd-show{display:flex}
-#ndCashExpenseHistoryModal .nd-cash-dialog{background:#fff;border-radius:18px;padding:18px;width:min(900px,100%);max-height:85dvh;overflow:auto;box-sizing:border-box}
-#ndCashExpenseHistoryModal table{border-collapse:collapse;width:100%;min-width:560px}
-#ndCashExpenseHistoryModal td,#ndCashExpenseHistoryModal th{padding:10px 8px;border-bottom:1px solid #e4e8e4;text-align:left}
-#ndCashExpenseHistoryModal .nd-cash-scroll{overflow:auto}
-#ndCashExpenseHistoryModal .nd-cash-head{display:flex;justify-content:space-between;gap:10px;align-items:center}
-</style>
-<script id="nd-cash-logic-canonical">
-(()=>{'use strict';
-const $=id=>document.getElementById(id), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let loading=false,modalLoaded=false;
-function setup(){
- const btn=$('pettyCashHistoryBtn');if(btn){btn.textContent='Daily Cash Expense Submissions';btn.setAttribute('aria-label','Daily Cash Expense Submissions');}
- const submit=$('addPettyBtn');if(submit)submit.textContent='Submit';
- const approval=$('ndUmoPettyApproval');if(approval)approval.hidden=true;
- const exp=$('ndExpenseExpand'),bank=$('ndTransferExpand');
- if(exp&&!exp.dataset.ndDefaultCollapsed){exp.open=false;exp.dataset.ndDefaultCollapsed='1';}
- if(bank&&!bank.dataset.ndDefaultCollapsed){bank.open=false;bank.dataset.ndDefaultCollapsed='1';}
- const history=$('ndTodayCashTransactionHistory');if(history)history.open=true;
- if(!$('ndCashExpenseHistoryModal')){
-  const m=document.createElement('div');m.id='ndCashExpenseHistoryModal';m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');
-  m.innerHTML='<div class="nd-cash-dialog"><div class="nd-cash-head"><h3>Daily Cash Expense Submissions</h3><button type="button" class="btn" data-close-expense-history>Close</button></div><div id="ndCashExpenseHistoryBody" class="nd-cash-scroll">Loading...</div></div>';
-  document.body.appendChild(m);
- }
-}
-async function load(){
- const body=$('ndCashExpenseHistoryBody'),db=window.salaryDb;if(!body||!db||loading)return;
- loading=true;body.textContent='Loading...';
- try{
-  const [{data,error},{data:userData,error:userError}]=await Promise.all([
-   db.rpc('nd_petty_expense_history',{p_limit:500}),db.auth.getUser()
-  ]);
-  if(error)throw error;if(userError)throw userError;
-  const isUmo=String(userData?.user?.email||'').toLowerCase()==='umo1017@gmail.com';
-  const rows=Array.isArray(data)?data:[];
-  if(!rows.length){body.textContent='No cash expense submissions.';return;}
-  body.innerHTML='<table><thead><tr><th>Date</th><th>Branch</th><th>Reason</th><th>Amount</th><th>Status</th><th>Review</th></tr></thead><tbody>'+rows.map(r=>{
-   const status=String(r.status||'pending');
-   const action=isUmo&&status==='pending'?'<button type="button" class="mini" data-cash-review="approve" data-id="'+esc(r.id)+'">Approve</button> <button type="button" class="mini" data-cash-review="reject" data-id="'+esc(r.id)+'">Reject</button>':'—';
-   return '<tr><td>'+esc(new Date(r.created_at).toLocaleDateString('en-GB',{timeZone:'Asia/Kuala_Lumpur'}))+'</td><td>'+esc(r.branch)+'</td><td>'+esc(r.reason)+'</td><td>RM '+Number(r.amount||0).toFixed(2)+'</td><td>'+esc(status)+'</td><td>'+action+'</td></tr>';
-  }).join('')+'</tbody></table>';
- }catch(e){body.textContent='History unavailable: '+(e?.message||e)+' — Verify nd_petty_expense_history SQL.';}
- finally{loading=false;}
-}
-document.addEventListener('click',async e=>{
- const launch=e.target.closest('#pettyCashHistoryBtn');
- if(launch){e.preventDefault();e.stopImmediatePropagation();setup();$('ndCashExpenseHistoryModal').classList.add('nd-show');void load();return;}
- if(e.target.closest('[data-close-expense-history]')||e.target.id==='ndCashExpenseHistoryModal'){$('ndCashExpenseHistoryModal')?.classList.remove('nd-show');return;}
- const b=e.target.closest('#ndCashExpenseHistoryModal [data-cash-review]');
- if(!b)return;e.preventDefault();e.stopImmediatePropagation();
- if(!confirm('Confirm '+b.dataset.cashReview+' this expense?'))return;
- b.disabled=true;
- try{
-  const {error}=await window.salaryDb.rpc('nd_petty_expense_review',{p_request_id:b.dataset.id,p_decision:b.dataset.cashReview});
-  if(error)throw error;await load();window.dispatchEvent(new Event('nd-petty-expense-changed'));
- }catch(err){alert('Review failed: '+(err?.message||err));b.disabled=false;}
-},true);
-document.addEventListener('keydown',e=>{if(e.key==='Escape')$('ndCashExpenseHistoryModal')?.classList.remove('nd-show');});
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
-let checks=0;const t=setInterval(()=>{setup();if(++checks===8)clearInterval(t)},500);
-})();
-</script>
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let rows=[],busy=false,lastPromptKey='',dialog;
+const db=()=>window.salaryDb||null;
+async function email(){const c=db();if(!c)return '';const r=await c.auth.getUser();return String(r.data?.user?.email||'').toLowerCase();}
+function mount(){if(dialog)return;dialog=document.createElement('dialog');dialog.id='ndCashReviewDialog';dialog.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2>Cash Expense · Pending Approval</h2><button type="button" data-close>Close</button></div><p data-status role="status"></p><div data-items></div>';document.body.append(dialog);dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.querySelector('[data-items]').addEventListener('click',async e=>{const b=e.target.closest('[data-review]');if(!b||busy)return;const id=b.dataset.id,action=b.dataset.review,r=rows.find(x=>x.id===id);if(!r)return;const card=b.closest('.nd-review-row');const amount=Number(card.querySelector('[data-amount]').value);if(action==='approved'&&(!Number.isFinite(amount)||amount<=0)){alert('Enter a valid verified amount.');return;}if(!confirm((action==='approved'?'Approve':'Reject')+' Cash Expense RM '+r.amount+'?'))return;busy=true;card.querySelectorAll('button').forEach(x=>x.disabled=true);try{const result=await db().rpc('nd_cash_expense_review',{p_id:id,p_action:action,p_verified_amount:action==='approved'?amount:null});if(result.error)throw result.error;await load(false);window.dispatchEvent(new Event('nd-cash-expense-reviewed'));}catch(error){alert('Approval failed: '+error.message);}finally{busy=false;card.querySelectorAll('button').forEach(x=>x.disabled=false);}});}
+function receiptMarkup(path){if(!path)return '<p>No receipt attached.</p>';if(/^https:\/\//i.test(path)){let u;try{u=new URL(path);}catch(_){return '<p>Invalid receipt URL</p>';}if(!/\.(pdf|png|jpe?g|webp)(\?|$)/i.test(u.pathname))return '<p>Receipt stored; use the receipt viewer to open it.</p>';return /\.pdf$/i.test(u.pathname)?'<iframe title="Receipt" src="'+esc(u.href)+'"></iframe>':'<img alt="Expense receipt" src="'+esc(u.href)+'">';}return '<p>Receipt stored at: '+esc(path)+' (private storage: use an authorized signed URL)</p>';}
+async function load(show){if(await email()!=='umo1017@gmail.com')return;mount();const r=await db().from('nd_cash_expense_requests').select('id,branch,expense_date,amount,expense_reason,receipt_path,status,submitted_at').eq('status','pending').order('submitted_at',{ascending:true}).limit(100);if(r.error){if(show){dialog.showModal();dialog.querySelector('[data-status]').textContent='Unable to load: '+r.error.message;}return;}rows=r.data||[];const key=rows.map(x=>x.id).join('|');if(!show&&(!rows.length||key===lastPromptKey))return;lastPromptKey=key;dialog.querySelector('[data-status]').textContent=rows.length+' pending expense(s). Approval does not automatically synchronize legacy petty_entries cash totals.';dialog.querySelector('[data-items]').innerHTML=rows.map(x=>'<article class="nd-review-row"><strong>'+esc(x.branch)+' · '+esc(x.expense_date)+'</strong><p>'+esc(x.expense_reason)+'</p><p>Submitted amount: <strong>RM '+Number(x.amount).toFixed(2)+'</strong></p>'+receiptMarkup(x.receipt_path)+'<label>Verified amount (RM)<input data-amount type="number" min="0.01" step="0.01" value="'+Number(x.amount).toFixed(2)+'"></label><div class="nd-review-actions"><button type="button" data-review="approved" data-id="'+esc(x.id)+'">Approve</button><button type="button" data-review="rejected" data-id="'+esc(x.id)+'">Reject</button></div></article>').join('')||'<p>No pending expenses.</p>';if(!dialog.open)dialog.showModal();}
+window.ndOpenCashExpenseApprovals=()=>load(true);
+function init(){const card=$('ndExpenseActionCard');if(card&&!$('ndCashApprovalOpen')){const b=document.createElement('button');b.id='ndCashApprovalOpen';b.type='button';b.className='btn';b.textContent='Pending Approvals';b.hidden=true;b.onclick=()=>void load(true);card.append(b);void email().then(e=>{b.hidden=e!=='umo1017@gmail.com';});}setTimeout(()=>void load(false),1500);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+window.addEventListener('nd-cash-expense-submitted',()=>{lastPromptKey='';void load(false);});
+})();</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
@@ -35264,30 +35064,3 @@ body #ndStaffFormsPage{width:auto!important;min-width:0!important;max-width:none
 #ndStaffDeductionsMount .ndd-warning-choice span{font-size:14px;font-weight:700}
 #ndStaffDeductionsMount .ndd-warning-choice+.helper{font-size:12px;margin:5px 0 0;line-height:1.4}
 </style>
-
-<!-- Nature's Dao: settlement receipt -> collapsed cash actions -->
-<script id="nd-cash-actions-collapsed-under-receipt-20261031">
-(()=>{'use strict';
- const $=id=>document.getElementById(id);
- function align(){
-  const receipt=$('dailySettlementProofCard'),expense=$('ndExpenseActionCard'),bank=$('cashRemittanceCard');
-  if(!receipt||!expense||!bank||!receipt.parentElement)return;
-  // Move existing nodes (not copies) so handlers and form state are preserved.
-  if(receipt.nextElementSibling!==expense)receipt.after(expense);
-  if(expense.nextElementSibling!==bank)expense.after(bank);
-  const exp=$('ndExpenseExpand'),transfer=$('ndTransferExpand');
-  // Do not change the open state after initial setup: user controls expansion.
-  if(!window.ndCashActionsInitialCollapsed){
-    if(exp)exp.open=false;
-    if(transfer)transfer.open=false;
-    window.ndCashActionsInitialCollapsed=true;
-  }
-  const label=exp?.querySelector('summary strong');if(label)label.textContent='Cash Expense';
-  const submit=$('addPettyBtn');if(submit)submit.textContent='Submit';
- }
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',align,{once:true});else align();
- window.addEventListener('load',align,{once:true});
- let count=0;const handle=setInterval(()=>{align();if(++count>=25)clearInterval(handle)},800);
- document.addEventListener('click',e=>{if(e.target.closest('[data-branch],#branch,#branchSelect,#dailyBranch'))setTimeout(align,150)});
-})();
-</script>
