@@ -5854,6 +5854,9 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const legacyExpenses=rows.reduce((sum,r)=>sum+(Array.isArray(r.petty_entries)?r.petty_entries:[])
       .filter(e=>e?.type==='out').reduce((n,e)=>n+(Number(e.amount)||0),0),0);
     const floatRows=rows.slice().sort((a,b)=>String(a.settlement_date).localeCompare(String(b.settlement_date)));
+    // A petty float is not automatically extra company cash. Historical petty
+    // opening may already be included in the original cash opening balance.
+    // Keep it visible in diagnostics but never silently add it twice.
     const legacyOpening=floatRows.length?Number(floatRows[0].petty_opening||0):0;
     // Approved requests are a distinct source from historical petty_entries.
     // Only approved review amounts reduce cash; pending/rejected never do.
@@ -5861,8 +5864,12 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       String(x.branch||'').trim()===target && (!cutoff || String(x.expense_date||'')<=cutoff) &&
       String(x.expense_date||'')>=ND_CASH_LEDGER_START
     ).reduce((sum,x)=>sum+Number(x.approved_amount||0),0);
-    return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,legacyExpenses,legacyOpening,approvedExpenses,
-      balance:cash-withdrawals+legacyPettyTransfers-transfers-advanceDeductions-legacyExpenses-approvedExpenses+legacyOpening};
+    // Only reverse internal petty transfers actually reflected in recorded
+    // cash_withdrawal. Never credit an internal transfer above withdrawals.
+    // Without a verified opening balance, legacy petty_opening is informational.
+    const internalTransferReversal=Math.min(Math.max(0,withdrawals),Math.max(0,legacyPettyTransfers));
+    return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,internalTransferReversal,legacyExpenses,legacyOpening,approvedExpenses,
+      balance:cash-withdrawals+internalTransferReversal-transfers-advanceDeductions-legacyExpenses-approvedExpenses};
   }
   function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
     return ndCashLedgerBreakdown(branch,sourceRows,cutoffDate).balance;
@@ -8499,9 +8506,9 @@ return `<div class="history-date-card">
     const savedWithdrawal=existing ? Number(existing.cash_withdrawal||0) : 0;
     balance+=(num("cash")-savedCash)-(ndDailyWithdrawalTotal()-savedWithdrawal);
 
-    if(!ndCashAdvanceReady||ndCashRemittanceError){
+    if(!ndCashAdvanceReady||ndCashRemittanceError||ndApprovedCashExpenseError){
       el.textContent='Unavailable';el.style.color='';if($('ndTodayCashNegativeHint'))$('ndTodayCashNegativeHint').style.display='none';
-      el.title=ndCashRemittanceError?'Cash Remittance data unavailable: '+ndCashRemittanceError:(ndCashAdvanceError?'Salary Advance Cash unavailable: '+ndCashAdvanceError:'Loading salary advance deductions');
+      el.title=ndCashRemittanceError?'Cash Remittance data unavailable: '+ndCashRemittanceError:(ndApprovedCashExpenseError?'Approved Cash Expense data unavailable: '+ndApprovedCashExpenseError:(ndCashAdvanceError?'Salary Advance Cash unavailable: '+ndCashAdvanceError:'Loading salary advance deductions'));
       ndRenderCashAdvanceHistory();return;
     }
     // An advance can be paid before today's sales are posted. A negative cash
@@ -8517,7 +8524,7 @@ return `<div class="history-date-card">
     const breakdown=ndCashLedgerBreakdown(currentBranch,allRows,selectedDate);
     const pendingCash=num("cash")-(existing?Number(existing.cash||0):0);
     const pendingWithdrawal=ndDailyWithdrawalTotal()-(existing?Number(existing.cash_withdrawal||0):0);
-    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Cash withdrawn: ${money(breakdown.withdrawals+pendingWithdrawal)} | Verified bank transfers: ${money(breakdown.transfers)} | Salary advances (cash paid out): ${money(breakdown.advanceDeductions)} | Legacy cash expenses: ${money(breakdown.legacyExpenses)} | UMO approved cash expenses: ${money(breakdown.approvedExpenses)} | Remaining: ${money(balance)}`;
+    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Cash withdrawn: ${money(breakdown.withdrawals+pendingWithdrawal)} | Verified bank transfers: ${money(breakdown.transfers)} | Salary advances (cash paid out): ${money(breakdown.advanceDeductions)} | Internal transfer reversal: ${money(breakdown.internalTransferReversal)} | Legacy petty opening excluded (requires verification): ${money(breakdown.legacyOpening)} | Legacy cash expenses: ${money(breakdown.legacyExpenses)} | UMO approved cash expenses: ${money(breakdown.approvedExpenses)} | Remaining: ${money(balance)}`;
     el.dataset.cashBreakdown=el.title;
     // Keep the audit breakdown available for diagnostics, but do not display a note.
     const detail=document.getElementById("ndCashBalanceAudit");
