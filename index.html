@@ -5869,7 +5869,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     // Without a verified opening balance, legacy petty_opening is informational.
     const internalTransferReversal=Math.min(Math.max(0,withdrawals),Math.max(0,legacyPettyTransfers));
     return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,internalTransferReversal,legacyExpenses,legacyOpening,approvedExpenses,
-      balance:cash-transfers-legacyExpenses-approvedExpenses-advanceDeductions};
+      balance:cash-transfers-legacyExpenses-approvedExpenses-advanceDeductions-(withdrawals-internalTransferReversal)};
   }
   function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
     return ndCashLedgerBreakdown(branch,sourceRows,cutoffDate).balance;
@@ -7048,7 +7048,9 @@ return `<div class="history-date-card">
     const selectedCashDate=$("settlementDate")?.value||today();
     const savedCashRow=(allRows||[]).find(r=>String(r.branch||"").trim()===String(currentBranch||"").trim()&&String(r.settlement_date||"")===String(selectedCashDate));
     const unifiedCash=directCashRemainingForBranch(currentBranch,allRows,selectedCashDate)
-      +num("cash")-Number(savedCashRow?.cash||0);
+      +num("cash")-Number(savedCashRow?.cash||0)
+      -(Math.max(0,ndDailyWithdrawalTotal()-Math.min(ndDailyWithdrawalTotal(),ndPettyTransferTotal()))
+      -Math.max(0,Number(savedCashRow?.cash_withdrawal||0)-Math.min(Number(savedCashRow?.cash_withdrawal||0),(Array.isArray(savedCashRow?.petty_entries)?savedCashRow.petty_entries:[]).filter(e=>e?.type==='in'&&(e?.transfer_to_petty===true||e?.reason==='Cash Withdrawal to Petty Cash')).reduce((n,e)=>n+(Number(e.amount)||0),0))));
     const unifiedCashReady=ndCashAdvanceReady&&!ndCashRemittanceError&&!ndApprovedCashExpenseError;
     $("cashBalance").value=unifiedCashReady?money(unifiedCash):'Unavailable';
     $("pettyRemaining").value=money(pettyRemaining);
@@ -8504,6 +8506,14 @@ return `<div class="history-date-card">
     const savedCash=existing ? Number(existing.cash||0) : 0;
     const savedWithdrawal=existing ? Number(existing.cash_withdrawal||0) : 0;
     balance+=(num("cash")-savedCash);
+    // Unsaved real cash withdrawals reduce the remaining balance immediately.
+    // Exclude old internal Cash-to-Petty transfers from company cash outflow.
+    const savedInternal=(Array.isArray(existing?.petty_entries)?existing.petty_entries:[]).filter(e=>e?.type==='in'&&(e?.transfer_to_petty===true||e?.reason==='Cash Withdrawal to Petty Cash')).reduce((n,e)=>n+(Number(e.amount)||0),0);
+    const currentInternal=ndPettyTransferTotal();
+    const savedRealWithdrawal=Math.max(0,savedWithdrawal-Math.min(savedWithdrawal,savedInternal));
+    const currentTotalWithdrawal=ndDailyWithdrawalTotal();
+    const currentRealWithdrawal=Math.max(0,currentTotalWithdrawal-Math.min(currentTotalWithdrawal,currentInternal));
+    balance-=currentRealWithdrawal-savedRealWithdrawal;
 
     if(!ndCashAdvanceReady||ndCashRemittanceError||ndApprovedCashExpenseError){
       el.textContent='Unavailable';el.style.color='';if($('ndTodayCashNegativeHint'))$('ndTodayCashNegativeHint').style.display='none';
@@ -8523,7 +8533,7 @@ return `<div class="history-date-card">
     const breakdown=ndCashLedgerBreakdown(currentBranch,allRows,selectedDate);
     const pendingCash=num("cash")-(existing?Number(existing.cash||0):0);
     const pendingWithdrawal=ndDailyWithdrawalTotal()-(existing?Number(existing.cash_withdrawal||0):0);
-    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Bank transfers: ${money(breakdown.transfers)} | Cash expenses (legacy): ${money(breakdown.legacyExpenses)} | Cash expenses (UMO approved): ${money(breakdown.approvedExpenses)} | Salary advance cash paid (net): ${money(breakdown.advanceDeductions)} | Remaining: ${money(balance)}`;
+    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Bank transfers: ${money(breakdown.transfers)} | Cash expenses (legacy): ${money(breakdown.legacyExpenses)} | Cash expenses (UMO approved): ${money(breakdown.approvedExpenses)} | Salary advance cash paid (net): ${money(breakdown.advanceDeductions)} | Cash withdrawals: ${money(breakdown.withdrawals-breakdown.internalTransferReversal+currentRealWithdrawal-savedRealWithdrawal)} | Remaining: ${money(balance)}`;
     el.dataset.cashBreakdown=el.title;
     // Keep the audit breakdown available for diagnostics, but do not display a note.
     const detail=document.getElementById("ndCashBalanceAudit");
