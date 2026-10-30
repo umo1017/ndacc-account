@@ -25127,7 +25127,11 @@ Bed Fee: Amlee / + merchant / database memory checked.
         if(error)throw Error(table+': '+error.message);rows.push(...(data||[]));if((data||[]).length<500)return rows;
       }
     }
-    const [records,daily]=await Promise.all([all('ai_receipt_records','receipt_date','*'),all('daily_settlements','settlement_date','id,settlement_date,branch,petty_entries')]);
+    const [records,daily,cashExpenses]=await Promise.all([
+      all('ai_receipt_records','receipt_date','*'),
+      all('daily_settlements','settlement_date','id,settlement_date,branch,petty_entries'),
+      all('nd_cash_expense_requests','expense_date','id,branch,expense_date,amount,review_amount,expense_reason,receipt_path,status')
+    ]);
     const byRef=new Map();
     for(const r of records.filter(r=>r.branch===branch))byRef.set(r.source_ref||'scan:'+r.id,{...r});
     for(const row of daily.filter(r=>r.branch===branch))(Array.isArray(row.petty_entries)?row.petty_entries:[]).forEach((e,index)=>{
@@ -25135,6 +25139,25 @@ Bed Fee: Amlee / + merchant / database memory checked.
       const ref='daily_settlements:'+row.id+':petty:'+index;
       byRef.set(ref,{source_ref:ref,receipt_date:row.settlement_date,branch:row.branch,total_amount:Number(e.amount||0),source_type:'petty_cash',receipt_file:e.receipt||null});
     });
+    // New Cash Expense submissions are stored separately from legacy petty_entries.
+    // Include their receipt evidence once, with the approval status clearly labelled.
+    for(const expense of cashExpenses){
+      const raw=expense.receipt_path;
+      let receipt=null;
+      if(raw){
+        try{
+          const parsed=typeof raw==='string'&&raw.trim().startsWith('{')?JSON.parse(raw):raw;
+          receipt=typeof parsed==='string'?{path:parsed}:parsed&&typeof parsed==='object'?{path:parsed.path||'',bucket:parsed.bucket||'petty-receipts'}:null;
+        }catch(_){receipt={path:String(raw)};}
+      }
+      const ref='cash_expense:'+expense.id;
+      byRef.set(ref,{
+        source_ref:ref,receipt_date:expense.expense_date,branch:expense.branch,
+        total_amount:Number(expense.status==='approved'?(expense.review_amount??expense.amount):expense.amount)||0,
+        source_type:'cash_expense',expense_status:expense.status,
+        merchant:expense.expense_reason||'',receipt_file:receipt
+      });
+    }
     return [...byRef.values()].sort((a,b)=>String(a.receipt_date).localeCompare(String(b.receipt_date))||String(a.branch).localeCompare(String(b.branch))||String(a.source_ref||a.id).localeCompare(String(b.source_ref||b.id)));
   }
   async function monthlyReceiptImage(bytes,type){
@@ -25158,7 +25181,7 @@ Bed Fee: Amlee / + merchant / database memory checked.
     const pageCache=new Map();
     for(let i=0;i<records.length;i++){
       const r=records[i],receipt=r.receipt_file;progress?.('Preparing receipt '+(i+1)+' / '+records.length+'...');
-      const info=()=>{const page=pdf.addPage([595.28,841.89]);text(page,'Receipt '+(i+1)+' | '+r.receipt_date+' | '+String(r.branch||'-'),26,813,11,true);text(page,'Amount: '+money(r.total_amount)+' | '+(r.source_type==='card_settlement'?'Card Settlement | '+r.verification:r.source_type==='petty_cash'?'Petty Cash':r.source_type==='report_expense'?'Monthly Report - '+String(r.merchant||'').slice(0,38):'Receipt Scan'),26,793,11);return page;};
+      const info=()=>{const page=pdf.addPage([595.28,841.89]);text(page,'Receipt '+(i+1)+' | '+r.receipt_date+' | '+String(r.branch||'-'),26,813,11,true);text(page,'Amount: '+money(r.total_amount)+' | '+(r.source_type==='card_settlement'?'Card Settlement | '+r.verification:r.source_type==='petty_cash'?'Petty Cash':r.source_type==='cash_expense'?'Cash Expense ('+String(r.expense_status||'unknown').toUpperCase()+')':r.source_type==='report_expense'?'Monthly Report - '+String(r.merchant||'').slice(0,38):'Receipt Scan'),26,793,11);return page;};
       try{
         if(!receipt?.path)throw Error('No receipt attached.');
         const key=receipt.path;
@@ -34674,6 +34697,24 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void load(
   document.addEventListener('DOMContentLoaded',()=>void check(),{once:true});
 })();
 </script>
+
+<style id="nd-expense-single-history-mobile-fix">
+#ndExpenseActionCard .nd-petty-history-table{display:none!important}
+#ndExpenseRequestHistory{width:100%!important;max-width:100%!important;overflow:visible!important;box-sizing:border-box!important;margin-top:12px!important}
+#ndExpenseRequestHistory .nd-exp-history-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0 12px;flex-wrap:wrap}
+#ndExpenseRequestHistory [data-exp-message]{white-space:normal;overflow-wrap:anywhere;font-size:13px}
+#ndExpenseRequestHistory table{width:100%!important;min-width:0!important;table-layout:fixed!important}
+#ndExpenseRequestHistory th,#ndExpenseRequestHistory td{white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+#ndExpenseRequestHistory .nd-exp-actions button{max-width:100%;white-space:normal;cursor:pointer}
+@media(max-width:650px){
+#ndExpenseRequestHistory thead{display:none!important}
+#ndExpenseRequestHistory table,#ndExpenseRequestHistory tbody,#ndExpenseRequestHistory tr,#ndExpenseRequestHistory td{display:block!important;width:100%!important;box-sizing:border-box!important}
+#ndExpenseRequestHistory tbody tr{padding:10px 12px;margin:0 0 12px;border:1px solid #dfe7e1;border-radius:12px;background:#fff}
+#ndExpenseRequestHistory tbody td{border:0!important;padding:6px 0!important;text-align:left!important;font-size:14px!important}
+#ndExpenseRequestHistory tbody td[data-label]:before{content:attr(data-label);display:block;font-size:12px;font-weight:700;color:#6a7a70;margin-bottom:3px}
+#ndExpenseRequestHistory .nd-exp-actions{display:flex;flex-wrap:wrap;gap:8px}
+}
+</style>
 <style id="nd-expense-inline-history-style">
 #ndExpenseRequestHistory{margin-top:12px;overflow-x:auto}#ndExpenseRequestHistory table{width:100%;border-collapse:collapse;min-width:520px}#ndExpenseRequestHistory td,#ndExpenseRequestHistory th{padding:9px 7px;text-align:left;border-bottom:1px solid #e3e9e5;font-size:13px}#ndExpenseRequestHistory .nd-exp-actions{display:flex;gap:6px;flex-wrap:wrap}#ndExpenseRequestHistory button{padding:7px 10px;border-radius:8px;border:1px solid #d1d9d4;background:#f5f8f6;color:#254e3e;font-weight:600}#ndExpenseRequestHistory [data-exp-delete]{color:#a42c2c}#ndExpenseRequestHistory .nd-exp-status{font-weight:600;text-transform:capitalize}
 </style>
@@ -34684,10 +34725,10 @@ const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'
 const getDb=()=>window.salaryDb||window.supabaseClient||window.supabaseDb||null;
 let rows=[],loading=false,loadedKey='',lastLoad=0;
 function admin(){const email=String(window.currentUserEmail||window.currentUser?.email||window.currentEmail||window.salaryCurrentUser?.email||'').toLowerCase();return ['umo1017@gmail.com','mars83002566@gmail.com'].includes(email);}
-function mount(){const old=$('pettyBody');if(!old)return null;let root=$('ndExpenseRequestHistory');if(root)return root;root=document.createElement('section');root.id='ndExpenseRequestHistory';root.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:12px 0"><strong>Cash Expense History</strong><button type="button" data-exp-refresh>Refresh</button></div><div data-exp-message role="status"></div><table><thead><tr><th>Date / Status</th><th>Reason</th><th>Amount</th><th>Receipt / Action</th></tr></thead><tbody data-exp-rows></tbody></table>';old.closest('.nd-petty-history-table')?.after(root);root.querySelector('[data-exp-refresh]').onclick=()=>load(true);root.addEventListener('click',onClick);return root;}
+function mount(){const old=$('pettyBody');if(!old)return null;let root=$('ndExpenseRequestHistory');if(root)return root;root=document.createElement('section');root.id='ndExpenseRequestHistory';root.innerHTML='<div class="nd-exp-history-heading"><strong>Today’s Cash Expense</strong><button type="button" data-exp-refresh>Refresh</button></div><div data-exp-message role="status"></div><table><thead><tr><th>Date / Status</th><th>Reason</th><th>Amount</th><th>Receipt / Action</th></tr></thead><tbody data-exp-rows></tbody></table>';old.closest('.nd-petty-history-table')?.after(root);root.querySelector('[data-exp-refresh]').onclick=()=>load(true);root.addEventListener('click',onClick);return root;}
 function current(){return {branch:String(document.querySelector('#dailyBranchToggle .branch-btn.active')?.dataset.branch||localStorage.getItem('nd_daily_branch_v1')||'Eco Botanic'),date:String($('settlementDate')?.value||new Date().toISOString().slice(0,10))};}
-function render(){const root=mount();if(!root)return;root.querySelector('[data-exp-rows]').innerHTML=rows.map(r=>`<tr><td>${safe(r.expense_date)}<div class="nd-exp-status">${safe(r.status)}</div></td><td>${safe(r.expense_reason)}</td><td>RM ${Number(r.status==='approved'?(r.review_amount??r.amount):r.amount).toFixed(2)}</td><td><div class="nd-exp-actions">${r.receipt_path?`<button type="button" data-exp-receipt="${safe(r.id)}">View Receipt</button>`:''}${admin()?`<button type="button" data-exp-delete="${safe(r.id)}">Delete</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="4">No Cash Expense submissions for this month.</td></tr>';}
-async function load(force=false){const root=mount(),db=getDb();if(!root||!db||loading)return;const {branch,date}=current();if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return;const month=date.slice(0,7);const key=branch+'|'+month;if(!force&&key===loadedKey&&Date.now()-lastLoad<20000)return;loading=true;root.querySelector('[data-exp-message]').textContent='Loading history…';try{const [y,m]=month.split('-').map(Number);const next=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;let query=db.from('nd_cash_expense_requests').select('id,branch,expense_date,expense_reason,amount,review_amount,status,receipt_path,submitted_at').gte('expense_date',month+'-01').lt('expense_date',next).order('submitted_at',{ascending:false}).limit(500);if(branch)query=query.eq('branch',branch);const res=await query;if(res.error)throw res.error;rows=res.data||[];loadedKey=key;lastLoad=Date.now();root.querySelector('[data-exp-message]').textContent='';render();}catch(e){root.querySelector('[data-exp-message]').textContent='History unavailable: '+(e.message||e);}finally{loading=false;}}
+function render(){const root=mount();if(!root)return;root.querySelector('[data-exp-rows]').innerHTML=rows.map(r=>`<tr><td data-label="Date / Status">${safe(r.expense_date)}<div class="nd-exp-status">${safe(r.status)}</div></td><td data-label="Reason">${safe(r.expense_reason)}</td><td data-label="Amount">RM ${Number(r.status==='approved'?(r.review_amount??r.amount):r.amount).toFixed(2)}</td><td data-label="Receipt / Action"><div class="nd-exp-actions">${r.receipt_path?`<button type="button" data-exp-receipt="${safe(r.id)}">View Receipt</button>`:''}${admin()?`<button type="button" data-exp-delete="${safe(r.id)}">Delete</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="4">No Cash Expense submissions for today.</td></tr>';}
+async function load(force=false){const root=mount(),db=getDb();if(!root||!db||loading)return;const {branch,date}=current();if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return;const key=branch+'|'+date;if(!force&&key===loadedKey&&Date.now()-lastLoad<20000)return;loading=true;root.querySelector('[data-exp-message]').textContent='Loading history…';try{let query=db.from('nd_cash_expense_requests').select('id,branch,expense_date,expense_reason,amount,review_amount,status,receipt_path,submitted_at').eq('expense_date',date).order('submitted_at',{ascending:false}).limit(500);if(branch)query=query.eq('branch',branch);const res=await query;if(res.error)throw res.error;rows=res.data||[];loadedKey=key;lastLoad=Date.now();root.querySelector('[data-exp-message]').textContent='';render();}catch(e){root.querySelector('[data-exp-message]').textContent='History unavailable: '+(e.message||e);}finally{loading=false;}}
 async function onClick(ev){const b=ev.target.closest('button');if(!b)return;const id=b.dataset.expDelete||b.dataset.expReceipt;if(!id)return;const r=rows.find(x=>x.id===id);if(!r)return;const db=getDb();if(b.dataset.expDelete){if(!admin()){alert('UMO / Mars approval required.');return;}if(!confirm(`Delete ${r.status} Cash Expense RM ${Number(r.amount).toFixed(2)}? Approved expenses will be reversed from the cash ledger.`))return;b.disabled=true;try{const res=await db.rpc('nd_cash_expense_delete',{p_id:id});if(res.error)throw res.error;loadedKey='';await load(true);window.dispatchEvent(new Event('nd-cash-expense-reviewed'));}catch(e){alert('Delete failed: '+(e.message||e)+'. Run the Cash Expense delete SQL first.');}finally{b.disabled=false;}return;}
 if(b.dataset.expReceipt){b.disabled=true;try{let path=r.receipt_path,url=path;if(path?.startsWith('{')){const j=JSON.parse(path);path=j.path||'';url=j.url||path;}if(!/^https:\/\//i.test(url)){const res=await db.storage.from('petty-receipts').createSignedUrl(path,600);if(res.error)throw res.error;url=res.data.signedUrl;}window.open(url,'_blank','noopener,noreferrer');}catch(e){alert('Unable to open receipt: '+(e.message||e));}finally{b.disabled=false;}}}
 function start(){mount();const expand=$('ndExpenseExpand');expand?.addEventListener('toggle',()=>{if(expand.open)load(true);});$('settlementDate')?.addEventListener('change',()=>load(true));document.addEventListener('change',e=>{if(e.target?.id==='branch'||e.target?.id==='outlet')load(true);});$('dailyBranchToggle')?.addEventListener('click',e=>{if(e.target.closest('[data-branch]'))setTimeout(()=>load(true),250);});window.addEventListener('nd-cash-expense-reviewed',()=>load(true));window.addEventListener('nd-cash-expense-submitted',()=>load(true));setInterval(()=>{if(expand?.open)load();},25000);if(expand?.open)load(true);}
