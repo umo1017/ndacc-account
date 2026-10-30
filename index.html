@@ -4933,7 +4933,7 @@ window.ndEmployeeFullName = function(employee){
 <div id="autoSaveState"></div>
 </div>
 <div id="ndExpenseActionCard" class="card span12 nd-petty-compact" style="background:var(--soft)">
-<details class="nd-action-expand" id="ndExpenseExpand"><summary><span><strong>Cash Expense</strong><div class="nd-petty-balance"><span>Available Balance</span><input aria-label="Legacy Cash Expense Balance" id="pettyRemaining" readonly="" type="text"/></div></span><span class="nd-action-plus" aria-hidden="true">›</span></summary><div class="nd-petty-head"><h3 id="pettyInOutTitle">Cash Expense</h3></div>
+<details class="nd-action-expand" id="ndExpenseExpand"><summary><span><strong>Cash Expense</strong></span><span class="nd-action-plus" aria-hidden="true">›</span></summary><input id="pettyRemaining" aria-label="Legacy Cash Expense Balance (internal only)" type="hidden" /><div class="nd-petty-head"><h3 id="pettyInOutTitle">Cash Expense</h3></div>
 <div class="nd-petty-fields">
 <div class="nd-petty-field nd-petty-reason"><label for="pettyReason">Reason</label><input id="pettyReason" placeholder="Enter expense reason" required="required" type="text"/></div>
 <div class="nd-petty-field nd-petty-amount"><label for="pettyAmount">Amount</label><div class="nd-petty-money"><span aria-hidden="true">RM</span><input id="pettyAmount" aria-label="Expense amount in RM" inputmode="decimal" autocomplete="off" min="0.01" placeholder="0.00" step="0.01" type="number" value=""/></div></div>
@@ -5829,6 +5829,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     return {cash,petty};
   }
 
+  let ndApprovedCashExpenseRows=[],ndApprovedCashExpenseError="";
   function ndCashLedgerBreakdown(branch,sourceRows=allRows,cutoffDate=""){
     const target=String(branch||"").trim(), cutoff=String(cutoffDate||"").trim();
     const seen=new Set();
@@ -5854,8 +5855,14 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
       .filter(e=>e?.type==='out').reduce((n,e)=>n+(Number(e.amount)||0),0),0);
     const floatRows=rows.slice().sort((a,b)=>String(a.settlement_date).localeCompare(String(b.settlement_date)));
     const legacyOpening=floatRows.length?Number(floatRows[0].petty_opening||0):0;
-    return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,legacyExpenses,legacyOpening,
-      balance:cash-withdrawals+legacyPettyTransfers-transfers-advanceDeductions-legacyExpenses+legacyOpening};
+    // Approved requests are a distinct source from historical petty_entries.
+    // Only approved review amounts reduce cash; pending/rejected never do.
+    const approvedExpenses=ndApprovedCashExpenseRows.filter(x=>
+      String(x.branch||'').trim()===target && (!cutoff || String(x.expense_date||'')<=cutoff) &&
+      String(x.expense_date||'')>=ND_CASH_LEDGER_START
+    ).reduce((sum,x)=>sum+Number(x.approved_amount||0),0);
+    return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,legacyExpenses,legacyOpening,approvedExpenses,
+      balance:cash-withdrawals+legacyPettyTransfers-transfers-advanceDeductions-legacyExpenses-approvedExpenses+legacyOpening};
   }
   function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
     return ndCashLedgerBreakdown(branch,sourceRows,cutoffDate).balance;
@@ -6923,11 +6930,14 @@ return `<div class="history-date-card">
       }
       throw Error('Advance history is too large for one refresh.');
     })();
-    const [dailyRes,remittanceRes,advanceRes]=await Promise.all([
+    const [dailyRes,remittanceRes,advanceRes,expenseRes]=await Promise.all([
       db.from("daily_settlements").select("*").order("settlement_date",{ascending:false}),
       db.from("cash_remittances").select("*").order("remittance_date",{ascending:false}).order("id",{ascending:false}),
-      advanceTask.then(data=>({data,error:null}),error=>({data:null,error}))
+      advanceTask.then(data=>({data,error:null}),error=>({data:null,error})),
+      (async()=>{const rows=[];for(let offset=0;offset<30000;offset+=500){const r=await db.from('nd_cash_expense_daily_approved').select('branch,expense_date,approved_amount').range(offset,offset+499);if(r.error)return {data:null,error:r.error};const page=r.data||[];rows.push(...page);if(page.length<500)return {data:rows,error:null};}return {data:null,error:new Error('Approved expense history exceeds refresh limit.')}})()
     ]);
+    if(expenseRes.error){ndApprovedCashExpenseError=expenseRes.error.message||String(expenseRes.error);ndApprovedCashExpenseRows=[];}
+    else{ndApprovedCashExpenseError='';ndApprovedCashExpenseRows=expenseRes.data||[];}
     if(advanceRes.error){ndCashAdvanceReady=false;ndCashAdvanceError=advanceRes.error.message||String(advanceRes.error);ndCashAdvanceEntries=[];}
     else{ndCashAdvanceEntries=advanceRes.data;ndCashAdvanceReady=true;ndCashAdvanceError='';}
     if(dailyRes.error){$("syncState").textContent="同步失败："+dailyRes.error.message;$("syncState").className="bad";return false;}
@@ -6943,13 +6953,14 @@ return `<div class="history-date-card">
       await loadSelectedCashTransferHistory();
     }
     renderDailyBranchButtons();
-    const cashProblems=[ndCashAdvanceError&&('Salary Advance: '+ndCashAdvanceError),ndCashRemittanceError&&('Cash Remittance: '+ndCashRemittanceError)].filter(Boolean);
+    const cashProblems=[ndCashAdvanceError&&('Salary Advance: '+ndCashAdvanceError),ndCashRemittanceError&&('Cash Remittance: '+ndCashRemittanceError),ndApprovedCashExpenseError&&('Approved Cash Expenses: '+ndApprovedCashExpenseError)].filter(Boolean);
     $("syncState").textContent=cashProblems.length?'Partial sync - Cash Balance unavailable: '+cashProblems.join(' | '):'云端已同步 ✓';
     $("syncState").className=cashProblems.length?'bad':'ok';
     return true;
   }
 
   let ndAdvanceLedgerReloading=false;
+  window.addEventListener('nd-cash-expense-reviewed',async()=>{if(await fetchRows())renderAll();});
   window.addEventListener('nd-cash-advance-changed',async()=>{
     if(ndAdvanceLedgerReloading||!db)return;
     ndAdvanceLedgerReloading=true;
@@ -8498,7 +8509,7 @@ return `<div class="history-date-card">
     const breakdown=ndCashLedgerBreakdown(currentBranch,allRows,selectedDate);
     const pendingCash=num("cash")-(existing?Number(existing.cash||0):0);
     const pendingWithdrawal=ndDailyWithdrawalTotal()-(existing?Number(existing.cash_withdrawal||0):0);
-    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Cash withdrawn: ${money(breakdown.withdrawals+pendingWithdrawal)} | Verified bank transfers: ${money(breakdown.transfers)} | Salary advances (cash paid out): ${money(breakdown.advanceDeductions)} | Remaining: ${money(balance)}`;
+    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Cash withdrawn: ${money(breakdown.withdrawals+pendingWithdrawal)} | Verified bank transfers: ${money(breakdown.transfers)} | Salary advances (cash paid out): ${money(breakdown.advanceDeductions)} | Legacy cash expenses: ${money(breakdown.legacyExpenses)} | UMO approved cash expenses: ${money(breakdown.approvedExpenses)} | Remaining: ${money(balance)}`;
     el.dataset.cashBreakdown=el.title;
     // Keep the audit breakdown available for diagnostics, but do not display a note.
     const detail=document.getElementById("ndCashBalanceAudit");
