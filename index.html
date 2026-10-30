@@ -7036,9 +7036,17 @@ return `<div class="history-date-card">
     const cashRemittance=verifiedCashRemittanceForDate(currentBranch,$("settlementDate")?.value||today());
     const cashBalance=String($('settlementDate')?.value||today())<ND_CASH_LEDGER_START?0:cashOpening+num("cash")-cashWithdrawal-cashRemittance-ndCashAdvanceTotal(currentBranch,$('settlementDate')?.value||today(),true)+ndCashAdvanceTotal(currentBranch,$('settlementDate')?.value||today(),false);
     $("grandTotal").value=money(total);
-    $("cashBalance").value=ndCashAdvanceReady?money(cashBalance):'Unavailable';
+    // Display the same unified, date-scoped cash ledger used by Today's Cash Balance.
+    // Include unsaved form changes exactly once; never display legacy cash_opening as available cash.
+    const selectedCashDate=$("settlementDate")?.value||today();
+    const savedCashRow=(allRows||[]).find(r=>String(r.branch||"").trim()===String(currentBranch||"").trim()&&String(r.settlement_date||"")===String(selectedCashDate));
+    const unifiedCash=directCashRemainingForBranch(currentBranch,allRows,selectedCashDate)
+      +num("cash")-Number(savedCashRow?.cash||0)
+      -(ndDailyWithdrawalTotal()-Number(savedCashRow?.cash_withdrawal||0));
+    const unifiedCashReady=ndCashAdvanceReady&&!ndCashRemittanceError&&!ndApprovedCashExpenseError;
+    $("cashBalance").value=unifiedCashReady?money(unifiedCash):'Unavailable';
     $("pettyRemaining").value=money(pettyRemaining);
-    $("metricGrandTotal").textContent=money(total);if($("metricCashBalance"))$("metricCashBalance").textContent=ndCashAdvanceReady?money(cashBalance):'Unavailable';
+    $("metricGrandTotal").textContent=money(total);if($("metricCashBalance"))$("metricCashBalance").textContent=unifiedCashReady?money(unifiedCash):'Unavailable';
     $("metricPetty").textContent=money(pettyRemaining);
     $("metricDate").textContent=$("settlementDate").value||"-";
     renderPetty();
@@ -35080,3 +35088,9 @@ body #ndStaffFormsPage{width:auto!important;min-width:0!important;max-width:none
 </style>
 
 <style id="nd-unified-cash-hide-old-transfer">#cashToPettyPanel,#ndPettyTopupReminder{display:none!important}</style>
+
+<style id="nd-unified-cash-legacy-summary-override">
+#appView #ndExpenseExpand>summary .nd-petty-balance,
+#appView #ndExpenseActionCard #ndExpenseExpand>summary .nd-petty-balance,
+#appView #ndExpenseExpand>summary #pettyRemaining{display:none!important;visibility:hidden!important}
+</style>
