@@ -34595,6 +34595,60 @@ function init(){move();approvalPanel();void refresh();}if(document.readyState===
 window.addEventListener('focus',()=>void refresh());document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refresh();});
 })();
 </script>
+
+<style id="nd-today-cash-final-layout">
+#ndTodayCashUnified > #ndExpenseActionCard,#ndTodayCashUnified > #cashRemittanceCard{width:100%;max-width:100%;margin:12px 0!important;box-sizing:border-box}
+#ndTodayCashUnified #ndExpenseExpand>summary strong,#ndTodayCashUnified #ndTransferExpand>summary strong{font-weight:750}
+#ndTodayCashUnified .nd-petty-history-table{display:none!important}
+#ndTodayCashUnified #ndTodayCashTransactionHistory{margin-top:12px}
+#ndTodayCashUnified #ndTodayCashTransactionHistory>summary{cursor:pointer;font-weight:750;padding:12px 0}
+#ndTodayCashUnified #ndTodayCashTransactionHistory .nd-history-actions{display:flex;gap:8px;flex-wrap:wrap}
+#ndTodayCashUnified #ndUmoPettyApproval{margin:12px 0}
+</style>
+<script id="nd-today-cash-final-layout-script">
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+function setup(){
+ const total=$('todayTotalCash'),expense=$('ndExpenseActionCard'),bank=$('cashRemittanceCard');
+ if(!total||!expense||!bank)return;
+ const host=total.closest('.card.span12');if(!host)return;
+ host.id='ndTodayCashUnified';
+ const expTitle=expense.querySelector('#ndExpenseExpand>summary strong');if(expTitle)expTitle.textContent='Cash Expense';
+ const head=$('pettyInOutTitle');if(head)head.textContent='Cash Expense';
+ const btn=$('addPettyBtn');if(btn)btn.textContent='Submit for UMO Approval';
+ const old=host.querySelector('#ndTodayCashTransactionHistory');
+ if(!old){
+  const d=document.createElement('details');d.id='ndTodayCashTransactionHistory';
+  const summary=document.createElement('summary');summary.textContent='Transaction History';d.appendChild(summary);
+  const actions=document.createElement('div');actions.className='nd-history-actions';
+  for(const id of ['pettyCashHistoryBtn','bedFeeHistoryBtn','cashRemittanceHistoryBtn','historyRecordsBtn']){
+   const b=$(id);if(b)actions.appendChild(b);
+  }
+  d.appendChild(actions);host.appendChild(d);
+ }
+ const history=$('ndTodayCashTransactionHistory');
+ // Preserve all old elements and event listeners: only move their DOM nodes.
+ const approval=$('ndUmoPettyApproval');
+ host.insertBefore(expense,history);
+ host.insertBefore(bank,history);
+ if(approval)host.insertBefore(approval,bank);
+ // Remove note/remarks inputs only within this unified cash workflow.
+ for(const card of [expense,bank]){
+  for(const el of card.querySelectorAll('input,textarea')){
+   const name=[el.id,el.name,el.getAttribute('aria-label')].filter(Boolean).join(' ');
+   if(/\b(?:remarks?|notes?)\b/i.test(name)){
+    const parent=el.closest('.form-group,.field,.nd-petty-field,.money-line')||el.closest('label')||el;
+    parent.style.display='none';el.disabled=true;
+   }
+  }
+ }
+ const oldPetty=$('pettyRemaining');if(oldPetty)oldPetty.closest('.nd-petty-balance')?.style.setProperty('display','none','important');
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
+// The earlier approval script can insert its panel after DOMContentLoaded.
+let tries=0;const interval=setInterval(()=>{setup();if(++tries>=8)clearInterval(interval);},500);
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
