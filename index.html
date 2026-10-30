@@ -8108,19 +8108,40 @@ return `<div class="history-date-card">
       const date=$("settlementDate").value;
       const saved=allRows.find(r=>r.branch===currentBranch&&r.settlement_date===date);
       if(!saved){alert("This entry has not been saved. Submit Daily Settlement first.");return;}
-      const savedEntries=Array.isArray(saved.petty_entries)?saved.petty_entries:[];
-      const savedIndex=savedEntries.findIndex(e=>JSON.stringify(e)===JSON.stringify(entry));
-      if(savedIndex<0){alert("Record has changed. Refresh the page and try again.");return;}
+      // Read the latest persisted entries before deleting: the local row may have
+      // changed after receipt metadata updates or another device's save.
+      const latestResult=await db.from("daily_settlements")
+        .select("id,petty_entries,petty_opening,cash_withdrawal")
+        .eq("id",saved.id).single();
+      if(latestResult.error){alert("Unable to refresh Cash Expense: "+latestResult.error.message);return;}
+      const fresh=latestResult.data;
+      const savedEntries=Array.isArray(fresh.petty_entries)?fresh.petty_entries:[];
+      const same=(a,b)=>String(a?.type||"")===String(b?.type||"")
+        && String(a?.reason||"")===String(b?.reason||"")
+        && Math.abs(Number(a?.amount||0)-Number(b?.amount||0))<0.005
+        && String(a?.receipt?.path||"")===String(b?.receipt?.path||"");
+      const candidates=savedEntries.map((e,i)=>same(e,entry)?i:-1).filter(i=>i>=0);
+      if(candidates.length!==1){
+        alert(candidates.length>1
+          ?"Multiple matching records found. Please refresh and select the correct record."
+          :"This record was updated or removed. Reloading the latest Cash Expense records.");
+        await fetchRows();
+        const updated=allRows.find(r=>r.id===saved.id);
+        if(updated)await loadRow(updated);
+        renderAll();
+        return;
+      }
+      const savedIndex=candidates[0];
       const refund=entry.type==="in" && (entry.transfer_to_petty===true || entry.reason==="Cash Withdrawal to Petty Cash") ? Number(entry.amount||0):0;
-      if(!confirm(refund>0 ? `Delete this Petty Cash IN entry and refund RM ${refund.toFixed(2)} to Total Cash?` : "Delete this Petty Cash entry?"))return;
+      if(!confirm(refund>0 ? `Delete this Cash Expense IN entry and refund RM ${refund.toFixed(2)} to Total Cash?` : "Delete this Cash Expense entry?"))return;
       btn.disabled=true;
       try{
         const nextEntries=savedEntries.filter((_,i)=>i!==savedIndex);
-        const newWithdrawal=Number(saved.cash_withdrawal||0)-refund;
+        const newWithdrawal=Number(fresh.cash_withdrawal||0)-refund;
         if(newWithdrawal< -0.005)throw new Error("Cash Withdrawal is smaller than the refund. Please contact an administrator.");
         const pin=nextEntries.reduce((n,e)=>n+(e.type==="in"?Number(e.amount||0):0),0);
         const pout=nextEntries.reduce((n,e)=>n+(e.type==="out"?Number(e.amount||0):0),0);
-        const patch={petty_entries:nextEntries,petty_in:pin,petty_out:pout,petty_net:Number(saved.petty_opening||0)+pin-pout};
+        const patch={petty_entries:nextEntries,petty_in:pin,petty_out:pout,petty_net:Number(fresh.petty_opening||0)+pin-pout};
         if(refund>0)patch.cash_withdrawal=Math.max(0,Math.round(newWithdrawal*100)/100);
         const {data,error}=await db.from("daily_settlements").update(patch).eq("id",saved.id).select("id");
         if(error)throw error;
@@ -8644,75 +8665,32 @@ return `<div class="history-date-card">
       }
     };
 
+    // Cash Expense is a request, not an immediate petty_entries cash movement.
+    // Do not write to daily_settlements before UMO approves it.
     if($("addPettyBtn")) $("addPettyBtn").onclick=async()=>{
-      const amount=num("pettyAmount");
-      const type="out";
-      const reason=$("pettyReason").value.trim();
-      if(amount<=0){alert("Please enter an amount");return;}
-      if(!reason){
-        alert(type==="in"?"Please enter the Person in Charge.":"Please enter a reason.");
-        return;
-      }
-      if(type==="out" && !pendingPettyReceiptFile){
-        alert("Every Petty Cash OUT entry requires a receipt photo or file.");
-        return;
-      }
-
-      const pettyBtn=$("addPettyBtn");
-      const oldPettyText=pettyBtn?.textContent||"Submit";
-      if(pettyBtn){pettyBtn.disabled=true;pettyBtn.textContent=pendingPettyReceiptFile?"Uploading receipt...":"Saving...";}
-
+      const amount=num("pettyAmount"),reason=$("pettyReason").value.trim();
+      if(!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100){alert("Enter a valid amount (2 decimal places).");return;}
+      if(!reason){alert("Enter an expense reason.");return;}
+      if(!pendingPettyReceiptFile){alert("Attach a receipt before submitting Cash Expense.");return;}
+      const button=$("addPettyBtn"),label=button.textContent;
+      button.disabled=true;button.textContent="Submitting for approval...";
       let receipt=null;
       try{
-        if(pendingPettyReceiptFile) receipt=await uploadPettyReceipt(pendingPettyReceiptFile);
-
-        const newEntry={type,amount,reason};
-        if(receipt) newEntry.receipt=receipt;
-        pettyEntries.push(newEntry);
-
-        $("pettyAmount").value="";
-        $("pettyReason").value="";
-        pendingPettyReceiptFile=null;
-        refreshPendingPettyReceiptUI();
-        calc();
-        setDailyDirty();
-
-        if(pettyBtn) pettyBtn.textContent="Saving...";
-        await saveNow();
-
-        const pettySaved=$("syncState")?.classList.contains("ok");
-        if(pettySaved){
-          dailyDirty=false;
-          const dailyState=$("dailySubmitState");
-          if(dailyState){dailyState.textContent="";dailyState.className="helper";}
-          const dailyBtn=$("dailySubmitBtn");
-          if(dailyBtn){dailyBtn.disabled=false;dailyBtn.textContent="Submit Daily Settlement";}
-
-          if(pettyBtn) pettyBtn.textContent="Saved ✓";
-          setTimeout(()=>{
-            if(pettyBtn){
-              pettyBtn.disabled=false;
-              pettyBtn.textContent=oldPettyText;
-            }
-          },1200);
-        }else{
-          throw new Error("Petty Cash save failed");
-        }
-      }catch(err){
-        if(receipt?.path&&!err?.ndSaveUncertain){
-          try{await db.storage.from(PETTY_RECEIPT_BUCKET).remove([receipt.path]);}catch(_){}
-        }
-        if(receipt&&!err?.ndSaveUncertain){
-          const idx=pettyEntries.findIndex(e=>e?.receipt?.path===receipt.path);
-          if(idx>=0) pettyEntries.splice(idx,1);
-        }
-        calc();
-        if(pettyBtn){
-          pettyBtn.disabled=false;
-          pettyBtn.textContent="Retry Submit";
-        }
-        alert(err?.message||String(err));
-      }
+        receipt=await uploadPettyReceipt(pendingPettyReceiptFile);
+        if(!receipt?.path)throw Error("Receipt upload did not return a storage path.");
+        const result=await db.rpc('nd_cash_expense_submit',{
+          p_branch:currentBranch,p_amount:amount,p_reason:reason,p_receipt_path:receipt.path
+        });
+        if(result.error)throw result.error;
+        $("pettyAmount").value="";$("pettyReason").value="";
+        pendingPettyReceiptFile=null;refreshPendingPettyReceiptUI();
+        alert("Cash Expense submitted. Pending UMO approval. No cash has been deducted.");
+        window.dispatchEvent(new Event('nd-cash-expense-submitted'));
+      }catch(error){
+        // Keep the uploaded receipt when the submission outcome is uncertain:
+        // deleting it could break an already-created approval record.
+        alert("Cash Expense was not confirmed: "+(error?.message||error)+". Check Transaction History before retrying to avoid duplicates.");
+      }finally{button.disabled=false;button.textContent=label;}
     };
     $("refreshBtn").onclick=async()=>{await fetchRows();
     try{await cleanupExpiredCashRemittanceReceipts();}catch(_){}
@@ -33577,7 +33555,7 @@ function watch(canvas){if(observed.has(canvas))return;observed.add(canvas);const
 function scan(root){if(root.matches?.(selector))watch(root);root.querySelectorAll?.(selector).forEach(watch);}scan(document);new MutationObserver(records=>records.forEach(r=>r.addedNodes.forEach(node=>{if(node.nodeType===1)scan(node);}))).observe(document.body,{subtree:true,childList:true});})();</script><script id="nd-inline-document-reader">
 window.ndOpenInlineDocument=function(html,title){
  let dialog=document.getElementById('ndInlineDocumentDialog');
- if(!dialog){dialog=document.createElement('dialog');dialog.id='ndInlineDocumentDialog';dialog.setAttribute('aria-label','Document preview');dialog.style.cssText='width:min(1000px,96vw);height:92dvh;max-height:94dvh;padding:0;border:0;border-radius:16px;overflow:hidden';dialog.innerHTML='<div style="display:flex;height:100%;flex-direction:column"><header style="display:flex;align-items:center;gap:12px;padding:14px;background:#fff"><strong style="flex:1" data-title></strong><button type="button" class="btn" data-print>Print / Save as PDF</button><button type="button" class="btn" data-close>Close</button></header><iframe title="Document" style="flex:1;width:100%;min-height:0;border:0;background:white"></iframe></div>';document.body.append(dialog);dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.querySelector('[data-print]').onclick=()=>{const frame=dialog.querySelector('iframe');frame.contentWindow.focus();frame.contentWindow.print();};dialog.addEventListener('close',()=>{dialog.querySelector('iframe').srcdoc='';dialog.ndReturnFocus?.focus();});}
+ if(!dialog){dialog=document.createElement('dialog');dialog.id='ndInlineDocumentDialog';dialog.setAttribute('aria-label','Document preview');dialog.style.cssText='width:min(1000px,96vw);height:92dvh;max-height:94dvh;padding:0;border:0;border-radius:16px;overflow:hidden';dialog.innerHTML='<div style="display:flex;height:100%;flex-direction:column"><header style="display:flex;align-items:center;gap:12px;padding:14px;background:#fff"><strong style="flex:1" data-title></strong><button type="button" class="btn" data-print>Print / Save as PDF</button><button type="button" class="btn" data-close>Close</button></header><iframe title="Document" style="flex:1;width:100%;min-height:0;border:0;background:white"></iframe></div>';document.body.append(dialog);dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.querySelector('[data-items]').addEventListener('click',e=>{const b=e.target.closest('[data-open-receipt]');if(b)void previewReceipt(b);});dialog.querySelector('[data-print]').onclick=()=>{const frame=dialog.querySelector('iframe');frame.contentWindow.focus();frame.contentWindow.print();};dialog.addEventListener('close',()=>{dialog.querySelector('iframe').srcdoc='';dialog.ndReturnFocus?.focus();});}
  dialog.querySelector('[data-title]').textContent=title||'Document';const parsed=new DOMParser().parseFromString(html,'text/html');for(const button of parsed.querySelectorAll('button')){if(/\bprint\s*\(/i.test(button.getAttribute('onclick')||'')||/^Print\s*\/\s*Save as PDF$/i.test(button.textContent.trim())){const parent=button.parentElement;button.remove();if(parent&&!parent.textContent.trim()&&!parent.children.length)parent.remove();}}dialog.querySelector('iframe').srcdoc='<!doctype html>'+parsed.documentElement.outerHTML;dialog.ndReturnFocus=document.activeElement;if(!dialog.open)dialog.showModal();return dialog;
 };
 </script>
@@ -34580,7 +34558,7 @@ function setup(){makePanel();$('ordersInventoryBtn')?.addEventListener('click',(
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
 })();
 </script>
-<style id="nd-cash-unified-ui">#ndExpenseActionCard .nd-petty-balance{display:none!important}#ndCashReviewDialog{width:min(920px,96vw);max-height:90dvh;overflow:auto;border:1px solid #ddd;border-radius:16px;padding:20px;background:#fff}#ndCashReviewDialog::backdrop{background:#0008}#ndCashReviewDialog .nd-review-row{padding:14px;border:1px solid #ddd;border-radius:12px;margin:10px 0}#ndCashReviewDialog .nd-review-actions{display:flex;gap:10px;flex-wrap:wrap}#ndCashReviewDialog iframe,#ndCashReviewDialog img{width:100%;height:360px;object-fit:contain;border:1px solid #ddd}#ndCashReviewDialog button{padding:10px;border-radius:8px;cursor:pointer}#ndCashReviewDialog input{max-width:180px}</style>
+<style id="nd-cash-unified-ui">#ndExpenseActionCard .nd-petty-balance,#ndExpenseExpand .nd-petty-balance{display:none!important}#ndCashReviewDialog{width:min(920px,96vw);max-height:90dvh;overflow:auto;border:1px solid #ddd;border-radius:16px;padding:20px;background:#fff}#ndCashReviewDialog::backdrop{background:#0008}#ndCashReviewDialog .nd-review-row{padding:14px;border:1px solid #ddd;border-radius:12px;margin:10px 0}#ndCashReviewDialog .nd-review-actions{display:flex;gap:10px;flex-wrap:wrap}#ndCashReviewDialog iframe,#ndCashReviewDialog img{width:100%;height:360px;object-fit:contain;border:1px solid #ddd}#ndCashReviewDialog button{padding:10px;border-radius:8px;cursor:pointer}#ndCashReviewDialog input{max-width:180px}</style>
 <script id="nd-cash-expense-umo-review-v1">
 (()=>{'use strict';
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -34588,13 +34566,53 @@ let rows=[],busy=false,lastPromptKey='',dialog;
 const db=()=>window.salaryDb||null;
 async function email(){const c=db();if(!c)return '';const r=await c.auth.getUser();return String(r.data?.user?.email||'').toLowerCase();}
 function mount(){if(dialog)return;dialog=document.createElement('dialog');dialog.id='ndCashReviewDialog';dialog.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2>Cash Expense · Pending Approval</h2><button type="button" data-close>Close</button></div><p data-status role="status"></p><div data-items></div>';document.body.append(dialog);dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.querySelector('[data-items]').addEventListener('click',async e=>{const b=e.target.closest('[data-review]');if(!b||busy)return;const id=b.dataset.id,action=b.dataset.review,r=rows.find(x=>x.id===id);if(!r)return;const card=b.closest('.nd-review-row');const amount=Number(card.querySelector('[data-amount]').value);if(action==='approved'&&(!Number.isFinite(amount)||amount<=0)){alert('Enter a valid verified amount.');return;}if(!confirm((action==='approved'?'Approve':'Reject')+' Cash Expense RM '+r.amount+'?'))return;busy=true;card.querySelectorAll('button').forEach(x=>x.disabled=true);try{const result=await db().rpc('nd_cash_expense_review',{p_id:id,p_action:action,p_verified_amount:action==='approved'?amount:null});if(result.error)throw result.error;await load(false);window.dispatchEvent(new Event('nd-cash-expense-reviewed'));}catch(error){alert('Approval failed: '+error.message);}finally{busy=false;card.querySelectorAll('button').forEach(x=>x.disabled=false);}});}
-function receiptMarkup(path){if(!path)return '<p>No receipt attached.</p>';if(/^https:\/\//i.test(path)){let u;try{u=new URL(path);}catch(_){return '<p>Invalid receipt URL</p>';}if(!/\.(pdf|png|jpe?g|webp)(\?|$)/i.test(u.pathname))return '<p>Receipt stored; use the receipt viewer to open it.</p>';return /\.pdf$/i.test(u.pathname)?'<iframe title="Receipt" src="'+esc(u.href)+'"></iframe>':'<img alt="Expense receipt" src="'+esc(u.href)+'">';}return '<p>Receipt stored at: '+esc(path)+' (private storage: use an authorized signed URL)</p>';}
-async function load(show){if(await email()!=='umo1017@gmail.com')return;mount();const r=await db().from('nd_cash_expense_requests').select('id,branch,expense_date,amount,expense_reason,receipt_path,status,submitted_at').eq('status','pending').order('submitted_at',{ascending:true}).limit(100);if(r.error){if(show){dialog.showModal();dialog.querySelector('[data-status]').textContent='Unable to load: '+r.error.message;}return;}rows=r.data||[];const key=rows.map(x=>x.id).join('|');if(!show&&(!rows.length||key===lastPromptKey))return;lastPromptKey=key;dialog.querySelector('[data-status]').textContent=rows.length+' pending expense(s). Approval does not automatically synchronize legacy petty_entries cash totals.';dialog.querySelector('[data-items]').innerHTML=rows.map(x=>'<article class="nd-review-row"><strong>'+esc(x.branch)+' · '+esc(x.expense_date)+'</strong><p>'+esc(x.expense_reason)+'</p><p>Submitted amount: <strong>RM '+Number(x.amount).toFixed(2)+'</strong></p>'+receiptMarkup(x.receipt_path)+'<label>Verified amount (RM)<input data-amount type="number" min="0.01" step="0.01" value="'+Number(x.amount).toFixed(2)+'"></label><div class="nd-review-actions"><button type="button" data-review="approved" data-id="'+esc(x.id)+'">Approve</button><button type="button" data-review="rejected" data-id="'+esc(x.id)+'">Reject</button></div></article>').join('')||'<p>No pending expenses.</p>';if(!dialog.open)dialog.showModal();}
+function receiptMarkup(path){if(!path)return '<p>No receipt attached.</p>';return '<div data-receipt="'+esc(path)+'"><button type="button" data-open-receipt>View Receipt</button><div data-receipt-preview role="status"></div></div>';}
+async function previewReceipt(button){const root=button.closest('[data-receipt]'),out=root?.querySelector('[data-receipt-preview]');if(!out)return;const path=root.dataset.receipt;button.disabled=true;out.textContent='Loading receipt…';try{
+ let url=path;
+ if(!/^https:\/\//i.test(path)){
+  const result=await db().storage.from('petty-receipts').createSignedUrl(path,300);
+  if(result.error)throw result.error;
+  url=result.data?.signedUrl;
+ }
+ if(!url)throw Error('Receipt link unavailable.');
+ const parsed=new URL(url,location.href);
+ if(parsed.protocol!=='https:')throw Error('Unsupported receipt link.');
+ const pdf=/\.pdf(?:$|[?#])/i.test(parsed.pathname);
+ const media=document.createElement(pdf?'iframe':'img');
+ if(pdf)media.title='Cash Expense Receipt';else media.alt='Cash Expense Receipt';
+ media.src=parsed.href;out.replaceChildren(media);
+ }catch(error){out.textContent='Unable to open receipt: '+error.message;}finally{button.disabled=false;}}
+
+async function load(show){if(await email()!=='umo1017@gmail.com')return;mount();const r=await db().from('nd_cash_expense_requests').select('id,branch,expense_date,amount,expense_reason,receipt_path,status,submitted_at').eq('status','pending').order('submitted_at',{ascending:true}).limit(100);if(r.error){if(show){dialog.showModal();dialog.querySelector('[data-status]').textContent='Unable to load: '+r.error.message;}return;}rows=r.data||[];const key=rows.map(x=>x.id).join('|');if(!show&&(!rows.length||key===lastPromptKey))return;lastPromptKey=key;dialog.querySelector('[data-status]').textContent=rows.length+' pending expense(s). Approval does not automatically synchronize legacy petty_entries cash totals.';dialog.querySelector('[data-items]').innerHTML=rows.map(x=>'<article class="nd-review-row"><strong>'+esc(x.branch)+' · '+esc(x.expense_date)+'</strong><p>'+esc(x.expense_reason)+'</p><p>Submitted amount: <strong>RM '+Number(x.amount).toFixed(2)+'</strong></p>'+receiptMarkup(x.receipt_path)+'<label>Verified amount (RM)<input data-amount type="number" min="0.01" step="0.01" value="'+Number(x.amount).toFixed(2)+'"></label><div class="nd-review-actions"><button type="button" data-review="approved" data-id="'+esc(x.id)+'">Approve</button><button type="button" data-review="rejected" data-id="'+esc(x.id)+'">Reject</button></div></article>').join('')||'<p>No pending expenses.</p>';if(!dialog.open&&!document.querySelector('dialog[open]'))dialog.showModal();}
 window.ndOpenCashExpenseApprovals=()=>load(true);
-function init(){const card=$('ndExpenseActionCard');if(card&&!$('ndCashApprovalOpen')){const b=document.createElement('button');b.id='ndCashApprovalOpen';b.type='button';b.className='btn';b.textContent='Pending Approvals';b.hidden=true;b.onclick=()=>void load(true);card.append(b);void email().then(e=>{b.hidden=e!=='umo1017@gmail.com';});}setTimeout(()=>void load(false),1500);}
+function init(){document.getElementById('ndCashApprovalOpen')?.remove();setTimeout(()=>void load(false),1500);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 window.addEventListener('nd-cash-expense-submitted',()=>{lastPromptKey='';void load(false);});
+setInterval(()=>{if(!document.hidden)void load(false);},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void load(false);});
 })();</script>
+<script id="nd-cash-expense-approval-note">document.addEventListener('DOMContentLoaded',()=>{const card=document.getElementById('ndPettyCashCard')||document.getElementById('pettyCashCard');if(card&&!document.getElementById('ndCashExpenseNote')){const p=document.createElement('p');p.id='ndCashExpenseNote';p.className='helper';p.textContent='New Cash Expenses remain pending until UMO approval. The cash balance reconciliation is not yet enabled.';card.appendChild(p);}});</script>
+
+<script id="nd-cash-expense-ledger-integrity-v1">
+(()=>{'use strict';
+  // Cash Expense approvals and the legacy petty_entries ledger are distinct
+  // until a server-side reconciliation is deployed. Never add the two balances.
+  window.ndCashExpenseLedgerMode='approval-pending-reconciliation';
+  async function check(){
+    const db=window.salaryDb;if(!db)return;
+    try{const r=await db.from('nd_cash_expense_daily_approved')
+      .select('branch,expense_date,approved_amount,approved_count')
+      .order('expense_date',{ascending:false}).limit(100);
+      if(r.error)throw r.error;
+      window.ndCashExpenseApprovedTotals=r.data||[];
+    }catch(e){console.warn('Cash Expense reconciliation view unavailable:',e.message);}
+  }
+  window.ndRefreshCashExpenseReconciliation=check;
+  window.addEventListener('nd-cash-expense-submitted',()=>void check());
+  window.addEventListener('nd-cash-expense-reviewed',()=>void check());
+  document.addEventListener('DOMContentLoaded',()=>void check(),{once:true});
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
