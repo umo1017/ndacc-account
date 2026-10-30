@@ -34741,8 +34741,7 @@ async function load(){
  busy=true;
  try{
   const email=String(window.currentUser?.email||window.user?.email||'').toLowerCase();
-  let q=db.from('nd_petty_expense_requests').select('id,branch,reason,amount,status,created_at,submitted_email,reviewed_at').order('created_at',{ascending:false}).limit(150);
-  const {data,error}=await q;
+  const {data,error}=await db.rpc('nd_petty_expense_history',{p_limit:150});
   if(error)throw error;
   const rows=(data||[]).filter(r=>email===admin||!email||String(r.submitted_email||'').toLowerCase()===email);
   if(!rows.length){body.textContent='No cash expense submissions yet.';return;}
@@ -35247,3 +35246,26 @@ body #ndStaffFormsPage{width:auto!important;min-width:0!important;max-width:none
 #ndStaffDeductionsMount .ndd-warning-choice span{font-size:14px;font-weight:700}
 #ndStaffDeductionsMount .ndd-warning-choice+.helper{font-size:12px;margin:5px 0 0;line-height:1.4}
 </style>
+
+<!-- Nature's Dao: settlement receipt -> collapsed cash actions -->
+<script id="nd-cash-actions-collapsed-under-receipt-20261031">
+(()=>{'use strict';
+ const $=id=>document.getElementById(id);
+ function align(){
+  const receipt=$('dailySettlementProofCard'),expense=$('ndExpenseActionCard'),bank=$('cashRemittanceCard');
+  if(!receipt||!expense||!bank||!receipt.parentElement)return;
+  // Move existing nodes (not copies) so handlers and form state are preserved.
+  if(receipt.nextElementSibling!==expense)receipt.after(expense);
+  if(expense.nextElementSibling!==bank)expense.after(bank);
+  const exp=$('ndExpenseExpand'),transfer=$('ndTransferExpand');
+  if(exp?.open)exp.open=false;
+  if(transfer?.open)transfer.open=false;
+  const label=exp?.querySelector('summary strong');if(label)label.textContent='Cash Expense';
+  const submit=$('addPettyBtn');if(submit)submit.textContent='Submit';
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',align,{once:true});else align();
+ window.addEventListener('load',align,{once:true});
+ let count=0;const handle=setInterval(()=>{align();if(++count>=25)clearInterval(handle)},800);
+ document.addEventListener('click',e=>{if(e.target.closest('[data-branch],#branch,#branchSelect,#dailyBranch'))setTimeout(align,150)});
+})();
+</script>
