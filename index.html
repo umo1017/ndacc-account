@@ -34659,6 +34659,86 @@ let tries=0;const interval=setInterval(()=>{setup();if(++tries>=8)clearInterval(
 #ndExpenseActionCard input,#ndExpenseActionCard button{max-width:100%;box-sizing:border-box}
 @media(max-width:650px){#ndExpenseActionCard .nd-petty-row,#ndExpenseActionCard .nd-petty-actions{flex-wrap:wrap!important}#ndExpenseActionCard #addPettyBtn{display:block!important;width:100%!important;flex:1 1 100%!important;font-size:14px!important}}
 </style>
+
+<style id="nd-cash-expense-history-v2-css">
+#ndTodayCashUnified #ndTodayCashTransactionHistory{display:block!important}
+#ndTodayCashUnified #ndTodayCashTransactionHistory>summary{display:list-item!important;cursor:pointer}
+#ndTodayCashUnified #ndUmoPettyApproval{display:none!important}
+#ndTodayCashUnified #ndExpenseActionCard .nd-petty-history-table{display:none!important}
+#ndTodayCashUnified #ndCashExpenseDailyHistory{margin-top:12px}
+#ndCashExpenseDailyHistory table{width:100%;border-collapse:collapse}
+#ndCashExpenseDailyHistory th,#ndCashExpenseDailyHistory td{padding:9px 7px;border-bottom:1px solid #e4e9e5;text-align:left;font-size:13px}
+#ndCashExpenseDailyHistory .nd-status{font-weight:600}
+#ndCashExpenseDailyHistory .nd-expense-review{display:flex;gap:6px;flex-wrap:wrap}
+#ndTodayCashUnified #ndExpenseActionCard #addPettyBtn{width:100%;max-width:100%}
+@media(max-width:650px){#ndCashExpenseDailyHistory{overflow-x:auto}#ndCashExpenseDailyHistory table{min-width:480px}}
+</style>
+<script id="nd-cash-expense-history-v2">
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+const admin='umo1017@gmail.com';
+let busy=false;
+function setup(){
+ const host=$('ndTodayCashUnified'),expense=$('ndExpenseActionCard'),bank=$('cashRemittanceCard'),history=$('ndTodayCashTransactionHistory');
+ if(!host||!expense||!bank||!history)return;
+ const btn=$('addPettyBtn');if(btn)btn.textContent='Submit';
+ const approval=$('ndUmoPettyApproval');if(approval)approval.hidden=true;
+ host.insertBefore(expense,history);host.insertBefore(bank,history);
+ const exp=$('ndExpenseExpand'),tr=$('ndTransferExpand');
+ if(exp)exp.open=true;
+ if(tr)tr.open=true;
+ history.open=true;
+ // The two action headings stay above the submit buttons, and history stays expanded.
+ let daily=$('ndCashExpenseDailyHistory');
+ if(!daily){
+  daily=document.createElement('section');daily.id='ndCashExpenseDailyHistory';
+  daily.innerHTML='<strong>Daily Cash Expense Submissions</strong><div id="ndCashExpenseDailyBody" class="helper">Loading...</div>';
+  const fields=expense.querySelector('.nd-petty-fields');
+  if(fields)fields.after(daily);else exp?.appendChild(daily);
+ }
+ const table=expense.querySelector('.nd-petty-history-table');
+ if(table)table.style.display='none';
+}
+async function load(){
+ if(busy)return;
+ const body=$('ndCashExpenseDailyBody'),db=window.salaryDb;
+ if(!body||!db)return;
+ busy=true;
+ try{
+  const email=String(window.currentUser?.email||window.user?.email||'').toLowerCase();
+  let q=db.from('nd_petty_expense_requests').select('id,branch,reason,amount,status,created_at,submitted_email,reviewed_at').order('created_at',{ascending:false}).limit(150);
+  const {data,error}=await q;
+  if(error)throw error;
+  const rows=(data||[]).filter(r=>email===admin||!email||String(r.submitted_email||'').toLowerCase()===email);
+  if(!rows.length){body.textContent='No cash expense submissions yet.';return;}
+  body.innerHTML='<table><thead><tr><th>Date</th><th>Branch</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>'+rows.map(r=>{
+   const date=new Date(r.created_at).toLocaleDateString('en-GB',{timeZone:'Asia/Kuala_Lumpur'});
+   const status=String(r.status||'pending');
+   const controls=status==='pending'&&email===admin?'<div class="nd-expense-review"><button class="mini" data-expense-id="'+esc(r.id)+'" data-decision="approve">Approve</button><button class="mini" data-expense-id="'+esc(r.id)+'" data-decision="reject">Reject</button></div>':'—';
+   return '<tr title="'+esc(r.reason)+'"><td>'+esc(date)+'</td><td>'+esc(r.branch)+'</td><td>RM '+Number(r.amount||0).toFixed(2)+'</td><td class="nd-status">'+esc(status[0].toUpperCase()+status.slice(1))+'</td><td>'+controls+'</td></tr>';
+  }).join('')+'</tbody></table>';
+ }catch(e){body.textContent='History unavailable: '+(e?.message||e);}
+ finally{busy=false;}
+}
+document.addEventListener('click',async e=>{
+ const b=e.target.closest('#ndCashExpenseDailyHistory [data-expense-id]');
+ if(!b)return;
+ e.preventDefault();
+ if(!confirm('Confirm '+b.dataset.decision+' this cash expense?'))return;
+ b.disabled=true;
+ try{
+  const {error}=await window.salaryDb.rpc('nd_petty_expense_review',{p_request_id:b.dataset.expenseId,p_decision:b.dataset.decision});
+  if(error)throw error;
+  await load();
+ }catch(err){alert('Review failed: '+(err?.message||err));b.disabled=false;}
+});
+function start(){setup();void load();let n=0;const t=setInterval(()=>{setup();if(++n>=12)clearInterval(t)},500);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+document.addEventListener('click',e=>{if(e.target.closest('#addPettyBtn'))setTimeout(load,1200);});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void load()});
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
