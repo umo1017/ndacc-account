@@ -146,6 +146,23 @@ async function prepare(){if(busy)return;const employee=employees.find(e=>String(
 async function saveSigned(){if(busy)return;if(!draft||!employeeSigned){$('ndSimpleAdvanceSigningStatus').textContent='Review the document and add the employee signature before saving.';return;}const signed=pendingPayload?.p_document||{...draft,employee_signature:$('ndSimpleAdvanceSignature').toDataURL('image/png')};const payload=pendingPayload||{p_branch:draft.employee.branch,p_employee_id:draft.employee_id,p_amount:Number(draft.details.find(r=>r[0]==='Advance Amount (RM)')[1]),p_request:request||uuid(),p_signature:signed.employee_signature,p_document:signed};pendingPayload=payload;setBusy(true);$('ndSimpleAdvanceSigningStatus').textContent='Saving signed advance…';let saved=false;try{const auth=await wait(db().auth.getUser(),'Account');if(auth.error||auth.data?.user?.email?.toLowerCase()!==actor)throw Error('Your account changed. Reopen the form.');const result=await wait(db().rpc('nd_salary_advance_signed_submit',payload),'Saving signed advance');if(result.error)throw result.error;const row=Array.isArray(result.data)?result.data[0]:result.data;saved=true;pendingPayload=null;request=null;window.dispatchEvent(new Event('nd-cash-advance-changed'));closeDialog($('ndSimpleAdvance'));const refresh=openHistory();view(row?.document_snapshot?row:{record_source:'simple',document_snapshot:signed});const refreshed=await refresh;$('ndSimpleAdvanceHistory').querySelector('[data-sa-status]').textContent='Signed advance saved.'+(refreshed?'':' Reopen History to refresh the saved record.');try{if(typeof refreshSalaryStayHere==='function')void Promise.resolve(refreshSalaryStayHere()).catch(()=>{});}catch(_){}
  }catch(error){if(!saved){if(error.code==='PGRST202'||error.code==='P0001'||/schema cache|nd_salary_advance_signed_submit/i.test(error.message))pendingPayload=null;$('ndSimpleAdvanceSigningStatus').textContent='Unable to save: '+error.message+' Check History before retrying.';}}finally{setBusy(false);}}
 function signedView(document){if(!window.ndContractDocumentMarkup)throw Error('Document tools are still loading. Try again.');const markup=window.ndContractDocumentMarkup(document);return window.ndOpenInlineDocument('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#e9efeb;padding:14px}@page{size:A4 portrait;margin:0}@media print{html,body{margin:0;padding:0;background:#fff}.nd-advance-contract{width:210mm!important;max-width:none!important;box-shadow:none!important}.nd-advance-sheet{width:210mm!important;height:297mm!important;page-break-inside:avoid}}</style><style id="nd-hide-cash-audit-panel">#ndCashAuditPanel{display:none!important}</style>
+
+<style id="nd-cash-expense-bank-style-20261031">
+/* Match Cash Transfer to Bank: vertically stacked inputs and full-width actions. */
+#appView #ndExpenseActionCard .nd-petty-fields{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:16px!important;width:100%!important}
+#appView #ndExpenseActionCard .nd-petty-field,#appView #ndExpenseActionCard .petty-action-wrap{width:100%!important;min-width:0!important;max-width:100%!important;grid-column:auto!important;grid-row:auto!important}
+#appView #ndExpenseActionCard .nd-petty-field>label{display:block!important;margin:0 0 9px!important;font-weight:750!important}
+#appView #ndExpenseActionCard #pettyReason,#appView #ndExpenseActionCard .nd-petty-money{width:100%!important;min-height:52px!important;box-sizing:border-box!important}
+#appView #ndExpenseActionCard .nd-petty-receipt{width:100%!important}
+#appView #ndExpenseActionCard .petty-inline-receipt{width:100%!important}
+#appView #ndExpenseActionCard .nd-petty-upload-actions{display:flex!important;width:100%!important}
+#appView #ndExpenseActionCard #pettyReceiptFileBtn{display:block!important;width:100%!important;min-height:52px!important;text-align:center!important;white-space:normal!important}
+#appView #ndExpenseActionCard #addPettyBtn{display:block!important;width:100%!important;min-height:52px!important;font-size:16px!important;font-weight:750!important;white-space:nowrap!important}
+#appView #ndExpenseActionCard .nd-petty-history-table{display:none!important}
+#appView #ndExpenseActionCard .nd-cash-inline-history{border-top:1px solid #e1e7e3;margin-top:18px;padding-top:18px;width:100%;min-width:0}
+#appView #ndExpenseActionCard .nd-cash-inline-history button{max-width:100%}
+#appView #ndExpenseActionCard{overflow:hidden}
+</style>
 </head><body>'+markup+'<style id="nd-cash-expense-mobile-layout-final">
 /* Single-column action area: never squeeze upload, submit or history into the field grid. */
 #appView #ndExpenseActionCard .nd-petty-fields{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,.72fr)!important;gap:12px!important;align-items:end!important;width:100%!important;min-width:0!important}
@@ -8726,7 +8743,7 @@ return `<div class="history-date-card">
         if(result.error)throw result.error;
         $("pettyAmount").value="";$("pettyReason").value="";
         pendingPettyReceiptFile=null;refreshPendingPettyReceiptUI();
-        alert("Cash Expense submitted. Pending UMO approval. No cash has been deducted.");
+        alert("Cash Expense submitted. Pending approval. No cash has been deducted.");
         window.dispatchEvent(new Event('nd-cash-expense-submitted'));
       }catch(error){
         // Keep the uploaded receipt when the submission outcome is uncertain:
