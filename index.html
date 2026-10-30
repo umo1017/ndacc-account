@@ -5851,6 +5851,12 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     const legacyPettyTransfers=rows.reduce((sum,r)=>sum+(Array.isArray(r.petty_entries)?r.petty_entries:[])
       .filter(e=>e?.type==='in'&&(e?.transfer_to_petty===true||e?.reason==='Cash Withdrawal to Petty Cash'))
       .reduce((n,e)=>n+(Number(e.amount)||0),0),0);
+    // Genuine Petty Cash IN returns money to the company cash balance.
+    // Exclude old Cash Withdrawal to Petty Cash transfers: these are internal
+    // movements already neutralised by internalTransferReversal below.
+    const pettyCashIn=rows.reduce((sum,r)=>sum+(Array.isArray(r.petty_entries)?r.petty_entries:[])
+      .filter(e=>e?.type==='in' && e?.transfer_to_petty!==true && String(e?.reason||'').trim()!=='Cash Withdrawal to Petty Cash')
+      .reduce((n,e)=>n+(Number(e.amount)||0),0),0);
     const legacyExpenses=rows.reduce((sum,r)=>sum+(Array.isArray(r.petty_entries)?r.petty_entries:[])
       .filter(e=>e?.type==='out').reduce((n,e)=>n+(Number(e.amount)||0),0),0);
     const floatRows=rows.slice().sort((a,b)=>String(a.settlement_date).localeCompare(String(b.settlement_date)));
@@ -5868,8 +5874,8 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     // cash_withdrawal. Never credit an internal transfer above withdrawals.
     // Without a verified opening balance, legacy petty_opening is informational.
     const internalTransferReversal=Math.min(Math.max(0,withdrawals),Math.max(0,legacyPettyTransfers));
-    return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,internalTransferReversal,legacyExpenses,legacyOpening,approvedExpenses,
-      balance:cash-transfers-legacyExpenses-approvedExpenses-advanceDeductions-(withdrawals-internalTransferReversal)};
+    return {cash,withdrawals,transfers,advanceDeductions,legacyPettyTransfers,internalTransferReversal,pettyCashIn,legacyExpenses,legacyOpening,approvedExpenses,
+      balance:cash+pettyCashIn-transfers-legacyExpenses-approvedExpenses-advanceDeductions-(withdrawals-internalTransferReversal)};
   }
   function directCashRemainingForBranch(branch,sourceRows=allRows,cutoffDate=""){
     return ndCashLedgerBreakdown(branch,sourceRows,cutoffDate).balance;
@@ -8533,7 +8539,7 @@ return `<div class="history-date-card">
     const breakdown=ndCashLedgerBreakdown(currentBranch,allRows,selectedDate);
     const pendingCash=num("cash")-(existing?Number(existing.cash||0):0);
     const pendingWithdrawal=ndDailyWithdrawalTotal()-(existing?Number(existing.cash_withdrawal||0):0);
-    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Bank transfers: ${money(breakdown.transfers)} | Cash expenses (legacy): ${money(breakdown.legacyExpenses)} | Cash expenses (UMO approved): ${money(breakdown.approvedExpenses)} | Salary advance cash paid (net): ${money(breakdown.advanceDeductions)} | Cash withdrawals: ${money(breakdown.withdrawals-breakdown.internalTransferReversal+currentRealWithdrawal-savedRealWithdrawal)} | Remaining: ${money(balance)}`;
+    el.title=`Cash received: ${money(breakdown.cash+pendingCash)} | Petty Cash IN: ${money(breakdown.pettyCashIn)} | Bank transfers: ${money(breakdown.transfers)} | Cash expenses (legacy): ${money(breakdown.legacyExpenses)} | Cash expenses (UMO approved): ${money(breakdown.approvedExpenses)} | Salary advance cash paid (net): ${money(breakdown.advanceDeductions)} | Cash withdrawals: ${money(breakdown.withdrawals-breakdown.internalTransferReversal+currentRealWithdrawal-savedRealWithdrawal)} | Remaining: ${money(balance)}`;
     el.dataset.cashBreakdown=el.title;
     // Keep the audit breakdown available for diagnostics, but do not display a note.
     const detail=document.getElementById("ndCashBalanceAudit");
