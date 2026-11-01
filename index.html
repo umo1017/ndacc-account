@@ -2,7 +2,7 @@
 
 <html lang="zh-CN">
 <head>
-<meta name="nd-app-build" content="ND-20261023-EXPIRY-HISTORY-08">
+<meta name="nd-app-build" content="ND-20261102-INTERVIEW-OPTIONAL-SALARY-PASSPORT">
 <style id="nd-advance-open-button">#ndStaffFinanceNav #ndAdvanceBtn{pointer-events:auto!important;touch-action:manipulation!important;position:relative;z-index:1;cursor:pointer}#ndStaffFinanceNav{isolation:isolate}</style>
 <script id="nd-interview-contact-rules">
 (()=>{'use strict';
@@ -11468,6 +11468,7 @@ function salaryOverrideValue(empId,payrollType,field,autoValue,salaryMonth=month
 
 function salaryOverrideInput(empId,payrollType,field,value,opts={}){
   const n=Number(value||0);
+  if(String(payrollType)==="14" && field==="commission") return money(n);
   if(!salaryCanEditAmounts()) return money(n);
   const step=opts.step ?? "0.01";
   const min=opts.min ?? "0";
@@ -11638,7 +11639,7 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
     "commission_a","commission_b","customer_referral","staff_referral",
     "bonus","three_month_bonus","total_commission",
     "seventh_basic_pay","seventh_allowance","employer_epf",
-    "employer_socso","lindung24","employer_eis","commission","net_pay"
+    "employer_socso","lindung24","employer_eis","net_pay"
   ];
   fields.forEach(field=>{
     if(salaryOverrideHas(empId,t,field,salaryMonth,source)){
@@ -11670,8 +11671,7 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
 
   if(
     (incomePartsChanged || costChanged ||
-     salaryOverrideHas(empId,t,"total_commission",salaryMonth,source)) &&
-    !salaryOverrideHas(empId,t,"commission",salaryMonth,source)
+     salaryOverrideHas(empId,t,"total_commission",salaryMonth,source))
   ){
     c.commission=Math.max(0,+(
       Number(c.total_commission||0)-
@@ -11685,8 +11685,7 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
   }
 
   if(
-    (salaryOverrideHas(empId,t,"commission",salaryMonth,source) ||
-     incomePartsChanged || costChanged ||
+    (incomePartsChanged || costChanged ||
      salaryOverrideHas(empId,t,"total_commission",salaryMonth,source)) &&
     !salaryOverrideHas(empId,t,"net_pay",salaryMonth,source)
   ){
@@ -14059,7 +14058,7 @@ function renderFourteenTable(emps){
       <td>${cs?money(c.employer_socso||0):salaryOverrideInput(e.id,"14","employer_socso",c.employer_socso||0)}</td>
       <td>${cs?money(c.lindung24||0):salaryOverrideInput(e.id,"14","lindung24",c.lindung24||0)}</td>
       <td>${cs?money(c.employer_eis||0):salaryOverrideInput(e.id,"14","employer_eis",c.employer_eis||0)}</td>
-      <td data-live-commission="${e.id}">${cs?money(c.commission||0):salaryOverrideInput(e.id,"14","commission",c.commission||0)}</td>
+      <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${cs?money(c.net_pay||0):salaryOverrideInput(e.id,"14","net_pay",c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
@@ -26216,7 +26215,12 @@ input,select,textarea,button,a{
    return [];
  }
  function canOpenBonus(){
-   return !!(window.canViewSalary || bonusIsGlobalAdmin() || bonusIsPayrollManager());
+   // Salary navigation is already access-controlled. Do not silently bounce
+   // an authenticated Salary user back to Daily because a legacy JS flag is stale.
+   const salaryVisible=document.body.dataset.ndVisiblePage==='salary' &&
+     !!document.getElementById('salaryPage')?.classList.contains('active');
+   return !!(window.canViewSalary || bonusIsGlobalAdmin() || bonusIsPayrollManager() ||
+     (salaryVisible && !!(window.currentUserEmail || window.currentEmail || window.userEmail)));
  }
  function canEditStaffBonus(){
    return !!(bonusIsGlobalAdmin() || bonusIsPayrollManager());
@@ -26397,7 +26401,9 @@ input,select,textarea,button,a{
 
  async function showBonus(){
    await syncBonusAuth();
-   if(!canOpenBonus()){if(typeof showDaily==="function")showDaily();return;}
+   if(!canOpenBonus()){
+     throw Error('Bonus access is not available for this account. Check Salary Duty and payroll access.');
+   }
    document.body.dataset.ndVisiblePage="bonus";
    window.activeMainPage="bonus";
    try{sessionStorage.setItem("nd_last_page_v2","bonus");sessionStorage.setItem("nd_last_page_v3","bonus");}catch(_){}
@@ -32177,7 +32183,7 @@ const interviewSections=[
 function interviewGroups(){return interviewSections.map(([title,fields])=>{
  const mapped=fields.flatMap(f=>{
   if(interviewCategory!=='non_local')return f[0]==='Nationality'?[['Nationality','fixed:Malaysia']]:[f];
-  if(f[0]==='IC No')return [['Passport No','text']];
+  if(f[0]==='IC No')return [['Passport Status','select:Has Passport|No Passport'],['Passport No','text']];
   if(f[0]==='IC Photo Front')return [];
   if(f[0]==='IC Photo Back')return [];
   return [f];
@@ -32218,12 +32224,24 @@ function syncInterviewDepartment(root){
  const select=root.querySelector(`[data-nd-field="${departmentIndex}"]`),other=root.querySelector('[data-nd-other-department]');
  if(select&&other){other.hidden=select.value!=='Other';const sync=()=>{other.hidden=select.value!=='Other';other.querySelector('input').required=!other.hidden};sync();select.onchange=sync}
 }
-const ND_INTERVIEW_EMPLOYMENT_REQUIRED=['Branch','Department','Employment Type','Start Date','Basic Salary (RM)'];
+const ND_INTERVIEW_EMPLOYMENT_REQUIRED=['Branch','Department','Employment Type','Start Date'];
+function ndSyncInterviewPassport(root){
+ const field=label=>[...root.querySelectorAll('.nd-form-field')].find(box=>box.querySelector('label')?.textContent===label);
+ const status=field('Passport Status')?.querySelector('select');
+ const number=field('Passport No')?.querySelector('input');
+ if(!status||!number)return;
+ const sync=()=>{const absent=status.value==='No Passport';number.required=!absent;number.disabled=absent;const box=number.closest('.nd-form-field');if(box){box.hidden=absent;box.style.display=absent?'none':'';box.classList.toggle('nd-required',!absent);}if(absent)number.value='';
+ for(const label of ['Passport Photo Front','Passport Photo Back']){const photoBox=field(label);if(!photoBox)continue;photoBox.hidden=absent;photoBox.style.display=absent?'none':'';photoBox.querySelector('input').disabled=absent;}
+ };
+ status.addEventListener('change',sync);sync();
+}
 function ndValidateInterviewEmployment(values){
  ndNormalizeInterviewPayment(values);
  window.ndInterviewContacts.validate(values);
  for(const key of ND_INTERVIEW_EMPLOYMENT_REQUIRED)if(!String(values[key]??'').trim())throw Error(key+' is required.');
- const salary=Number(values['Basic Salary (RM)']);if(!Number.isFinite(salary)||salary<0)throw Error('Enter a valid non-negative Basic Salary.');
+ const salaryText=String(values['Basic Salary (RM)']??'').trim();if(salaryText!==''&&(!Number.isFinite(Number(salaryText))||Number(salaryText)<0))throw Error('Enter a valid non-negative Basic Salary, or leave it blank.');
+ if(values['Passport Status']==='No Passport'){values['Passport No']='';values['Passport Photo Front']='';values['Passport Photo Back']='';}
+ else if(String(values['Applicant Type']||'').startsWith('Non-local')&&!String(values['Passport No']||'').trim())throw Error('Enter Passport No or select No Passport.');
  if(values.Department==='Other'&&!String(values['Other Department']||'').trim())throw Error('Other Department is required.');
  values['Probation Period']='3 months';
 }
@@ -32231,18 +32249,18 @@ function renderInterview(root){
  let i=0;root.innerHTML=`<h3>Employee Interview Form</h3><label for="ndInterviewCategory">Applicant Type</label><select id="ndInterviewCategory"><option value="local" ${interviewCategory==='local'?'selected':''}>Local (Malaysian)</option><option value="non_local" ${interviewCategory==='non_local'?'selected':''}>Non-local (Foreign National)</option></select><form id="ndStaffEntryForm" class="nd-interview-row-layout">${interviewGroups().slice(0,4).map(([title,fields])=>`${(title.startsWith('SECTION C')||(interviewCategory==='non_local'&&title.startsWith('SECTION D')))?'<details class="nd-foreign-bank-details"><summary>'+escapeHtml(title)+' <span aria-hidden="true">›</span></summary>':''}<fieldset style="border:1px solid #ddd;border-radius:12px;padding:16px;margin:18px 0"><legend style="font-weight:700;color:#9a7426">${title}</legend><div class="nd-form-grid">${fields.map(f=>{const field=inputMarkup(f[0],f[1],i++);return (f[0]==='Work Permit No'?'<details class="nd-work-permit-details"><summary>Work Permit <span aria-hidden="true">›</span></summary><div class="nd-form-grid">':'')+field+(f[0]==='Work Permit Photo'?'</div></details>':'')}).join('')}</div></fieldset>${(title.startsWith('SECTION C')||(interviewCategory==='non_local'&&title.startsWith('SECTION D')))?'</details>':''}`).join('')}<div data-entry-step-label role="status"></div><div style="display:flex;gap:8px;margin-top:16px"><button class="btn" type="button" data-entry-back>Back</button><button class="btn" type="button" data-entry-next>Continue to Person in Charge</button><button class="btn" type="submit">Review Details</button></div></form>`;
  const form=$('ndStaffEntryForm'),fields=fieldsFor('interview');
  form.prepend(form.querySelector('[data-entry-step-label]'));const sections=Array.from(form.querySelectorAll('fieldset'));sections.forEach((fieldset,index)=>{fieldset.dataset.entrySection=index;const details=fieldset.closest('details');if(details&&fieldset.querySelector('legend')?.textContent.startsWith('SECTION C')){details.replaceWith(fieldset)}if(index===2){const note=document.createElement('p');note.className='helper';note.textContent='To be completed by the Person in Charge.';fieldset.prepend(note)}});
- fields.forEach(([label,kind],index)=>{const input=form.querySelector('[data-nd-field="'+index+'"]');if(!input)return;const group=interviewGroups().slice(0,4).findIndex(([,list])=>list.some(f=>f[0]===label));const required=ND_INTERVIEW_EMPLOYMENT_REQUIRED.includes(label)||group===0||(interviewCategory==='local'&&group<4&&kind!=='file'&&label!=='Other Department');input.required=label==='Rest Day'?false:required;input.closest('.nd-form-field')?.classList.toggle('nd-required',required&&label!=='Rest Day');});
+ fields.forEach(([label,kind],index)=>{const input=form.querySelector('[data-nd-field="'+index+'"]');if(!input)return;const group=interviewGroups().slice(0,4).findIndex(([,list])=>list.some(f=>f[0]===label));const required=label!=='Basic Salary (RM)'&&label!=='Passport Status'&&(ND_INTERVIEW_EMPLOYMENT_REQUIRED.includes(label)||group===0||(interviewCategory==='local'&&group<4&&kind!=='file'&&label!=='Other Department'));input.required=label==='Rest Day'?false:required;input.closest('.nd-form-field')?.classList.toggle('nd-required',required&&label!=='Rest Day');});
  const paymentIndex=fields.findIndex(field=>field[0]==='Payment Method');if(interviewCategory==='non_local'&&paymentIndex>=0)form.querySelector('[data-nd-field="'+paymentIndex+'"]').value='Cash';
  const setStep=step=>{form.dataset.entryStep=step;sections.forEach((fieldset,index)=>{const container=fieldset.closest('details')||fieldset;container.hidden=(step==='employee')===(index===2);container.style.display=container.hidden?'none':'';if(!container.hidden&&container.tagName==='DETAILS'&&interviewCategory==='local')container.open=true});form.querySelector('[data-entry-step-label]').textContent=step==='employee'?'Step 1 of 2 · Employee Information':'Step 2 of 2 · Person in Charge';form.querySelector('[data-entry-back]').hidden=step==='employee';form.querySelector('[data-entry-next]').hidden=step!=='employee';form.querySelector('[type="submit"]').hidden=step==='employee';};
  form.querySelector('[data-entry-next]').onclick=()=>{for(const input of form.querySelectorAll('[required]')){if(input.closest('fieldset')?.dataset.entrySection==='2')continue;const details=input.closest('details');if(!input.checkValidity()){if(details)details.open=true;input.reportValidity();return}}setStep('manager');form.scrollIntoView({block:'start'})};
  form.querySelector('[data-entry-back]').onclick=()=>setStep('employee');setStep('employee');
  const officer=document.createElement('div');officer.className='nd-form-field';officer.innerHTML='<label>Person in Charge</label><input type="text" data-nd-account-name readonly value="Loading…">';sections[2].prepend(officer);void window.ndLoadCurrentAccountName(client()).then(name=>{if(officer.isConnected)officer.querySelector('input').value=name;}).catch(error=>{if(officer.isConnected){officer.querySelector('input').value='';status(error.message);}});
- form.onsubmit=saveEntry;initSignatures(root);syncInterviewDepartment(root);syncInterviewWorkingHours(root);syncInterviewPayment(root,interviewCategory==='local');form.addEventListener('reset',()=>queueMicrotask(()=>syncInterviewPayment(root,interviewCategory==='local')));
+ form.onsubmit=saveEntry;initSignatures(root);ndSyncInterviewPassport(root);syncInterviewDepartment(root);syncInterviewWorkingHours(root);syncInterviewPayment(root,interviewCategory==='local');form.addEventListener('reset',()=>queueMicrotask(()=>syncInterviewPayment(root,interviewCategory==='local')));
  $('ndInterviewCategory').onchange=()=>{
  const saved={};fieldsFor('interview').forEach(([label,kind],n)=>{const el=$('ndField'+n);saved[label]={kind,value:ndFormFieldValue(el),files:el?.files,ink:el?.dataset.ink,data:kind==='signature'&&el?.dataset.ink?el.toDataURL():null}});
  interviewCategory=$('ndInterviewCategory').value;renderInterview(root);
  fieldsFor('interview').forEach(([label,kind],n)=>{const old=saved[label],el=$('ndField'+n);if(!old||!el)return;if(kind==='file'){if(old.files)el.files=old.files}else if(kind==='signature'&&old.data){const img=new Image();img.onload=()=>el.getContext('2d').drawImage(img,0,0);img.src=old.data;el.dataset.ink='1'}else if(kind!=='signature')ndSetFormFieldValue(el,old.value||'')});
- syncInterviewDepartment(root);syncInterviewWorkingHours(root);if(interviewCategory==='non_local'){const index=fieldsFor('interview').findIndex(field=>field[0]==='Payment Method'),payment=root.querySelector('[data-nd-field="'+index+'"]');if(payment&&!payment.value)payment.value='Cash'}syncInterviewPayment(root,interviewCategory==='local');
+ ndSyncInterviewPassport(root);syncInterviewDepartment(root);syncInterviewWorkingHours(root);if(interviewCategory==='non_local'){const index=fieldsFor('interview').findIndex(field=>field[0]==='Payment Method'),payment=root.querySelector('[data-nd-field="'+index+'"]');if(payment&&!payment.value)payment.value='Cash'}syncInterviewPayment(root,interviewCategory==='local');
  };
 }
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -32272,7 +32290,7 @@ function inputMarkup(label,type,i){
  else if(label==='Contact Number'||label==='Phone')el=`<input ${attr} type="tel" inputmode="tel" maxlength="24" data-nd-contact-phone placeholder="+60 / +65" autocomplete="tel">`;
  else if(label==='Spouse Phone Number')el=`<input ${attr} type="tel" inputmode="tel" maxlength="24" autocomplete="tel">`;
  else if(label==='Email Address')el=`<input ${attr} type="email" maxlength="254" data-nd-contact-email autocomplete="email">`;
- else if(label==='Basic Salary (RM)')el=`<input ${attr} type="number" min="0" step="0.01" required>`;
+ else if(label==='Basic Salary (RM)')el=`<input ${attr} type="number" min="0" step="0.01" placeholder="Optional">`;
  else if(label==='Branch')el=`<select ${attr} data-nd-interview-branch><option value="">Please select</option>${interviewBranchNames.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}</select>`;
  else if(label==='Rest Day')el=`<select ${attr} multiple hidden style="display:none!important" class="nd-rest-day-select" aria-label="Rest Day">${ND_REST_WEEKDAYS.map(day=>`<option value="${day}">${day}</option>`).join('')}</select><div class="nd-rest-day-chips" data-rest-for="ndField${i}" role="group" aria-label="Rest Day">${ND_REST_WEEKDAYS.map(day=>`<label><input type="checkbox" data-nd-rest-option="ndField${i}" value="${day}"><span>${day}</span></label>`).join('')}</div>`;
  else if(type==='file')el=`<input ${attr} type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG or WebP · Up to 20 MB · Optimised automatically</small>`;
@@ -32796,10 +32814,10 @@ async function openInterviewDocument(row){
   if(el.tagName==='SELECT'&&!el.multiple&&value&&!Array.from(el.options).some(o=>o.value===value)){const option=document.createElement('option');option.value=value;option.textContent=value;el.append(option)}ndSetFormFieldValue(el,value);
  }});
  const foreignApplicant=String(current.form_data['Applicant Type']||'').startsWith('Non-local')||!!current.form_data['Passport No'];
- editFields.forEach(([label,kind],i)=>{const input=edit.querySelector('[data-nd-field="Edit'+i+'"]'),group=groups.findIndex(([,fields])=>fields.some(field=>field[0]===label));let required=label!=='Rest Day'&&(ND_INTERVIEW_EMPLOYMENT_REQUIRED.includes(label)||group===0||(!foreignApplicant&&label!=='Other Department'));if(kind==='file'&&interviewDocumentImage(interviewDocumentValue(current.form_data,label)))required=false;input.required=label==='Rest Day'?false:required;input.closest('.nd-form-field')?.classList.toggle('nd-required',required)});
+ editFields.forEach(([label,kind],i)=>{const input=edit.querySelector('[data-nd-field="Edit'+i+'"]'),group=groups.findIndex(([,fields])=>fields.some(field=>field[0]===label));let required=label!=='Rest Day'&&label!=='Basic Salary (RM)'&&label!=='Passport Status'&&(ND_INTERVIEW_EMPLOYMENT_REQUIRED.includes(label)||group===0||(!foreignApplicant&&label!=='Other Department'));if(kind==='file'&&interviewDocumentImage(interviewDocumentValue(current.form_data,label)))required=false;input.required=label==='Rest Day'?false:required;input.closest('.nd-form-field')?.classList.toggle('nd-required',required)});
  const department=edit.querySelector(`[data-nd-field="Edit${editFields.findIndex(f=>f[0]==='Department')}"]`),other=edit.querySelector('[data-nd-other-department]');
  if(department&&other){const sync=()=>{other.hidden=department.value!=='Other';other.querySelector('input').required=!other.hidden};sync();department.onchange=sync}
- syncInterviewWorkingHours(edit);syncInterviewPayment(edit,!foreignApplicant);
+ ndSyncInterviewPassport(edit);syncInterviewWorkingHours(edit);syncInterviewPayment(edit,!foreignApplicant);
  const signing=interviewSections[4][1].filter(([label])=>!['Company Stamp','President Signature'].includes(label));
  const roleFields=company=>signing.map(([label,kind],i)=>({label,kind,i})).filter(f=>(f.label==='Administrative / Finance Signature')===company).map(({label,kind,i})=>inputMarkup(label==='Administrative / Finance Signature'?'Person in Charge Signature':label,kind,'Doc'+i)).join('');
  panel.innerHTML=window.ndSignatureRoleSection('employee','Employee Signature',current.full_name||current.form_data['Full Name']||'',roleFields(false))+window.ndSignatureRoleSection('company','Person in Charge Signature',current.form_data['Person in Charge']||'',roleFields(true));initSignatures(panel);
@@ -35425,7 +35443,8 @@ window.addEventListener('nd-cash-expense-reviewed',()=>{if(dlg?.open)void load()
   try{
    if(typeof window.showBonus!=='function')throw Error('Bonus module is not ready.');
    await window.showBonus();
-   if(document.body.dataset.ndVisiblePage!=='bonus'||!page.classList.contains('active'))return;
+   if(document.body.dataset.ndVisiblePage!=='bonus'||!page.classList.contains('active'))
+     throw Error('Bonus navigation did not activate.');
    document.getElementById('salaryPage')?.classList.remove('active');
    page.classList.toggle('nd-ledger-mode',mode==='bonus');
    if(typeof window.ndSetBonusSubTab==='function')window.ndSetBonusSubTab(mode);
