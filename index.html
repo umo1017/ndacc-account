@@ -8951,7 +8951,7 @@ return `<div class="history-date-card">
       let dialog=$('ndWeeklyCashDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndWeeklyCashDialog';document.body.append(dialog);}
       dialog.dataset.actor=actor;dialog.setAttribute('aria-label','Weekly Cash to Bank');
       const total=items.reduce((sum,x)=>sum+x.toBank,0);
-      dialog.innerHTML='<header><small>NATURE’S DAO</small><h2>Weekly Cash to Bank</h2><p>Today Cash through Sunday · '+escHtml(cutoff)+'</p></header><div class="nd-weekly-cash-body">'+items.map(x=>'<article><h3>'+escHtml(x.branch)+'</h3><dl><dt>Cash received</dt><dd>'+money(x.cash)+'</dd><dt>Cash withdrawals</dt><dd>'+money(x.withdrawals)+'</dd><dt>Verified bank deposits</dt><dd>'+money(x.verified)+'</dd><dt>Salary advances (cash paid out)</dt><dd>'+money(x.advances)+'</dd><dt>Cash balance through Sunday</dt><dd><strong>'+money(x.balance)+'</strong></dd>'+(x.pending>0?'<dt>Deposits awaiting verification</dt><dd>'+money(x.pending)+'</dd>':'')+'</dl></article>').join('')+'<div class="nd-weekly-cash-total"><span>Cash awaiting verified bank deposit</span><strong>'+money(total)+'</strong></div><p class="helper">Includes earlier cash carried forward. Monday sales are excluded. Deposits awaiting verification are already submitted; check their receipts before making another deposit.</p><button type="button" class="btn" data-weekly-cash-ack>I Understand</button></div>';
+      dialog.innerHTML='<header><small>NATURE’S DAO</small><h2>Weekly Cash to Bank</h2><p>Today Cash through Sunday · '+escHtml(cutoff)+'</p></header><div class="nd-weekly-cash-body">'+items.map(x=>'<article><h3>'+escHtml(x.branch)+'</h3><dl><dt>Cash received</dt><dd>'+money(x.cash)+'</dd><dt>Cash withdrawals</dt><dd>'+money(x.withdrawals)+'</dd><dt>Verified bank deposits</dt><dd>'+money(x.verified)+'</dd><dt>Salary advances (cash paid out)</dt><dd>'+money(x.advances)+'</dd><dt>Cash balance through Sunday</dt><dd><strong>'+money(x.balance)+'</strong></dd>'+(x.pending>0?'<dt>Deposits awaiting verification</dt><dd>'+money(x.pending)+'</dd>':'')+'</dl></article>').join('')+'<div class="nd-weekly-cash-total"><span>Cash awaiting verified bank deposit</span><strong>'+money(total)+'</strong></div><button type="button" class="btn" data-weekly-cash-ack>I Understand</button></div>';
       dialog.querySelector('[data-weekly-cash-ack]').onclick=()=>{ndWeeklyCashSeen.add(key);try{localStorage.setItem(key,'1');}catch(_){}dialog.close();};
       dialog.oncancel=()=>{ndWeeklyCashSeen.add(key);try{localStorage.setItem(key,'1');}catch(_){}};
       dialog.showModal();
@@ -14052,8 +14052,6 @@ function renderFourteenTable(emps){
       <td>${cs?money(customer):salaryOverrideInput(e.id,"14","customer_referral",customer)}</td>
       <td>${cs?money(staff):salaryOverrideInput(e.id,"14","staff_referral",staff)}</td>
       <td>${cs?money(bonus):salaryOverrideInput(e.id,"14","bonus",bonus)}</td>
-      <td data-live-3bonus="${e.id}">${cs?money(c.three_month_bonus||0):salaryOverrideInput(e.id,"14","three_month_bonus",c.three_month_bonus||0)}</td>
-      <td style="color:#7040b4;font-weight:800">${money(wBonus)}</td>
       <td data-live-totalcommission14="${e.id}">${cs?money(total):salaryOverrideInput(e.id,"14","total_commission",total)}</td>
       <td>${cs?money(c.seventh_basic_pay||0):salaryOverrideInput(e.id,"14","seventh_basic_pay",c.seventh_basic_pay||0)}</td>
       <td>${cs?money(c.seventh_allowance||0):salaryOverrideInput(e.id,"14","seventh_allowance",c.seventh_allowance||0)}</td>
@@ -14087,8 +14085,6 @@ function renderFourteenTable(emps){
       <th rowspan="2">Customer Referral</th>
       <th rowspan="2">Staff Referral</th>
       <th rowspan="2">Bonus</th>
-      <th rowspan="2">3-Bonus</th>
-      <th rowspan="2">W-Bonus</th>
       <th rowspan="2">Total Commission</th>
       <th rowspan="2">7th Basic Pay</th>
       <th rowspan="2">Allowance</th>
@@ -14104,7 +14100,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="17" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="15" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -14112,7 +14108,7 @@ function renderFourteenTable(emps){
       </tr>
       ${rows}
       <tr class="netpay-summary-row" style="display:none">
-        <td colspan="17" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
+        <td colspan="15" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
@@ -31055,59 +31051,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #bonusPage .bonus-top #closeBonusPage{display:none!important}
 #ndBonusSalaryTabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 </style>
-<script id="nd-bonus-inside-salary-v1">
-(function(){
- function setup(){
-  const bonusBtn=document.getElementById('salaryViewBonusBtn');
-  const bonusPage=document.getElementById('bonusPage');
-  const salaryTabs=document.getElementById('salaryViewTabs');
-  if(!bonusBtn||!bonusPage||!salaryTabs)return;
-  const bonusTabs=document.createElement('div');
-  bonusTabs.id='ndBonusSalaryTabs';
-  bonusTabs.innerHTML='<button type="button" class="salary-view-btn" data-nd-salary-mode="7th">7th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="14th">14th</button><button type="button" class="salary-view-btn active" data-nd-salary-mode="bonus">Bonus</button><button type="button" class="salary-view-btn" data-nd-salary-mode="target">Target Bonus</button>';
-  const shell=bonusPage.querySelector('.bonus-shell');
-  if(shell)shell.insertBefore(bonusTabs,shell.firstChild);
-  bonusBtn.addEventListener('click',function(e){
-    e.preventDefault();e.stopPropagation();
-    if(typeof window.showBonus==='function')window.showBonus();
-    else document.getElementById('sidebarBonus')?.click();
-    // The exclusive-screen CSS only displays Bonus when this state is set.
-    document.body.dataset.ndVisiblePage='bonus';
-    document.getElementById('bonusPage')?.classList.add('active','sidebar-offset');
-    document.getElementById('salaryPage')?.classList.remove('active');
-    document.getElementById('sidebarSalary')?.classList.add('active');
-    document.getElementById('sidebarBonus')?.classList.remove('active');
-    try{sessionStorage.setItem('nd_last_page_v2','salary');sessionStorage.setItem('nd_last_page_v3','bonus');}catch(_){}
-  },true);
-  bonusTabs.addEventListener('click',function(e){
-    const b=e.target.closest('[data-nd-salary-mode]');if(!b)return;
-    const mode=b.dataset.ndSalaryMode;
-    if(mode==='bonus'){window.ndSetBonusSubTab?.('bonus');return;}
-    if(mode==='target'){window.ndSetBonusSubTab?.('target');return;}
-    // Restore the exclusive-screen state before rendering the selected salary tab.
-    // Otherwise #salaryPage remains hidden behind body[data-nd-visible-page=bonus].
-    document.body.dataset.ndVisiblePage='salary';
-    bonusPage.classList.remove('active','sidebar-offset','nd-target-only');
-    document.getElementById('salaryPage')?.classList.add('active','sidebar-offset');
-    if(typeof window.showSalary==='function')window.showSalary();
-    document.body.dataset.ndVisiblePage='salary';
-    if(typeof window.setSalaryViewMode==='function')window.setSalaryViewMode(mode);
-    else document.getElementById(mode==='7th'?'salaryView7Btn':'salaryView14Btn')?.click();
-    try{sessionStorage.setItem('nd_last_page_v3','salary');}catch(_){}
-  });
-  const nav=document.getElementById('sidebarBonus');
-  if(nav)nav.style.setProperty('display','none','important');
-  const obs=new MutationObserver(function(){
-    if(bonusPage.classList.contains('active')||document.body.dataset.ndVisiblePage==='bonus'){
-      document.getElementById('sidebarSalary')?.classList.add('active');
-      document.getElementById('sidebarBonus')?.classList.remove('active');
-    }
-  });
-  obs.observe(bonusPage,{attributes:true,attributeFilter:['class']});
- }
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
-})();
-</script>
+
 <div aria-labelledby="ndPettyTopupReminderTitle" aria-modal="true" id="ndPettyTopupReminder" role="dialog">
 <div class="nd-petty-dialog"><button aria-label="Close" class="nd-petty-close" id="ndPettyReminderClose" type="button">×</button>
 <h3 id="ndPettyTopupReminderTitle" style="margin:7px 0 8px">Petty Cash Top Up Reminder</h3>
@@ -31122,39 +31066,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #bonusPage.nd-target-only .nd-bonus-filter-card .bonus-metrics{display:none!important}
 #salaryViewTargetBonusBtn.active,#ndBonusSalaryTabs [data-nd-salary-mode="target"].active{background:#294b62!important;color:#fff!important;border-color:#294b62!important}
 </style>
-<script id="nd-target-bonus-separate-tab-v1">
-(function(){
- function setTab(mode){
-  const target=mode==='target',page=document.getElementById('bonusPage');
-  if(!page)return;
-  page.querySelector('.bonus-shell > .bonus-card')?.classList.add('nd-bonus-filter-card');
-  page.classList.toggle('nd-target-only',target);
-  document.querySelectorAll('#ndBonusSalaryTabs [data-nd-salary-mode]').forEach(b=>b.classList.toggle('active',b.dataset.ndSalaryMode===(target?'target':'bonus')));
-  document.getElementById('salaryViewTargetBonusBtn')?.classList.toggle('active',target);
-  document.getElementById('salaryViewBonusBtn')?.classList.toggle('active',!target&&document.body.dataset.ndVisiblePage==='bonus');
-  const title=page.querySelector('.bonus-title');if(title)title.textContent=target?'Target Bonus':'Branch Bonus';
- }
- window.ndSetBonusSubTab=setTab;
- function setup(){
-  const target=document.getElementById('salaryViewTargetBonusBtn');
-  const bonus=document.getElementById('salaryViewBonusBtn');
-  if(!target||!bonus)return;
-  target.addEventListener('click',function(e){
-   e.preventDefault();e.stopPropagation();
-   if(typeof window.showBonus==='function')window.showBonus();
-   document.body.dataset.ndVisiblePage='bonus';
-   document.getElementById('bonusPage')?.classList.add('active','sidebar-offset');
-   document.getElementById('salaryPage')?.classList.remove('active');
-   setTab('target');
-   document.dispatchEvent(new Event('nd-bonus-open'));
-  },true);
-  bonus.addEventListener('click',()=>setTab('bonus'));
-  // Bonus navigation is handled by nd-bonus-inside-salary-v1.
-  // Avoid a second handler on the same tab group.
- }
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
-})();
-</script>
+
 <style id="nd-duty-style">#ndDutyAdminBtn{display:none!important}#ndDutyAdminModal{display:none;position:fixed;inset:0;background:#0009;z-index:22000;align-items:center;justify-content:center;padding:14px}#ndDutyAdminModal.open{display:flex}#ndDutyAdminModal .nd-duty-dialog{background:white;border-radius:16px;padding:22px;width:min(620px,100%);max-height:90vh;overflow:auto}#ndDutyAdminModal input,#ndDutyAdminModal select{margin:4px 0 10px}#ndDutyAdminModal .nd-duty-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #eee;padding:10px 0}#ndDutyAdminModal .nd-duty-line button{margin-left:auto}</style>
 <script id="nd-duty-directory-merge-v2">
 (function(){
@@ -32256,9 +32168,9 @@ async function ndFetchInterviewBranches(epoch){
 }
 window.ndGetStaffFormBranches=async()=>{await loadInterviewBranches();return [...interviewBranchNames];};
 const interviewSections=[
- ['SECTION A : EMPLOYEE INFORMATION', [['Full Name','text'],['IC No','text'],['IC Photo Front','file'],['IC Photo Back','file'],['Date of Birth','date'],['Gender','select:|Male|Female'],['Nationality','select:|China|Myanmar|Vietnam|Indonesia|Thailand'],['Married Status','select:|Single|Married|Divorced|Widowed'],['Home Address','textarea'],['Contact Number','tel'],['Email Address','email']]],
+ ['SECTION A : EMPLOYEE INFORMATION', [['Full Name','text'],['Nickname','text'],['IC No','text'],['IC Photo Front','file'],['IC Photo Back','file'],['Date of Birth','date'],['Gender','select:|Male|Female'],['Nationality','select:|China|Myanmar|Vietnam|Indonesia|Thailand'],['Married Status','select:|Single|Married|Divorced|Widowed'],['Home Address','textarea'],['Contact Number','tel'],['Email Address','email']]],
  ['SECTION B : EMERGENCY INFORMATION', [['Spouse Name','text'],['Spouse Phone Number','tel']]],
- ['SECTION C : EMPLOYMENT INFORMATION', [['Branch','select:|Eco Botanic|Nusa Bestari'],['Department','select:|Therapist|Beautician|Manager|Front Desk|Other'],['Other Department','text'],['Employment Type','select:|Full Time|Part Time'],['Start Date','date'],['Basic Salary (RM)','number'],['Probation Period','text'],['Rest Day','select:|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday']]],
+ ['SECTION C : EMPLOYMENT INFORMATION', [['Branch','select:|Eco Botanic|Nusa Bestari'],['Department','select:|Therapist|Beautician|Manager|Front Desk|Other'],['Other Department','text'],['Employment Type','select:|Full Time|Part Time'],['Start Date','date'],['Basic Salary (RM)','number'],['Allowance (RM)','number'],['Probation Period','text'],['Rest Day','select:|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday']]],
  ['SECTION D: BANK & STATUTORY INFORMATION', [['Payment Method','select:|Cash|Bank Transfer|TNG'],['Bank Name','text'],['Bank Account No','text'],['KWSP (EPF) No','text'],['SOCSO No','text'],['EIS No','text']]],
  ['SECTION E: SIGNATURES / COMPANY STAMPING', [['Employee Signature','signature'],['Date','date'],['Administrative / Finance Signature','signature'],['Company Stamp','file'],['President Signature','signature']]]
 ];
@@ -32748,7 +32660,7 @@ async function saveEntry(e){
   const fullName=String(values['Full Name']||values['Candidate Name']||values['Employee Name']||'').trim();if(!fullName)throw Error('Name is required.');
   const formDate=values['Interview Date']||values['Start Date']||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
   const request=crypto.randomUUID();values.__nd_save_request=request;
-  const payload={form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted'};
+  const authUser=await client().auth.getUser();if(authUser.error||!authUser.data?.user?.id)throw Error('Please sign in again.');const payload={form_type:type,branch,full_name:fullName,form_date:formDate,form_data:values,status:'submitted',created_by:authUser.data.user.id};
   attempt={request,owner:userEmail,payload,saved:null};form.ndPendingFormSave=attempt;
   ensureAccount();phase='Saving form';status('Saving form…');
   // Return metadata only; the complete photos/signatures are already available locally.
@@ -32849,7 +32761,7 @@ function interviewDocumentMarkup(values){
  const subtype=foreign?'Foreign National Applicant':'Local Malaysian Applicant';
  const heading=()=>`<div class="nd-doc-brand">${interviewLogoMarkup()}<div class="nd-doc-company"><strong>${escapeHtml(values['Company Name']??interviewBranding()['Company Name'])}</strong><p>Company Registration No. ${escapeHtml(values['Company Registration No']??interviewBranding()['Company Registration No'])}</p><p style="white-space:pre-line">${escapeHtml(values['Company Address']??interviewBranding()['Company Address'])}</p></div></div>`;
  const section=([title,fields])=>{
-  if(title.startsWith('SECTION E'))return `<section class="nd-doc-section"><h3>${escapeHtml(title)}</h3><div class="nd-doc-signatures">${['Employee Signature','Administrative / Finance Signature','President Signature','Company Stamp'].map(label=>{const img=interviewDocumentImage(values[label]);return `<div><strong>${label}</strong>${img?`<img src="${img}" alt="${label}">`:'<div class="nd-doc-sign-space"></div>'}${label==='Administrative / Finance Signature'?`<span class="nd-doc-sign-date">${escapeHtml(values['Person in Charge']||'')}</span>`:''}${label==='Company Stamp'?'':`<span class="nd-doc-sign-date">Date: ${escapeHtml(label==='Employee Signature'?interviewDocumentValue(values,'Date')||'________________':'________________')}</span>`}</div>`}).join('')}</div></section>`;
+  if(title.startsWith('SECTION E'))return ''; if(title.startsWith('SECTION E'))return `<section class="nd-doc-section"><h3>${escapeHtml(title)}</h3><div class="nd-doc-signatures">${['Employee Signature','Administrative / Finance Signature','President Signature','Company Stamp'].map(label=>{const img=interviewDocumentImage(values[label]);return `<div><strong>${label}</strong>${img?`<img src="${img}" alt="${label}">`:'<div class="nd-doc-sign-space"></div>'}${label==='Administrative / Finance Signature'?`<span class="nd-doc-sign-date">${escapeHtml(values['Person in Charge']||'')}</span>`:''}${label==='Company Stamp'?'':`<span class="nd-doc-sign-date">Date: ${escapeHtml(label==='Employee Signature'?interviewDocumentValue(values,'Date')||'________________':'________________')}</span>`}</div>`}).join('')}</div></section>`;
   const rows=fields.filter(([label,kind])=>kind!=='file'&&(label!=='Other Department'||values.Department==='Other'||values[label]));
   const files=[];
   return `<section class="nd-doc-section"><h3>${escapeHtml(title)}</h3><table class="nd-doc-table"><tbody>${rows.map(([label])=>{const v=interviewDocumentValue(values,label);return `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(v&&typeof v!=='object'?v:'')||'&nbsp;'}</td></tr>`}).join('')}</tbody></table>${files.length?`<div class="nd-doc-attachments">${files.map(([label])=>{const img=interviewDocumentImage(values[label]);return `<figure>${img?`<img src="${img}" alt="${escapeHtml(label)}">`:'<span class="nd-doc-instruction">Not provided</span>'}<figcaption>${escapeHtml(label)}</figcaption></figure>`}).join('')}</div>`:''}</section>`;
@@ -32857,7 +32769,7 @@ function interviewDocumentMarkup(values){
  const identityFiles=groups.slice(0,2).flatMap(([,fields])=>fields).filter(([,kind])=>kind==='file');
  const identityPage=`<div class="nd-doc-sheet"><h2 class="nd-doc-title">Employee Interview Form A</h2><p class="nd-doc-subtitle">${subtype} &nbsp; | &nbsp; Identity documents</p><table class="nd-doc-table"><tbody><tr><th>Full Name</th><td>${escapeHtml(values['Full Name']||values['Candidate Name']||'')||'&nbsp;'}</td></tr></tbody></table><section class="nd-doc-section"><h3>${foreign?'PASSPORT':'IDENTITY CARD'} — FRONT &amp; BACK</h3><div class="nd-doc-attachments nd-doc-identity-attachments">${identityFiles.map(([label])=>{const img=interviewDocumentImage(interviewDocumentValue(values,label));return `<figure>${img?`<img src="${img}" alt="${escapeHtml(label)}">`:'<span class="nd-doc-instruction">Not provided</span>'}<figcaption>${escapeHtml(label)}</figcaption></figure>`}).join('')}</div></section></div>`;
  const footer=`<div class="nd-doc-footer">NATURE'S DAO &nbsp; | &nbsp; CONFIDENTIAL &nbsp; | &nbsp; ${subtype}</div>`;
- return `<article class="nd-interview-document"><div class="nd-doc-sheet">${heading()}<h1 class="nd-doc-title">Employee Interview Form A</h1><p class="nd-doc-subtitle">${subtype}</p>${groups.slice(0,2).map(section).join('')}${footer}</div><div class="nd-doc-sheet"><h2 class="nd-doc-title">Employee Interview Form A</h2><p class="nd-doc-subtitle">${subtype} &nbsp; | &nbsp; Employment and signatures</p><table class="nd-doc-table"><tbody><tr><th>Full Name</th><td>${escapeHtml(values['Full Name']||values['Candidate Name']||'')||'&nbsp;'}</td></tr></tbody></table>${groups.slice(2).map(section).join('')}${footer}</div>${identityPage}</article>`.replace(/<div class="nd-doc-sheet">/g,(()=>{let page=0;return ()=>'<div class="nd-doc-sheet"><div class="nd-doc-page-number" data-html2canvas-ignore="true">Page '+(++page)+'</div>'})());
+ return `<article class="nd-interview-document"><div class="nd-doc-sheet">${heading()}<h1 class="nd-doc-title">Employee Interview Form A</h1><p class="nd-doc-subtitle">${subtype}</p>${groups.slice(0,2).map(section).join('')}${footer}</div><div class="nd-doc-sheet"><h2 class="nd-doc-title">Employee Interview Form A</h2><p class="nd-doc-subtitle">${subtype} &nbsp; | &nbsp; Employment details</p><table class="nd-doc-table"><tbody><tr><th>Full Name</th><td>${escapeHtml(values['Full Name']||values['Candidate Name']||'')||'&nbsp;'}</td></tr></tbody></table>${groups.slice(2,4).map(section).join('')}${footer}</div>${identityPage}</article>`.replace(/<div class="nd-doc-sheet">/g,(()=>{let page=0;return ()=>'<div class="nd-doc-sheet"><div class="nd-doc-page-number" data-html2canvas-ignore="true">Page '+(++page)+'</div>'})());
 }
 
 function interviewDocumentFileName(row){
@@ -32913,11 +32825,11 @@ for(let i=0;i<signing.length;i++){const [label,kind]=signing[i],el=panel.querySe
  current.form_data=merged;row.form_data=merged;current.full_name=row.full_name=fullName;current.branch=row.branch=branch;render();dialog.querySelector('[data-doc-print-unsaved]')?.remove();message.textContent='Document saved successfully.';return true;
  }catch(e){message.textContent='Unable to save document: '+e.message;let fallback=dialog.querySelector('[data-doc-print-unsaved]');if(!fallback){fallback=document.createElement('button');fallback.type='button';fallback.className='btn';fallback.dataset.docPrintUnsaved='';fallback.textContent='Download Unsaved PDF';message.after(fallback);fallback.onclick=async()=>{try{const draft={...current,form_data:await collect()};await printCopy(draft);message.textContent='Unsaved copy prepared. Changes have not been saved to the system.'}catch(error){message.textContent='Unable to prepare copy: '+error.message}}}return false}finally{saving=false;btn.disabled=printBtn.disabled=false}};
  const signatureBox=panel.closest('fieldset');
- const setDocumentStep=step=>{dialog.dataset.interviewStep=step;const visible=(node,show)=>{node.hidden=!show;node.style.setProperty('display',show?'':'none',show?'':'important')};visible(signatureBox,step==='sign');visible(preview,step!=='sign');visible(edit,step==='review');visible(dialog.querySelector('[data-doc-save]'),step==='sign');visible(dialog.querySelector('[data-doc-next]'),step!=='sign');visible(dialog.querySelector('[data-doc-back]'),step==='sign');visible(dialog.querySelector('[data-doc-print]'),step==='final');dialog.querySelector('[data-doc-next]').textContent=step==='final'?'Edit / Sign Again':'Continue to Signatures';message.textContent=step==='sign'?'Employee and Person in Charge signatures':step==='final'?'Review the completed document.':'Review the details before signing.';dialog.scrollTop=0};
- dialog.querySelector('[data-doc-next]').onclick=async()=>{try{for(const input of edit.querySelectorAll('[required]'))if(!input.checkValidity()){edit.open=true;input.reportValidity();message.textContent='Complete all required details before signing.';return}const draft=await collect();preview.innerHTML='<style>'+ND_INTERVIEW_DOC_STYLE+'</style>'+interviewDocumentMarkup(draft);setDocumentStep('sign')}catch(error){message.textContent=error.message}};
+ const setDocumentStep=step=>{dialog.dataset.interviewStep=step;const visible=(node,show)=>{node.hidden=!show;node.style.setProperty('display',show?'':'none',show?'':'important')};visible(signatureBox,step==='sign');visible(preview,step!=='sign');visible(edit,step==='review');visible(dialog.querySelector('[data-doc-save]'),step==='sign');visible(dialog.querySelector('[data-doc-next]'),step!=='sign');visible(dialog.querySelector('[data-doc-back]'),step==='sign');visible(dialog.querySelector('[data-doc-print]'),step==='final');dialog.querySelector('[data-doc-next]').textContent=step==='final'?'Edit Details':'Save Interview Form';message.textContent=step==='sign'?'Employee and Person in Charge signatures':step==='final'?'Review the completed document.':'Review the details before signing.';dialog.scrollTop=0};
+ dialog.querySelector('[data-doc-next]').onclick=async()=>{try{for(const input of edit.querySelectorAll('[required]'))if(!input.checkValidity()){edit.open=true;input.reportValidity();message.textContent='Complete all required details before signing.';return}const draft=await collect();preview.innerHTML='<style>'+ND_INTERVIEW_DOC_STYLE+'</style>'+interviewDocumentMarkup(draft);if(await save())setDocumentStep('final')}catch(error){message.textContent=error.message}};
  dialog.querySelector('[data-doc-back]').onclick=async()=>{try{preview.innerHTML='<style>'+ND_INTERVIEW_DOC_STYLE+'</style>'+interviewDocumentMarkup(await collect());setDocumentStep('review')}catch(error){message.textContent=error.message}};
  dialog.querySelector('[data-doc-save]').onclick=async()=>{for(const [label] of signing.filter(([,kind])=>kind==='signature')){const index=signing.findIndex(field=>field[0]===label),canvas=panel.querySelector('[data-nd-field="Doc'+index+'"]');if(!(canvas.dataset.modified?canvas.dataset.ink:(canvas.dataset.ink||interviewDocumentImage(current.form_data[label])))){message.textContent=label+' is required.';return}}if(await save())setDocumentStep('final')};
- setDocumentStep(interviewDocumentImage(current.form_data['Employee Signature'])&&interviewDocumentImage(current.form_data['Administrative / Finance Signature'])?'final':'review');
+ setDocumentStep('review');
  dialog.querySelector('[data-doc-close]').onclick=()=>dialog.close();
  const printCopy=async record=>{
  if(!window.html2canvas||!window.jspdf?.jsPDF)throw Error('PDF tools are unavailable. Reload the page and try again.');
@@ -34992,50 +34904,7 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 </script>
 
 <!-- Navigation repair: unify Salary Bonus / Target Bonus tabs. -->
-<script id="nd-bonus-target-navigation-repair-v2">
-(function(){
- 'use strict';
- async function open(mode){
-  var page=document.getElementById('bonusPage');
-  if(!page)return;
-  try{
-   if(typeof window.showBonus==='function') await window.showBonus();
-   else {
-    document.body.dataset.ndVisiblePage='bonus';
-    document.getElementById('salaryPage')?.classList.remove('active','sidebar-offset');
-    page.classList.add('active','sidebar-offset');
-   }
-   // Do not override authorization if the original showBonus refused access.
-   if(document.body.dataset.ndVisiblePage!=='bonus'||!page.classList.contains('active'))return;
-   page.classList.toggle('nd-target-only',mode==='target');
-   page.classList.toggle('nd-ledger-mode',mode==='bonus');
-   if(typeof window.ndSetBonusSubTab==='function')window.ndSetBonusSubTab(mode);
-   page.classList.toggle('nd-target-only',mode==='target');
-   page.classList.toggle('nd-ledger-mode',mode==='bonus');
-   document.getElementById('salaryViewBonusBtn')?.classList.toggle('active',mode==='bonus');
-   document.getElementById('salaryViewTargetBonusBtn')?.classList.toggle('active',mode==='target');
-   document.querySelectorAll('#ndBonusSalaryTabs [data-nd-salary-mode]').forEach(function(b){b.classList.toggle('active',b.dataset.ndSalaryMode===mode)});
-   document.dispatchEvent(new Event('nd-bonus-open'));
-  }catch(e){console.error('Bonus navigation error',e);}
- }
- function setup(){
-  ['salaryViewBonusBtn','salaryViewTargetBonusBtn'].forEach(function(id){
-   var btn=document.getElementById(id);if(!btn)return;
-   btn.addEventListener('click',function(e){
-    e.preventDefault();e.stopImmediatePropagation();
-    void open(id==='salaryViewBonusBtn'?'bonus':'target');
-   },true);
-  });
-  var tabs=document.getElementById('ndBonusSalaryTabs');
-  if(tabs)tabs.addEventListener('click',function(e){
-   var b=e.target.closest('[data-nd-salary-mode]');
-   if(!b||!['bonus','target'].includes(b.dataset.ndSalaryMode))return;
-   e.preventDefault();e.stopImmediatePropagation();void open(b.dataset.ndSalaryMode);
-  },true);
- }
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
-})();
-</script>
+
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
@@ -35546,3 +35415,54 @@ window.addEventListener('nd-cash-expense-reviewed',()=>{if(dlg?.open)void load()
 
 <style id="nd-cash-audit-panel-style">#ndCashAuditPanel{margin:12px 0;padding:12px 14px;border:1px solid #d6e4da;border-radius:12px;background:#f8fbf9;color:#274635;font-size:13px}#ndCashAuditPanel summary{cursor:pointer;font-weight:700}#ndCashAuditPanel pre{white-space:pre-wrap;word-break:break-word;font:inherit;line-height:1.6}</style>
 
+
+<script id="nd-bonus-navigation-single-handler-20261102">
+(function(){
+ 'use strict';
+ async function openBonus(mode){
+  const page=document.getElementById('bonusPage');
+  if(!page)return;
+  try{
+   if(typeof window.showBonus!=='function')throw Error('Bonus module is not ready.');
+   await window.showBonus();
+   if(document.body.dataset.ndVisiblePage!=='bonus'||!page.classList.contains('active'))return;
+   document.getElementById('salaryPage')?.classList.remove('active');
+   page.classList.toggle('nd-ledger-mode',mode==='bonus');
+   if(typeof window.ndSetBonusSubTab==='function')window.ndSetBonusSubTab(mode);
+   page.classList.toggle('nd-target-only',mode==='target');
+   document.getElementById('salaryViewBonusBtn')?.classList.toggle('active',mode==='bonus');
+   document.getElementById('salaryViewTargetBonusBtn')?.classList.toggle('active',mode==='target');
+   document.querySelectorAll('#ndBonusSalaryTabs [data-nd-salary-mode]').forEach(b=>b.classList.toggle('active',b.dataset.ndSalaryMode===mode));
+   document.dispatchEvent(new Event('nd-bonus-open'));
+  }catch(err){console.error('[Bonus]',err);alert('Unable to open '+(mode==='target'?'Target Bonus':'Bonus')+': '+err.message);}
+ }
+ function setup(){
+  const page=document.getElementById('bonusPage');
+  if(!page)return;
+  const shell=page.querySelector('.bonus-shell');
+  if(shell&&!document.getElementById('ndBonusSalaryTabs')){
+   const tabs=document.createElement('div');tabs.id='ndBonusSalaryTabs';
+   tabs.innerHTML='<button type="button" class="salary-view-btn" data-nd-salary-mode="7th">7th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="14th">14th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="bonus">Bonus</button><button type="button" class="salary-view-btn" data-nd-salary-mode="target">Target Bonus</button>';
+   shell.prepend(tabs);
+  }
+  // Capture once at window level so older element listeners cannot race or reset the selected mode.
+  window.addEventListener('click',e=>{
+   const b=e.target?.closest?.('#salaryViewBonusBtn,#salaryViewTargetBonusBtn,#ndBonusSalaryTabs [data-nd-salary-mode]');
+   if(!b)return;
+   const mode=b.dataset.ndSalaryMode||(b.id==='salaryViewTargetBonusBtn'?'target':'bonus');
+   if(mode==='bonus'||mode==='target'){
+    e.preventDefault();e.stopImmediatePropagation();void openBonus(mode);return;
+   }
+   if(mode==='7th'||mode==='14th'){
+    e.preventDefault();e.stopImmediatePropagation();
+    document.body.dataset.ndVisiblePage='salary';
+    page.classList.remove('active','nd-target-only','nd-ledger-mode');
+    if(typeof window.showSalary==='function')window.showSalary();
+    if(typeof window.setSalaryViewMode==='function')window.setSalaryViewMode(mode);
+    else document.getElementById(mode==='7th'?'salaryView7Btn':'salaryView14Btn')?.click();
+   }
+  },true);
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
