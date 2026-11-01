@@ -11639,7 +11639,7 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
     "commission_a","commission_b","customer_referral","staff_referral",
     "bonus","three_month_bonus","total_commission",
     "seventh_basic_pay","seventh_allowance","employer_epf",
-    "employer_socso","lindung24","employer_eis","net_pay"
+    "employer_socso","lindung24","employer_eis"
   ];
   fields.forEach(field=>{
     if(salaryOverrideHas(empId,t,field,salaryMonth,source)){
@@ -11669,33 +11669,9 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
     "employer_socso","lindung24","employer_eis"
   ].some(field=>salaryOverrideHas(empId,t,field,salaryMonth,source));
 
-  if(
-    (incomePartsChanged || costChanged ||
-     salaryOverrideHas(empId,t,"total_commission",salaryMonth,source))
-  ){
-    c.commission=Math.max(0,+(
-      Number(c.total_commission||0)-
-      Number(c.seventh_basic_pay||0)-
-      Number(c.seventh_allowance||0)-
-      Number(c.employer_epf||0)-
-      Number(c.employer_socso||0)-
-      Number(c.lindung24||0)-
-      Number(c.employer_eis||0)
-    ).toFixed(2));
-  }
-
-  if(
-    (incomePartsChanged || costChanged ||
-     salaryOverrideHas(empId,t,"total_commission",salaryMonth,source)) &&
-    !salaryOverrideHas(empId,t,"net_pay",salaryMonth,source)
-  ){
-    c.net_pay=+(Number(c.commission||0)+Number(c.seventh_deduction_refund||0)).toFixed(2);
-  }
-  // Explicit Net Pay overrides always win, including an intentional RM 0.00.
-  // Never replace a saved manual value with an automatic recalculation.
-  if(salaryOverrideHas(empId,t,"net_pay",salaryMonth,source)){
-    c.net_pay=salaryOverrideValue(empId,t,"net_pay",c.net_pay,salaryMonth,source);
-  }
+  // 14th Nett Pay is derived, never a manual override.
+  // Preserve the existing 7th off-day deduction refund calculation.
+  c.net_pay=+(Number(c.commission||0)+Number(c.seventh_deduction_refund||0)).toFixed(2);
   c.total_income=Number(c.net_pay??c.commission??0);
   c.has_payslip=Number(c.net_pay||0)>0;
   return c;
@@ -14059,7 +14035,7 @@ function renderFourteenTable(emps){
       <td>${cs?money(c.lindung24||0):salaryOverrideInput(e.id,"14","lindung24",c.lindung24||0)}</td>
       <td>${cs?money(c.employer_eis||0):salaryOverrideInput(e.id,"14","employer_eis",c.employer_eis||0)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
-      <td data-live-netpay14="${e.id}">${cs?money(c.net_pay||0):salaryOverrideInput(e.id,"14","net_pay",c.net_pay||0)}</td>
+      <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
@@ -35434,53 +35410,94 @@ window.addEventListener('nd-cash-expense-reviewed',()=>{if(dlg?.open)void load()
 <style id="nd-cash-audit-panel-style">#ndCashAuditPanel{margin:12px 0;padding:12px 14px;border:1px solid #d6e4da;border-radius:12px;background:#f8fbf9;color:#274635;font-size:13px}#ndCashAuditPanel summary{cursor:pointer;font-weight:700}#ndCashAuditPanel pre{white-space:pre-wrap;word-break:break-word;font:inherit;line-height:1.6}</style>
 
 
-<script id="nd-bonus-navigation-single-handler-20261102">
-(function(){
- 'use strict';
- async function openBonus(mode){
-  const page=document.getElementById('bonusPage');
-  if(!page)return;
-  try{
-   if(typeof window.showBonus!=='function')throw Error('Bonus module is not ready.');
-   await window.showBonus();
-   if(document.body.dataset.ndVisiblePage!=='bonus'||!page.classList.contains('active'))
-     throw Error('Bonus navigation did not activate.');
-   document.getElementById('salaryPage')?.classList.remove('active');
+<style id="nd-bonus-independent-navigation-css">
+/* Separate Salary, Bonus Ledger, and Target Bonus into exclusive page views. */
+body[data-nd-visible-page="bonus"] #salaryPage,
+body[data-nd-visible-page="bonus"] #appView,
+body[data-nd-visible-page="bonus"] #rosterPage,
+body[data-nd-visible-page="bonus"] #ndStaffFinancePage {display:none!important}
+body[data-nd-visible-page="bonus"] #bonusPage {display:block!important;visibility:visible!important;opacity:1!important}
+#bonusPage.nd-ledger-mode #ndBonusLedger {display:block!important}
+#bonusPage.nd-ledger-mode #targetBonusSection {display:none!important}
+#bonusPage.nd-target-only #ndBonusLedger {display:none!important}
+#bonusPage.nd-target-only #targetBonusSection {display:block!important}
+#bonusPage .bonus-shell {width:100%;min-width:0}
+#bonusPage .bonus-top {margin-bottom:14px}
+#ndBonusSalaryTabs {display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+#ndBonusSalaryTabs button {min-height:44px}
+@media(max-width:760px){#bonusPage{padding:80px 12px 32px!important;margin:0!important;width:100%!important;max-width:100%!important}}
+</style>
+<script id="nd-bonus-independent-navigation-20261102">
+(()=>{'use strict';
+ const $=id=>document.getElementById(id);
+ let token=0;
+ function activate(mode){
+   const page=$('bonusPage');if(!page)throw Error('Bonus page is missing.');
+   const salary=$('salaryPage');
+   // Synchronous navigation: do not wait for Supabase permissions before changing screens.
+   document.body.dataset.ndVisiblePage='bonus';window.activeMainPage='bonus';
+   document.body.classList.remove('nd-records-visible');
+   for(const id of ['salaryPage','appView','rosterPage','settlementPage','ordersPage','settingsPage','socialPage','aiReceiptPage','ndStaffFinancePage','ndStaffFormsPage','ndStaffManagementPage','ndAnnouncementsPage']){
+     const node=$(id);if(!node)continue;node.classList.remove('active');
+     if(id==='appView')node.classList.add('hidden');
+     node.style.setProperty('display','none','important');
+   }
+   if(salary)salary.style.setProperty('display','none','important');
+   page.classList.add('active','sidebar-offset');page.hidden=false;
+   page.style.setProperty('display','block','important');
    page.classList.toggle('nd-ledger-mode',mode==='bonus');
-   if(typeof window.ndSetBonusSubTab==='function')window.ndSetBonusSubTab(mode);
    page.classList.toggle('nd-target-only',mode==='target');
-   document.getElementById('salaryViewBonusBtn')?.classList.toggle('active',mode==='bonus');
-   document.getElementById('salaryViewTargetBonusBtn')?.classList.toggle('active',mode==='target');
-   document.querySelectorAll('#ndBonusSalaryTabs [data-nd-salary-mode]').forEach(b=>b.classList.toggle('active',b.dataset.ndSalaryMode===mode));
-   document.dispatchEvent(new Event('nd-bonus-open'));
-  }catch(err){console.error('[Bonus]',err);alert('Unable to open '+(mode==='target'?'Target Bonus':'Bonus')+': '+err.message);}
+   $('salaryViewBonusBtn')?.classList.toggle('active',mode==='bonus');
+   $('salaryViewTargetBonusBtn')?.classList.toggle('active',mode==='target');
+   page.querySelectorAll('[data-nd-salary-mode]').forEach(b=>b.classList.toggle('active',b.dataset.ndSalaryMode===mode));
+   try{sessionStorage.setItem('nd_last_page_v2','bonus');sessionStorage.setItem('nd_last_page_v3','bonus')}catch(_){}
+   $('mainSidebar')?.classList.remove('open');
+   window.scrollTo({top:0,behavior:'instant'});
+   return page;
+ }
+ async function open(mode){
+   const seq=++token;let page;
+   try{page=activate(mode)}catch(e){alert(e.message);return}
+   const status=$('bonusSyncState');if(status)status.textContent='Loading '+(mode==='target'?'Target Bonus':'Bonus')+'…';
+   try{
+     // Reuse existing business calculations, database access and Target Bonus UI.
+     if(typeof window.loadBonus==='function')await window.loadBonus();
+     else if(typeof loadBonus==='function')await loadBonus();
+     if(seq!==token||document.body.dataset.ndVisiblePage!=='bonus')return;
+     activate(mode);
+     if(typeof window.ndSetBonusSubTab==='function')window.ndSetBonusSubTab(mode);
+     document.dispatchEvent(new Event('nd-bonus-open'));
+     if(mode==='target'&&!$('targetBonusSection')){
+       if(status)status.textContent='Target Bonus module has not initialized. Reload the page.';
+     }
+   }catch(e){console.error('[Bonus navigation]',e);if(status)status.textContent='Unable to load: '+(e?.message||e)}
  }
  function setup(){
-  const page=document.getElementById('bonusPage');
-  if(!page)return;
-  const shell=page.querySelector('.bonus-shell');
-  if(shell&&!document.getElementById('ndBonusSalaryTabs')){
-   const tabs=document.createElement('div');tabs.id='ndBonusSalaryTabs';
-   tabs.innerHTML='<button type="button" class="salary-view-btn" data-nd-salary-mode="7th">7th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="14th">14th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="bonus">Bonus</button><button type="button" class="salary-view-btn" data-nd-salary-mode="target">Target Bonus</button>';
-   shell.prepend(tabs);
-  }
-  // Capture once at window level so older element listeners cannot race or reset the selected mode.
-  window.addEventListener('click',e=>{
-   const b=e.target?.closest?.('#salaryViewBonusBtn,#salaryViewTargetBonusBtn,#ndBonusSalaryTabs [data-nd-salary-mode]');
-   if(!b)return;
-   const mode=b.dataset.ndSalaryMode||(b.id==='salaryViewTargetBonusBtn'?'target':'bonus');
-   if(mode==='bonus'||mode==='target'){
-    e.preventDefault();e.stopImmediatePropagation();void openBonus(mode);return;
+   const page=$('bonusPage');if(!page)return;
+   const shell=page.querySelector('.bonus-shell');
+   if(shell&&!$('ndBonusSalaryTabs')){
+     const nav=document.createElement('nav');nav.id='ndBonusSalaryTabs';nav.setAttribute('aria-label','Payroll sections');
+     nav.innerHTML='<button type="button" class="salary-view-btn" data-nd-salary-mode="7th">7th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="14th">14th</button><button type="button" class="salary-view-btn" data-nd-salary-mode="bonus">Bonus</button><button type="button" class="salary-view-btn" data-nd-salary-mode="target">Target Bonus</button>';
+     shell.prepend(nav);
    }
-   if(mode==='7th'||mode==='14th'){
-    e.preventDefault();e.stopImmediatePropagation();
-    document.body.dataset.ndVisiblePage='salary';
-    page.classList.remove('active','nd-target-only','nd-ledger-mode');
-    if(typeof window.showSalary==='function')window.showSalary();
-    if(typeof window.setSalaryViewMode==='function')window.setSalaryViewMode(mode);
-    else document.getElementById(mode==='7th'?'salaryView7Btn':'salaryView14Btn')?.click();
-   }
-  },true);
+   window.addEventListener('click',event=>{
+     const btn=event.target?.closest?.('#salaryViewBonusBtn,#salaryViewTargetBonusBtn,#ndBonusSalaryTabs [data-nd-salary-mode]');
+     if(!btn)return;
+     const mode=btn.dataset.ndSalaryMode||(btn.id==='salaryViewTargetBonusBtn'?'target':'bonus');
+     if(mode==='bonus'||mode==='target'){
+       event.preventDefault();event.stopImmediatePropagation();void open(mode);return;
+     }
+     if(mode==='7th'||mode==='14th'){
+       event.preventDefault();event.stopImmediatePropagation();++token;
+       page.classList.remove('active','nd-ledger-mode','nd-target-only');
+       page.style.setProperty('display','none','important');
+       $('salaryPage')?.style.removeProperty('display');
+       document.body.dataset.ndVisiblePage='salary';
+       if(typeof window.showSalary==='function')window.showSalary();
+       if(typeof window.setSalaryViewMode==='function')window.setSalaryViewMode(mode);
+       else $('salaryView'+(mode==='7th'?'7':'14')+'Btn')?.click();
+     }
+   },true);
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
