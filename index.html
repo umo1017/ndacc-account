@@ -34909,6 +34909,28 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 #ndBonusDistribution [hidden]{display:none!important}#ndBonusDistribution .ndbd-overview strong{display:block;margin-top:6px;font-size:18px}#ndBonusDistribution h3{margin:18px 0 8px}#ndBonusDistribution .ndbd-subtle{color:#65766b;font-size:12px}
 @media(max-width:600px){#ndBonusDistribution{padding:12px}#ndBonusDistribution .ndbd-overview{grid-template-columns:1fr 1fr}}
 </style>
+<style id="ndbd-simple-bonus-20261102">
+/* Only show the simple Bonus screen; keep the close button. */
+#bonusPage.nd-ledger-mode .bonus-shell > .bonus-card,
+#bonusPage.nd-ledger-mode .bonus-shell > .bonus-toolbar,
+#bonusPage.nd-ledger-mode .bonus-shell > .bonus-branch-tabs,
+#bonusPage.nd-ledger-mode .bonus-shell > .bonus-history,
+#bonusPage.nd-ledger-mode .bonus-shell > .bonus-metrics{display:none!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution{display:block!important;max-width:1100px;margin:8px auto!important;padding:16px!important;border-radius:16px!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-overview>div{min-width:0;padding:12px;border-radius:10px;background:#f5f8f6}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-manager-list{display:grid;grid-template-columns:1fr;gap:6px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-manager-row{padding:8px;gap:8px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-manager-row label:first-child{flex:1}
+#bonusPage.nd-ledger-mode #ndBonusDistribution h3{font-size:17px;margin:18px 0 10px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-scroll{max-width:100%;overflow-x:auto}
+#bonusPage.nd-ledger-mode #ndBonusDistribution table{width:100%;font-size:13px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution td,#bonusPage.nd-ledger-mode #ndBonusDistribution th{padding:8px 6px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution input,#bonusPage.nd-ledger-mode #ndBonusDistribution select{min-width:0;max-width:100%;box-sizing:border-box}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-actions{display:flex;gap:8px;margin-top:12px}
+@media(max-width:600px){#bonusPage.nd-ledger-mode #ndBonusDistribution{padding:12px!important}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-overview{grid-template-columns:repeat(2,minmax(0,1fr))}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-controls{grid-template-columns:1fr}#bonusPage.nd-ledger-mode #ndBonusDistribution h2{font-size:21px}}
+</style>
 <style id="ndbd-multiple-manager-style">
 #ndbdManagers.ndbd-manager-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;margin:8px 0 14px}
 #ndbdManagers .ndbd-manager-row{border:1px solid #dce5df;border-radius:10px;padding:10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#f8faf9}
@@ -34936,18 +34958,19 @@ const n=v=>Math.max(0,Number(v)||0);
 const totalSales=()=>settlements.filter(x=>x.branch===branch).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
 function setup(){if($('ndBonusDistribution'))return;const shell=$('bonusPage')?.querySelector('.bonus-shell');if(!shell)return;
 const el=document.createElement('section');el.id='ndBonusDistribution';el.innerHTML=`
-<h2>Branch Performance Bonus <small class="ndbd-subtle">Preview only · No payroll posting</small></h2>
-<div class="ndbd-controls"><label>Branch<select id="ndbdBranch"></select></label><label>Month<input id="ndbdMonth" type="month"></label><div style="grid-column:1/-1"><strong>Managers · Multiple Selection</strong><p class="ndbd-subtle">Tick each manager and set individual % of branch performance. Manager bonus is never reduced by staff deductions.</p><div id="ndbdManagers" class="ndbd-manager-list"></div></div></div>
-<div class="ndbd-overview"><div>Branch Total Performance<strong id="ndbdSales">—</strong></div><div>Manager Bonus (No Deduction)<strong id="ndbdManagerBonus">—</strong></div><div>Staff Bonus After Deductions<strong id="ndbdNetStaff">—</strong></div><div>Total Proposed Bonus<strong id="ndbdBonus">—</strong></div></div>
-<p class="ndbd-subtle">Performance source: daily_settlements.grand_total (provisional; must reconcile before payroll).</p>
-<div id="ndbdTeamBox" class="ndbd-team"><h3>Team Bonus · Automatic Staff Allocation</h3><div class="ndbd-controls"><label>Staff Team Bonus % of Branch Performance<input type="number" id="ndbdTeamRate" min="0" max="100" step="0.01" value="0"></label><div class="ndbd-subtle">Staff are automatically included. The team pool is divided equally among eligible staff, excluding the selected manager. MC / Target status may be adjusted below; check “Include” to grant exceptions.</div></div></div>
-<div id="ndbdEcoBox"><h3>Eco Botanic · Individual Staff Bonus</h3><p class="ndbd-subtle">Select each eligible employee and set their share of branch performance.</p></div>
-<h3 id="ndbdStaffTitle">Staff Bonus Allocation</h3><div class="ndbd-scroll"><table><thead><tr id="ndbdHeader"></tr></thead><tbody id="ndbdRows"></tbody></table></div>
-<h3>Staff Bonus Deductions <small class="ndbd-subtle">Employee only · Never deducted from manager bonus</small></h3>
-<div class="ndbd-controls"><label>Employee<select id="ndbdDeductEmployee"></select></label><label>Reason<input id="ndbdDeductReason" placeholder="Staff purchase / expense"></label><label>Amount (RM)<input id="ndbdDeductAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><div style="align-self:end"><button type="button" id="ndbdAddDeduction">Add Deduction</button></div></div>
-<div class="ndbd-scroll"><table><thead><tr><th>Employee</th><th>Reason</th><th>Deduction</th><th>Action</th></tr></thead><tbody id="ndbdDeductions"></tbody></table></div>
-<p class="ndbd-subtle" id="ndbdDeductionNote">Deductions affect staff bonus only. They do not change manager bonus, staff salary, or cash records. This is a draft calculator, not an accounting deduction record.</p>
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0"><button type="button" id="ndbdRefresh">Refresh Performance</button><button type="button" id="ndbdCopy">Copy Draft Summary</button></div><p role="status" id="ndbdStatus"></p>`;
+<h2>Branch Bonus <small class="ndbd-subtle">Preview only</small></h2>
+<div class="ndbd-controls"><label>Branch<select id="ndbdBranch"></select></label><label>Month<input id="ndbdMonth" type="month"></label></div>
+<div class="ndbd-overview"><div>Total Performance<strong id="ndbdSales">—</strong></div><div>Manager Bonus<strong id="ndbdManagerBonus">—</strong></div><div>Staff Bonus (Net)<strong id="ndbdNetStaff">—</strong></div><div>Total Bonus<strong id="ndbdBonus">—</strong></div></div>
+<h3>Managers <small class="ndbd-subtle">Select multiple · Set %</small></h3><div id="ndbdManagers" class="ndbd-manager-list"></div>
+<div id="ndbdTeamBox" class="ndbd-team"><div class="ndbd-controls"><label>Team Bonus %<input type="number" id="ndbdTeamRate" min="0" max="100" step="0.01" value="0"></label></div></div>
+<div id="ndbdEcoBox"><h3>Eco Staff Bonus</h3></div>
+<h3 id="ndbdStaffTitle">Staff Bonus</h3>
+<div class="ndbd-scroll"><table><thead><tr id="ndbdHeader"></tr></thead><tbody id="ndbdRows"></tbody></table></div>
+<h3>Staff Deduction</h3>
+<div class="ndbd-controls"><label>Employee<select id="ndbdDeductEmployee"></select></label><label>Amount (RM)<input id="ndbdDeductAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><div style="align-self:end"><button type="button" id="ndbdAddDeduction">Add</button></div></div>
+<div class="ndbd-scroll"><table><thead><tr><th>Employee</th><th>Deduction</th><th></th></tr></thead><tbody id="ndbdDeductions"></tbody></table></div>
+<p class="ndbd-subtle" id="ndbdDeductionNote">Only staff bonus is deducted. Managers are never deducted.</p>
+<div class="ndbd-actions"><button type="button" id="ndbdRefresh">Refresh</button><button type="button" id="ndbdCopy">Copy Summary</button></div><p role="status" id="ndbdStatus"></p>`;
 shell.append(el);$('ndbdMonth').value=month;
 $('ndbdMonth').addEventListener('change',e=>{month=e.target.value;void load()});
 $('ndbdBranch').addEventListener('change',e=>{branch=e.target.value;build()});
@@ -34958,7 +34981,7 @@ $('ndbdRows').addEventListener('change',updateRow);$('ndbdRows').addEventListene
 $('ndbdRefresh').addEventListener('click',()=>void load());
 $('ndbdAddDeduction').addEventListener('click',addDeduction);
 $('ndbdDeductions').addEventListener('click',e=>{const b=e.target.closest('[data-deduction-index]');if(!b)return;deductions.splice(Number(b.dataset.deductionIndex),1);drawDeductions();calculate()});
-$('ndbdCopy').addEventListener('click',()=>{let lines=[`${branch} · ${month}`,`Branch performance: ${$('ndbdSales').textContent}`,...Array.from(managers.entries()).map(([id,pct])=>`Manager ${rows.find(r=>String(r.id)===id)?.name||id}: ${pct}% = ${fmt(totalSales()*pct/100)} (no deduction)`),`Manager bonus: ${$('ndbdManagerBonus').textContent} (no deduction)`,isEco()?'Individual staff bonus':'Team pool bonus',...rows.filter(x=>!managers.has(String(x.id))).map(x=>`${x.name}: ${fmt(x.net||0)} (gross ${fmt(x.gross||0)}, deductions ${fmt(x.deduct||0)})`),...deductions.map(x=>`Deduction ${rows.find(r=>r.id===x.id)?.name||x.id}: ${x.reason} ${fmt(x.amount)}`)];navigator.clipboard?.writeText(lines.join('\n'));$('ndbdStatus').textContent='Draft copied where browser supports clipboard.'});
+$('ndbdCopy').addEventListener('click',()=>{let lines=[`${branch} · ${month}`,`Branch performance: ${$('ndbdSales').textContent}`,...Array.from(managers.entries()).map(([id,pct])=>`Manager ${rows.find(r=>String(r.id)===id)?.name||id}: ${pct}% = ${fmt(totalSales()*pct/100)} (no deduction)`),`Manager bonus: ${$('ndbdManagerBonus').textContent} (no deduction)`,isEco()?'Individual staff bonus':'Team pool bonus',...rows.filter(x=>!managers.has(String(x.id))).map(x=>`${x.name}: ${fmt(x.net||0)} (gross ${fmt(x.gross||0)}, deductions ${fmt(x.deduct||0)})`),...deductions.map(x=>`Deduction ${rows.find(r=>r.id===x.id)?.name||x.id}: ${fmt(x.amount)}`)];navigator.clipboard?.writeText(lines.join('\n'));$('ndbdStatus').textContent='Draft copied where browser supports clipboard.'});
 }
 function updateRow(e){const tr=e.target.closest('[data-staff-id]');if(!tr)return;const r=rows.find(x=>String(x.id)===tr.dataset.staffId);if(!r)return;const f=e.target.dataset.field;if(f==='rate')r.rate=Math.min(100,n(e.target.value));else if(f)r[f]=e.target.checked;calculate()}
 function nextMonth(m){const [y,k]=m.split('-').map(Number);return k===12?(y+1)+'-01-01':y+'-'+String(k+1).padStart(2,'0')+'-01'}
@@ -34967,15 +34990,15 @@ try{const [employees,sales]=await Promise.all([client.from('employees').select('
 if(employees.error)throw employees.error;if(sales.error)throw sales.error;
 staff=(employees.data||[]).filter(s=>!collab(s)&&!s.nd_archived_at&&!s.last_working_date);settlements=sales.data||[];
 const allowedBranches=branches.filter(allowed);$('ndbdBranch').innerHTML=allowedBranches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!allowedBranches.includes(branch))branch=allowedBranches[0]||'';$('ndbdBranch').value=branch;
-if(!branch){st.textContent='No permitted branch';$('ndbdRows').innerHTML='';return}build();st.textContent='Draft calculator only. Changes are not saved or posted to payroll.';
+if(!branch){st.textContent='No permitted branch';$('ndbdRows').innerHTML='';return}build();st.textContent='Preview · Not saved to payroll';
 }catch(err){st.textContent='Unable to load bonus data: '+(err?.message||err)}finally{loading=false}}
 function build(){draftKey=branch+'|'+month;managers=new Map();teamRate=0;deductions=[];const list=staff.filter(x=>x.outlet===branch);rows=list.map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),included:true,mc:false,target:true,rate:0,gross:0,deduct:0,net:0}));$('ndbdTeamRate').value=0;$('ndbdTeamBox').hidden=isEco();$('ndbdEcoBox').hidden=!isEco();$('ndbdStaffTitle').textContent=isEco()?'Individual Employee Bonus':'Team Bonus Staff (Auto Included)';drawManagers();buildRows()}
-function drawManagers(){const managerList=$('ndbdManagers');managerList.innerHTML=rows.map(r=>{const id=String(r.id),checked=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${id}"><label><input type="checkbox" data-field="managerCheck" ${checked?'checked':''}> ${esc(r.name)}</label><label>Bonus % <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${managers.get(id)||0}" ${checked?'':'disabled'}></label><span data-manager-bonus="${id}">${checked?fmt(totalSales()*(managers.get(id)||0)/100):'—'}</span></div>`}).join('')||'<p class="ndbd-subtle">No eligible managers in this branch</p>'}
-function buildRows(){const eligibles=rows.filter(x=>!managers.has(String(x.id)));$('ndbdHeader').innerHTML=isEco()?'<th>Include</th><th>Employee</th><th>MC</th><th>Target Met</th><th>Individual %</th><th>Gross Bonus</th><th>Deduction</th><th>Net Bonus</th>':'<th>Employee</th><th>MC</th><th>Target Met</th><th>Include / Exception</th><th>Gross Bonus</th><th>Deduction</th><th>Net Bonus</th>';
-$('ndbdRows').innerHTML=eligibles.map(r=>`<tr data-staff-id="${r.id}">${isEco()?'<td><input type="checkbox" data-field="included" '+(r.included?'checked':'')+'></td>':''}<td>${esc(r.name)}</td><td><input type="checkbox" data-field="mc" ${r.mc?'checked':''}></td><td><input type="checkbox" data-field="target" ${r.target?'checked':''}></td>${isEco()?`<td><input type="number" data-field="rate" min="0" max="100" step="0.01" value="${r.rate}"></td>`:`<td><input type="checkbox" data-field="included" ${r.included?'checked':''}></td>`}<td data-gross="${r.id}">RM 0.00</td><td data-deduct="${r.id}">RM 0.00</td><td data-net="${r.id}">RM 0.00</td></tr>`).join('');
+function drawManagers(){const managerList=$('ndbdManagers');managerList.innerHTML=rows.map(r=>{const id=String(r.id),checked=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${id}"><label><input type="checkbox" data-field="managerCheck" ${checked?'checked':''}> ${esc(r.name)}</label><label>% <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${managers.get(id)||0}" ${checked?'':'disabled'}></label><span data-manager-bonus="${id}">${checked?fmt(totalSales()*(managers.get(id)||0)/100):'—'}</span></div>`}).join('')||'<p class="ndbd-subtle">No eligible managers in this branch</p>'}
+function buildRows(){const eligibles=rows.filter(x=>!managers.has(String(x.id)));$('ndbdHeader').innerHTML=isEco()?'<th>Include</th><th>Employee</th><th>MC</th><th>Target Met</th><th>Individual %</th><th>Gross Bonus</th><th>Deduction</th><th>Net Bonus</th>':'<th>Employee</th><th>MC</th><th>Target</th><th>Bonus</th><th>Deduction</th><th>Net</th>';
+$('ndbdRows').innerHTML=eligibles.map(r=>`<tr data-staff-id="${r.id}">${isEco()?'<td><input type="checkbox" data-field="included" '+(r.included?'checked':'')+'></td>':''}<td>${esc(r.name)}</td><td><input type="checkbox" data-field="mc" ${r.mc?'checked':''}></td><td><input type="checkbox" data-field="target" ${r.target?'checked':''}></td>${isEco()?`<td><input type="number" data-field="rate" min="0" max="100" step="0.01" value="${r.rate}"></td>`:''}<td data-gross="${r.id}">RM 0.00</td><td data-deduct="${r.id}">RM 0.00</td><td data-net="${r.id}">RM 0.00</td></tr>`).join('');
 $('ndbdDeductEmployee').innerHTML='<option value="">Select Employee</option>'+eligibles.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('');drawDeductions();calculate()}
-function addDeduction(){const id=Number($('ndbdDeductEmployee').value),reason=$('ndbdDeductReason').value.trim(),amount=Number($('ndbdDeductAmount').value);if(!id||!rows.some(r=>r.id===id&&!managers.has(String(r.id)))){alert('Select an employee, not the manager.');return}if(!reason||!Number.isFinite(amount)||amount<=0){alert('Enter deduction reason and positive amount.');return}deductions.push({id,reason:reason.slice(0,200),amount:Math.round(amount*100)/100});$('ndbdDeductReason').value='';$('ndbdDeductAmount').value='';drawDeductions();calculate()}
-function drawDeductions(){$('ndbdDeductions').innerHTML=deductions.map((d,i)=>`<tr><td>${esc(rows.find(r=>r.id===d.id)?.name||d.id)}</td><td>${esc(d.reason)}</td><td>${fmt(d.amount)}</td><td><button type="button" data-deduction-index="${i}">Remove</button></td></tr>`).join('')||'<tr><td colspan="4">No deductions entered</td></tr>'}
+function addDeduction(){const id=Number($('ndbdDeductEmployee').value),amount=Number($('ndbdDeductAmount').value);if(!id||!rows.some(r=>r.id===id&&!managers.has(String(r.id)))){alert('Select an employee, not a manager.');return}if(!Number.isFinite(amount)||amount<=0){alert('Enter a positive deduction amount.');return}deductions.push({id,amount:Math.round(amount*100)/100});$('ndbdDeductAmount').value='';drawDeductions();calculate()}
+function drawDeductions(){$('ndbdDeductions').innerHTML=deductions.map((d,i)=>`<tr><td>${esc(rows.find(r=>r.id===d.id)?.name||d.id)}</td><td>${fmt(d.amount)}</td><td><button type="button" data-deduction-index="${i}">Remove</button></td></tr>`).join('')||'<tr><td colspan="3">No deductions</td></tr>'}
 function calculate(){const total=totalSales(),managerBonus=Array.from(managers.values()).reduce((sum,pct)=>sum+total*pct/100,0);const teamMembers=rows.filter(r=>!managers.has(String(r.id))&&r.included);const pool=isEco()?0:total*teamRate/100;const perHead=teamMembers.length?pool/teamMembers.length:0;
 let staffGross=0,staffNet=0;
 for(const r of rows){if(managers.has(String(r.id))){r.gross=0;r.deduct=0;r.net=0;continue}r.gross=isEco()?(r.included?total*r.rate/100:0):(r.included?perHead:0);r.deduct=deductions.filter(d=>d.id===r.id).reduce((a,d)=>a+d.amount,0);r.net=Math.max(0,r.gross-r.deduct);staffGross+=r.gross;staffNet+=r.net;for(const [suffix,val] of [['gross',r.gross],['deduct',r.deduct],['net',r.net]]){const e=document.querySelector(`[data-${suffix}="${r.id}"]`);if(e)e.textContent=fmt(val)}}
