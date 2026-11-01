@@ -150,7 +150,9 @@ function signedView(document){
  const markup=window.ndContractDocumentMarkup(document);
  const html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
  '<style>body{margin:0;background:#e9efeb;padding:14px}@page{size:A4 portrait;margin:0}@media print{html,body{margin:0;padding:0;background:#fff}.nd-advance-contract{width:210mm!important;max-width:none!important;box-shadow:none!important}.nd-advance-sheet{width:210mm!important;height:297mm!important;page-break-inside:avoid}}</style></head><body>'+
- markup+'</body></html>';
+ markup+'
+
+</body></html>';
  return window.ndOpenInlineDocument(html,'Salary Advance Repayment');
 }
 async function openHistory(){mount();const h=$('ndSimpleAdvanceHistory');if(!h.hasAttribute('open')){h.querySelector('[data-sa-month]').value=myDate().slice(0,7);showDialog(h);}return loadHistory();}
@@ -4948,16 +4950,6 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 </div>
 </div>
 
-<details id="ndDailyProductDeduction" class="nd-daily-product-deduction" style="margin:10px 0;padding:12px;border:1px solid #d8dee5;border-radius:10px">
- <summary style="cursor:pointer;font-weight:650">Product Deduction <span id="ndDailyProductCount"></span></summary>
- <div style="padding-top:12px">
-  <input id="ndDailyProductSearch" type="search" placeholder="Search available products" autocomplete="off" style="width:100%;padding:10px;margin-bottom:8px" />
-  <div id="ndDailyProductStatus" class="helper"></div>
-  <div id="ndDailyProductResults" style="max-height:210px;overflow:auto"></div>
-  <div id="ndDailyProductSelected" style="margin-top:12px"></div>
-  <small>Only products with available stock in this branch are shown. No prices.</small>
- </div>
-</details>
 <details class="nd-extra-payment-details" id="ndExtraPaymentDetails">
 <summary>Other Payment Items <span class="nd-extra-chevron">▾</span></summary>
 <div class="nd-extra-payment-grid">
@@ -4977,7 +4969,17 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <label for="amex">AMEX</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="amex" min="0" step="0.01" type="number" value=""/></div>
 </div>
-</div></details></div>
+</div></details>
+<details id="ndDailyProductDeduction" class="nd-daily-product-deduction" style="margin:10px 0;padding:12px;border:1px solid #d8dee5;border-radius:10px">
+ <summary style="cursor:pointer;font-weight:650">Product Deduction <span id="ndDailyProductCount"></span></summary>
+ <div style="padding-top:12px">
+  <input id="ndDailyProductSearch" type="search" placeholder="Search available products" autocomplete="off" style="width:100%;padding:10px;margin-bottom:8px" />
+  <div id="ndDailyProductStatus" class="helper"></div>
+  <div id="ndDailyProductResults" style="max-height:210px;overflow:auto"></div>
+  <div id="ndDailyProductSelected" style="margin-top:12px"></div>
+ </div>
+</details>
+</div>
 <div id="dailySettlementProofCard" class="nd-inline-settlement-proof">
 <div class="nd-settlement-totals"><div class="row3"><div class="nd-grand-total-column"><label>Grand Total</label><input id="grandTotal" readonly="" type="text"/></div>
 <div class="daily-proof-box">
@@ -34991,6 +34993,51 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 })();
 </script>
 
+<!-- Navigation repair: unify Salary Bonus / Target Bonus tabs. -->
+<script id="nd-bonus-target-navigation-repair-v2">
+(function(){
+ 'use strict';
+ async function open(mode){
+  var page=document.getElementById('bonusPage');
+  if(!page)return;
+  try{
+   if(typeof window.showBonus==='function') await window.showBonus();
+   else {
+    document.body.dataset.ndVisiblePage='bonus';
+    document.getElementById('salaryPage')?.classList.remove('active','sidebar-offset');
+    page.classList.add('active','sidebar-offset');
+   }
+   // Do not override authorization if the original showBonus refused access.
+   if(document.body.dataset.ndVisiblePage!=='bonus'||!page.classList.contains('active'))return;
+   page.classList.toggle('nd-target-only',mode==='target');
+   page.classList.toggle('nd-ledger-mode',mode==='bonus');
+   if(typeof window.ndSetBonusSubTab==='function')window.ndSetBonusSubTab(mode);
+   page.classList.toggle('nd-target-only',mode==='target');
+   page.classList.toggle('nd-ledger-mode',mode==='bonus');
+   document.getElementById('salaryViewBonusBtn')?.classList.toggle('active',mode==='bonus');
+   document.getElementById('salaryViewTargetBonusBtn')?.classList.toggle('active',mode==='target');
+   document.querySelectorAll('#ndBonusSalaryTabs [data-nd-salary-mode]').forEach(function(b){b.classList.toggle('active',b.dataset.ndSalaryMode===mode)});
+   document.dispatchEvent(new Event('nd-bonus-open'));
+  }catch(e){console.error('Bonus navigation error',e);}
+ }
+ function setup(){
+  ['salaryViewBonusBtn','salaryViewTargetBonusBtn'].forEach(function(id){
+   var btn=document.getElementById(id);if(!btn)return;
+   btn.addEventListener('click',function(e){
+    e.preventDefault();e.stopImmediatePropagation();
+    void open(id==='salaryViewBonusBtn'?'bonus':'target');
+   },true);
+  });
+  var tabs=document.getElementById('ndBonusSalaryTabs');
+  if(tabs)tabs.addEventListener('click',function(e){
+   var b=e.target.closest('[data-nd-salary-mode]');
+   if(!b||!['bonus','target'].includes(b.dataset.ndSalaryMode))return;
+   e.preventDefault();e.stopImmediatePropagation();void open(b.dataset.ndSalaryMode);
+  },true);
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
