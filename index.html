@@ -11812,6 +11812,9 @@ function legacyCommissionA(row={}){
   return legacy>0 ? legacy : 0;
 }
 window.ndWBonusCache=window.ndWBonusCache||new Map();
+window.ndAutoTargetBonusCache=window.ndAutoTargetBonusCache||new Map();
+function ndTargetBonusForEmployee(e){return Number(window.ndAutoTargetBonusCache.get(String(monthKey())+'|'+String(e?.outlet||'')+'|'+String(e?.id||''))||0);}
+
 function ndWBonusForEmployee(e){
  const k=String(monthKey())+'|'+String(e?.outlet||'')+'|'+String(e?.id||'');
  return Number(window.ndWBonusCache.get(k)||0);
@@ -11830,7 +11833,7 @@ async function ndLoadWBonusForSalary(){
  const outlets=[...new Set(salaryEmployees.map(e=>String(e.outlet||'')).filter(Boolean))];
  const now=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
  for(const outlet of outlets){
-   let cfg={daily_target:4000,required_days:4,weekly_bonus:388};
+   let cfg={daily_target:4000,required_days:4,weekly_bonus:388,monthly_target:100000,monthly_pool:1888};
    try{cfg={...cfg,...JSON.parse(localStorage.getItem('nd_target_bonus_settings_v1_'+outlet)||'{}')}}catch(_){}
    const [r,s]=await Promise.all([
      c.from('monthly_roster_day_assignments').select('work_date,staff_name').eq('outlet',outlet).gte('work_date',first).lte('work_date',last),
@@ -11846,9 +11849,34 @@ async function ndLoadWBonusForSalary(){
      for(const x of r.data||[]){const d=String(x.work_date).slice(0,10);if(d<a||d>b)continue;const n=norm(x.staff_name);if(!n)continue;if(Number(sales.get(d)||0)>=Number(cfg.daily_target))hits.set(n,(hits.get(n)||0)+1)}
      for(const [n,count] of hits)if(count>=Number(cfg.required_days))earned.set(n,(earned.get(n)||0)+Number(cfg.weekly_bonus));
    }
+   // Monthly Target Bonus: only after the branch reaches its monthly goal;
+   // split the configured pool by roster participation days, same as Target Bonus page.
+   const monthlySales=(s.data||[]).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
+   const people=new Map();
+   for(const x of r.data||[]){
+     const d=String(x.work_date||'').slice(0,10),n=norm(x.staff_name);
+     if(!n||d<first||d>last||d>now)continue;
+     people.set(n,(people.get(n)||0)+1);
+   }
+   const monthly=new Map();
+   if(last<=now && monthlySales>=Number(cfg.monthly_target??100000) && people.size){
+     const poolCents=Math.max(0,Math.round(Number(cfg.monthly_pool??1888)*100));
+     const days=[...people.values()].reduce((a,b)=>a+b,0);
+     let remain=poolCents;
+     const entries=[...people];
+     entries.forEach(([n,daysWorked],i)=>{
+       const cents=i===entries.length-1?remain:Math.round(poolCents*daysWorked/days);
+       remain-=cents;
+       monthly.set(n,cents/100);
+     });
+   }
    for(const e of salaryEmployees.filter(e=>String(e.outlet||'')===outlet)){
      const names=[e.name,e.full_name,e.nickname,e.staff_name,e.employee_name].map(norm);
-     window.ndWBonusCache.set(m+'|'+outlet+'|'+e.id,Number(names.map(n=>earned.get(n)||0).find(v=>v>0)||0));
+     const weekly=Number(names.map(n=>earned.get(n)||0).find(v=>v>0)||0);
+     const monthBonus=Number(names.map(n=>monthly.get(n)||0).find(v=>v>0)||0);
+     window.ndWBonusCache.set(m+'|'+outlet+'|'+e.id,weekly);
+     // Weekly + monthly target awards belong to the single 14th Bonus cell.
+     window.ndAutoTargetBonusCache.set(m+'|'+outlet+'|'+e.id,Math.round((weekly+monthBonus)*100)/100);
    }
  }
 }
@@ -11857,8 +11885,10 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
   const commissionB=Number(m.commission_b||0);
   const customer=Number(m.customer_referral||0);
   const staff=Number(m.staff_referral||0);
-  const bonus=Number(m.reward||0);
-  const threeMonthBonus=Number(threeBonus||0);
+  // New unconfirmed 14th: Target Bonus + quarterly Branch Bonus in ONE Bonus field.
+  // Historical confirmed snapshots retain their stored fields unchanged.
+  const bonus=Number(m.reward||0)+Number(threeBonus||0);
+  const threeMonthBonus=0;
   const wBonus=Number(m.w_bonus||0);
 
   // Requested order:
@@ -13670,22 +13700,15 @@ async function loadSalaryData(){
     console.warn("Legacy commission migration failed",err);
   }
 
-  // Calculate the employee-specific 3-month bonus for quarterly payout months.
+  // Bonus V4 quarter earnings. Read-only; no payroll is modified until UMO confirms.
   salaryQuarter3BonusMap=new Map();
   try{
-    if(window.ndQuarter3Bonus?.isPayoutMonth?.(month)){
-      await window.ndMapLimited(salaryEmployees,4,async e=>{
-        try{
-          const amount=await window.ndQuarter3Bonus.calculateEmployee(Number(e.id),month);
-          salaryQuarter3BonusMap.set(Number(e.id),Number(amount||0));
-        }catch(err){
-          console.warn("3-Bonus load failed",e.id,err);
-          salaryQuarter3BonusMap.set(Number(e.id),0);
-        }
-      });
+    if([3,6,9,12].includes(Number(month.slice(5,7)))){
+      salaryQuarter3BonusMap=await ndLoadV4QuarterForSalary(month);
     }
   }catch(err){
-    console.warn("3-Bonus preload failed",err);
+    console.warn("Bonus V4 quarterly load failed",err);
+    byId("salarySyncState").textContent="Bonus V4 unavailable: "+String(err?.message||err);
   }
 
   byId("salarySyncState").textContent=`Cloud Synced ✓ · ${salaryEmployees.length} Staff`;
@@ -13996,7 +14019,7 @@ function renderFourteenTable(emps){
           reward:Number(cs.bonus||0),
           w_bonus:Number(cs.w_bonus||0)
         },snapshotFor(e.id),threeBonus)
-      : calculate14th({...m,w_bonus:ndWBonusForEmployee(e)},snapshotFor(e.id),threeBonus);
+      : calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(e.id),threeBonus);
     const c=cs?.payment_done===true ? {...cs} : applyFourteenManualOverrides(e,{...(cs||{}),...base14,three_month_bonus:threeBonus});
     const a=Number(c.commission_a||0);
     const b=Number(c.commission_b||0);
@@ -14086,6 +14109,49 @@ function renderFourteenTable(emps){
     </tbody></table></div>`;
 }
 
+// Quarterly Bonus V4: Jan-Mar -> Mar, Apr-Jun -> Jun, Jul-Sep -> Sep, Oct-Dec -> Dec.
+// WARNING: only saved V4 data is counted. No local browser drafts or legacy quarter table.
+async function ndLoadV4QuarterForSalary(month){
+  const result=new Map();
+  if(![3,6,9,12].includes(Number(month.slice(5,7))))return result;
+  const [yr,mm]=month.split('-').map(Number);
+  const qMonths=[mm-2,mm-1,mm].map(n=>yr+'-'+String(n).padStart(2,'0')+'-01');
+  const monthsRes=await salaryDb.from('nd_bonus_v4_months').select('*').in('bonus_month',qMonths);
+  if(monthsRes.error)throw monthsRes.error;
+  const months=(monthsRes.data||[]).filter(m=>String(m.branch||'').toLowerCase()!=='global');
+  if(!months.length)return result;
+  const ids=months.map(m=>m.id);
+  const [mgrRes,staffRes,dedRes]=await Promise.all([
+    salaryDb.from('nd_bonus_v4_managers').select('*').in('month_id',ids),
+    salaryDb.from('nd_bonus_v4_staff').select('*').in('month_id',ids),
+    salaryDb.from('nd_bonus_v4_deductions').select('*').in('month_id',ids)
+  ]);
+  for(const r of [mgrRes,staffRes,dedRes])if(r.error)throw r.error;
+  const put=(id,n)=>{const k=Number(id);if(!Number.isFinite(k))return;result.set(k,Math.round(((result.get(k)||0)+n)*100)/100)};
+  for(const m of months){
+    const mgrs=(mgrRes.data||[]).filter(x=>x.month_id===m.id);
+    const managerIds=new Set(mgrs.map(x=>Number(x.employee_id)));
+    const total=Math.max(0,Number(m.total_sales??m.total_performance??0));
+    for(const x of mgrs){
+      const pct=Math.max(0,Number(x.bonus_percent??x.bonus_pct??0));
+      put(x.employee_id,Math.round(total*pct)/100);
+    }
+    const poolPct=String(m.branch)==='Eco Botanic'?1:Math.max(0,Number(m.team_percent??m.pool_percent??1));
+    const deductions=(dedRes.data||[]).filter(x=>x.month_id===m.id).reduce((a,x)=>a+Math.max(0,Number(x.amount??x.deduction_amount??0)),0);
+    const poolCents=Math.max(0,Math.round(total*poolPct)-Math.round(deductions*100));
+    // Only saved staff allocations qualify. No inferred targets/MC from absent records.
+    const eligible=(staffRes.data||[]).filter(x=>x.month_id===m.id
+      &&!managerIds.has(Number(x.employee_id))
+      &&x.has_mc!==true
+      &&x.target_met!==false && x.reached_target!==false
+      &&x.include_bonus!==false
+    ).sort((a,b)=>Number(a.employee_id)-Number(b.employee_id));
+    if(!eligible.length)continue;
+    const base=Math.floor(poolCents/eligible.length),remainder=poolCents%eligible.length;
+    eligible.forEach((x,i)=>put(x.employee_id,(base+(i<remainder?1:0))/100));
+  }
+  return result;
+}
 let salaryQuarter3BonusMap=new Map();
 function salaryQuarter3BonusFor(empId){
   return Number(salaryQuarter3BonusMap.get(Number(empId))||0);
@@ -14683,7 +14749,7 @@ function ndRefreshNetPayTotals(day){
     }else{
       const cs=commissionSnapshotFor(e.id);
       const bonus=cs?Number(cs.three_month_bonus??salaryQuarter3BonusFor(e.id)):salaryQuarter3BonusFor(e.id);
-      const base=cs?calculate14th({commission_a:Number(cs.commission_a||0),commission_b:Number(cs.commission_b||0),customer_referral:Number(cs.customer_referral||0),staff_referral:Number(cs.staff_referral||0),reward:Number(cs.bonus||0),w_bonus:Number(cs.w_bonus||0)},snapshotFor(e.id),bonus):calculate14th({...monthlyFor(e.id),w_bonus:ndWBonusForEmployee(e)},snapshotFor(e.id),bonus);
+      const base=cs?calculate14th({commission_a:Number(cs.commission_a||0),commission_b:Number(cs.commission_b||0),customer_referral:Number(cs.customer_referral||0),staff_referral:Number(cs.staff_referral||0),reward:Number(cs.bonus||0),w_bonus:Number(cs.w_bonus||0)},snapshotFor(e.id),bonus):calculate14th({...monthlyFor(e.id),reward:Number(monthlyFor(e.id).reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(e.id),bonus);
       amount=Number((cs?.payment_done===true?cs:applyFourteenManualOverrides(e,{...(cs||{}),...base,three_month_bonus:bonus})).net_pay||0);
     }
     sums[key]+=amount;
@@ -15361,7 +15427,7 @@ async function confirm14th(empId){
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || commissionSnapshotFor(empId)) return;
   const m=monthlyFor(empId);
-  const c=applyFourteenManualOverrides(e,calculate14th({...m,w_bonus:ndWBonusForEmployee(e)},snapshotFor(empId),salaryQuarter3BonusFor(empId)));
+  const c=applyFourteenManualOverrides(e,calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(empId),salaryQuarter3BonusFor(empId)));
   const row={
     employee_id:e.id,
     salary_month:monthDate(),
@@ -15370,7 +15436,7 @@ async function confirm14th(empId){
     total_commission:Number(c.total_commission||0),
     customer_referral:Number(m.customer_referral||0),
     staff_referral:Number(m.staff_referral||0),
-    bonus:Number(m.reward||0),
+    bonus:Number(c.bonus||0),
     three_month_bonus:Number(c.three_month_bonus||0),
     w_bonus:Number(c.w_bonus||0),
     commission:Number(c.commission||0),
@@ -34798,7 +34864,7 @@ const month=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lump
 const msg=t=>{const e=$('ndblMessage');if(e)e.textContent=t};
 const admin=()=>['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(window.currentUserEmail||'').toLowerCase());
 function setup(){if(ready)return;const page=$('bonusPage'),shell=page?.querySelector('.bonus-shell');if(!shell)return;ready=true;
-const section=document.createElement('section');section.id='ndBonusLedger';section.innerHTML=`<h2>Accumulated Staff Bonus</h2>
+const section=document.createElement('section');section.id='ndBonusLedger';section.innerHTML=`<h2>Historical Bonus Ledger</h2>
 <div class="ndbl-grid"><label>Branch<select id="ndblBranch"></select></label><label>Month<input type="month" id="ndblMonth"></label><label>Employee<select id="ndblEmployee"></select></label><label>Bonus Amount (RM)<input id="ndblAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label></div>
 <div class="ndbl-actions"><button class="btn primary" id="ndblAward" type="button">Award Selected Employee</button><button class="btn" id="ndblSettle" type="button">Settle Bonus</button><button class="btn" id="ndblRefresh" type="button">Refresh</button></div><p data-ndbl-message id="ndblMessage" role="status"></p>
 <div class="ndbl-metrics"><div>Accumulated Earned<br><strong id="ndblEarned">RM 0.00</strong></div><div>Settled<br><strong id="ndblPaid">RM 0.00</strong></div><div>Remaining<br><strong id="ndblRemaining">RM 0.00</strong></div></div>
@@ -34938,81 +35004,89 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 #ndbdManagers .ndbd-manager-row input[type=number]{max-width:75px}
 #ndbdManagers .ndbd-manager-row span{font-weight:650}
 </style>
-<script id="nd-bonus-distribution-v1-js">
+<style id="nd-bonus-v5-clean">
+#bonusPage.nd-ledger-mode #ndBonusLedger{display:none!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution{display:block!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution h2{margin:4px 0 12px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-subtle{font-size:12px;color:#68776c;margin:6px 0 10px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-manager-row{display:grid;grid-template-columns:minmax(105px,1fr) minmax(95px,125px) minmax(90px,auto);align-items:center;gap:8px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-overview strong{display:block;font-size:18px;margin-top:4px;white-space:normal}
+#bonusPage.nd-ledger-mode #ndBonusDistribution td,#bonusPage.nd-ledger-mode #ndBonusDistribution th{text-align:left;white-space:nowrap}
+#bonusPage.nd-ledger-mode #ndBonusDistribution [data-staff-bonus]{font-weight:700}
+</style><script id="nd-bonus-distribution-v1-js">
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt=v=>'RM '+Number(v||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
 const db=()=>window.salaryDb||(typeof salaryDb!=='undefined'?salaryDb:null);
 const monthNow=()=>{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit'}).formatToParts(new Date());return p.find(x=>x.type==='year').value+'-'+p.find(x=>x.type==='month').value};
-let staff=[],settlements=[],branch='Eco Botanic',month=monthNow(),rows=[],deductions=[],managers=new Map(),teamRate=0;
-let draftKey='',loading=false;
-const branches=['Eco Botanic','Nusa Bestari'];
-const isEco=()=>branch==='Eco Botanic';
-const collab=s=>[s.outlet,s.staff_category,s.employment_type,s.name,s.nickname].some(x=>/collaboration|合作/i.test(String(x||'')));
+const collab=s=>[s.outlet,s.staff_category,s.employment_type].some(x=>/collaboration|合作/i.test(String(x||'')));
+const safeNum=v=>Math.max(0,Number(v)||0);
+const idString=v=>String(v);
 const getEmail=()=>String(window.currentUserEmail||window.currentUser?.email||'').trim().toLowerCase();
-const isUmo=()=>getEmail()==='umo1017@gmail.com';
-const isSam=()=>getEmail()==='samchin6006@gmail.com';
-const allowed=b=>isUmo()||isSam()||staff.some(s=>s.outlet===b&&String(s.email||'').toLowerCase()===getEmail());
-const n=v=>Math.max(0,Number(v)||0);
-const totalSales=()=>settlements.filter(x=>x.branch===branch).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
-function setup(){if($('ndBonusDistribution'))return;const shell=$('bonusPage')?.querySelector('.bonus-shell');if(!shell)return;
+const fixedBranches=['Eco Botanic','Nusa Bestari'];
+let branch='Eco Botanic',month=monthNow(),staff=[],settlements=[],members=[],managers=new Map(),poolRate=1,poolDeduction=0,loading=false,sync=false;
+const isEco=()=>branch==='Eco Botanic';
+const allowed=b=>['umo1017@gmail.com','samchin6006@gmail.com'].includes(getEmail())||staff.some(s=>s.outlet===b&&String(s.email||'').toLowerCase()===getEmail());
+const sales=()=>settlements.filter(x=>x.branch===branch).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
+const storageKey=(b,m)=>'nd_bonus_pool_v5_draft_'+encodeURIComponent(b)+'_'+m;
+const baseKey=b=>'nd_bonus_pool_v5_defaults_'+encodeURIComponent(b);
+function readLocal(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch{return null}}
+function writeLocal(key,v){try{localStorage.setItem(key,JSON.stringify(v));return true}catch{return false}}
+function showStatus(t){const el=$('ndbdStatus');if(el)el.textContent=t}
+function snapshot(){return {managers:[...managers.entries()],staff:members.map(r=>({id:r.id,selected:r.selected,mc:r.mc,target:r.target})),poolRate,poolDeduction};}
+function saveDraft(){if(sync||!branch)return;const v=snapshot();const good=writeLocal(storageKey(branch,month),v);writeLocal(baseKey(branch),{managers:v.managers,staff:v.staff,poolRate:v.poolRate});showStatus(good?'Saved on this browser only · Not posted to payroll':'Preview only · Browser storage unavailable');}
+function applyState(){const v=readLocal(storageKey(branch,month))||readLocal(baseKey(branch));managers=new Map();poolRate=isEco()?1:1;poolDeduction=0;
+if(v){for(const pair of v.managers||[]){const id=String(pair[0]);if(members.some(r=>String(r.id)===id))managers.set(id,Math.min(100,safeNum(pair[1])))}
+for(const x of v.staff||[]){const r=members.find(r=>String(r.id)===String(x.id));if(!r)continue;r.selected=!!x.selected;r.mc=!!x.mc;r.target=x.target!==false}
+poolRate=isEco()?1:Math.min(100,safeNum(v.poolRate??1));poolDeduction=Math.max(0,safeNum(readLocal(storageKey(branch,month))?.poolDeduction??0));}
+}
+function mount(){if($('ndBonusDistribution'))return;const shell=$('bonusPage')?.querySelector('.bonus-shell');if(!shell)return;
 const el=document.createElement('section');el.id='ndBonusDistribution';el.innerHTML=`
-<h2>Branch Bonus <small class="ndbd-subtle">Preview only</small></h2>
+<h2>Branch Bonus</h2>
 <div class="ndbd-controls"><label>Branch<select id="ndbdBranch"></select></label><label>Month<input id="ndbdMonth" type="month"></label></div>
-<div class="ndbd-overview"><div>Total Performance<strong id="ndbdSales">—</strong></div><div>Manager Bonus<strong id="ndbdManagerBonus">—</strong></div><div>Staff Bonus (Net)<strong id="ndbdNetStaff">—</strong></div><div>Total Bonus<strong id="ndbdBonus">—</strong></div></div>
-<h3>Managers <small class="ndbd-subtle">Select multiple · Set %</small></h3><div id="ndbdManagers" class="ndbd-manager-list"></div>
-<div id="ndbdTeamBox" class="ndbd-team"><div class="ndbd-controls"><label>Team Bonus %<input type="number" id="ndbdTeamRate" min="0" max="100" step="0.01" value="0"></label></div></div>
-<div id="ndbdEcoBox"><h3>Eco Staff Bonus</h3></div>
-<h3 id="ndbdStaffTitle">Staff Bonus</h3>
+<div class="ndbd-overview"><div>Total Performance<strong id="ndbdSales">RM 0.00</strong></div><div>Manager Bonus<strong id="ndbdManagerBonus">RM 0.00</strong></div><div>Staff Pool 1% / %<strong id="ndbdPoolGross">RM 0.00</strong></div><div>Staff Pool After Deduction<strong id="ndbdNetStaff">RM 0.00</strong></div></div>
+<h3>Managers</h3><div class="ndbd-subtle">Select multiple managers and enter each manager’s %.</div><div id="ndbdManagers" class="ndbd-manager-list"></div>
+<div id="ndbdEcoBox"><h3>Eco Botanic · 1% Staff Bonus Pool</h3><p class="ndbd-subtle">Select participating therapists. MC or target not met = automatically excluded.</p></div>
+<div id="ndbdTeamBox"><h3>Team Bonus Pool</h3><label>Team Bonus % <input id="ndbdTeamRate" type="number" min="0" max="100" step="0.01" value="1"></label><p class="ndbd-subtle">All eligible non-manager staff are included automatically.</p></div>
 <div class="ndbd-scroll"><table><thead><tr id="ndbdHeader"></tr></thead><tbody id="ndbdRows"></tbody></table></div>
-<h3>Staff Deduction</h3>
-<div class="ndbd-controls"><label>Employee<select id="ndbdDeductEmployee"></select></label><label>Amount (RM)<input id="ndbdDeductAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><div style="align-self:end"><button type="button" id="ndbdAddDeduction">Add</button></div></div>
-<div class="ndbd-scroll"><table><thead><tr><th>Employee</th><th>Deduction</th><th></th></tr></thead><tbody id="ndbdDeductions"></tbody></table></div>
-<p class="ndbd-subtle" id="ndbdDeductionNote">Only staff bonus is deducted. Managers are never deducted.</p>
+<h3>Staff Pool Deduction</h3><div class="ndbd-controls"><label>Total Deduction (RM)<input id="ndbdDeductAmount" type="number" min="0" step="0.01" value="0"></label></div>
+<div class="ndbd-overview"><div>Eligible Staff<strong id="ndbdEligible">0</strong></div><div>Bonus Per Person<strong id="ndbdPerPerson">RM 0.00</strong></div></div>
+<p class="ndbd-subtle">Deduct from the staff pool first, then divide equally. Manager bonus is never deducted. No notes or remarks.</p>
 <div class="ndbd-actions"><button type="button" id="ndbdRefresh">Refresh</button><button type="button" id="ndbdCopy">Copy Summary</button></div><p role="status" id="ndbdStatus"></p>`;
 shell.append(el);$('ndbdMonth').value=month;
 $('ndbdMonth').addEventListener('change',e=>{month=e.target.value;void load()});
-$('ndbdBranch').addEventListener('change',e=>{branch=e.target.value;build()});
-$('ndbdManagers').addEventListener('change',e=>{const tr=e.target.closest('[data-manager-id]');if(!tr)return;const id=String(tr.dataset.managerId);if(e.target.dataset.field==='managerCheck'){if(e.target.checked){managers.set(id,managers.get(id)||0);deductions=deductions.filter(d=>String(d.id)!==id)}else{managers.delete(id)}drawManagers();buildRows()}});
-$('ndbdManagers').addEventListener('input',e=>{const tr=e.target.closest('[data-manager-id]');if(!tr||e.target.dataset.field!=='managerRate')return;const id=String(tr.dataset.managerId);if(managers.has(id)){managers.set(id,Math.min(100,n(e.target.value)));calculate()}});
-$('ndbdTeamRate').addEventListener('input',e=>{teamRate=Math.min(100,n(e.target.value));calculate()});
-$('ndbdRows').addEventListener('change',updateRow);$('ndbdRows').addEventListener('input',updateRow);
+$('ndbdBranch').addEventListener('change',e=>{branch=e.target.value;renderBranch()});
+$('ndbdManagers').addEventListener('change',e=>{const row=e.target.closest('[data-manager-id]');if(!row||e.target.dataset.field!=='managerCheck')return;const id=String(row.dataset.managerId);if(e.target.checked)managers.set(id,0);else managers.delete(id);drawManagers();drawStaff();saveDraft()});
+$('ndbdManagers').addEventListener('input',e=>{const row=e.target.closest('[data-manager-id]');if(!row||e.target.dataset.field!=='managerRate')return;const id=String(row.dataset.managerId);if(managers.has(id)){managers.set(id,Math.min(100,safeNum(e.target.value)));calculate();saveDraft()}});
+$('ndbdRows').addEventListener('change',e=>{const tr=e.target.closest('[data-staff-id]');if(!tr)return;const r=members.find(x=>String(x.id)===tr.dataset.staffId);if(!r)return;const field=e.target.dataset.field;if(field==='selected')r.selected=e.target.checked;else if(field==='mc')r.mc=e.target.checked;else if(field==='target')r.target=e.target.checked;calculate();saveDraft()});
+$('ndbdTeamRate').addEventListener('input',e=>{poolRate=Math.min(100,safeNum(e.target.value));calculate();saveDraft()});
+$('ndbdDeductAmount').addEventListener('input',e=>{poolDeduction=safeNum(e.target.value);calculate();saveDraft()});
 $('ndbdRefresh').addEventListener('click',()=>void load());
-$('ndbdAddDeduction').addEventListener('click',addDeduction);
-$('ndbdDeductions').addEventListener('click',e=>{const b=e.target.closest('[data-deduction-index]');if(!b)return;deductions.splice(Number(b.dataset.deductionIndex),1);drawDeductions();calculate()});
-$('ndbdCopy').addEventListener('click',()=>{let lines=[`${branch} · ${month}`,`Branch performance: ${$('ndbdSales').textContent}`,...Array.from(managers.entries()).map(([id,pct])=>`Manager ${rows.find(r=>String(r.id)===id)?.name||id}: ${pct}% = ${fmt(totalSales()*pct/100)} (no deduction)`),`Manager bonus: ${$('ndbdManagerBonus').textContent} (no deduction)`,isEco()?'Individual staff bonus':'Team pool bonus',...rows.filter(x=>!managers.has(String(x.id))).map(x=>`${x.name}: ${fmt(x.net||0)} (gross ${fmt(x.gross||0)}, deductions ${fmt(x.deduct||0)})`),...deductions.map(x=>`Deduction ${rows.find(r=>r.id===x.id)?.name||x.id}: ${fmt(x.amount)}`)];navigator.clipboard?.writeText(lines.join('\n'));$('ndbdStatus').textContent='Draft copied where browser supports clipboard.'});
+$('ndbdCopy').addEventListener('click',()=>{const lines=[branch+' · '+month,'Total performance: '+money(sales()),...Array.from(managers,([id,rate])=>{const r=members.find(x=>String(x.id)===id);return 'Manager '+(r?.name||id)+' · '+rate+'%: '+money(sales()*rate/100)}),'Staff pool: '+$('ndbdPoolGross').textContent,'Staff pool deduction: '+money(poolDeduction),'Staff pool after deduction: '+$('ndbdNetStaff').textContent,'Eligible staff: '+$('ndbdEligible').textContent,'Per person: '+$('ndbdPerPerson').textContent];navigator.clipboard?.writeText(lines.join('\n'));showStatus('Summary copied (if clipboard allowed).')});
 }
-function updateRow(e){const tr=e.target.closest('[data-staff-id]');if(!tr)return;const r=rows.find(x=>String(x.id)===tr.dataset.staffId);if(!r)return;const f=e.target.dataset.field;if(f==='rate')r.rate=Math.min(100,n(e.target.value));else if(f)r[f]=e.target.checked;calculate()}
-function nextMonth(m){const [y,k]=m.split('-').map(Number);return k===12?(y+1)+'-01-01':y+'-'+String(k+1).padStart(2,'0')+'-01'}
-async function load(){setup();if(loading)return;loading=true;const st=$('ndbdStatus');if(!st){loading=false;return}st.textContent='Loading branch performance…';const client=db();if(!client){st.textContent='Please sign in first';loading=false;return}
-try{const [employees,sales]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',month+'-01').lt('settlement_date',nextMonth(month)).limit(5000)]);
-if(employees.error)throw employees.error;if(sales.error)throw sales.error;
-staff=(employees.data||[]).filter(s=>!collab(s)&&!s.nd_archived_at&&!s.last_working_date);settlements=sales.data||[];
-const allowedBranches=branches.filter(allowed);$('ndbdBranch').innerHTML=allowedBranches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!allowedBranches.includes(branch))branch=allowedBranches[0]||'';$('ndbdBranch').value=branch;
-if(!branch){st.textContent='No permitted branch';$('ndbdRows').innerHTML='';return}build();st.textContent='Preview · Not saved to payroll';
-}catch(err){st.textContent='Unable to load bonus data: '+(err?.message||err)}finally{loading=false}}
-function build(){draftKey=branch+'|'+month;managers=new Map();teamRate=0;deductions=[];const list=staff.filter(x=>x.outlet===branch);rows=list.map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),included:true,mc:false,target:true,rate:0,gross:0,deduct:0,net:0}));$('ndbdTeamRate').value=0;$('ndbdTeamBox').hidden=isEco();$('ndbdEcoBox').hidden=!isEco();$('ndbdStaffTitle').textContent=isEco()?'Individual Employee Bonus':'Team Bonus Staff (Auto Included)';drawManagers();buildRows()}
-function drawManagers(){const managerList=$('ndbdManagers');managerList.innerHTML=rows.map(r=>{const id=String(r.id),checked=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${id}"><label><input type="checkbox" data-field="managerCheck" ${checked?'checked':''}> ${esc(r.name)}</label><label>% <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${managers.get(id)||0}" ${checked?'':'disabled'}></label><span data-manager-bonus="${id}">${checked?fmt(totalSales()*(managers.get(id)||0)/100):'—'}</span></div>`}).join('')||'<p class="ndbd-subtle">No eligible managers in this branch</p>'}
-function buildRows(){const eligibles=rows.filter(x=>!managers.has(String(x.id)));$('ndbdHeader').innerHTML=isEco()?'<th>Include</th><th>Employee</th><th>MC</th><th>Target Met</th><th>Individual %</th><th>Gross Bonus</th><th>Deduction</th><th>Net Bonus</th>':'<th>Employee</th><th>MC</th><th>Target</th><th>Bonus</th><th>Deduction</th><th>Net</th>';
-$('ndbdRows').innerHTML=eligibles.map(r=>`<tr data-staff-id="${r.id}">${isEco()?'<td><input type="checkbox" data-field="included" '+(r.included?'checked':'')+'></td>':''}<td>${esc(r.name)}</td><td><input type="checkbox" data-field="mc" ${r.mc?'checked':''}></td><td><input type="checkbox" data-field="target" ${r.target?'checked':''}></td>${isEco()?`<td><input type="number" data-field="rate" min="0" max="100" step="0.01" value="${r.rate}"></td>`:''}<td data-gross="${r.id}">RM 0.00</td><td data-deduct="${r.id}">RM 0.00</td><td data-net="${r.id}">RM 0.00</td></tr>`).join('');
-$('ndbdDeductEmployee').innerHTML='<option value="">Select Employee</option>'+eligibles.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('');drawDeductions();calculate()}
-function addDeduction(){const id=Number($('ndbdDeductEmployee').value),amount=Number($('ndbdDeductAmount').value);if(!id||!rows.some(r=>r.id===id&&!managers.has(String(r.id)))){alert('Select an employee, not a manager.');return}if(!Number.isFinite(amount)||amount<=0){alert('Enter a positive deduction amount.');return}deductions.push({id,amount:Math.round(amount*100)/100});$('ndbdDeductAmount').value='';drawDeductions();calculate()}
-function drawDeductions(){$('ndbdDeductions').innerHTML=deductions.map((d,i)=>`<tr><td>${esc(rows.find(r=>r.id===d.id)?.name||d.id)}</td><td>${fmt(d.amount)}</td><td><button type="button" data-deduction-index="${i}">Remove</button></td></tr>`).join('')||'<tr><td colspan="3">No deductions</td></tr>'}
-function calculate(){const total=totalSales(),managerBonus=Array.from(managers.values()).reduce((sum,pct)=>sum+total*pct/100,0);const teamMembers=rows.filter(r=>!managers.has(String(r.id))&&r.included);const pool=isEco()?0:total*teamRate/100;const perHead=teamMembers.length?pool/teamMembers.length:0;
-let staffGross=0,staffNet=0;
-for(const r of rows){if(managers.has(String(r.id))){r.gross=0;r.deduct=0;r.net=0;continue}r.gross=isEco()?(r.included?total*r.rate/100:0):(r.included?perHead:0);r.deduct=deductions.filter(d=>d.id===r.id).reduce((a,d)=>a+d.amount,0);r.net=Math.max(0,r.gross-r.deduct);staffGross+=r.gross;staffNet+=r.net;for(const [suffix,val] of [['gross',r.gross],['deduct',r.deduct],['net',r.net]]){const e=document.querySelector(`[data-${suffix}="${r.id}"]`);if(e)e.textContent=fmt(val)}}
-$('ndbdSales').textContent=fmt(total);$('ndbdManagerBonus').textContent=fmt(managerBonus);$('ndbdNetStaff').textContent=fmt(staffNet);$('ndbdBonus').textContent=fmt(managerBonus+staffNet);
-for(const [id,pct] of managers){const e=document.querySelector(`[data-manager-bonus="${id}"]`);if(e)e.textContent=fmt(total*pct/100)}
-const totalPct=Array.from(managers.values()).reduce((a,b)=>a+b,0)+(isEco()?rows.filter(r=>!managers.has(String(r.id))&&r.included).reduce((sum,r)=>sum+r.rate,0):teamRate);
-if(totalPct>100)$('ndbdStatus').textContent='Warning: manager + employee percentages exceed 100%. Preview only.';
-const excess=rows.filter(r=>!managers.has(String(r.id))&&r.deduct>r.gross);$('ndbdDeductionNote').textContent=excess.length?'Some deductions exceed the employee bonus. Net bonus is shown as RM 0.00; excess is NOT carried to salary or manager bonus.':'Deductions affect staff bonus only. Manager bonus is never reduced. No salary/cash records are changed.';
+function drawManagers(){$('ndbdManagers').innerHTML=members.map(r=>{const id=String(r.id),selected=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${esc(id)}"><label><input type="checkbox" data-field="managerCheck" ${selected?'checked':''}> ${esc(r.name)}</label><label>% <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${selected?managers.get(id):0}" ${selected?'':'disabled'}></label><span data-manager-bonus="${esc(id)}">${selected?money(sales()*managers.get(id)/100):'—'}</span></div>`}).join('')||'No managers available'}
+function drawStaff(){const listed=members.filter(r=>!managers.has(String(r.id)));$('ndbdHeader').innerHTML=isEco()?'<th>Select</th><th>Staff</th><th>MC</th><th>Target Met</th><th>Bonus</th>':'<th>Staff</th><th>MC</th><th>Target Met</th><th>Bonus</th>';
+$('ndbdRows').innerHTML=listed.map(r=>`<tr data-staff-id="${esc(r.id)}">${isEco()?`<td><input type="checkbox" data-field="selected" ${r.selected?'checked':''}></td>`:''}<td>${esc(r.name)}</td><td><input type="checkbox" data-field="mc" ${r.mc?'checked':''}></td><td><input type="checkbox" data-field="target" ${r.target?'checked':''}></td><td data-staff-bonus="${esc(r.id)}">RM 0.00</td></tr>`).join('')||'<tr><td colspan="5">No eligible staff listed</td></tr>';calculate()}
+function calculate(){const total=sales(),mgr=[...managers.values()].reduce((a,p)=>a+total*p/100,0);const gross=total*(isEco()?1:poolRate)/100;const eligible=members.filter(r=>!managers.has(String(r.id))&&(!isEco()||r.selected)&&!r.mc&&r.target);const distributable=Math.max(0,gross-poolDeduction);
+// Allocate integer cents to prevent rounding drift.
+const cents=Math.round(distributable*100),base=eligible.length?Math.floor(cents/eligible.length):0,rem=eligible.length?cents%eligible.length:0;
+const sorted=[...eligible].sort((a,b)=>Number(a.id)-Number(b.id));const allocations=new Map(sorted.map((r,i)=>[String(r.id),(base+(i<rem?1:0))/100]));
+for(const r of members){const node=document.querySelector(`[data-staff-bonus="${CSS.escape(String(r.id))}"]`);if(node)node.textContent=money(allocations.get(String(r.id))||0)}
+for(const [id,p] of managers){const el=document.querySelector(`[data-manager-bonus="${CSS.escape(id)}"]`);if(el)el.textContent=money(total*p/100)}
+$('ndbdSales').textContent=money(total);$('ndbdManagerBonus').textContent=money(mgr);$('ndbdPoolGross').textContent=money(gross);$('ndbdNetStaff').textContent=money(distributable);$('ndbdEligible').textContent=String(eligible.length);$('ndbdPerPerson').textContent=eligible.length?money(distributable/eligible.length):money(0);
+if(poolDeduction>gross)showStatus('Staff pool deduction exceeds pool. Staff payout is RM 0; excess is not deducted from managers or salary.');
+else if(eligible.length===0&&gross>0)showStatus('No eligible staff · Pool is not distributed.');
 }
-window.ndOpenBranchBonusDistribution=async()=>{setup();await load()};
+function renderBranch(){sync=true;members=staff.filter(x=>x.outlet===branch).map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),selected:true,mc:false,target:true}));applyState();$('ndbdTeamRate').value=poolRate;$('ndbdDeductAmount').value=poolDeduction;$('ndbdEcoBox').hidden=!isEco();$('ndbdTeamBox').hidden=isEco();drawManagers();drawStaff();sync=false;showStatus('Preview · Settings saved only on this browser; not saved to Supabase or payroll.')}
+const nextMonth=m=>{const [y,n]=m.split('-').map(Number);return n===12?(y+1)+'-01-01':y+'-'+String(n+1).padStart(2,'0')+'-01'};
+async function load(){mount();if(loading)return;loading=true;showStatus('Loading…');const client=db();if(!client){loading=false;showStatus('Sign in first');return}
+try{const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',month+'-01').lt('settlement_date',nextMonth(month)).limit(5000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);settlements=s.data||[];const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;if(!branch){showStatus('No branch access');return}renderBranch()}
+catch(e){showStatus('Unable to load: '+(e?.message||e))}finally{loading=false}}
+window.ndOpenBranchBonusDistribution=async()=>{mount();await load()};
 document.addEventListener('nd-bonus-open',()=>{if(document.body.dataset.ndVisiblePage==='bonus'&&$('bonusPage')?.classList.contains('nd-ledger-mode'))void window.ndOpenBranchBonusDistribution()});
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
-
 </script>
 </body>
 </html>
