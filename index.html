@@ -34895,8 +34895,7 @@ function printSlip(r){const e=employees.find(x=>Number(x.id)===Number(r.employee
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
-<style id="nd-company-fine-style">#ndCompanyFineDialog{width:min(900px,96vw);max-height:90dvh;border:1px solid #dce5e0;border-radius:16px;padding:22px}#ndCompanyFineDialog::backdrop{background:#0008}#ndCompanyFineDialog .ndcf-table{overflow-x:auto}#ndCompanyFineDialog table{min-width:650px}</style>
-<script id="nd-company-fine-v1">(()=>{'use strict';const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const fmt=n=>'RM '+Number(n||0).toFixed(2);function setup(){const target=$('salaryViewTargetBonusBtn');if(!target||$('ndCompanyFineBtn'))return;const button=document.createElement('button');button.type='button';button.className='salary-view-btn';button.id='ndCompanyFineBtn';button.textContent='Company Fine';target.insertAdjacentElement('afterend',button);const d=document.createElement('dialog');d.id='ndCompanyFineDialog';d.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px"><h2>Company Fine · Staff Only</h2><button class="btn" data-close type="button">Close</button></div><label>Month <input id="ndcfMonth" type="month"></label><p id="ndcfStatus" role="status"></p><h3 id="ndcfTotal"></h3><div class="ndcf-table" id="ndcfRows"></div>';document.body.append(d);d.querySelector('[data-close]').onclick=()=>d.close();$('ndcfMonth').value=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).slice(0,7);$('ndcfMonth').onchange=load;button.onclick=()=>{d.showModal();void load()};async function load(){const db=typeof salaryDb!=='undefined'?salaryDb:null;if(!db)return $('ndcfStatus').textContent='Database unavailable';$('ndcfStatus').textContent='Loading...';try{const [a,b]=await Promise.all([db.from('nd_staff_incidents').select('id,employee_id,employee_name,outlet,incident_date,approved_amount,review_status,nd_deleted_at').eq('review_status','approved').gte('incident_date',$('ndcfMonth').value+'-01').lt('incident_date',(()=>{const [y,m]=$('ndcfMonth').value.split('-').map(Number);return new Date(Date.UTC(y,m,1)).toISOString().slice(0,10)})()).limit(5000),db.from('employees').select('*').limit(5000)]);if(a.error)throw a.error;if(b.error)throw b.error;const staff=new Map((b.data||[]).map(e=>[Number(e.id),e]));let unknown=0,excluded=0;const rows=(a.data||[]).filter(r=>{if(r.nd_deleted_at||Number(r.approved_amount)<=0)return false;const e=staff.get(Number(r.employee_id));if(!e){unknown++;return false}const role=String([e.role,e.position,e.job_title,e.designation,e.employee_role,e.staff_type].filter(Boolean).join(' ')).toLowerCase();if(/manager|店长|经理|supervisor|director/.test(role)){excluded++;return false}if(!role){unknown++;return false}return true});const total=rows.reduce((n,r)=>n+Number(r.approved_amount),0);$('ndcfTotal').textContent='Approved Staff Fines: '+fmt(total);$('ndcfRows').innerHTML='<table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Approved Fine</th></tr></thead><tbody>'+rows.map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${fmt(r.approved_amount)}</td></tr>`).join('')+'</tbody></table>';$('ndcfStatus').textContent=`${rows.length} staff fines · ${excluded} manager/supervisor excluded · ${unknown} unclassified excluded (review employee role)`}catch(e){$('ndcfStatus').textContent='Unable to load: '+e.message}}}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();</script>
+
 <script id="ndDailyProductDeductionScript">
 (()=>{
 'use strict';
@@ -35013,7 +35012,75 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 #bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-overview strong{display:block;font-size:18px;margin-top:4px;white-space:normal}
 #bonusPage.nd-ledger-mode #ndBonusDistribution td,#bonusPage.nd-ledger-mode #ndBonusDistribution th{text-align:left;white-space:nowrap}
 #bonusPage.nd-ledger-mode #ndBonusDistribution [data-staff-bonus]{font-weight:700}
-</style><script id="nd-bonus-distribution-v1-js">
+</style><style id="ndbd-manager-therapist-dialog-v2">
+#ndBonusDistribution .ndbd-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0}
+#ndBonusDistribution .ndbd-heading h3{margin:0!important}
+#ndBonusDistribution .ndbd-heading button{background:#244f3d;color:white;font-weight:600;border:0}
+#ndBonusDistribution .ndbd-summary{display:grid;gap:5px}
+#ndBonusDistribution .ndbd-summary-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #ebefeb}
+#ndBonusDistribution .ndbd-dialog{position:fixed;inset:0;background:rgba(10,30,20,.55);z-index:2147483000;padding:18px;overflow:auto;display:flex;justify-content:center;align-items:flex-start}
+#ndBonusDistribution .ndbd-dialog[hidden]{display:none!important}
+#ndBonusDistribution .ndbd-dialog-panel{width:min(700px,100%);margin:4vh auto;background:white;border-radius:16px;padding:16px;max-height:86vh;overflow:auto;box-shadow:0 18px 60px #0003}
+#ndBonusDistribution .ndbd-dialog-panel .ndbd-manager-list{display:grid;gap:8px}
+#ndBonusDistribution .ndbd-dialog-panel .ndbd-manager-row{display:flex;align-items:center;gap:10px;justify-content:space-between;border-bottom:1px solid #e7eee8;padding:8px 0}
+#ndBonusDistribution .ndbd-dialog-panel .ndbd-manager-row label{display:flex;align-items:center;gap:8px}
+#ndBonusDistribution .ndbd-dialog-panel input[type="checkbox"]{width:18px;height:18px;flex:none}
+#ndBonusDistribution .ndbd-dialog-panel input[type="number"]{width:80px}
+#ndBonusDistribution .ndbd-edit-table{min-width:480px}
+#ndBonusDistribution .ndbd-edit-table td,#ndBonusDistribution .ndbd-edit-table th{padding:10px 6px}
+@media(max-width:600px){#ndBonusDistribution .ndbd-dialog{padding:8px}#ndBonusDistribution .ndbd-dialog-panel{padding:12px;margin:2vh auto}#ndBonusDistribution table{min-width:0!important}#ndBonusDistribution .ndbd-edit-table{min-width:460px!important}}
+</style>
+<style id="nd-bonus-branch-v6-simple">
+#ndBonusDistribution .ndbd-choice-list{display:grid;gap:10px;margin:14px 0}
+#ndBonusDistribution .ndbd-choice-list button,#ndBonusDistribution .ndbd-big-button{width:100%;text-align:left;background:#f1f7f2;border:1px solid #cdded2;color:#244f3d;font-weight:700}
+#ndBonusDistribution .ndbd-controls>div>label{display:block;margin-bottom:4px}
+#ndBonusDistribution #ndbdTeamBox{border:1px solid #e0e9e0;border-radius:12px;padding:12px;margin-top:12px}
+#ndBonusDistribution #ndbdTeamBox input{max-width:140px}
+#ndBonusDistribution #ndbdTeamBox label{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#ndBonusDistribution:has(#ndbdTeamBox:not([hidden])) .ndbd-scroll:has(#ndbdRows){display:none}
+#ndBonusDistribution #ndbdStatus:empty{display:none}
+#ndBonusDistribution .ndbd-summary-row strong{white-space:nowrap}
+</style>
+<style id="ndbd-premium-color-table-20261102">
+/* Nature's Dao: premium color dashboard; no explanatory notes or remarks. */
+#bonusPage.nd-ledger-mode #ndBonusDistribution{--nd-forest:#0e5a56;--nd-blue:#3753ac;--nd-purple:#7848a6;--nd-amber:#b76c19;--nd-ink:#193345;display:block!important;max-width:1120px;margin:12px auto!important;padding:clamp(14px,2.5vw,26px)!important;background:linear-gradient(145deg,#f7fcff 0%,#f8f7ff 48%,#f8fcf7 100%)!important;border:1px solid #d7e6eb!important;box-shadow:0 12px 35px #27455a16!important;border-radius:22px!important;color:var(--nd-ink)!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution h2{font-size:clamp(21px,3.5vw,27px)!important;letter-spacing:-.6px;font-weight:800;color:#123d54;margin:0 0 18px!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-controls{gap:12px;margin:14px 0 18px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-controls>label,#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-controls>div{background:#fff;border:1px solid #e2eaf0;border-radius:14px;padding:12px 14px;box-shadow:0 3px 12px #24507109;font-weight:700;color:#466177}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-controls>label input,#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-controls>div button{margin-top:7px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution #ndbdChooseBranch{background:linear-gradient(105deg,#0a8079,#0e5c7c);color:#fff;border:0;text-align:center;min-height:42px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid{gap:11px;margin:18px 0}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid>div{background:linear-gradient(140deg,#e2f7f4,#f2fcfa)!important;border:1px solid #bde7df;border-radius:16px!important;padding:16px!important;color:#266e6c;font-weight:700;box-shadow:0 3px 10px #1c6e6a0d}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid>div:nth-child(2){background:linear-gradient(140deg,#eee7ff,#f8f5ff)!important;border-color:#dacef8;color:#7650a8}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid>div:nth-child(3){background:linear-gradient(140deg,#e6edff,#f6f8ff)!important;border-color:#d1ddff;color:#3d5eb4}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid>div:nth-child(4){background:linear-gradient(140deg,#fff0d7,#fffbf2)!important;border-color:#f4dfae;color:#a06416}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid strong{font-size:clamp(18px,2.5vw,25px)!important;letter-spacing:-.5px;color:#153c4c;white-space:normal;overflow-wrap:anywhere}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-heading{margin:18px 0 8px!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution h3{font-size:16px!important;font-weight:800;color:#254359}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-heading button,#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-actions button{background:linear-gradient(105deg,#176e78,#344ca5)!important;color:white!important;border:0!important;font-weight:700;box-shadow:0 3px 8px #1b638b24}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-heading button:active,#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-actions button:active{transform:scale(.98)}
+#bonusPage.nd-ledger-mode #ndBonusDistribution #ndbdManagerSummary{background:#fff;border:1px solid #e0e7f4;border-radius:14px;padding:4px 14px;margin-bottom:14px;box-shadow:0 4px 12px #455da00b}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-summary-row{border-bottom:1px solid #e7edf6;color:#334b6e;font-weight:650}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-summary-row:last-child{border:0}
+#bonusPage.nd-ledger-mode #ndBonusDistribution #ndbdEcoBox,#bonusPage.nd-ledger-mode #ndBonusDistribution #ndbdTeamBox{background:linear-gradient(120deg,#f2f6ff,#fff)!important;border:1px solid #dae3f6!important;border-radius:14px!important;padding:12px 14px;margin:12px 0}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results{background:#fff;border:1px solid #d8e5ef;border-radius:14px;overflow-x:auto;box-shadow:0 5px 18px #254f8110;margin:12px 0}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results table{min-width:0!important;width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results thead th{background:#214c75!important;color:white!important;font-weight:750!important;border:0!important;padding:13px 10px!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results tbody tr:nth-child(odd){background:#f5f9ff}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results tbody tr:nth-child(even){background:#fff}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results tbody td{padding:12px 10px!important;border-bottom:1px solid #e5edf4;color:#324c62}
+#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results tbody td:last-child{font-weight:800;color:#0c7a69}
+#bonusPage.nd-ledger-mode #ndBonusDistribution #ndbdEcoTotals>div{background:linear-gradient(130deg,#eef5fe,#f8fbff)!important;border:1px solid #d3e4f6;border-radius:14px!important;color:#365c89;font-weight:700}
+#bonusPage.nd-ledger-mode #ndBonusDistribution #ndbdEcoTotals>div:last-child{background:linear-gradient(130deg,#ddf7e9,#f3fff8)!important;border-color:#c1e9d2;color:#0e7858}
+#bonusPage.nd-ledger-mode #ndBonusDistribution #ndbdStatus:empty{display:none!important}
+#bonusPage.nd-ledger-mode #ndBonusDistribution #ndbdStatus:not(:empty){font-size:12px;background:#fff4dc;border:1px solid #ead8a6;color:#7d5a18;padding:9px;border-radius:9px}
+#ndBonusDistribution .ndbd-dialog-panel{background:linear-gradient(150deg,#fff,#f6faff);border:1px solid #d5e4ed}
+#ndBonusDistribution .ndbd-edit-table thead th{background:#254c75;color:#fff;font-size:13px}
+#ndBonusDistribution .ndbd-edit-table tbody tr:nth-child(odd){background:#f1f6ff}
+#ndBonusDistribution .ndbd-choice-list button{background:linear-gradient(105deg,#e4f7f5,#ecf2ff)!important;border-color:#c5dfeb!important}
+@media(max-width:600px){#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid>div{padding:12px!important;font-size:11px}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid strong{font-size:17px!important}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results table{font-size:12px}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results td,#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results th{padding:9px 6px!important}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-heading button{font-size:12px}}
+</style>
+<script id="nd-bonus-distribution-v1-js">
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -35027,6 +35094,10 @@ const getEmail=()=>String(window.currentUserEmail||window.currentUser?.email||''
 const fixedBranches=['Eco Botanic','Nusa Bestari'];
 let branch='Eco Botanic',month=monthNow(),staff=[],settlements=[],members=[],managers=new Map(),poolRate=1,poolDeduction=0,loading=false,sync=false;
 const isEco=()=>branch==='Eco Botanic';
+const isSam=()=>getEmail()==='samchin6006@gmail.com';
+const managerCandidates=()=>isSam()?staff:staff.filter(x=>x.outlet===branch);
+const displayName=r=>r?.nickname||r?.name||String(r?.id||'');
+const managerName=id=>{const r=staff.find(x=>String(x.id)===String(id));return r?displayName(r):String(id)};
 const allowed=b=>['umo1017@gmail.com','samchin6006@gmail.com'].includes(getEmail())||staff.some(s=>s.outlet===b&&String(s.email||'').toLowerCase()===getEmail());
 const sales=()=>settlements.filter(x=>x.branch===branch).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
 const storageKey=(b,m)=>'nd_bonus_pool_v5_draft_'+encodeURIComponent(b)+'_'+m;
@@ -35037,37 +35108,61 @@ function showStatus(t){const el=$('ndbdStatus');if(el)el.textContent=t}
 function snapshot(){return {managers:[...managers.entries()],staff:members.map(r=>({id:r.id,selected:r.selected,mc:r.mc,target:r.target})),poolRate,poolDeduction};}
 function saveDraft(){if(sync||!branch)return;const v=snapshot();const good=writeLocal(storageKey(branch,month),v);writeLocal(baseKey(branch),{managers:v.managers,staff:v.staff,poolRate:v.poolRate});showStatus(good?'Saved on this browser only · Not posted to payroll':'Preview only · Browser storage unavailable');}
 function applyState(){const v=readLocal(storageKey(branch,month))||readLocal(baseKey(branch));managers=new Map();poolRate=isEco()?1:1;poolDeduction=0;
-if(v){for(const pair of v.managers||[]){const id=String(pair[0]);if(members.some(r=>String(r.id)===id))managers.set(id,Math.min(100,safeNum(pair[1])))}
+if(v){for(const pair of v.managers||[]){const id=String(pair[0]);if(managerCandidates().some(r=>String(r.id)===id))managers.set(id,Math.min(100,safeNum(pair[1])))}
 for(const x of v.staff||[]){const r=members.find(r=>String(r.id)===String(x.id));if(!r)continue;r.selected=!!x.selected;r.mc=!!x.mc;r.target=x.target!==false}
 poolRate=isEco()?1:Math.min(100,safeNum(v.poolRate??1));poolDeduction=Math.max(0,safeNum(readLocal(storageKey(branch,month))?.poolDeduction??0));}
 }
 function mount(){if($('ndBonusDistribution'))return;const shell=$('bonusPage')?.querySelector('.bonus-shell');if(!shell)return;
 const el=document.createElement('section');el.id='ndBonusDistribution';el.innerHTML=`
 <h2>Branch Bonus</h2>
-<div class="ndbd-controls"><label>Branch<select id="ndbdBranch"></select></label><label>Month<input id="ndbdMonth" type="month"></label></div>
-<div class="ndbd-overview"><div>Total Performance<strong id="ndbdSales">RM 0.00</strong></div><div>Manager Bonus<strong id="ndbdManagerBonus">RM 0.00</strong></div><div>Staff Pool 1% / %<strong id="ndbdPoolGross">RM 0.00</strong></div><div>Staff Pool After Deduction<strong id="ndbdNetStaff">RM 0.00</strong></div></div>
-<h3>Managers</h3><div class="ndbd-subtle">Select multiple managers and enter each manager’s %.</div><div id="ndbdManagers" class="ndbd-manager-list"></div>
-<div id="ndbdEcoBox"><h3>Eco Botanic · 1% Staff Bonus Pool</h3><p class="ndbd-subtle">Select participating therapists. MC or target not met = automatically excluded.</p></div>
-<div id="ndbdTeamBox"><h3>Team Bonus Pool</h3><label>Team Bonus % <input id="ndbdTeamRate" type="number" min="0" max="100" step="0.01" value="1"></label><p class="ndbd-subtle">All eligible non-manager staff are included automatically.</p></div>
-<div class="ndbd-scroll"><table><thead><tr id="ndbdHeader"></tr></thead><tbody id="ndbdRows"></tbody></table></div>
-<h3>Staff Pool Deduction</h3><div class="ndbd-controls"><label>Total Deduction (RM)<input id="ndbdDeductAmount" type="number" min="0" step="0.01" value="0"></label></div>
-<div class="ndbd-overview"><div>Eligible Staff<strong id="ndbdEligible">0</strong></div><div>Bonus Per Person<strong id="ndbdPerPerson">RM 0.00</strong></div></div>
-<p class="ndbd-subtle">Deduct from the staff pool first, then divide equally. Manager bonus is never deducted. No notes or remarks.</p>
+<div class="ndbd-controls"><div><label>Branch</label><button type="button" id="ndbdChooseBranch" class="ndbd-big-button">Select Branch</button><select id="ndbdBranch" aria-label="Select Branch" hidden></select></div><label>Month<input id="ndbdMonth" type="month"></label></div>
+<div class="ndbd-overview ndbd-kpi-grid"><div>Monthly Total Performance<strong id="ndbdSales">RM 0.00</strong></div><div>Manager Bonus<strong id="ndbdManagerBonus">RM 0.00</strong></div><div>Staff Bonus Pool<strong id="ndbdPoolGross">RM 0.00</strong></div><div>Remaining Staff Pool<strong id="ndbdNetStaff">RM 0.00</strong></div></div>
+<div class="ndbd-heading"><h3>Branch Managers</h3><button type="button" id="ndbdEditManagers">Select Managers / %</button></div>
+<div id="ndbdManagerSummary" class="ndbd-summary"></div>
+<div id="ndbdEcoBox"><div class="ndbd-heading"><h3>Branch Staff · 1%</h3><button type="button" id="ndbdEditStaff">Select Therapists</button></div></div>
+<div id="ndbdTeamBox"><h3>Staff Bonus Pool</h3><label>Staff Total Bonus % <input id="ndbdTeamRate" type="number" min="0" max="100" step="0.01" value="1"></label></div>
+<div class="ndbd-scroll ndbd-results"><table><thead><tr id="ndbdHeader"></tr></thead><tbody id="ndbdRows"></tbody></table></div>
+<h3>Staff Bonus Deduction</h3><div class="ndbd-controls"><label>Deduction (RM)<input id="ndbdDeductAmount" type="number" min="0" step="0.01" value="0"></label></div>
+<div class="ndbd-overview" id="ndbdEcoTotals"><div>Eligible Staff<strong id="ndbdEligible">0</strong></div><div>Bonus Per Person<strong id="ndbdPerPerson">RM 0.00</strong></div></div>
+
+<div id="ndbdBranchDialog" class="ndbd-dialog" hidden><div class="ndbd-dialog-panel"><div class="ndbd-heading"><h3>Select Branch</h3><button type="button" id="ndbdCloseBranch">Done</button></div><div id="ndbdBranchChoices" class="ndbd-choice-list"></div></div></div>
+<div id="ndbdManagersDialog" class="ndbd-dialog" hidden><div class="ndbd-dialog-panel"><div class="ndbd-heading"><h3>Select Managers</h3><button type="button" id="ndbdCloseManagers">Done</button></div><div id="ndbdManagers" class="ndbd-manager-list"></div></div></div>
+<div id="ndbdStaffDialog" class="ndbd-dialog" hidden><div class="ndbd-dialog-panel"><div class="ndbd-heading"><h3>Select Therapists</h3><button type="button" id="ndbdCloseStaff">Done</button></div><div id="ndbdStaffEditor" class="ndbd-scroll"></div></div></div>
 <div class="ndbd-actions"><button type="button" id="ndbdRefresh">Refresh</button><button type="button" id="ndbdCopy">Copy Summary</button></div><p role="status" id="ndbdStatus"></p>`;
 shell.append(el);$('ndbdMonth').value=month;
+$('ndbdChooseBranch').addEventListener('click',()=>{$('ndbdBranchDialog').hidden=false});
+$('ndbdCloseBranch').addEventListener('click',()=>{$('ndbdBranchDialog').hidden=true});
+$('ndbdBranchChoices').addEventListener('click',e=>{const btn=e.target.closest('[data-bonus-branch]');if(!btn)return;branch=btn.dataset.bonusBranch;$('ndbdBranch').value=branch;$('ndbdBranchDialog').hidden=true;renderBranch()});
+$('ndbdEditManagers').addEventListener('click',()=>{$('ndbdManagersDialog').hidden=false});
+$('ndbdCloseManagers').addEventListener('click',()=>{$('ndbdManagersDialog').hidden=true;drawManagers();drawStaff()});
+$('ndbdEditStaff').addEventListener('click',()=>{$('ndbdStaffDialog').hidden=false;drawStaff()});
+$('ndbdCloseStaff').addEventListener('click',()=>{$('ndbdStaffDialog').hidden=true;drawStaff()});
+for(const id of ['ndbdBranchDialog','ndbdManagersDialog','ndbdStaffDialog'])$(id).addEventListener('click',e=>{if(e.target===e.currentTarget){e.currentTarget.hidden=true;drawManagers();drawStaff()}});
 $('ndbdMonth').addEventListener('change',e=>{month=e.target.value;void load()});
 $('ndbdBranch').addEventListener('change',e=>{branch=e.target.value;renderBranch()});
 $('ndbdManagers').addEventListener('change',e=>{const row=e.target.closest('[data-manager-id]');if(!row||e.target.dataset.field!=='managerCheck')return;const id=String(row.dataset.managerId);if(e.target.checked)managers.set(id,0);else managers.delete(id);drawManagers();drawStaff();saveDraft()});
 $('ndbdManagers').addEventListener('input',e=>{const row=e.target.closest('[data-manager-id]');if(!row||e.target.dataset.field!=='managerRate')return;const id=String(row.dataset.managerId);if(managers.has(id)){managers.set(id,Math.min(100,safeNum(e.target.value)));calculate();saveDraft()}});
-$('ndbdRows').addEventListener('change',e=>{const tr=e.target.closest('[data-staff-id]');if(!tr)return;const r=members.find(x=>String(x.id)===tr.dataset.staffId);if(!r)return;const field=e.target.dataset.field;if(field==='selected')r.selected=e.target.checked;else if(field==='mc')r.mc=e.target.checked;else if(field==='target')r.target=e.target.checked;calculate();saveDraft()});
+$('ndbdStaffEditor').addEventListener('change',e=>{const tr=e.target.closest('[data-staff-id]');if(!tr)return;const r=members.find(x=>String(x.id)===tr.dataset.staffId);if(!r)return;const field=e.target.dataset.field;if(field==='selected')r.selected=e.target.checked;else if(field==='mc')r.mc=e.target.checked;else if(field==='target')r.target=e.target.checked;drawStaff();saveDraft()});
 $('ndbdTeamRate').addEventListener('input',e=>{poolRate=Math.min(100,safeNum(e.target.value));calculate();saveDraft()});
 $('ndbdDeductAmount').addEventListener('input',e=>{poolDeduction=safeNum(e.target.value);calculate();saveDraft()});
 $('ndbdRefresh').addEventListener('click',()=>void load());
-$('ndbdCopy').addEventListener('click',()=>{const lines=[branch+' · '+month,'Total performance: '+money(sales()),...Array.from(managers,([id,rate])=>{const r=members.find(x=>String(x.id)===id);return 'Manager '+(r?.name||id)+' · '+rate+'%: '+money(sales()*rate/100)}),'Staff pool: '+$('ndbdPoolGross').textContent,'Staff pool deduction: '+money(poolDeduction),'Staff pool after deduction: '+$('ndbdNetStaff').textContent,'Eligible staff: '+$('ndbdEligible').textContent,'Per person: '+$('ndbdPerPerson').textContent];navigator.clipboard?.writeText(lines.join('\n'));showStatus('Summary copied (if clipboard allowed).')});
+$('ndbdCopy').addEventListener('click',()=>{const lines=[branch+' · '+month,'Total performance: '+money(sales()),...Array.from(managers,([id,rate])=>{return 'Manager '+managerName(id)+' · '+rate+'%: '+money(sales()*rate/100)}),'Staff pool: '+$('ndbdPoolGross').textContent,'Staff pool deduction: '+money(poolDeduction),'Staff pool after deduction: '+$('ndbdNetStaff').textContent,'Eligible staff: '+$('ndbdEligible').textContent,'Per person: '+$('ndbdPerPerson').textContent];navigator.clipboard?.writeText(lines.join('\n'));showStatus('Summary copied (if clipboard allowed).')});
 }
-function drawManagers(){$('ndbdManagers').innerHTML=members.map(r=>{const id=String(r.id),selected=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${esc(id)}"><label><input type="checkbox" data-field="managerCheck" ${selected?'checked':''}> ${esc(r.name)}</label><label>% <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${selected?managers.get(id):0}" ${selected?'':'disabled'}></label><span data-manager-bonus="${esc(id)}">${selected?money(sales()*managers.get(id)/100):'—'}</span></div>`}).join('')||'No managers available'}
-function drawStaff(){const listed=members.filter(r=>!managers.has(String(r.id)));$('ndbdHeader').innerHTML=isEco()?'<th>Select</th><th>Staff</th><th>MC</th><th>Target Met</th><th>Bonus</th>':'<th>Staff</th><th>MC</th><th>Target Met</th><th>Bonus</th>';
-$('ndbdRows').innerHTML=listed.map(r=>`<tr data-staff-id="${esc(r.id)}">${isEco()?`<td><input type="checkbox" data-field="selected" ${r.selected?'checked':''}></td>`:''}<td>${esc(r.name)}</td><td><input type="checkbox" data-field="mc" ${r.mc?'checked':''}></td><td><input type="checkbox" data-field="target" ${r.target?'checked':''}></td><td data-staff-bonus="${esc(r.id)}">RM 0.00</td></tr>`).join('')||'<tr><td colspan="5">No eligible staff listed</td></tr>';calculate()}
+function drawManagers(){
+const options=managerCandidates();
+$('ndbdManagers').innerHTML=options.map(r=>{const id=String(r.id),selected=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${esc(id)}"><label><input type="checkbox" data-field="managerCheck" ${selected?'checked':''}> ${esc(displayName(r))}${isSam()?' · '+esc(r.outlet):''}</label><label>% <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${selected?managers.get(id):0}" ${selected?'':'disabled'}></label><span data-manager-bonus="${esc(id)}">${selected?money(sales()*managers.get(id)/100):'—'}</span></div>`}).join('')||'No managers available';
+$('ndbdManagerSummary').innerHTML=[...managers].map(([id,pct])=>`<div class="ndbd-summary-row"><span>${esc(managerName(id))} · ${pct}%</span><strong>${money(sales()*pct/100)}</strong></div>`).join('')||'<span>—</span>';
+}
+function drawStaff(){
+const listed=members.filter(r=>!managers.has(String(r.id)));
+$('ndbdHeader').innerHTML='<th>Staff</th><th>MC</th><th>Target</th><th>Bonus</th>';
+const eligible=r=>r.selected&&!r.mc&&r.target;
+$('ndbdRows').innerHTML=isEco()?listed.filter(r=>r.selected).map(r=>`<tr data-staff-id="${esc(r.id)}"><td>${esc(r.name)}</td><td>${r.mc?'MC':'—'}</td><td>${r.target?'Met':'Not met'}</td><td data-staff-bonus="${esc(r.id)}">RM 0.00</td></tr>`).join('')||'<tr><td colspan="4">No selected therapists</td></tr>':'';
+$('ndbdStaffEditor').innerHTML=`<table class="ndbd-edit-table"><thead><tr><th>Select</th><th>Therapist</th><th>MC</th><th>Target Met</th><th>Bonus</th></tr></thead><tbody>${listed.map(r=>`<tr data-staff-id="${esc(r.id)}"><td><input type="checkbox" data-field="selected" ${r.selected?'checked':''}></td><td>${esc(r.name)}</td><td><input type="checkbox" data-field="mc" ${r.mc?'checked':''}></td><td><input type="checkbox" data-field="target" ${r.target?'checked':''}></td><td>${eligible(r)?'Eligible':'Excluded'}</td></tr>`).join('')}</tbody></table>`;
+$('ndbdEcoTotals').hidden=!isEco();
+$('ndbdStaffEditor').closest('.ndbd-dialog')?.toggleAttribute('data-team-branch',!isEco());
+calculate();
+}
 function calculate(){const total=sales(),mgr=[...managers.values()].reduce((a,p)=>a+total*p/100,0);const gross=total*(isEco()?1:poolRate)/100;const eligible=members.filter(r=>!managers.has(String(r.id))&&(!isEco()||r.selected)&&!r.mc&&r.target);const distributable=Math.max(0,gross-poolDeduction);
 // Allocate integer cents to prevent rounding drift.
 const cents=Math.round(distributable*100),base=eligible.length?Math.floor(cents/eligible.length):0,rem=eligible.length?cents%eligible.length:0;
@@ -35078,10 +35173,10 @@ $('ndbdSales').textContent=money(total);$('ndbdManagerBonus').textContent=money(
 if(poolDeduction>gross)showStatus('Staff pool deduction exceeds pool. Staff payout is RM 0; excess is not deducted from managers or salary.');
 else if(eligible.length===0&&gross>0)showStatus('No eligible staff · Pool is not distributed.');
 }
-function renderBranch(){sync=true;members=staff.filter(x=>x.outlet===branch).map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),selected:true,mc:false,target:true}));applyState();$('ndbdTeamRate').value=poolRate;$('ndbdDeductAmount').value=poolDeduction;$('ndbdEcoBox').hidden=!isEco();$('ndbdTeamBox').hidden=isEco();drawManagers();drawStaff();sync=false;showStatus('Preview · Settings saved only on this browser; not saved to Supabase or payroll.')}
+function renderBranch(){if($('ndbdChooseBranch'))$('ndbdChooseBranch').textContent=branch||'Select Branch';if($('ndbdManagersDialog'))$('ndbdManagersDialog').hidden=true;if($('ndbdStaffDialog'))$('ndbdStaffDialog').hidden=true;if($('ndbdBranchDialog'))$('ndbdBranchDialog').hidden=true;sync=true;members=staff.filter(x=>x.outlet===branch).map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),selected:true,mc:false,target:true}));applyState();$('ndbdTeamRate').value=poolRate;$('ndbdDeductAmount').value=poolDeduction;$('ndbdEcoBox').hidden=!isEco();$('ndbdTeamBox').hidden=isEco();drawManagers();drawStaff();sync=false;showStatus('')}
 const nextMonth=m=>{const [y,n]=m.split('-').map(Number);return n===12?(y+1)+'-01-01':y+'-'+String(n+1).padStart(2,'0')+'-01'};
 async function load(){mount();if(loading)return;loading=true;showStatus('Loading…');const client=db();if(!client){loading=false;showStatus('Sign in first');return}
-try{const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',month+'-01').lt('settlement_date',nextMonth(month)).limit(5000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);settlements=s.data||[];const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;if(!branch){showStatus('No branch access');return}renderBranch()}
+try{const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',month+'-01').lt('settlement_date',nextMonth(month)).limit(5000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);settlements=s.data||[];const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;$('ndbdBranchChoices').innerHTML=bs.map(b=>`<button type="button" data-bonus-branch="${esc(b)}">${esc(b)}</button>`).join('');if(!branch){showStatus('No branch access');return}renderBranch()}
 catch(e){showStatus('Unable to load: '+(e?.message||e))}finally{loading=false}}
 window.ndOpenBranchBonusDistribution=async()=>{mount();await load()};
 document.addEventListener('nd-bonus-open',()=>{if(document.body.dataset.ndVisiblePage==='bonus'&&$('bonusPage')?.classList.contains('nd-ledger-mode'))void window.ndOpenBranchBonusDistribution()});
@@ -35695,6 +35790,17 @@ body[data-nd-visible-page="bonus"] #bonusPage {display:block!important;visibilit
 body[data-nd-visible-page="pro-beta"] #ndProBetaPage:not([hidden]) {display:block!important;visibility:visible!important;opacity:1!important;}
 body[data-nd-visible-page="pro-beta"] #appView,body[data-nd-visible-page="pro-beta"] #salaryPage,body[data-nd-visible-page="pro-beta"] #bonusPage {display:none!important;}
 </style>
+
+<style id="nd-pro-beta-modal-opening-fix">
+#ndProBetaPage.nd-pro-shown:not([hidden]){
+  position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;
+  overflow:auto!important;overscroll-behavior:contain!important;z-index:2147483000!important;
+  max-width:none!important;display:block!important;visibility:visible!important;opacity:1!important;
+  background:#f7f8f6!important;padding:20px 16px 90px!important;
+}
+#ndProBetaPage.nd-pro-shown #ndProExit{position:sticky;top:0;z-index:10}
+@media(max-width:760px){#ndProBetaPage.nd-pro-shown:not([hidden]){padding:18px 12px 90px!important}}
+</style>
 <style id="nd-pro-beta-v1-css">
 #ndProBetaPage{display:none;max-width:1400px;margin:0 auto;padding:26px 20px 70px;background:#f7f8f6;min-height:100vh;color:#203c31}
 #ndProBetaPage *{box-sizing:border-box}#ndProBetaPage .pro-head,#ndProBetaPage .pro-line{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -35737,32 +35843,79 @@ const stat=(msg,err=false)=>{const e=el('ndProStatus');e.textContent=msg||'';e.c
 const opt=(arr,selected)=>arr.map(([v,n])=>`<option value="${esc(v)}" ${String(v)===String(selected)?'selected':''}>${esc(n)}</option>`).join('');
 const field=(name,html)=>`<div class="pro-field"><label>${name}</label>${html}</div>`;
 const chooseBranch=(all=true)=>`<select id="proBranch">${all?'<option value="all">All Branches</option>':''}${opt(valid.map(v=>[v,v]),branch)}</select>`;
-function getDb(){return (typeof salaryDb!=='undefined'&&salaryDb)||window.salaryDb||null;}
-async function authorize(){db=getDb();if(!db)return false;const a=await db.auth.getUser();if(a.error||!a.data?.user||a.data.user.email?.toLowerCase()!=='umo1017@gmail.com')return false;const x=await db.rpc('nd_pro_beta_is_umo');return !x.error&&x.data===true;}
-async function updateNav(){try{const allowed=await authorize();nav.hidden=!allowed;nav.style.display=allowed?'':'none';if(!allowed&&ready)leave();return allowed;}catch(_){nav.hidden=true;nav.style.display='none';return false;}}
-function leave(){page.style.display='none';page.hidden=true;ready=false;el('sidebarDaily')?.click();}
-function switchPage(){document.querySelectorAll('#mainSidebar .sidebar-btn').forEach(b=>b.classList.remove('active'));nav.classList.add('active');const ids=['appView','ndStaffFinancePage','aiReceiptPage','salaryPage','rosterPage','bonusPage','settlementPage','ordersPage','socialPage','settingsPage','ndAnnouncementsPage','ndStaffFormsPage','ndStaffManagementPage'];ids.forEach(id=>{const e=el(id);if(e){e.classList.remove('active','nd-open');e.style.setProperty('display','none','important');}});page.hidden=false;page.style.display='block';document.body.dataset.ndVisiblePage='pro-beta';window.activeMainPage='pro-beta';el('mainSidebar')?.classList.remove('open');window.scrollTo(0,0);}
+function getDb(){return window.salaryDb||(typeof salaryDb!=="undefined"?salaryDb:null);}
+async function authorize(){
+  db=getDb();
+  if(!db||!db.auth)throw Error('Database client is not ready. Sign in and reload the page.');
+  const a=await db.auth.getUser();
+  if(a.error)throw Error('Authentication: '+a.error.message);
+  if(!a.data?.user)throw Error('Please sign in as UMO first.');
+  if(String(a.data.user.email||'').trim().toLowerCase()!=='umo1017@gmail.com')throw Error('UMO account only.');
+  const result=await db.rpc('nd_pro_beta_is_umo');
+  if(result.error)throw Error('UMO permission: '+result.error.message);
+  if(result.data!==true)throw Error('UMO database permission was not granted.');
+  return true;
+}
+let lastScreen='';let betaOpenBusy=false;
+async function updateNav(){
+  try{await authorize();nav.hidden=false;nav.style.setProperty('display','block');return true;}
+  catch(e){nav.hidden=true;nav.style.setProperty('display','none');return false;}
+}
+function switchPage(){
+  if(!page)return;
+  if(!page.classList.contains('nd-pro-shown'))lastScreen=document.body.dataset.ndVisiblePage||'';
+  page.hidden=false;page.classList.add('nd-pro-shown');
+  page.style.setProperty('display','block','important');
+  page.style.setProperty('visibility','visible','important');
+  document.body.dataset.ndVisiblePage='pro-beta';
+  nav?.classList.add('active');
+  document.getElementById('mainSidebar')?.classList.remove('open');
+  try{page.scrollTop=0;}catch(_e){}
+}
+function leave(){
+  if(!page)return;
+  page.classList.remove('nd-pro-shown');
+  page.hidden=true;page.style.removeProperty('display');page.style.removeProperty('visibility');
+  ready=false;
+  nav?.classList.remove('active');
+  if(document.body.dataset.ndVisiblePage==='pro-beta'){
+    if(lastScreen)document.body.dataset.ndVisiblePage=lastScreen;
+    else delete document.body.dataset.ndVisiblePage;
+  }
+}
 async function open(){
-  // Show immediately; network permission checks must not make button appear inert.
-  ready=true;switchPage();stat('Verifying UMO access…');
-  try {
-    if(!await updateNav()){
-      ready=false;page.hidden=true;page.style.display='none';
-      alert('Nature’s Dao Pro (Beta): Only the UMO account can access this module. Please sign in as umo1017@gmail.com.');return;
-    }
-    ready=true;switchPage();await load();
-  } catch(error){stat('Unable to open Beta: '+(error?.message||error),true);}
+  if(betaOpenBusy)return;
+  betaOpenBusy=true;
+  switchPage();
+  stat('Checking UMO access…');
+  const host=el('ndProContent');
+  if(host&&!ready)host.innerHTML='<div class="pro-card">Checking account and database access…</div>';
+  try{
+    await authorize();
+    ready=true;
+    nav.hidden=false;nav.style.setProperty('display','block');
+    await load();
+  }catch(error){
+    ready=false;
+    stat('Cannot open Nature\'s Dao Pro (Beta): '+(error?.message||error),true);
+    if(host)host.innerHTML='<div class="pro-card"><strong>Access unavailable</strong><p>Check UMO login, database connection, and nd_pro_beta_is_umo() RPC. Existing website functions are unaffected.</p></div>';
+  }finally{betaOpenBusy=false;}
 }
 window.ndOpenProBeta=open;
-let betaOpenBusy=false;
-function safeOpen(){if(betaOpenBusy)return;betaOpenBusy=true;void open().finally(()=>{betaOpenBusy=false;});}
-// Pointer events reach the control even if older sidebar click handlers consume clicks.
-nav?.addEventListener('pointerdown',e=>{if(e.button!==undefined&&e.button!==0)return;e.stopPropagation();safeOpen();},true);
-nav?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();safeOpen();},true);
-el('ndProExit')?.addEventListener('click',leave);
-el('ndProLanguage')?.addEventListener('change',e=>{lang=e.target.value;render();});
-el('ndProTabs')?.addEventListener('click',e=>{const t=e.target.closest('[data-tab]');if(!t)return;active=t.dataset.tab;render();});
-window.addEventListener('click',e=>{if(!ready||!page.contains(e.target)&&e.target.closest('#mainSidebar .sidebar-btn:not(#ndProBetaNav)')){if(ready&&e.target.closest('#mainSidebar .sidebar-btn:not(#ndProBetaNav)')){page.hidden=true;page.style.display='none';ready=false;}}},true);
+// Capture the sidebar click before legacy navigation handlers.
+document.addEventListener('click',e=>{
+  const target=e.target?.closest?.('#ndProBetaNav');
+  if(!target)return;
+  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+  void open();
+},true);
+document.addEventListener('pointerdown',e=>{
+  if(!e.target?.closest?.('#ndProBetaNav'))return;
+  e.stopPropagation();
+},true);
+el('ndProExit')?.addEventListener('click',e=>{e.preventDefault();leave();});
+el('ndProLanguage')?.addEventListener('change',e=>{lang=e.target.value;if(ready)render();});
+el('ndProTabs')?.addEventListener('click',e=>{const t=e.target.closest('[data-tab]');if(!t||!ready)return;active=t.dataset.tab;render();});
 async function read(table,select='*'){const r=await db.from(table).select(select);if(r.error)throw new Error(`${table}: ${r.error.message}`);return r.data||[];}
 async function load(){stat(tr('Loading beta data…','正在读取测试数据…'));try{const out=await Promise.all([read('nd_pro_beta_customers'),read('nd_pro_beta_services'),read('nd_pro_beta_service_prices'),read('nd_pro_beta_appointments'),read('nd_pro_beta_appointment_staff'),read('employees','id,name,nickname,outlet,nd_archived_at,last_working_date')]);[customers,services,prices,appointments,links,staff]=out;staff=staff.filter(x=>!x.nd_archived_at&&!x.last_working_date);stat('');render();}catch(e){stat(tr('Beta tables not ready: ','测试数据库未就绪：')+e.message,true);el('ndProContent').innerHTML='<div class="pro-card">Run the approved UMO Beta SQL and reload this page. / 请先执行测试数据库 SQL。</div>';}}
 function render(){el('ndProTabs').querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('selected',b.dataset.tab===active));const host=el('ndProContent');if(!host)return;if(active==='appointments')renderAppointments(host);else if(active==='customers')renderCustomers(host);else if(active==='catalog')renderCatalog(host);else renderPos(host);}
@@ -35806,8 +35959,90 @@ function renderCatalog(host){host.innerHTML=`<div class="pro-card"><h3>${tr('Add
 el('proItemForm').onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries(new FormData(f)),btn=f.querySelector('button');btn.disabled=true;try{const r=await db.from('nd_pro_beta_services').insert({name_en:x.name_en.trim(),name_zh:x.name_zh.trim()||null,item_type:x.item_type,duration_minutes:x.duration?Number(x.duration):null,available_for_booking:x.item_type==='service'}).select('id').single();if(r.error)throw r.error;const p=await db.from('nd_pro_beta_service_prices').insert({service_id:r.data.id,branch:x.branch,price:Number(x.price)});if(p.error)throw p.error;await load();stat('Beta item saved.');}catch(err){stat(err.message,true);}finally{btn.disabled=false;}};}
 function renderPos(host){const filtered=services.filter(s=>prices.some(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch)));host.innerHTML=`<div class="pro-card pro-line"><div>${field(tr('Branch','分行'),chooseBranch())}</div><strong>${tr('POS Demo — Not a real payment','POS 测试 — 不进行真实付款')}</strong></div><div class="pro-grid">${filtered.map(s=>{const p=prices.find(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch));return `<div class="pro-card"><strong>${esc(lang==='zh'&&s.name_zh?s.name_zh:s.name_en)}</strong><p class="pro-muted">${esc(p?.branch||'')}</p><p>RM ${Number(p?.price||0).toFixed(2)}</p><button type="button" class="pro-tab" data-add="${s.id}" data-price="${p?.id||''}">+ Add</button></div>`;}).join('')}</div><div class="pro-card"><h3>${tr('Demo Cart','测试购物车')}</h3><div id="proCart"></div><button class="pro-action" type="button" id="proClearCart">${tr('Clear Cart','清空购物车')}</button><p class="pro-muted">Checkout, cash settlement, wallet deductions, commissions and WhatsApp sending are intentionally disabled.</p></div>`;
 el('proBranch').value=branch;el('proBranch').onchange=e=>{branch=e.target.value;cart=[];render();};host.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const s=services.find(x=>x.id===b.dataset.add),p=prices.find(x=>x.id===b.dataset.price);if(s&&p){cart.push({name:s.name_en,price:Number(p.price),branch:p.branch});drawCart();}});el('proClearCart').onclick=()=>{cart=[];drawCart();};function drawCart(){el('proCart').innerHTML=cart.map((x,i)=>`<div class="pro-row"><span>${esc(x.name)} (${esc(x.branch)})</span><strong>RM ${x.price.toFixed(2)}</strong></div>`).join('')+`<div class="pro-row"><strong>Total</strong><strong>RM ${cart.reduce((n,x)=>n+x.price,0).toFixed(2)}</strong></div>`;}drawCart();}
-function init(){nav.hidden=true;nav.style.display='none';void updateNav();setInterval(()=>{if(!ready)void updateNav();},60000);}
+function init(){if(!nav||!page)return;nav.hidden=true;nav.style.display='none';void updateNav();
+  try{getDb()?.auth?.onAuthStateChange?.(()=>setTimeout(()=>void updateNav(),0));}catch(_e){}
+  // Fallback for login initialization in the legacy application.
+  setInterval(()=>{if(!ready&&nav.hidden)void updateNav();},15000);
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 window.addEventListener('nd-pro-auth-refresh',()=>void updateNav());
 })();
 </script>
+
+<style id="nd-company-fine-page-css">
+#ndCompanyFinePage{position:fixed;inset:0;z-index:2147483500;overflow:auto;background:#f5f7fb;color:#172338;padding:22px clamp(14px,4vw,40px);font-family:inherit}#ndCompanyFinePage[hidden]{display:none!important}
+#ndCompanyFinePage .ncf-shell{max-width:1150px;margin:auto}#ndCompanyFinePage .ncf-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}#ndCompanyFinePage .ncf-top h2{font-size:23px;margin:0;font-weight:800;color:#14243e}
+#ndCompanyFinePage button{cursor:pointer;border:1px solid #d8e0ee;background:white;color:#172338;border-radius:12px;padding:10px 16px;font-weight:700}#ndCompanyFinePage .ncf-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;background:white;border-radius:18px;padding:18px;box-shadow:0 5px 22px #1b376013}#ndCompanyFinePage label{display:grid;gap:6px;font-weight:700;font-size:13px;min-width:180px}#ndCompanyFinePage select,#ndCompanyFinePage input{border:1px solid #cdd7e5;border-radius:10px;background:white;color:#182c46;padding:10px;font-size:15px}
+#ndCompanyFinePage .ncf-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:15px 0}#ndCompanyFinePage .ncf-card{padding:18px;border-radius:17px;background:white;box-shadow:0 5px 22px #1b376013}#ndCompanyFinePage .ncf-card small{font-weight:700;color:#63748d}#ndCompanyFinePage .ncf-card strong{display:block;font-size:24px;margin-top:9px;letter-spacing:-.6px}#ndCompanyFinePage .ncf-card:nth-child(1){border-top:5px solid #269e85}#ndCompanyFinePage .ncf-card:nth-child(2){border-top:5px solid #6b60b8}#ndCompanyFinePage .ncf-card:nth-child(3){border-top:5px solid #dc9b37}#ndCompanyFinePage .ncf-card:nth-child(4){border-top:5px solid #2786c9}
+#ndCompanyFinePage .ncf-panel{background:white;border-radius:18px;box-shadow:0 5px 22px #1b376013;margin-top:14px;overflow:hidden}#ndCompanyFinePage .ncf-panel h3{margin:0;padding:16px 18px;color:#142c46;font-size:16px}#ndCompanyFinePage .ncf-scroll{overflow:auto}#ndCompanyFinePage table{width:100%;border-collapse:collapse;min-width:640px;font-size:13px}#ndCompanyFinePage th{background:#eaf0fa;color:#314765;text-align:left}#ndCompanyFinePage th,#ndCompanyFinePage td{padding:12px 15px;border-bottom:1px solid #edf1f7}#ndCompanyFinePage tbody tr:nth-child(even){background:#f9fbfe}#ndCompanyFinePage .ncf-status{margin:12px 0;color:#586a82;font-size:13px;min-height:18px}#ndCompanyFinePage .ncf-tag{background:#e7f7f1;color:#16664c;border-radius:18px;padding:4px 9px;font-size:12px;font-weight:700}#ndCompanyFinePage .ncf-warning{background:#fff0e8;color:#a54b20;padding:9px 14px;border-radius:12px;margin-top:10px;font-size:13px}
+.nd-required-error{outline:2px solid #e33753!important;border-color:#e33753!important;background:#fff0f3!important;box-shadow:0 0 0 3px #e3375325!important}.nd-required-error-label{color:#c42c48!important}#ndCompanyFinePage .ncf-empty{text-align:center;color:#718096;padding:25px}@media(max-width:750px){#ndCompanyFinePage .ncf-stats{grid-template-columns:repeat(2,minmax(0,1fr))}#ndCompanyFinePage .ncf-card{padding:13px}#ndCompanyFinePage .ncf-card strong{font-size:20px}#ndCompanyFinePage .ncf-top h2{font-size:19px}#ndCompanyFinePage .ncf-controls>*{flex:1}}
+</style>
+<script id="nd-company-fine-page-v2">(()=>{'use strict';
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+const monthOf=s=>String(s||'').slice(0,7);
+const addMonths=(m,n)=>{let [y,k]=m.split('-').map(Number);let d=new Date(Date.UTC(y,k-1+n,1));return d.toISOString().slice(0,7)};
+const nextMonth=m=>addMonths(m,1)+'-01';
+const todayMonth=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit'}).format(new Date());
+function getDb(){try{return typeof salaryDb!=='undefined'?salaryDb:null}catch(_){return null}}
+let page=null,btn=null,returnFocus=null,knownManagers=new Set();
+const manager=(e,id)=>knownManagers.has(Number(id))||/manager|supervisor|director|经理|店长|主管/i.test([e?.role,e?.position,e?.job_title,e?.designation,e?.employee_role].filter(Boolean).join(' '));
+const collab=e=>/collaboration|合作|freelance|contractor/i.test([e?.outlet,e?.staff_category,e?.staff_type,e?.employment_type,e?.employee_type].filter(Boolean).join(' '));
+const fulltime=e=>/full[ -]?time|全职|permanent/i.test([e?.staff_type,e?.staff_category,e?.employment_type,e?.employee_type,e?.employment_status].filter(Boolean).join(' '));
+const official=e=>!e?.nd_archived_at;
+async function fetchAll(q){let arr=[];for(let start=0;start<20000;start+=500){let x=await q(start,start+499);if(x.error)throw x.error;arr.push(...(x.data||[]));if((x.data||[]).length<500)break}return arr}
+function ensure(){if(page)return;page=document.createElement('section');page.id='ndCompanyFinePage';page.hidden=true;page.innerHTML=`<div class="ncf-shell"><div class="ncf-top"><h2>Company Fine</h2><button id="ncfClose" type="button">Close</button></div><div class="ncf-controls"><label>Branch<select id="ncfBranch"><option>Eco Botanic</option><option>Nusa Bestari</option></select></label><label>Month<input id="ncfMonth" type="month"></label></div><div id="ncfStatus" class="ncf-status" role="status"></div><div class="ncf-stats"><div class="ncf-card"><small>Branch Total Fine</small><strong id="ncfFine">RM 0.00</strong></div><div class="ncf-card"><small>Monthly 20%</small><strong id="ncfFifth">RM 0.00</strong></div><div class="ncf-card"><small>Eligible Full-time</small><strong id="ncfCount">0</strong></div><div class="ncf-card"><small>Per Staff</small><strong id="ncfShare">RM 0.00</strong></div></div><div class="ncf-panel"><h3>Company Fine Bonus Payout</h3><div class="ncf-payout"><div><label for="ncfPayoutAmount">Cash Expense Amount (RM)<input id="ncfPayoutAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label></div><button id="ncfPrepareExpense" type="button">Prepare Cash Expense</button><div id="ncfExpenseStatus" role="status"></div></div></div><div class="ncf-panel"><h3>Monthly Staff Fines</h3><div id="ncfFines" class="ncf-scroll"></div></div><div class="ncf-panel"><h3>5-Month Distribution</h3><div id="ncfMonths" class="ncf-scroll"></div></div><div class="ncf-panel"><h3>Eligible Staff</h3><div id="ncfStaff" class="ncf-scroll"></div></div><div id="ncfWarn"></div></div>`;document.body.append(page);$('ncfMonth').value=todayMonth();$('ncfBranch').onchange=load;$('ncfMonth').onchange=load;$('ncfClose').onclick=close;$('ncfPrepareExpense').onclick=prepareExpense;document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!page.hidden)close()});}
+function open(){ensure();returnFocus=document.activeElement;page.hidden=false;document.body.style.setProperty('--ncf-open','1');$('ncfClose').focus();void load()}
+function prepareExpense(){
+ const status=$('ncfExpenseStatus'),branch=$('ncfBranch').value,month=$('ncfMonth').value;
+ const amount=Number($('ncfPayoutAmount').value);
+ status.textContent='';
+ if(!Number.isFinite(amount)||amount<=0){status.textContent='Enter the actual paid amount.';$('ncfPayoutAmount').classList.add('nd-required-error');$('ncfPayoutAmount').focus();return}
+ $('ncfPayoutAmount').classList.remove('nd-required-error');
+ const expense=$('ndExpenseExpand'),reason=$('pettyReason'),moneyField=$('pettyAmount'),daily=$('sidebarDaily');
+ if(!expense||!reason||!moneyField||!daily){status.textContent='Cash Expense form is unavailable.';return}
+ let current='';try{current=localStorage.getItem('nd_daily_branch_v1')||'Eco Botanic'}catch(_){current='Eco Botanic'}
+ if(current!==branch){status.textContent='Choose '+branch+' in Daily Settlement first, then prepare Cash Expense.';return}
+ const title='Company Fine Bonus Payout - '+branch+' - '+month;
+ // This only fills the EXISTING expense form. Approval and receipt remain mandatory.
+ close();daily.click();expense.open=true;reason.value=title;moneyField.value=amount.toFixed(2);
+ reason.dispatchEvent(new Event('input',{bubbles:true}));moneyField.dispatchEvent(new Event('input',{bubbles:true}));
+ expense.scrollIntoView({block:'center',behavior:'smooth'});reason.focus();
+}
+function close(){if(page)page.hidden=true;returnFocus?.focus?.()}
+function install(){if(btn)return;const target=$('salaryViewTargetBonusBtn');if(!target)return;btn=document.createElement('button');btn.type='button';btn.className='salary-view-btn';btn.id='ndCompanyFineBtn';btn.textContent='Company Fine';target.insertAdjacentElement('afterend',btn);btn.addEventListener('click',open)}
+function rowsTable(headers,rows){return '<table><thead><tr>'+headers.map(s=>'<th>'+esc(s)+'</th>').join('')+'</tr></thead><tbody>'+ (rows.length?rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+headers.length+'" class="ncf-empty">No records</td></tr>')+'</tbody></table>'}
+async function load(){const db=getDb();if(!db){$('ncfStatus').textContent='Database unavailable';return}let m=$('ncfMonth').value,b=$('ncfBranch').value;if(!/^\d{4}-\d{2}$/.test(m))return;$('ncfStatus').textContent='Loading...';$('ncfPayoutAmount').value='';$('ncfExpenseStatus').textContent='';$('ncfWarn').innerHTML='';try{
+ const start=addMonths(m,-4)+'-01',end=nextMonth(addMonths(m,5));
+ const [incidents,employees,managerRows]=await Promise.all([
+ fetchAll((lo,hi)=>db.from('nd_staff_incidents').select('id,employee_id,employee_name,outlet,incident_date,approved_amount,review_status,nd_deleted_at').gte('incident_date',start).lt('incident_date',end).order('incident_date',{ascending:true}).range(lo,hi)),
+ fetchAll((lo,hi)=>db.from('employees').select('*').range(lo,hi)),
+ fetchAll((lo,hi)=>db.from('nd_bonus_v4_managers').select('employee_id').range(lo,hi)).catch(()=>[])
+ ]);
+ knownManagers=new Set(managerRows.map(x=>Number(x.employee_id)));
+ let staffMap=new Map(employees.map(x=>[Number(x.id),x]));let uncertain=new Set();
+ const fines=incidents.filter(r=>r.review_status==='approved'&&!r.nd_deleted_at&&Number(r.approved_amount)>0).map(r=>({...r,person:staffMap.get(Number(r.employee_id))})).filter(r=>{if(!r.person){uncertain.add('Missing employee records');return false}if(manager(r.person,r.employee_id))return false;if(![ 'Eco Botanic','Nusa Bestari'].includes(r.outlet))return false;return true});
+ const branchFines=fines.filter(r=>r.outlet===b), monthly=branchFines.filter(r=>monthOf(r.incident_date)===m), total=monthly.reduce((s,x)=>s+Number(x.approved_amount),0);
+ $('ncfFine').textContent=money(total);$('ncfFifth').textContent=money(total*.2);
+ const eligible=employees.filter(e=>String(e.outlet)===b&&official(e)&&!manager(e,e.id)&&!collab(e)&&fulltime(e)&&!branchFines.some(r=>Number(r.employee_id)===Number(e.id)&&r.incident_date>=addMonths(m,-4)+'-01'&&r.incident_date<nextMonth(m)));
+ const unknown=employees.filter(e=>String(e.outlet)===b&&official(e)&&!manager(e,e.id)&&!collab(e)&&!fulltime(e));if(unknown.length)uncertain.add(unknown.length+' staff without confirmed Full-time classification are excluded');
+ $('ncfCount').textContent=String(eligible.length);$('ncfShare').textContent=money(eligible.length?total*.2/eligible.length:0);
+ $('ncfFines').innerHTML=rowsTable(['Date','Employee','Approved Fine'],monthly.map(r=>[esc(r.incident_date),esc(r.employee_name),money(r.approved_amount)]));
+ $('ncfMonths').innerHTML=rowsTable(['Period','Pool (20%)','Status'],Array.from({length:5},(_,i)=>{let date=addMonths(m,i+1);return[esc(date),money(total*.2),date>todayMonth()?'<span class="ncf-tag">Upcoming</span>':'<span class="ncf-tag">Preview</span>']}));
+ $('ncfStaff').innerHTML=rowsTable(['Employee','Type','Estimated Share'],eligible.map(e=>[esc(e.nickname||e.name||e.id),'<span class="ncf-tag">Full-time</span>',money(eligible.length?total*.2/eligible.length:0)]));
+ $('ncfStatus').textContent=monthly.length+' fines · '+b+' · '+m;
+ if(uncertain.size)$('ncfWarn').innerHTML='<div class="ncf-warning">'+[...uncertain].map(esc).join(' · ')+'</div>';
+ }catch(e){$('ncfStatus').textContent='Unable to load: '+e.message;['ncfFines','ncfMonths','ncfStaff'].forEach(id=>$(id).innerHTML='')}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
+window.ndOpenCompanyFine=open;
+})();</script>
+<script id="nd-required-fields-red-v1">(()=>{'use strict';function invalid(el){if(el.disabled||!el.willValidate)return false;let empty=el.matches('input[type=checkbox]')?!el.checked:!String(el.value??'').trim();return (el.required&&empty)||!el.checkValidity()}
+function mark(el){let bad=invalid(el);el.classList.toggle('nd-required-error',bad);let label=el.labels?.[0]||el.closest('label');if(label)label.classList.toggle('nd-required-error-label',bad);return bad}
+function inspect(form){let first=null;for(let el of form.querySelectorAll('input,select,textarea'))if(mark(el)&&!first)first=el;if(first){let details=first.closest('details');if(details)details.open=true;first.focus({preventScroll:true});first.scrollIntoView({behavior:'smooth',block:'center'});return false}return true}
+document.addEventListener('submit',e=>{let f=e.target;if(f instanceof HTMLFormElement&&!inspect(f)){e.preventDefault();e.stopImmediatePropagation()}},true);
+document.addEventListener('click',e=>{let b=e.target.closest('button,input[type=submit]');if(!b)return;let f=b.form;if(!f||b.type==='button'||b.matches('[formnovalidate]'))return;if(!inspect(f)){e.preventDefault();e.stopImmediatePropagation()}},true);
+document.addEventListener('input',e=>{let x=e.target;if(x?.classList?.contains('nd-required-error'))mark(x)},true);
+document.addEventListener('change',e=>{let x=e.target;if(x?.classList?.contains('nd-required-error'))mark(x)},true);
+})();</script>
+
+<style id="nd-fine-expense-handoff-css">#ndCompanyFinePage .ncf-payout{display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:18px}#ndCompanyFinePage .ncf-payout label{min-width:210px}#ndCompanyFinePage #ncfPrepareExpense{background:#197b68;color:white;border-color:#197b68;min-height:42px}#ndCompanyFinePage #ncfExpenseStatus{width:100%;font-size:13px;color:#a44e25;min-height:16px}</style>
