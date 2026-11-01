@@ -4780,16 +4780,16 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const local=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const endOfMonth=d=>{const [y,m]=d.split('-').map(Number);return new Date(Date.UTC(y,m,0)).getUTCDate()===Number(d.slice(8));};
-const monthDue=()=>{const d=local(),day=Number(d.slice(8));return endOfMonth(d)?d.slice(0,7):day<=7?new Date(Date.UTC(Number(d.slice(0,4)),Number(d.slice(5,7))-2,1)).toISOString().slice(0,7):null;};
+const monthDue=()=>{const d=local(),day=Number(d.slice(8));const month=endOfMonth(d)?d.slice(0,7):day<=7?new Date(Date.UTC(Number(d.slice(0,4)),Number(d.slice(5,7))-2,1)).toISOString().slice(0,7):null;return month&&month>='2026-11'?month:null;};
 const db=()=>window.salaryDb;let busy=false,active=null,lines=[];
 function branches(){const s=$('ordersBranch');return s?[...s.options].map(o=>o.value).filter(v=>v&&v!=='__ALL__'&&v!=='Global'):[];}
 function ensure(){if($('ndMonthlyStockDialog'))return;const d=document.createElement('dialog');d.id='ndMonthlyStockDialog';d.innerHTML='<div class="nd-ms-head"><h2 style="margin:0">Monthly Stock Check</h2><button type="button" class="btn" data-close>Close</button></div><p id="ndMsDescription" class="helper"></p><div class="nd-ms-table"><table><thead><tr><th>Product</th><th>System Qty</th><th>Actual Qty</th><th>Difference</th></tr></thead><tbody id="ndMsRows"></tbody></table></div><p id="ndMsStatus" role="status"></p><div class="nd-ms-actions"><button type="button" class="btn" data-later>Remind Me Later</button><button type="button" class="btn primary" data-save>Submit Stock Check</button></div>';document.body.append(d);d.querySelector('[data-close]').onclick=()=>d.close();d.querySelector('[data-later]').onclick=()=>{if(active)sessionStorage.setItem('nd_monthly_stock_later_'+active.month+'_'+active.branch,'1');d.close();};d.querySelector('[data-save]').onclick=save;d.querySelector('#ndMsRows').addEventListener('input',e=>{if(e.target.matches('input[data-i]')){const i=Number(e.target.dataset.i),v=e.target.value,el=d.querySelector('[data-diff="'+i+'"]');el.textContent=v===''?'—':String(Number(v)-lines[i].reference_qty);el.classList.toggle('nd-ms-error',v!==''&&Number(v)!==lines[i].reference_qty);}});}
 async function getLines(branch){const {data,error}=await window.ndOrdersAllResult(()=>db().from('inventory_movements').select('outlet,sku_id,product_name,brand,qty_change').eq('outlet',branch).order('id',{ascending:true}));if(error)throw error;const g=new Map();for(const r of data||[]){const k=String(r.sku_id);const v=g.get(k)||{sku_id:k,product_name:r.product_name||k,reference_qty:0};v.reference_qty+=Number(r.qty_change||0);if(r.product_name)v.product_name=r.product_name;g.set(k,v);}return [...g.values()].filter(r=>Number.isSafeInteger(r.reference_qty)&&r.reference_qty>0).sort((a,b)=>a.product_name.localeCompare(b.product_name));}
 async function completed(branch,month){const {data,error}=await db().from('nd_monthly_stock_checks').select('id').eq('branch',branch).eq('check_month',month).limit(1);if(error)throw error;return !!data?.length;}
-async function open(branch,month,automatic=false){if(busy||!db())return;ensure();const d=$('ndMonthlyStockDialog');if(d.open)return;busy=true;const st=$('ndMsStatus');st.textContent='Loading inventory…';try{if(await completed(branch,month)){if(!automatic)alert('Monthly stock check already submitted for '+branch+' ('+month+').');return;}lines=await getLines(branch);if(!lines.length){if(!automatic)alert('No products with positive stock in '+branch+'.');return;}active={branch,month};$('ndMsDescription').textContent=branch+' · '+month+' · '+lines.length+' products with stock. Enter the physical quantity for each product. Differences will be recorded for management review; inventory will not change automatically.';$('ndMsRows').innerHTML=lines.map((r,i)=>'<tr><td>'+esc(r.product_name)+'<small style="display:block;color:#68776c">'+esc(r.sku_id)+'</small></td><td>'+r.reference_qty+'</td><td><input type="number" min="0" step="1" inputmode="numeric" data-i="'+i+'" aria-label="Actual quantity for '+esc(r.product_name)+'"></td><td class="nd-ms-diff" data-diff="'+i+'">—</td></tr>').join('');st.textContent='';d.showModal();}catch(e){if(!automatic)alert('Unable to load monthly stock check: '+e.message);else console.warn('Monthly stock check unavailable:',e);}finally{busy=false;}}
+async function open(branch,month,automatic=false){if(month<'2026-11'){if(!automatic)alert('Monthly Stock Check starts from November 2026. October 2026 does not require a check.');return;}if(busy||!db())return;ensure();const d=$('ndMonthlyStockDialog');if(d.open)return;busy=true;const st=$('ndMsStatus');st.textContent='Loading inventory…';try{if(await completed(branch,month)){if(!automatic)alert('Monthly stock check already submitted for '+branch+' ('+month+').');return;}lines=await getLines(branch);if(!lines.length){if(!automatic)alert('No products with positive stock in '+branch+'.');return;}active={branch,month};$('ndMsDescription').textContent=branch+' · '+month+' · '+lines.length+' products with stock. Enter the physical quantity for each product. Differences will be recorded for management review; inventory will not change automatically.';$('ndMsRows').innerHTML=lines.map((r,i)=>'<tr><td>'+esc(r.product_name)+'<small style="display:block;color:#68776c">'+esc(r.sku_id)+'</small></td><td>'+r.reference_qty+'</td><td><input type="number" min="0" step="1" inputmode="numeric" data-i="'+i+'" aria-label="Actual quantity for '+esc(r.product_name)+'"></td><td class="nd-ms-diff" data-diff="'+i+'">—</td></tr>').join('');st.textContent='';d.showModal();}catch(e){if(!automatic)alert('Unable to load monthly stock check: '+e.message);else console.warn('Monthly stock check unavailable:',e);}finally{busy=false;}}
 async function save(){if(busy||!active)return;const inputs=[...$('ndMsRows').querySelectorAll('input[data-i]')],actual=inputs.map(e=>e.value.trim());if(actual.some(v=>v===''||!/^(0|[1-9]\d*)$/.test(v)||!Number.isSafeInteger(Number(v)))){$('ndMsStatus').textContent='Enter a valid whole-number Actual Qty for every product.';return;}const {branch,month}=active;const diff=actual.filter((v,i)=>Number(v)!==lines[i].reference_qty).length;if(!confirm('Submit '+lines.length+' products for '+branch+' ('+month+')? '+diff+' differences. This does not adjust inventory.'))return;busy=true;const button=$('ndMonthlyStockDialog').querySelector('[data-save]');button.disabled=true;$('ndMsStatus').textContent='Saving monthly check…';try{const auth=await db().auth.getUser();if(auth.error||!auth.data?.user)throw Error('Please sign in.');const payload={branch,check_month:month,checked_by:auth.data.user.id,items:lines.map((r,i)=>({sku_id:r.sku_id,product_name:r.product_name,reference_qty:r.reference_qty,actual_qty:Number(actual[i])}))};const {error}=await db().from('nd_monthly_stock_checks').insert(payload);if(error)throw error;$('ndMsStatus').textContent='Monthly check saved. '+diff+' differences require review.';sessionStorage.removeItem('nd_monthly_stock_later_'+month+'_'+branch);setTimeout(()=>{$('ndMonthlyStockDialog')?.close();void checkDue();},900);}catch(e){$('ndMsStatus').textContent='Unable to save: '+e.message;}finally{busy=false;button.disabled=false;}}
 async function checkDue(){const month=monthDue();if(!month||!db()||!$('ordersBranch')||!$('authView')?.classList.contains('hidden'))return;const selected=$('ordersBranch').value;const list=selected&&selected!=='__ALL__'?[selected]:[];for(const branch of list){if(sessionStorage.getItem('nd_monthly_stock_later_'+month+'_'+branch))continue;try{if(!(await completed(branch,month))){await open(branch,month,true);return;}}catch(e){console.warn('Monthly check status:',e.message);return;}}}
-function init(){ensure();const card=$('ndStockCheckCard');if(card&&!$('ndMonthlyStockOpen')){const b=document.createElement('button');b.id='ndMonthlyStockOpen';b.type='button';b.className='btn';b.textContent='Open Monthly Stock Check';b.style.margin='10px 0';b.onclick=()=>{const branch=$('ordersBranch')?.value;if(!branch||branch==='__ALL__'){alert('Select a single branch first.');return;}void open(branch,monthDue()||local().slice(0,7));};card.insertBefore(b,card.querySelector('.nd-stockcheck-fields'));}const nav=$('sidebarOrders');nav?.addEventListener('click',()=>setTimeout(checkDue,700));$('ordersInventoryBtn')?.addEventListener('click',()=>setTimeout(checkDue,400));window.addEventListener('focus',()=>{if(!$('authView')?.classList.contains('hidden'))return;void checkDue();});setTimeout(checkDue,3500);}
+function init(){ensure();const card=$('ndStockCheckCard');if(card&&!$('ndMonthlyStockOpen')){const b=document.createElement('button');b.id='ndMonthlyStockOpen';b.type='button';b.className='btn';b.textContent='Open Monthly Stock Check';b.style.margin='10px 0';b.onclick=()=>{const branch=$('ordersBranch')?.value;if(!branch||branch==='__ALL__'){alert('Select a single branch first.');return;}void open(branch,monthDue()||(local().slice(0,7)<'2026-11'?'2026-11':local().slice(0,7)));};card.insertBefore(b,card.querySelector('.nd-stockcheck-fields'));}const nav=$('sidebarOrders');nav?.addEventListener('click',()=>setTimeout(checkDue,700));$('ordersInventoryBtn')?.addEventListener('click',()=>setTimeout(checkDue,400));window.addEventListener('focus',()=>{if(!$('authView')?.classList.contains('hidden'))return;void checkDue();});setTimeout(checkDue,3500);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 </script>
@@ -4947,6 +4947,17 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 </div>
 </div>
 </div>
+
+<details id="ndDailyProductDeduction" class="nd-daily-product-deduction" style="margin:10px 0;padding:12px;border:1px solid #d8dee5;border-radius:10px">
+ <summary style="cursor:pointer;font-weight:650">Product Deduction <span id="ndDailyProductCount"></span></summary>
+ <div style="padding-top:12px">
+  <input id="ndDailyProductSearch" type="search" placeholder="Search available products" autocomplete="off" style="width:100%;padding:10px;margin-bottom:8px" />
+  <div id="ndDailyProductStatus" class="helper"></div>
+  <div id="ndDailyProductResults" style="max-height:210px;overflow:auto"></div>
+  <div id="ndDailyProductSelected" style="margin-top:12px"></div>
+  <small>Only products with available stock in this branch are shown. No prices.</small>
+ </div>
+</details>
 <details class="nd-extra-payment-details" id="ndExtraPaymentDetails">
 <summary>Other Payment Items <span class="nd-extra-chevron">▾</span></summary>
 <div class="nd-extra-payment-grid">
@@ -7538,6 +7549,11 @@ return `<div class="history-date-card">
     }finally{dailySubmitting=false;restore();}
   }
   async function performDailySettlementSubmit(){
+    const dateValue=$("settlementDate")?.value;
+    const todayMY=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const asDay=s=>Math.floor(Date.parse(s+'T00:00:00Z')/86400000);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dateValue||'')||!Number.isFinite(asDay(dateValue)))throw Error('Select a valid Daily date.');
+    if(asDay(dateValue)>asDay(todayMY)||asDay(todayMY)-asDay(dateValue)>7)throw Error('Daily entries are limited to today and the previous 7 days.');
     const btn=$("dailySubmitBtn");
     const state=$("dailySubmitState");
     if(!dailyDirty){
@@ -7581,9 +7597,19 @@ return `<div class="history-date-card">
     const outcome=await saveNow();
 
     const sync=$("syncState");
-    const saved=sync && sync.classList.contains("ok");
+    const saved=!!outcome?.saved && sync && sync.classList.contains("ok");
 
     if(saved){
+      if(window.ndDailyProductCommit){
+        try{await window.ndDailyProductCommit();}
+        catch(stockError){
+          dailyDirty=true;
+          if(btn){btn.disabled=false;btn.textContent="Retry Product Deduction";}
+          if(state){state.textContent="Daily saved, but product stock was NOT deducted: "+(stockError?.message||stockError)+". Retry to complete.";state.className="helper bad";}
+          const syncEl=$("syncState");if(syncEl){syncEl.textContent="Product deduction pending: "+(stockError?.message||stockError);syncEl.className="bad";}
+          return;
+        }
+      }
       ndPettyReminderShow(true);
       dailyDirty=false;
       if(btn) btn.textContent="Saved ✓";
@@ -7615,6 +7641,7 @@ return `<div class="history-date-card">
     }
   }
 
+  window.ndDailyMarkDirty=setDailyDirty;
   function setDailyClean(){
     dailyDirty=false;
     const btn=$("dailySubmitBtn");
@@ -31114,8 +31141,12 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   if(!target||!bonus)return;
   target.addEventListener('click',function(e){
    e.preventDefault();e.stopPropagation();
-   bonus.click();
+   if(typeof window.showBonus==='function')window.showBonus();
+   document.body.dataset.ndVisiblePage='bonus';
+   document.getElementById('bonusPage')?.classList.add('active','sidebar-offset');
+   document.getElementById('salaryPage')?.classList.remove('active');
    setTab('target');
+   document.dispatchEvent(new Event('nd-bonus-open'));
   },true);
   bonus.addEventListener('click',()=>setTab('bonus'));
   // Bonus navigation is handled by nd-bonus-inside-salary-v1.
@@ -34841,6 +34872,125 @@ function start(){mount();const expand=$('ndExpenseExpand');expand?.addEventListe
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
 </script>
+<style id="nd-bonus-ledger-css">
+#bonusPage.nd-ledger-mode .bonus-shell>.bonus-card,#bonusPage.nd-ledger-mode #targetBonusSection{display:none!important}
+#bonusPage.nd-ledger-mode #ndBonusLedger{display:block!important}
+#ndBonusLedger{display:none;padding:16px;background:#fff;border:1px solid #dce5e0;border-radius:16px;margin-top:12px}
+#ndBonusLedger .ndbl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:14px 0}
+#ndBonusLedger .ndbl-grid>label{display:block;font-weight:600;font-size:13px}
+#ndBonusLedger input,#ndBonusLedger select{margin-top:6px}
+#ndBonusLedger .ndbl-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+#ndBonusLedger .ndbl-table{overflow-x:auto;margin:14px 0}
+#ndBonusLedger table{min-width:680px}
+#ndBonusLedger td,#ndBonusLedger th{white-space:normal}
+#ndBonusLedger .ndbl-metrics{display:flex;flex-wrap:wrap;gap:10px}
+#ndBonusLedger .ndbl-metrics>div{background:#f2f6f3;border-radius:12px;padding:12px;min-width:140px}
+#ndBonusLedger [data-ndbl-message]{min-height:20px;color:#345c48}
+</style>
+<script id="nd-bonus-ledger-v1">
+(()=>{'use strict';
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+const client=()=>typeof salaryDb!=='undefined'?salaryDb:null;
+let employees=[],awards=[],settlements=[],incidents=[],activeBranch='',ready=false;
+const month=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).slice(0,7);
+const msg=t=>{const e=$('ndblMessage');if(e)e.textContent=t};
+const admin=()=>['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(window.currentUserEmail||'').toLowerCase());
+function setup(){if(ready)return;const page=$('bonusPage'),shell=page?.querySelector('.bonus-shell');if(!shell)return;ready=true;
+const section=document.createElement('section');section.id='ndBonusLedger';section.innerHTML=`<h2>Accumulated Staff Bonus</h2><p class="helper">Selected staff only. MC / poor performance: do not award for that month. Company fines are tracked separately.</p>
+<div class="ndbl-grid"><label>Branch<select id="ndblBranch"></select></label><label>Month<input type="month" id="ndblMonth"></label><label>Employee<select id="ndblEmployee"></select></label><label>Bonus Amount (RM)<input id="ndblAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label>Reason<select id="ndblReason"><option value="Monthly selected bonus">Eligible - Monthly bonus</option><option value="Performance bonus">Eligible - Performance bonus</option><option value="Target bonus">Eligible - Target bonus</option></select></label></div>
+<div class="ndbl-actions"><button class="btn primary" id="ndblAward" type="button">Award Selected Employee</button><button class="btn" id="ndblSettle" type="button">Settle Bonus</button><button class="btn" id="ndblRefresh" type="button">Refresh</button></div><p data-ndbl-message id="ndblMessage" role="status"></p>
+<div class="ndbl-metrics"><div>Accumulated Earned<br><strong id="ndblEarned">RM 0.00</strong></div><div>Settled<br><strong id="ndblPaid">RM 0.00</strong></div><div>Remaining<br><strong id="ndblRemaining">RM 0.00</strong></div></div>
+<h3>Employee Bonus Balances</h3><div class="ndbl-table" id="ndblBalances"></div>
+<h3>Monthly Bonus History</h3><div class="ndbl-table" id="ndblHistory"></div>
+<h3>Bonus Settlement Payslips</h3><div class="ndbl-table" id="ndblSlips"></div>`;
+shell.append(section);
+$('ndblMonth').value=month();$('ndblBranch').onchange=()=>{activeBranch=$('ndblBranch').value;populate();render()};$('ndblMonth').onchange=render;
+$('ndblRefresh').onclick=load;
+$('ndblAward').onclick=()=>mutate('award');$('ndblSettle').onclick=()=>mutate('settle');
+$('ndblSlips').onclick=e=>{const b=e.target.closest('[data-ndbl-slip]');if(!b)return;const row=settlements.find(r=>r.id===b.dataset.ndblSlip);if(row)printSlip(row)};
+const original=window.ndSetBonusSubTab;
+window.ndSetBonusSubTab=function(mode){original?.(mode);page.classList.toggle('nd-ledger-mode',mode==='bonus');if(mode==='bonus')void load()};
+const b=$('salaryViewBonusBtn');b?.addEventListener('click',()=>{page.classList.add('nd-ledger-mode');void load()});
+const t=$('salaryViewTargetBonusBtn');t?.addEventListener('click',()=>page.classList.remove('nd-ledger-mode'));
+}
+function populate(){const branches=[...new Set(employees.map(e=>e.outlet).filter(Boolean))];$('ndblBranch').innerHTML=branches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(branches.includes(activeBranch))$('ndblBranch').value=activeBranch;else activeBranch=$('ndblBranch').value;const es=employees.filter(e=>e.outlet===activeBranch&&!e.nd_archived_at&&!e.resignation_date&&!e.last_working_date&&!['resigned','terminated','inactive'].includes(String(e.employment_status||'').toLowerCase()));$('ndblEmployee').innerHTML=es.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}
+async function load(){setup();if(!admin()){msg('Only UMO / Mars can manage the accumulated bonus ledger.');return}const db=client();if(!db){msg('Database not ready');return}msg('Loading...');try{
+const [a,b,c,d]=await Promise.all([db.from('employees').select('*').limit(5000),db.from('nd_bonus_awards').select('*').order('created_at',{ascending:false}).limit(5000),db.from('nd_bonus_settlements').select('*').order('created_at',{ascending:false}).limit(5000),db.from('nd_staff_incidents').select('employee_id,employee_name,outlet,incident_date,approved_amount,review_status,nd_deleted_at').eq('review_status','approved').limit(5000)]);
+for(const x of [a,b,c,d])if(x.error)throw x.error;
+employees=a.data||[];awards=b.data||[];settlements=c.data||[];incidents=d.data||[];populate();render();msg('Loaded. Company fines are separate from bonus balances.');}catch(e){msg('Unable to load: '+e.message)}}
+function render(){if(!$('ndblBranch'))return;const branch=activeBranch,m=$('ndblMonth').value,byId=new Map(employees.map(e=>[Number(e.id),e]));const a=awards.filter(x=>x.branch===branch),s=settlements.filter(x=>x.branch===branch);const sum=x=>x.reduce((n,r)=>n+Number(r.amount||0),0);$('ndblEarned').textContent=money(sum(a));$('ndblPaid').textContent=money(sum(s));$('ndblRemaining').textContent=money(sum(a)-sum(s));
+const ids=[...new Set([...a,...s].map(x=>Number(x.employee_id)))];$('ndblBalances').innerHTML='<table><thead><tr><th>Employee</th><th>Earned</th><th>Settled</th><th>Remaining</th></tr></thead><tbody>'+ids.map(id=>{const ea=sum(a.filter(x=>Number(x.employee_id)===id)),paid=sum(s.filter(x=>Number(x.employee_id)===id));return `<tr><td>${esc(byId.get(id)?.name||id)}</td><td>${money(ea)}</td><td>${money(paid)}</td><td><strong>${money(ea-paid)}</strong></td></tr>`}).join('')+'</tbody></table>';
+const history=a.filter(x=>x.bonus_month===m);$('ndblHistory').innerHTML='<table><thead><tr><th>Month</th><th>Employee</th><th>Reason</th><th>Bonus</th><th>Recorded</th></tr></thead><tbody>'+history.map(x=>`<tr><td>${esc(x.bonus_month)}</td><td>${esc(byId.get(Number(x.employee_id))?.name||x.employee_id)}</td><td>${esc(x.reason)}</td><td>${money(x.amount)}</td><td>${esc(String(x.created_at).slice(0,10))}</td></tr>`).join('')+(history.length?'':'<tr><td colspan="5">No selected bonus for this month.</td></tr>')+'</tbody></table>';
+$('ndblSlips').innerHTML='<table><thead><tr><th>Date</th><th>Employee</th><th>Amount</th><th>Payslip</th></tr></thead><tbody>'+s.filter(x=>String(x.settlement_date).slice(0,7)===m).map(x=>`<tr><td>${esc(x.settlement_date)}</td><td>${esc(byId.get(Number(x.employee_id))?.name||x.employee_id)}</td><td>${money(x.amount)}</td><td><button class="btn" data-ndbl-slip="${esc(x.id)}">View / Print</button></td></tr>`).join('')+'</tbody></table>'}
+async function mutate(mode){if(!admin())return msg('UMO / Mars only');const db=client(),branch=$('ndblBranch').value,id=Number($('ndblEmployee').value),amount=Number($('ndblAmount').value);if(!id||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100&&Math.abs(Math.round(amount*100)-amount*100)>.00001)return msg('Select an employee and a valid amount.');const employee=employees.find(e=>Number(e.id)===id);if(!employee||employee.outlet!==branch)return msg('Employee / branch mismatch');const earned=awards.filter(x=>Number(x.employee_id)===id&&x.branch===branch).reduce((n,x)=>n+Number(x.amount),0),paid=settlements.filter(x=>Number(x.employee_id)===id&&x.branch===branch).reduce((n,x)=>n+Number(x.amount),0);if(mode==='settle'&&amount>earned-paid)return msg('Amount exceeds remaining bonus');if(!confirm(`${mode==='award'?'Award':'Settle'} ${money(amount)} for ${employee.name}?`))return;const btn=$(mode==='award'?'ndblAward':'ndblSettle');btn.disabled=true;try{const result=await db.rpc(mode==='award'?'nd_bonus_award':'nd_bonus_settle',mode==='award'?{p_branch:branch,p_employee_id:id,p_month:$('ndblMonth').value,p_amount:amount,p_reason:$('ndblReason').value}:{p_branch:branch,p_employee_id:id,p_amount:amount});if(result.error)throw result.error;await load();msg(mode==='award'?'Bonus awarded.':'Bonus settled. Open the payslip in the settlement month.');}catch(e){msg('Unable to save: '+e.message)}finally{btn.disabled=false}}
+function printSlip(r){const e=employees.find(x=>Number(x.id)===Number(r.employee_id));const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Bonus Payslip</title><style>body{font:15px Arial;color:#243e33;padding:40px;max-width:750px;margin:auto}h1{border-bottom:2px solid #294b3d;padding-bottom:15px}table{width:100%;border-collapse:collapse}td{padding:13px;border-bottom:1px solid #ddd}td:first-child{font-weight:bold;width:40%}@media print{button{display:none}}</style></head><body><h1>NATURE'S DAO · BONUS PAYSLIP</h1><table><tr><td>Reference</td><td>${esc(r.id)}</td></tr><tr><td>Employee</td><td>${esc(e?.name||r.employee_id)}</td></tr><tr><td>Branch</td><td>${esc(r.branch)}</td></tr><tr><td>Settlement Date</td><td>${esc(r.settlement_date)}</td></tr><tr><td>Bonus Paid</td><td><strong>${money(r.amount)}</strong></td></tr></table><p>Separate bonus settlement record. Not a salary payroll deduction.</p><button onclick="print()">Print / Save PDF</button></body></html>`;const blob=new Blob([html],{type:'text/html'}),url=URL.createObjectURL(blob);const w=window.open(url,'_blank');if(!w)alert('Allow pop-ups to open the bonus payslip.');setTimeout(()=>URL.revokeObjectURL(url),60000)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
+<style id="nd-company-fine-style">#ndCompanyFineDialog{width:min(900px,96vw);max-height:90dvh;border:1px solid #dce5e0;border-radius:16px;padding:22px}#ndCompanyFineDialog::backdrop{background:#0008}#ndCompanyFineDialog .ndcf-table{overflow-x:auto}#ndCompanyFineDialog table{min-width:650px}</style>
+<script id="nd-company-fine-v1">(()=>{'use strict';const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const fmt=n=>'RM '+Number(n||0).toFixed(2);function setup(){const target=$('salaryViewTargetBonusBtn');if(!target||$('ndCompanyFineBtn'))return;const button=document.createElement('button');button.type='button';button.className='salary-view-btn';button.id='ndCompanyFineBtn';button.textContent='Company Fine';target.insertAdjacentElement('afterend',button);const d=document.createElement('dialog');d.id='ndCompanyFineDialog';d.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px"><h2>Company Fine · Staff Only</h2><button class="btn" data-close type="button">Close</button></div><p class="helper">Approved employee fines only. Manager fines are excluded. This report does not affect bonus balances or payroll.</p><label>Month <input id="ndcfMonth" type="month"></label><p id="ndcfStatus" role="status"></p><h3 id="ndcfTotal"></h3><div class="ndcf-table" id="ndcfRows"></div>';document.body.append(d);d.querySelector('[data-close]').onclick=()=>d.close();$('ndcfMonth').value=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).slice(0,7);$('ndcfMonth').onchange=load;button.onclick=()=>{d.showModal();void load()};async function load(){const db=typeof salaryDb!=='undefined'?salaryDb:null;if(!db)return $('ndcfStatus').textContent='Database unavailable';$('ndcfStatus').textContent='Loading...';try{const [a,b]=await Promise.all([db.from('nd_staff_incidents').select('id,employee_id,employee_name,outlet,incident_date,approved_amount,review_status,nd_deleted_at').eq('review_status','approved').gte('incident_date',$('ndcfMonth').value+'-01').lt('incident_date',(()=>{const [y,m]=$('ndcfMonth').value.split('-').map(Number);return new Date(Date.UTC(y,m,1)).toISOString().slice(0,10)})()).limit(5000),db.from('employees').select('*').limit(5000)]);if(a.error)throw a.error;if(b.error)throw b.error;const staff=new Map((b.data||[]).map(e=>[Number(e.id),e]));let unknown=0,excluded=0;const rows=(a.data||[]).filter(r=>{if(r.nd_deleted_at||Number(r.approved_amount)<=0)return false;const e=staff.get(Number(r.employee_id));if(!e){unknown++;return false}const role=String([e.role,e.position,e.job_title,e.designation,e.employee_role,e.staff_type].filter(Boolean).join(' ')).toLowerCase();if(/manager|店长|经理|supervisor|director/.test(role)){excluded++;return false}if(!role){unknown++;return false}return true});const total=rows.reduce((n,r)=>n+Number(r.approved_amount),0);$('ndcfTotal').textContent='Approved Staff Fines: '+fmt(total);$('ndcfRows').innerHTML='<table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Approved Fine</th></tr></thead><tbody>'+rows.map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${fmt(r.approved_amount)}</td></tr>`).join('')+'</tbody></table>';$('ndcfStatus').textContent=`${rows.length} staff fines · ${excluded} manager/supervisor excluded · ${unknown} unclassified excluded (review employee role)`}catch(e){$('ndcfStatus').textContent='Unable to load: '+e.message}}}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();</script>
+<script id="ndDailyProductDeductionScript">
+(()=>{
+'use strict';
+const byId=id=>document.getElementById(id);
+const state={branch:'',stock:[],selected:new Map(),busy:false,loadedAt:0};
+const escapeHTML=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const getBranch=()=>String(byId('branchRecordState')?.textContent||'').trim();
+const getDb=()=>window.salaryDb||window.ordersDb?.();
+function status(message){const el=byId('ndDailyProductStatus');if(el)el.textContent=message||'';}
+function selectedList(){return [...state.selected.values()];}
+function markDirty(){const btn=byId('dailySubmitBtn');if(btn){btn.textContent='Submit Daily Settlement';btn.disabled=false;}const el=byId('dailySubmitState');if(el){el.textContent='Unsaved Product Deduction';el.className='helper bad';}if(typeof window.ndDailyMarkDirty==='function')window.ndDailyMarkDirty();}
+function draw(){
+ const results=byId('ndDailyProductResults'),chosen=byId('ndDailyProductSelected');if(!results||!chosen)return;
+ const q=String(byId('ndDailyProductSearch')?.value||'').toLowerCase().trim();
+ const rows=state.stock.filter(r=>r.available>0&&(!q||[r.product_name,r.brand,r.sku_id].some(v=>String(v||'').toLowerCase().includes(q)))).slice(0,60);
+ results.innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px;border-bottom:1px solid #eee"><span>${escapeHTML(r.product_name)} <small>Available: ${r.available}</small></span><button type="button" class="btn" data-nd-add="${escapeHTML(r.sku_id)}">+</button></div>`).join('')||'<small>No available products found.</small>';
+ chosen.innerHTML=selectedList().map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0"><span style="flex:1">${escapeHTML(r.product_name)}</span><button type="button" class="btn" data-nd-minus="${escapeHTML(r.sku_id)}">−</button><strong>${r.qty}</strong><button type="button" class="btn" data-nd-plus="${escapeHTML(r.sku_id)}">+</button><button type="button" class="btn" data-nd-remove="${escapeHTML(r.sku_id)}">Remove</button></div>`).join('');
+ const badge=byId('ndDailyProductCount');if(badge)badge.textContent=state.selected.size?'('+state.selected.size+')':'';
+}
+async function refresh(force=false){
+ const branch=getBranch();if(!branch||branch==='Global'){state.stock=[];state.branch=branch;status('Select a branch to search products.');draw();return;}
+ if(branch!==state.branch){state.selected.clear();state.branch=branch;state.loadedAt=0;}
+ if(!force&&Date.now()-state.loadedAt<15000){draw();return;}
+ const db=getDb();if(!db){status('Please sign in to load stock.');return;}
+ status('Loading available products...');
+ const date=byId('settlementDate')?.value;
+ if(!date){status('Select the Daily date first.');return;}
+ const {data,error}=await db.rpc('nd_daily_product_available',{p_branch:branch,p_date:date});
+ if(error){status('Unable to load stock: '+error.message);return;}
+ if(branch!==getBranch())return;
+ const map=new Map();for(const r of data||[]){const id=String(r.sku_id);map.set(id,{sku_id:id,product_name:r.product_name||id,brand:r.brand||'',available:Number(r.available)||0});}
+ state.stock=[...map.values()].filter(r=>r.available>0).sort((a,b)=>a.product_name.localeCompare(b.product_name));state.loadedAt=Date.now();status('');draw();
+}
+byId('ndDailyProductSearch')?.addEventListener('input',draw);
+byId('ndDailyProductDeduction')?.addEventListener('toggle',e=>{if(e.target.open)refresh(true);});
+byId('ndDailyProductDeduction')?.addEventListener('click',e=>{
+ const button=e.target.closest('button[data-nd-add],button[data-nd-plus],button[data-nd-minus],button[data-nd-remove]');if(!button||state.busy)return;
+ const action=['add','plus','minus','remove'].find(k=>button.hasAttribute('data-nd-'+k));const id=button.getAttribute('data-nd-'+action);const stock=state.stock.find(r=>r.sku_id===id);if(!stock)return;
+ const existing=state.selected.get(id);const current=existing?.qty||0;let next=action==='remove'?0:action==='minus'?current-1:current+1;
+ if(next>stock.available){status('Insufficient stock.');return;}if(next<=0)state.selected.delete(id);else state.selected.set(id,{sku_id:id,product_name:stock.product_name,brand:stock.brand,qty:next});status('');markDirty();draw();
+});
+window.ndDailyProductCommit=async()=>{
+ if(!state.selected.size)return;
+ const branch=getBranch();if(branch!==state.branch)throw Error('Branch changed. Re-select products.');
+ const date=byId('settlementDate')?.value;if(!date)throw Error('Select a settlement date.');
+ const db=getDb();if(!db)throw Error('Please sign in.');
+ state.busy=true;
+ try{
+  const items=selectedList().map(r=>({sku_id:r.sku_id,qty:r.qty}));
+  const {error}=await db.rpc('nd_daily_product_deduct',{p_branch:branch,p_date:date,p_items:items});
+  if(error)throw Error(error.message+' (Run the Product Deduction SQL if not installed.)');
+  state.selected.clear();state.loadedAt=0;draw();status('Stock deducted and recorded.');
+ }finally{state.busy=false;}
+};
+// Refresh when changing branch/date, without clearing pending selection on the same branch.
+document.addEventListener('click',e=>{if(e.target.closest('.branch-btn'))setTimeout(()=>refresh(true),100);});
+byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();state.loadedAt=0;void refresh(true);});
+
+})();
+</script>
+
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
