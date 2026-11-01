@@ -36065,7 +36065,49 @@ let hours=getHours();
 const clock12=t=>{const parts=String(t).split(':');const h=Number(parts[0]);return `${h%12||12}:${parts[1]||'00'} ${h<12?'AM':'PM'}`};
 const minsOf=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 function visibleTimes(){const h=hours[branch==='all'?'Eco Botanic':branch]||defaultHours['Eco Botanic'];const b=hours[branch==='all'?'Nusa Bestari':branch]||defaultHours['Nusa Bestari'];return branch==='all'?{start:Math.min(minsOf(h.open),minsOf(b.open)),end:Math.max(minsOf(h.close),minsOf(b.close))}:{start:minsOf(h.open),end:minsOf(h.close)}}
-let db=null,ready=false,active='home',lang='en',branch='all',date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
+// UMO-only customer save shared by booking and CRM.
+ async function proSaveCustomerSafe(rawName,rawPhone,rawEmail){
+  const name=String(rawName||'').trim(), phone=String(rawPhone||'').trim(), email=String(rawEmail||'').trim();
+  if(!name)throw Error(tr('Customer name is required.','请输入顾客姓名。'));
+  if(phone && !/^\+?[\d\s()-]{8,25}$/.test(phone))throw Error(tr('Enter a valid phone number.','请输入正确电话号码。'));
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error(tr('Enter a valid email.','请输入正确电邮。'));
+  if(!db)throw Error('Supabase is not connected.');
+  const authResult=await db.auth.getUser();
+  if(authResult.error)throw authResult.error;
+  if(!authResult.data?.user?.id)throw Error(tr('Please sign in before saving.','请先登入再保存。'));
+  const permission=await db.rpc('nd_pro_beta_is_umo');
+  if(permission.error)throw permission.error;
+  if(permission.data!==true)throw Error(tr('UMO account required.','只允许 UMO 账号操作。'));
+  const digits=phone.replace(/\D/g,'');
+  if(digits){
+   const matches=customers.filter(c=>String(c.phone||'').replace(/\D/g,'')===digits);
+   if(matches.length>1)throw Error(tr('Duplicate phone records. Review customers first.','电话号码有重复资料，请先检查顾客。'));
+   if(matches.length===1)return {customer:matches[0],existed:true};
+  }
+  let result;
+  // Reuse the verified RPC when available; fall back to RLS-protected insert for optional phone.
+  if(digits.length>=8 && typeof db.rpc==='function'){
+   result=await db.rpc('nd_pro_beta_find_or_add_customer',{
+    p_phone:phone,p_name:name,p_email:email||null
+   });
+   if(!result.error){
+    const row=await db.from('nd_pro_beta_customers').select('id,full_name,phone,email').eq('id',result.data).single();
+    if(row.error)throw row.error;
+    const existing=customers.some(c=>c.id===row.data.id);
+    if(!existing)customers.unshift(row.data);
+    return {customer:row.data,existed:existing};
+   }
+   // Missing RPC is acceptable before Booking V2 is installed; do not hide other SQL errors.
+   if(!['PGRST202','42883'].includes(String(result.error.code||'')))throw result.error;
+  }
+  result=await db.from('nd_pro_beta_customers').insert({
+   full_name:name,phone:phone||null,email:email||null,created_by:authResult.data.user.id
+  }).select('id,full_name,phone,email').single();
+  if(result.error)throw result.error;
+  customers.unshift(result.data);
+  return {customer:result.data,existed:false};
+ }
+ let db=null,ready=false,active='home',lang='en',branch='all',date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
 let customers=[],services=[],prices=[],appointments=[],staff=[],links=[],cart=[],rooms=[];
 let showTherapists=true, calendarMode='staff',restById=new Map();
 const todayMY=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
@@ -36292,8 +36334,21 @@ el('proCustomerFind').oninput=e=>{const q=e.target.value.trim().toLowerCase();co
 el('proAddCustomer').onclick=showCustomerModal;
 el('proRefSearch').onclick=()=>{form.elements.customer.focus();form.elements.customer.size=Math.min(7,Math.max(2,form.elements.customer.options.length));};
 form.elements.customer.onchange=()=>{form.elements.customer.size=0;displayCustomer()};
-el('proQuickSave').onclick=async()=>{const name=el('proQuickName').value.trim(),phone=el('proQuickPhone').value.trim();if(!name){el('proQuickName').style.borderColor='#c62828';return;}let customer=null;const existing=customers.find(c=>phone&&String(c.phone||'').replace(/\D/g,'')===phone.replace(/\D/g,''));if(existing){customer=existing}else{const r=await db.from('nd_pro_beta_customers').insert({full_name:name,phone:phone||null,created_by:(await db.auth.getUser()).data.user?.id}).select('id,full_name,phone').single();if(r.error){stat(r.error.message,true);return;}customer=r.data;customers.push(customer);}if(!Array.from(form.elements.customer.options).some(o=>o.value===customer.id))form.elements.customer.add(new Option(customer.full_name+' · '+(customer.phone||''),customer.id));form.elements.customer.value=customer.id;closeCustomer();displayCustomer();stat(tr('Customer added.','顾客已新增。'));};
-form.elements.branch.onchange=()=>{const old=form.elements.room_id.value;form.elements.room_id.innerHTML='<option value="">'+tr('No room','不指定房间')+'</option>'+opt(roomsFor(form.elements.branch.value).map(r=>[r.id,r.room_name]),old);};
+el('proQuickSave').onclick=async()=>{
+  const button=el('proQuickSave'),nameEl=el('proQuickName'),phoneEl=el('proQuickPhone');
+  button.disabled=true;const old=button.textContent;button.textContent=tr('Saving…','保存中…');
+  try{
+   const saved=await proSaveCustomerSafe(nameEl.value,phoneEl.value,'');const customer=saved.customer;
+   if(!Array.from(form.elements.customer.options).some(o=>o.value===customer.id))
+    form.elements.customer.add(new Option(customer.full_name+' · '+(customer.phone||''),customer.id));
+   form.elements.customer.value=customer.id;closeCustomer();displayCustomer();
+   stat(saved.existed?tr('Existing customer selected.','已选择现有顾客。'):tr('Customer saved.','顾客已保存。'));
+  }catch(err){
+   const msg=err?.message||String(err);
+   stat(msg,true);alert(tr('Customer could not be saved: ','顾客保存失败：')+msg);
+  }finally{button.disabled=false;button.textContent=old;}
+ };
+ form.elements.branch.onchange=()=>{const old=form.elements.room_id.value;form.elements.room_id.innerHTML='<option value="">'+tr('No room','不指定房间')+'</option>'+opt(roomsFor(form.elements.branch.value).map(r=>[r.id,r.room_name]),old);};
 el('proAppointmentReset').onclick=reset;
 el('proAppointmentCancel').onclick=async()=>{const id=form.elements.appointment_id.value;if(!id||!confirm(tr('Cancel this appointment?','确定取消这个预约吗？')))return;const buttons=[el('proAppointmentCancel'),el('proAppointmentSave')];buttons.forEach(b=>b.disabled=true);try{const r=await db.rpc('nd_pro_beta_cancel_appointment',{p_appointment_id:id});if(r.error)throw r.error;closeBooking();await load();stat(tr('Appointment cancelled.','预约已取消。'));}catch(e){stat(e.message,true);buttons.forEach(b=>b.disabled=false);}};
 form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries(new FormData(f));if(!x.customer){phoneSearch.focus();phoneSearch.classList.add('proref-invalid');stat(tr('Select or add a customer.','请选择或新增顾客。'),true);return;}if(!x.employee){stat(tr('Select a therapist.','请选择技师。'),true);return;}if(!x.date||!x.time){stat('Date and time are required.',true);return;}const start=localIso(x.date,x.time),end=new Date(new Date(start).getTime()+Number(x.duration)*60000).toISOString();const editing=Boolean(x.appointment_id);const payload={p_branch:x.branch,p_starts_at:start,p_ends_at:end,p_service_name:x.service,p_employee_ids:[Number(x.employee)],p_room_id:x.room_id||null};if(editing)payload.p_appointment_id=x.appointment_id;else payload.p_customer_id=x.customer;const button=el('proAppointmentSave');button.disabled=true;try{const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;date=x.date;branch=x.branch;closeBooking();await load();stat(tr(editing?'Appointment updated successfully.':'Appointment created successfully.',editing?'预约已更新。':'预约已新增。'));}catch(err){stat(err.message,true);}finally{button.disabled=false;}};
@@ -36319,7 +36374,18 @@ function renderCustomers(host){
  $('proCustomerList').querySelectorAll('[data-crm-book]').forEach(b=>b.onclick=()=>{window.ndProCustomerForBooking=b.dataset.crmBook;active='appointments';render();el('proNewBooking')?.click();const sel=el('proAppointmentForm')?.elements.customer;if(sel){sel.value=b.dataset.crmBook;sel.dispatchEvent(new Event('change',{bubbles:true}));}});};
  $('proCustomerSearch').oninput=draw;host.querySelectorAll('[data-crm-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.crmTab;host.querySelectorAll('[data-crm-tab]').forEach(x=>x.classList.toggle('active',x===b));draw()});draw();
  const modal=$('proCrmModal');const close=()=>modal.hidden=true;$('proCrmAdd').onclick=()=>{modal.hidden=false;$('proCustomerForm').elements.full_name.focus()};$('proCrmClose').onclick=close;$('proCrmDim').onclick=close;$('proCustomerCsv').onclick=()=>{active='imports';render();const mode=el('proImportType');if(mode)mode.value='customers'};
- $('proCustomerForm').onsubmit=async e=>{e.preventDefault();const f=e.target;if(!f.reportValidity())return;const x=Object.fromEntries(new FormData(f));const phone=x.phone.trim();if(phone&&customers.some(c=>String(c.phone||'').replace(/\D/g,'')===phone.replace(/\D/g,''))){stat(tr('This phone already exists.','这个电话号码已经存在。'),true);return;}const r=await db.from('nd_pro_beta_customers').insert({full_name:x.full_name.trim(),phone:phone||null,email:x.email.trim()||null}).select('id,full_name,phone,email').single();if(r.error){stat(r.error.message,true);return;}customers.unshift(r.data);close();draw();stat(tr('Customer saved.','顾客已保存。'));};
+ $('proCustomerForm').onsubmit=async e=>{
+  e.preventDefault();const f=e.currentTarget;if(!f.reportValidity())return;
+  const button=f.querySelector('button[type="submit"]');const old=button.textContent;
+  button.disabled=true;button.textContent=tr('Saving…','保存中…');
+  const x=Object.fromEntries(new FormData(f));
+  try{
+   const saved=await proSaveCustomerSafe(x.full_name,x.phone,x.email);
+   close();draw();
+   stat(saved.existed?tr('Customer already exists.','顾客已存在。'):tr('Customer saved.','顾客已保存。'));
+  }catch(err){const msg=err?.message||String(err);stat(msg,true);alert(tr('Customer could not be saved: ','顾客保存失败：')+msg);}
+  finally{button.disabled=false;button.textContent=old;}
+};
 }
 // CSV Import Center: deliberately isolated from live accounting & customer credits.
 let proImportParsed=null;
@@ -36469,3 +36535,30 @@ document.addEventListener('change',e=>{let x=e.target;if(x?.classList?.contains(
 })();</script>
 
 <style id="nd-fine-expense-handoff-css">#ndCompanyFinePage .ncf-payout{display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:18px}#ndCompanyFinePage .ncf-payout label{min-width:210px}#ndCompanyFinePage #ncfPrepareExpense{background:#197b68;color:white;border-color:#197b68;min-height:42px}#ndCompanyFinePage #ncfExpenseStatus{width:100%;font-size:13px;color:#a44e25;min-height:16px}</style>
+
+<style id="nd-pro-customer-profile-css">
+#ndProProfileOverlay[hidden]{display:none!important}#ndProProfileOverlay{position:fixed;inset:0;z-index:2147483600;background:#f3f2f9;color:#222b3a;overflow-y:auto;overscroll-behavior:contain;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}#ndProProfileOverlay *{box-sizing:border-box}#ndProProfileOverlay button,#ndProProfileOverlay input,#ndProProfileOverlay select{font:inherit}#ndProProfileOverlay .npc-wrap{max-width:660px;margin:auto;padding:18px 16px 55px}#ndProProfileOverlay .npc-top{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:50px}#ndProProfileOverlay .npc-back,#ndProProfileOverlay .npc-edit{border:0;background:transparent;color:#1672ef;font-size:25px;padding:8px 12px;cursor:pointer}#ndProProfileOverlay .npc-top strong{font-weight:800;font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#ndProProfileOverlay .npc-avatar{width:84px;height:84px;border-radius:50%;margin:14px auto 20px;background:linear-gradient(135deg,#d0e7ff,#ead9ff);display:grid;place-items:center;color:#305c96;font-size:35px;font-weight:800;position:relative}#ndProProfileOverlay .npc-avatar:after{content:'✎';position:absolute;right:-4px;bottom:0;background:#1679fd;color:white;border:3px solid #f3f2f9;border-radius:100%;font-size:13px;width:30px;height:30px;display:grid;place-items:center}#ndProProfileOverlay .npc-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:#e4e5eb;border-radius:14px;padding:4px;gap:3px;margin:14px 0 18px}#ndProProfileOverlay .npc-tabs button{border:0;background:transparent;border-radius:11px;padding:12px 3px;color:#777d8a;font-weight:750;font-size:13px;cursor:pointer}#ndProProfileOverlay .npc-tabs button.active{background:#fff;color:#0877f8;box-shadow:0 1px 6px #0b173222}#ndProProfileOverlay .npc-card{background:#fff;border-radius:19px;margin:0 0 13px;overflow:hidden;box-shadow:0 3px 14px #1d2d4510}#ndProProfileOverlay .npc-field{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:61px;padding:13px 18px;border-bottom:1px solid #e8e8eb}#ndProProfileOverlay .npc-field:last-child{border:0}#ndProProfileOverlay .npc-field span{font-size:14px;font-weight:680;color:#30323c;flex:0 0 37%}#ndProProfileOverlay .npc-field input,#ndProProfileOverlay .npc-field select{min-width:0;width:60%;text-align:right;border:1px solid #dce4ef;border-radius:10px;background:#f9fbff;padding:9px 8px;font-size:14px;color:#1672ef}#ndProProfileOverlay .npc-field input:focus,#ndProProfileOverlay .npc-field select:focus{outline:2px solid #99c7ff}#ndProProfileOverlay .npc-save{display:block;width:100%;background:#187bfa;color:white;border:0;border-radius:15px;padding:15px;font-weight:850;margin:12px 0 22px;cursor:pointer}#ndProProfileOverlay .npc-muted{color:#9da1aa;font-size:13px}#ndProProfileOverlay .npc-title{font-size:14px;font-weight:750;color:#8e919e;margin:20px 8px 10px}#ndProProfileOverlay .npc-tags{display:flex;flex-wrap:wrap;gap:8px;padding:15px}#ndProProfileOverlay .npc-tag{background:#f0f0f4;border:1px solid transparent;border-radius:9px;padding:10px 12px;min-height:39px;font-weight:700;color:#30323b;font-size:13px;cursor:pointer}#ndProProfileOverlay .npc-tag.on{background:#e5e0ff;color:#4c3cc9;border-color:#9e90fc}#ndProProfileOverlay .npc-tag.green.on{background:#d7f9db;color:#147639;border-color:#83d89b}#ndProProfileOverlay .npc-summary{padding:16px}#ndProProfileOverlay .npc-chips{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}#ndProProfileOverlay .npc-chip{background:#ede5ff;color:#6a4ac1;border-radius:6px;padding:5px 9px;font-weight:800;font-size:12px}#ndProProfileOverlay .npc-money{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;border-top:1px solid #eee;padding-top:16px;margin-top:12px}#ndProProfileOverlay .npc-money small{display:block;color:#818590;font-size:12px}#ndProProfileOverlay .npc-money b{font-size:19px}#ndProProfileOverlay .npc-links button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:18px;background:transparent;border:0;border-bottom:1px solid #eee;text-align:left;color:#34415b;font-weight:700;cursor:pointer}#ndProProfileOverlay .npc-links button:last-child{border:0}#ndProProfileOverlay .npc-links .disabled{opacity:.45;cursor:not-allowed}#ndProProfileOverlay .npc-alert{margin:10px 2px;color:#d14343;font-size:13px;min-height:18px}#ndProProfileOverlay .npc-loading{padding:30px;text-align:center;color:#757d8b}
+</style>
+<div id="ndProProfileOverlay" hidden aria-label="Customer Profile"><div class="npc-wrap"><header class="npc-top"><button type="button" class="npc-back" id="ndProProfileBack" aria-label="Back">‹</button><strong id="ndProProfileTitle">Customer</strong><button type="button" class="npc-edit" id="ndProProfileClose" aria-label="Close">✕</button></header><div class="npc-avatar" id="ndProProfileAvatar">C</div><nav class="npc-tabs" id="ndProProfileTabs"><button type="button" data-profile-tab="info" class="active">Information</button><button type="button" data-profile-tab="details">Details</button><button type="button" data-profile-tab="address">Address</button><button type="button" data-profile-tab="settings">Settings</button></nav><section id="ndProProfileBody" aria-live="polite"></section><p class="npc-alert" id="ndProProfileError"></p></div></div>
+<script id="nd-pro-customer-profile-js">(()=>{'use strict';
+const $=id=>document.getElementById(id), overlay=$('ndProProfileOverlay');if(!overlay)return;
+let customer=null,ext={},tab='info',db=null;const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const lbl={info:'Information',details:'Details',address:'Address',settings:'Settings'};
+const field=(title,name,value='',type='text',choices=null)=>`<label class="npc-field"><span>${title}</span>${choices?`<select name="${name}">${choices.map(([v,t])=>`<option value="${esc(v)}" ${String(value||'')===v?'selected':''}>${esc(t)}</option>`).join('')}</select>`:`<input name="${name}" type="${type}" value="${esc(value)}" ${name==='full_name'?'required maxlength="120"':''} ${name==='phone'?'inputmode="tel" maxlength="32"':''}>`}</label>`;
+function tabs(){document.querySelectorAll('#ndProProfileTabs button').forEach(b=>b.classList.toggle('active',b.dataset.profileTab===tab));}
+function render(){tabs();const root=$('ndProProfileBody');$('ndProProfileTitle').textContent=customer?.full_name||customer?.phone||'Customer';$('ndProProfileAvatar').textContent=(customer?.full_name||'C').slice(0,1).toUpperCase();if(!customer){root.innerHTML='<div class="npc-loading">Loading…</div>';return;}
+if(tab==='info'){root.innerHTML=`<form id="ndProProfileInfoForm" class="npc-card">${field('Name','full_name',customer.full_name)}${field('Phone Number','phone',customer.phone||'','tel')}${field('Member Code','member_code',ext.member_code||'')}${field('ID / Passport','id_document',ext.id_document||'')}${field('Birthday','birthday',ext.birthday||'','date')}${field('Nationality','nationality',ext.nationality||'')}${field('Source','source',ext.source||'')}${field('Email','email',customer.email||'','email')}${field('Marital Status','marital_status',ext.marital_status||'','text',[['','Select'],['single','Single'],['married','Married']])}${field('Gender','gender',ext.gender||'','text',[['','Select'],['male','Male'],['female','Female'],['other','Other']])}<button class="npc-save" type="submit">Save Customer</button></form>`;
+$('ndProProfileInfoForm').onsubmit=saveInfo;
+}else if(tab==='details'){let tags=Array.isArray(ext.tags)?ext.tags:[];const taglist=['VIP','VVIP','Discount 20%','Discount 25%','Discount 30%','Eco Botanic','Nusa Bestari','Referral','Regular','First Visit'];root.innerHTML=`<div class="npc-title">Membership Level</div><div class="npc-card npc-tags" id="npcLevels">${['Standard','VIP','VVIP'].map(t=>`<button type="button" class="npc-tag ${ext.membership_level===t?'on':''}" data-level="${esc(t)}">${esc(t)}</button>`).join('')}</div><div class="npc-title">Member Tags</div><div class="npc-card npc-tags" id="npcTagList">${taglist.map(t=>`<button type="button" class="npc-tag ${tags.includes(t)?'on':''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div><button class="npc-save" type="button" id="npcSaveDetail">Save Details</button>`;root.querySelectorAll('[data-level]').forEach(b=>b.onclick=()=>{ext.membership_level=b.dataset.level;render()});root.querySelectorAll('[data-tag]').forEach(b=>b.onclick=()=>{const set=new Set(ext.tags||[]);set.has(b.dataset.tag)?set.delete(b.dataset.tag):set.add(b.dataset.tag);ext.tags=[...set];render()});$('npcSaveDetail').onclick=()=>saveExtra();
+}else if(tab==='address'){root.innerHTML=`<form id="npcAddressForm" class="npc-card">${field('Address Line 1','address_line1',ext.address_line1||'')}${field('Address Line 2','address_line2',ext.address_line2||'')}${field('City','city',ext.city||'')}${field('State','state',ext.state||'')}${field('Postcode','postcode',ext.postcode||'')}${field('Country','country',ext.country||'Malaysia')}<button class="npc-save" type="submit">Save Address</button></form>`;$('npcAddressForm').onsubmit=e=>{e.preventDefault();Object.assign(ext,Object.fromEntries(new FormData(e.currentTarget)));saveExtra()};
+}else{root.innerHTML=`<div class="npc-card npc-links"><button class="disabled" disabled type="button">Merge Customer <span>›</span></button><button class="disabled" disabled type="button">Hide Customer <span>›</span></button><button class="disabled" disabled type="button" style="color:#d9534f">Delete Customer <span>›</span></button></div>`;}
+}
+async function authorize(){db=window.salaryDb||null;if(!db)throw Error('Supabase is not ready');const a=await db.auth.getUser();if(a.error)throw a.error;if(String(a.data?.user?.email||'').toLowerCase()!=='umo1017@gmail.com')throw Error('UMO only');const ok=await db.rpc('nd_pro_beta_is_umo');if(ok.error)throw ok.error;if(ok.data!==true)throw Error('UMO permission required')}
+async function open(id){overlay.hidden=false;document.body.style.overflow='hidden';customer=null;ext={};$('ndProProfileError').textContent='';tab='info';render();try{await authorize();const c=await db.from('nd_pro_beta_customers').select('id,full_name,phone,email').eq('id',id).single();if(c.error)throw c.error;customer=c.data;const x=await db.from('nd_pro_beta_customer_profiles').select('*').eq('customer_id',id).maybeSingle();if(x.error&&x.error.code!=='42P01'&&x.error.code!=='PGRST205')throw x.error;ext=x.data||{};render()}catch(e){$('ndProProfileError').textContent=e.message||String(e)}}
+function close(){overlay.hidden=true;document.body.style.overflow='';}
+async function saveInfo(e){e.preventDefault();$('ndProProfileError').textContent='';let form=new FormData(e.currentTarget);const full_name=String(form.get('full_name')||'').trim();if(!full_name){$('ndProProfileError').textContent='Name is required';return;}const changes={full_name,phone:String(form.get('phone')||'').trim()||null,email:String(form.get('email')||'').trim()||null};const extraKeys=['member_code','id_document','birthday','nationality','source','marital_status','gender'];for(const k of extraKeys)ext[k]=String(form.get(k)||'').trim()||null;try{await authorize();const r=await db.from('nd_pro_beta_customers').update(changes).eq('id',customer.id).select('id').single();if(r.error)throw r.error;customer={...customer,...changes};await saveExtra(true);render();$('ndProProfileError').textContent='Saved';$('ndProProfileError').style.color='#16804f';}catch(err){$('ndProProfileError').textContent=err.message||String(err);$('ndProProfileError').style.color='#d14343'}}
+async function saveExtra(silent=false){try{await authorize();const keys=['member_code','id_document','birthday','nationality','source','marital_status','gender','membership_level','tags','address_line1','address_line2','city','state','postcode','country'];const data={customer_id:customer.id};for(const k of keys)if(Object.hasOwn(ext,k))data[k]=ext[k]||null;const r=await db.from('nd_pro_beta_customer_profiles').upsert(data,{onConflict:'customer_id'});if(r.error)throw r.error;if(!silent){$('ndProProfileError').textContent='Saved';$('ndProProfileError').style.color='#16804f';}}catch(e){$('ndProProfileError').textContent='Profile SQL required: '+(e.message||e);$('ndProProfileError').style.color='#d14343';if(silent)throw e}}
+$('ndProProfileBack').onclick=close;$('ndProProfileClose').onclick=close;overlay.addEventListener('click',e=>{const b=e.target.closest('[data-profile-tab]');if(b){tab=b.dataset.profileTab;render()}});
+// Clicking a member card opens profile; existing book button keeps its own action.
+document.addEventListener('click',e=>{if(overlay.hidden===false)return;const card=e.target.closest('#proCustomerList .procrm-person');if(!card||e.target.closest('[data-crm-book],button,a,input'))return;const book=card.querySelector('[data-crm-book]');if(book?.dataset.crmBook)open(book.dataset.crmBook);},true);
+})();</script>
