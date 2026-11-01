@@ -9867,11 +9867,6 @@ document.getElementById('ndCashPettyRefresh')?.addEventListener('click',ndRender
 </div>
 <div class="actions" style="margin-top:14px"><button class="btn" id="bonusSaveBtn" type="button">Save Bonus</button></div>
 </div>
-<div class="bonus-card" id="ndRestoredBonusHistoryCard">
-<div class="outlet-title"><strong>Saved Bonus History</strong><button type="button" class="btn" id="ndRestoredBonusHistoryRefresh">Refresh History</button></div>
-<p class="helper" id="ndRestoredBonusHistoryStatus">Shows existing saved bonus records from all months.</p>
-<div class="bonus-table-wrap"><table class="bonus-table"><thead><tr><th>Month</th><th>Branch</th><th>Employee</th><th>Eligible</th><th>Bonus (RM)</th></tr></thead><tbody id="ndRestoredBonusHistoryRows"></tbody></table></div>
-</div>
 <div class="bonus-card" id="bonusDeductionCard">
 <div class="outlet-title">
 <div>
@@ -25948,7 +25943,7 @@ input,select,textarea,button,a{
  let latestWeekSeen=weekNo(today());
  function ensure(){let root=$('targetBonusSection');if(root)return root;const page=$('bonusPage');if(!page)return null;
  root=document.createElement('section');root.id='targetBonusSection';root.className='bonus-card';
- root.innerHTML=`<p class="helper" style="margin:0 0 12px">Target Bonus history tables are currently empty. Settings shown may be browser-local defaults until saved to the database.</p><div class="tb-head"><h2 style="margin:0;font-size:21px">Target Bonus</h2><span class="helper" id="tbSync"></span></div>
+ root.innerHTML=`<div class="tb-head"><h2 style="margin:0;font-size:21px">Target Bonus</h2><span class="helper" id="tbSync"></span></div>
  <div class="tb-row"><div class="tb-head"><strong>Weekly Target Bonus</strong><button class="btn tb-edit" type="button">Edit</button></div>
  <div class="tb-fields"><div><label>Daily Branch Target (RM)</label><input id="tbDaily" type="number" min="0" readonly></div><div><label>Required Days / Week</label><input id="tbDays" type="number" min="1" max="7" readonly></div><div><label>Bonus / Staff (RM)</label><input id="tbWeekly" type="number" min="0" readonly></div></div>
  <div class="tb-week-nav"><button class="btn" id="tbPrev" type="button">‹ Previous</button><strong id="tbWeekLabel"></strong><button class="btn" id="tbNext" type="button">Next ›</button><button class="btn" id="tbLatest" type="button">Latest Week</button></div>
@@ -32212,7 +32207,7 @@ function ndSyncInterviewPassport(root){
  const number=field('Passport No')?.querySelector('input');
  if(!status||!number)return;
  const sync=()=>{const absent=status.value==='No Passport';number.required=!absent;number.disabled=absent;const box=number.closest('.nd-form-field');if(box){box.hidden=absent;box.style.display=absent?'none':'';box.classList.toggle('nd-required',!absent);}if(absent)number.value='';
- for(const label of ['Passport Photo Front','Passport Photo Back']){const photoBox=field(label);if(!photoBox)continue;photoBox.hidden=absent;photoBox.style.display=absent?'none':'';photoBox.querySelector('input').disabled=absent;}
+ for(const label of ['Passport Photo Front','Passport Photo Back']){const photoBox=field(label);if(!photoBox)continue;photoBox.hidden=absent;photoBox.style.display=absent?'none':'';const photoInput=photoBox.querySelector('input');if(photoInput){photoInput.disabled=absent;photoInput.required=false;if(absent)photoInput.value='';}}
  };
  status.addEventListener('change',sync);sync();
 }
@@ -32805,9 +32800,9 @@ async function openInterviewDocument(row){
  signing.forEach(([label,kind],i)=>{const el=panel.querySelector(`[data-nd-field="Doc${i}"]`),value=interviewDocumentValue(current.form_data,label),src=interviewDocumentImage(value);if(kind==='signature'&&src){const image=new Image();image.onload=()=>{window.ndFitSignatureImage(el,image);el.dataset.ink='1'};image.src=src}else if(kind!=='file'&&kind!=='signature')el.value=value||(label==='Date'?new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}):'')});
  panel.querySelectorAll('canvas[data-nd-field]').forEach(canvas=>{canvas.addEventListener('pointerdown',()=>canvas.dataset.modified='1');panel.querySelector(`[data-clear-signature="${canvas.dataset.ndField}"]`).addEventListener('click',()=>canvas.dataset.modified='1')});
  const collect=async()=>{const values=applyInterviewBranding({...current.form_data});
- for(let i=0;i<editFields.length;i++){const [label,kind]=editFields[i],el=edit.querySelector(`[data-nd-field="Edit${i}"]`);if(kind==='file'){if(el.files?.[0])values[label]=await readFile(el.files[0])}else values[label]=ndFormFieldValue(el)}
+ for(let i=0;i<editFields.length;i++){const [label,kind]=editFields[i],el=edit.querySelector(`[data-nd-field="Edit${i}"]`);if(kind==='file'){if(values['Passport Status']==='No Passport'&&['Passport Photo Front','Passport Photo Back'].includes(label)){values[label]='';continue;}if(el.files?.[0])values[label]=await readFile(el.files[0])}else values[label]=ndFormFieldValue(el)}
  if(values['Department']!=='Other')values['Other Department']='';
-for(let i=0;i<signing.length;i++){const [label,kind]=signing[i],el=panel.querySelector(`[data-nd-field="Doc${i}"]`);if(kind==='signature'){if(el.dataset.modified||!values[label])values[label]=el.dataset.ink?{name:label,data:el.toDataURL('image/png')}:'';}else if(kind==='file'){if(el.files?.[0])values[label]=await readFile(el.files[0])}else values[label]=ndFormFieldValue(el)}ndValidateInterviewEmployment(values);await window.ndInterviewContacts.check(client(),values,current.id);values['Person in Charge']=await window.ndLoadCurrentAccountName(client());return values};
+for(let i=0;i<signing.length;i++){const [label,kind]=signing[i],el=panel.querySelector(`[data-nd-field="Doc${i}"]`);if(kind==='signature'){if(el.dataset.modified||!values[label])values[label]=el.dataset.ink?{name:label,data:el.toDataURL('image/png')}:'';}else if(kind==='file'){if(values['Passport Status']==='No Passport'&&['Passport Photo Front','Passport Photo Back'].includes(label)){values[label]='';continue;}if(el.files?.[0])values[label]=await readFile(el.files[0])}else values[label]=ndFormFieldValue(el)}ndValidateInterviewEmployment(values);await window.ndInterviewContacts.check(client(),values,current.id);values['Person in Charge']=await window.ndLoadCurrentAccountName(client());return values};
  const render=()=>{preview.innerHTML='<style>'+ND_INTERVIEW_DOC_STYLE+'</style>'+interviewDocumentMarkup(applyInterviewBranding({...current.form_data}))};render();
  const describeError=(error,phase)=>{const parts=[error?.message,error?.details,error?.hint,error?.code].filter(Boolean).map(String);return phase+': '+(parts.length?[...new Set(parts)].join(' · '):'The server rejected the request.')};
  const request=async build=>{const controller=new AbortController();let timer;try{return await Promise.race([Promise.resolve(build(controller.signal)),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('The connection is taking too long. Please try again.'))},25000)})])}finally{clearTimeout(timer)}};
@@ -34798,7 +34793,47 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #ndBonusLedger .ndbl-metrics>div{background:#f2f6f3;border-radius:12px;padding:12px;min-width:140px}
 #ndBonusLedger [data-ndbl-message]{min-height:20px;color:#345c48}
 </style>
-
+<script id="nd-bonus-ledger-v1">
+(()=>{'use strict';
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+const client=()=>typeof salaryDb!=='undefined'?salaryDb:null;
+let employees=[],awards=[],settlements=[],incidents=[],activeBranch='',ready=false;
+const month=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).slice(0,7);
+const msg=t=>{const e=$('ndblMessage');if(e)e.textContent=t};
+const admin=()=>['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(window.currentUserEmail||'').toLowerCase());
+function setup(){if(ready)return;const page=$('bonusPage'),shell=page?.querySelector('.bonus-shell');if(!shell)return;ready=true;
+const section=document.createElement('section');section.id='ndBonusLedger';section.innerHTML=`<h2>Accumulated Staff Bonus</h2><p class="helper">Selected staff only. MC / poor performance: do not award for that month. Company fines are tracked separately.</p>
+<div class="ndbl-grid"><label>Branch<select id="ndblBranch"></select></label><label>Month<input type="month" id="ndblMonth"></label><label>Employee<select id="ndblEmployee"></select></label><label>Bonus Amount (RM)<input id="ndblAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label>Reason<select id="ndblReason"><option value="Monthly selected bonus">Eligible - Monthly bonus</option><option value="Performance bonus">Eligible - Performance bonus</option><option value="Target bonus">Eligible - Target bonus</option></select></label></div>
+<div class="ndbl-actions"><button class="btn primary" id="ndblAward" type="button">Award Selected Employee</button><button class="btn" id="ndblSettle" type="button">Settle Bonus</button><button class="btn" id="ndblRefresh" type="button">Refresh</button></div><p data-ndbl-message id="ndblMessage" role="status"></p>
+<div class="ndbl-metrics"><div>Accumulated Earned<br><strong id="ndblEarned">RM 0.00</strong></div><div>Settled<br><strong id="ndblPaid">RM 0.00</strong></div><div>Remaining<br><strong id="ndblRemaining">RM 0.00</strong></div></div>
+<h3>Employee Bonus Balances</h3><div class="ndbl-table" id="ndblBalances"></div>
+<h3>Monthly Bonus History</h3><div class="ndbl-table" id="ndblHistory"></div>
+<h3>Bonus Settlement Payslips</h3><div class="ndbl-table" id="ndblSlips"></div>`;
+shell.append(section);
+$('ndblMonth').value=month();$('ndblBranch').onchange=()=>{activeBranch=$('ndblBranch').value;populate();render()};$('ndblMonth').onchange=render;
+$('ndblRefresh').onclick=load;
+$('ndblAward').onclick=()=>mutate('award');$('ndblSettle').onclick=()=>mutate('settle');
+$('ndblSlips').onclick=e=>{const b=e.target.closest('[data-ndbl-slip]');if(!b)return;const row=settlements.find(r=>r.id===b.dataset.ndblSlip);if(row)printSlip(row)};
+const original=window.ndSetBonusSubTab;
+window.ndSetBonusSubTab=function(mode){original?.(mode);page.classList.toggle('nd-ledger-mode',mode==='bonus');if(mode==='bonus')void load()};
+const b=$('salaryViewBonusBtn');b?.addEventListener('click',()=>{page.classList.add('nd-ledger-mode');void load()});
+const t=$('salaryViewTargetBonusBtn');t?.addEventListener('click',()=>page.classList.remove('nd-ledger-mode'));
+}
+function populate(){const branches=[...new Set(employees.map(e=>e.outlet).filter(Boolean))];$('ndblBranch').innerHTML=branches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(branches.includes(activeBranch))$('ndblBranch').value=activeBranch;else activeBranch=$('ndblBranch').value;const es=employees.filter(e=>e.outlet===activeBranch&&!e.nd_archived_at&&!e.resignation_date&&!e.last_working_date&&!['resigned','terminated','inactive'].includes(String(e.employment_status||'').toLowerCase()));$('ndblEmployee').innerHTML=es.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}
+async function load(){setup();if(!admin()){msg('Only UMO / Mars can manage the accumulated bonus ledger.');return}const db=client();if(!db){msg('Database not ready');return}msg('Loading...');try{
+const [a,b,c,d]=await Promise.all([db.from('employees').select('*').limit(5000),db.from('nd_bonus_awards').select('*').order('created_at',{ascending:false}).limit(5000),db.from('nd_bonus_settlements').select('*').order('created_at',{ascending:false}).limit(5000),db.from('nd_staff_incidents').select('employee_id,employee_name,outlet,incident_date,approved_amount,review_status,nd_deleted_at').eq('review_status','approved').limit(5000)]);
+for(const x of [a,b,c,d])if(x.error)throw x.error;
+employees=a.data||[];awards=b.data||[];settlements=c.data||[];incidents=d.data||[];populate();render();msg('Loaded. Company fines are separate from bonus balances.');}catch(e){msg('Unable to load: '+e.message)}}
+function render(){if(!$('ndblBranch'))return;const branch=activeBranch,m=$('ndblMonth').value,byId=new Map(employees.map(e=>[Number(e.id),e]));const a=awards.filter(x=>x.branch===branch),s=settlements.filter(x=>x.branch===branch);const sum=x=>x.reduce((n,r)=>n+Number(r.amount||0),0);$('ndblEarned').textContent=money(sum(a));$('ndblPaid').textContent=money(sum(s));$('ndblRemaining').textContent=money(sum(a)-sum(s));
+const ids=[...new Set([...a,...s].map(x=>Number(x.employee_id)))];$('ndblBalances').innerHTML='<table><thead><tr><th>Employee</th><th>Earned</th><th>Settled</th><th>Remaining</th></tr></thead><tbody>'+ids.map(id=>{const ea=sum(a.filter(x=>Number(x.employee_id)===id)),paid=sum(s.filter(x=>Number(x.employee_id)===id));return `<tr><td>${esc(byId.get(id)?.name||id)}</td><td>${money(ea)}</td><td>${money(paid)}</td><td><strong>${money(ea-paid)}</strong></td></tr>`}).join('')+'</tbody></table>';
+const history=a.filter(x=>x.bonus_month===m);$('ndblHistory').innerHTML='<table><thead><tr><th>Month</th><th>Employee</th><th>Reason</th><th>Bonus</th><th>Recorded</th></tr></thead><tbody>'+history.map(x=>`<tr><td>${esc(x.bonus_month)}</td><td>${esc(byId.get(Number(x.employee_id))?.name||x.employee_id)}</td><td>${esc(x.reason)}</td><td>${money(x.amount)}</td><td>${esc(String(x.created_at).slice(0,10))}</td></tr>`).join('')+(history.length?'':'<tr><td colspan="5">No selected bonus for this month.</td></tr>')+'</tbody></table>';
+$('ndblSlips').innerHTML='<table><thead><tr><th>Date</th><th>Employee</th><th>Amount</th><th>Payslip</th></tr></thead><tbody>'+s.filter(x=>String(x.settlement_date).slice(0,7)===m).map(x=>`<tr><td>${esc(x.settlement_date)}</td><td>${esc(byId.get(Number(x.employee_id))?.name||x.employee_id)}</td><td>${money(x.amount)}</td><td><button class="btn" data-ndbl-slip="${esc(x.id)}">View / Print</button></td></tr>`).join('')+'</tbody></table>'}
+async function mutate(mode){if(!admin())return msg('UMO / Mars only');const db=client(),branch=$('ndblBranch').value,id=Number($('ndblEmployee').value),amount=Number($('ndblAmount').value);if(!id||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100&&Math.abs(Math.round(amount*100)-amount*100)>.00001)return msg('Select an employee and a valid amount.');const employee=employees.find(e=>Number(e.id)===id);if(!employee||employee.outlet!==branch)return msg('Employee / branch mismatch');const earned=awards.filter(x=>Number(x.employee_id)===id&&x.branch===branch).reduce((n,x)=>n+Number(x.amount),0),paid=settlements.filter(x=>Number(x.employee_id)===id&&x.branch===branch).reduce((n,x)=>n+Number(x.amount),0);if(mode==='settle'&&amount>earned-paid)return msg('Amount exceeds remaining bonus');if(!confirm(`${mode==='award'?'Award':'Settle'} ${money(amount)} for ${employee.name}?`))return;const btn=$(mode==='award'?'ndblAward':'ndblSettle');btn.disabled=true;try{const result=await db.rpc(mode==='award'?'nd_bonus_award':'nd_bonus_settle',mode==='award'?{p_branch:branch,p_employee_id:id,p_month:$('ndblMonth').value,p_amount:amount,p_reason:$('ndblReason').value}:{p_branch:branch,p_employee_id:id,p_amount:amount});if(result.error)throw result.error;await load();msg(mode==='award'?'Bonus awarded.':'Bonus settled. Open the payslip in the settlement month.');}catch(e){msg('Unable to save: '+e.message)}finally{btn.disabled=false}}
+function printSlip(r){const e=employees.find(x=>Number(x.id)===Number(r.employee_id));const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Bonus Payslip</title><style>body{font:15px Arial;color:#243e33;padding:40px;max-width:750px;margin:auto}h1{border-bottom:2px solid #294b3d;padding-bottom:15px}table{width:100%;border-collapse:collapse}td{padding:13px;border-bottom:1px solid #ddd}td:first-child{font-weight:bold;width:40%}@media print{button{display:none}}</style></head><body><h1>NATURE'S DAO · BONUS PAYSLIP</h1><table><tr><td>Reference</td><td>${esc(r.id)}</td></tr><tr><td>Employee</td><td>${esc(e?.name||r.employee_id)}</td></tr><tr><td>Branch</td><td>${esc(r.branch)}</td></tr><tr><td>Settlement Date</td><td>${esc(r.settlement_date)}</td></tr><tr><td>Bonus Paid</td><td><strong>${money(r.amount)}</strong></td></tr></table><p>Separate bonus settlement record. Not a salary payroll deduction.</p><button onclick="print()">Print / Save PDF</button></body></html>`;const blob=new Blob([html],{type:'text/html'}),url=URL.createObjectURL(blob);const w=window.open(url,'_blank');if(!w)alert('Allow pop-ups to open the bonus payslip.');setTimeout(()=>URL.revokeObjectURL(url),60000)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
 <style id="nd-company-fine-style">#ndCompanyFineDialog{width:min(900px,96vw);max-height:90dvh;border:1px solid #dce5e0;border-radius:16px;padding:22px}#ndCompanyFineDialog::backdrop{background:#0008}#ndCompanyFineDialog .ndcf-table{overflow-x:auto}#ndCompanyFineDialog table{min-width:650px}</style>
 <script id="nd-company-fine-v1">(()=>{'use strict';const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const fmt=n=>'RM '+Number(n||0).toFixed(2);function setup(){const target=$('salaryViewTargetBonusBtn');if(!target||$('ndCompanyFineBtn'))return;const button=document.createElement('button');button.type='button';button.className='salary-view-btn';button.id='ndCompanyFineBtn';button.textContent='Company Fine';target.insertAdjacentElement('afterend',button);const d=document.createElement('dialog');d.id='ndCompanyFineDialog';d.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px"><h2>Company Fine · Staff Only</h2><button class="btn" data-close type="button">Close</button></div><p class="helper">Approved employee fines only. Manager fines are excluded. This report does not affect bonus balances or payroll.</p><label>Month <input id="ndcfMonth" type="month"></label><p id="ndcfStatus" role="status"></p><h3 id="ndcfTotal"></h3><div class="ndcf-table" id="ndcfRows"></div>';document.body.append(d);d.querySelector('[data-close]').onclick=()=>d.close();$('ndcfMonth').value=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).slice(0,7);$('ndcfMonth').onchange=load;button.onclick=()=>{d.showModal();void load()};async function load(){const db=typeof salaryDb!=='undefined'?salaryDb:null;if(!db)return $('ndcfStatus').textContent='Database unavailable';$('ndcfStatus').textContent='Loading...';try{const [a,b]=await Promise.all([db.from('nd_staff_incidents').select('id,employee_id,employee_name,outlet,incident_date,approved_amount,review_status,nd_deleted_at').eq('review_status','approved').gte('incident_date',$('ndcfMonth').value+'-01').lt('incident_date',(()=>{const [y,m]=$('ndcfMonth').value.split('-').map(Number);return new Date(Date.UTC(y,m,1)).toISOString().slice(0,10)})()).limit(5000),db.from('employees').select('*').limit(5000)]);if(a.error)throw a.error;if(b.error)throw b.error;const staff=new Map((b.data||[]).map(e=>[Number(e.id),e]));let unknown=0,excluded=0;const rows=(a.data||[]).filter(r=>{if(r.nd_deleted_at||Number(r.approved_amount)<=0)return false;const e=staff.get(Number(r.employee_id));if(!e){unknown++;return false}const role=String([e.role,e.position,e.job_title,e.designation,e.employee_role,e.staff_type].filter(Boolean).join(' ')).toLowerCase();if(/manager|店长|经理|supervisor|director/.test(role)){excluded++;return false}if(!role){unknown++;return false}return true});const total=rows.reduce((n,r)=>n+Number(r.approved_amount),0);$('ndcfTotal').textContent='Approved Staff Fines: '+fmt(total);$('ndcfRows').innerHTML='<table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Approved Fine</th></tr></thead><tbody>'+rows.map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${fmt(r.approved_amount)}</td></tr>`).join('')+'</tbody></table>';$('ndcfStatus').textContent=`${rows.length} staff fines · ${excluded} manager/supervisor excluded · ${unknown} unclassified excluded (review employee role)`}catch(e){$('ndcfStatus').textContent='Unable to load: '+e.message}}}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();</script>
 <script id="ndDailyProductDeductionScript">
@@ -34864,21 +34899,6 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 
 <!-- Navigation repair: unify Salary Bonus / Target Bonus tabs. -->
 
-<script id="nd-restored-bonus-history-20261102">
-(()=>{'use strict';
-const $=id=>document.getElementById(id);
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function refresh(){const status=$('ndRestoredBonusHistoryStatus'),body=$('ndRestoredBonusHistoryRows');if(!status||!body)return;
-const db=window.salaryDb;if(!db){status.textContent='Sign in to view saved bonus history.';return;}
-status.textContent='Loading saved bonus history…';try{
-const {data,error}=await db.from('branch_bonus_monthly').select('bonus_month,branch,employee_id,employee_name,eligible,bonus_amount').order('bonus_month',{ascending:false}).limit(1000);
-if(error)throw error;const rows=data||[];
-body.innerHTML=rows.map(r=>'<tr><td>'+esc(r.bonus_month)+'</td><td>'+esc(r.branch)+'</td><td>'+esc(r.employee_name||r.employee_id)+'</td><td>'+ (r.eligible===true?'Yes':r.eligible===false?'No':'—')+'</td><td>RM '+Number(r.bonus_amount||0).toFixed(2)+'</td></tr>').join('')||'<tr><td colspan="5">No saved bonus records accessible to this account.</td></tr>';
-status.textContent=rows.length+' saved bonus record(s) loaded. These are historical database records, not newly generated awards.';
-}catch(e){status.textContent='Unable to load saved history: '+(e.message||e);body.replaceChildren();}}
-function init(){$('ndRestoredBonusHistoryRefresh')?.addEventListener('click',refresh);document.addEventListener('nd-bonus-open',()=>{if(!$('bonusPage')?.classList.contains('nd-target-only'))void refresh()});}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-})();</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
@@ -35397,17 +35417,11 @@ body[data-nd-visible-page="bonus"] #appView,
 body[data-nd-visible-page="bonus"] #rosterPage,
 body[data-nd-visible-page="bonus"] #ndStaffFinancePage {display:none!important}
 body[data-nd-visible-page="bonus"] #bonusPage {display:block!important;visibility:visible!important;opacity:1!important}
-#bonusPage.nd-ledger-mode #ndBonusLedger {display:none!important}
+#bonusPage.nd-ledger-mode #ndBonusLedger {display:block!important}
 #bonusPage.nd-ledger-mode #targetBonusSection {display:none!important}
 #bonusPage.nd-target-only #ndBonusLedger {display:none!important}
 #bonusPage.nd-target-only #targetBonusSection {display:block!important}
 #bonusPage .bonus-shell {width:100%;min-width:0}
-#bonusPage.nd-target-only .bonus-shell > .bonus-card{display:none!important}
-#bonusPage:not(.nd-target-only) .bonus-shell > .bonus-card{display:block!important}
-#bonusPage:not(.nd-target-only) #targetBonusSection{display:none!important}
-#bonusPage.nd-target-only #targetBonusSection{display:block!important}
-#bonusPage .bonus-top{padding-top:4px}
-@media(max-width:600px){#bonusPage .bonus-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important}#bonusPage .bonus-title{font-size:22px!important}}
 #bonusPage .bonus-top {margin-bottom:14px}
 #ndBonusSalaryTabs {display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 #ndBonusSalaryTabs button {min-height:44px}
@@ -35431,7 +35445,7 @@ body[data-nd-visible-page="bonus"] #bonusPage {display:block!important;visibilit
    if(salary)salary.style.setProperty('display','none','important');
    page.classList.add('active','sidebar-offset');page.hidden=false;
    page.style.setProperty('display','block','important');
-   page.classList.remove('nd-ledger-mode');
+   page.classList.toggle('nd-ledger-mode',mode==='bonus');
    page.classList.toggle('nd-target-only',mode==='target');
    $('salaryViewBonusBtn')?.classList.toggle('active',mode==='bonus');
    $('salaryViewTargetBonusBtn')?.classList.toggle('active',mode==='target');
