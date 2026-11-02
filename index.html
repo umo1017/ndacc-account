@@ -299,6 +299,8 @@ function signedView(document){
  #ndProBetaPage:has(.pro-calendar)>#ndProHamburger{top:calc(env(safe-area-inset-top) + 7px)!important}
 }
 </style>
+
+
 </body></html>';
  return window.ndOpenInlineDocument(html,'Salary Advance Repayment');
 }
@@ -35415,6 +35417,16 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #proRefAddCustomerModal #proQuickSave{background:#187cf1!important;color:#fff!important;border:0!important;padding:17px!important;border-radius:15px!important;font-weight:800}
 @media(max-width:480px){#ndProBookingModal .pro-booking-panel{width:100%!important;max-width:100%!important}#ndProBookingModal .proref-datetime{padding:13px 12px}#ndProBookingModal .proref-phone-row{padding:11px 14px}}
 </style>
+<style id="nd-pro-no-branch-and-tap-fix">
+/* Branch is managed outside the appointment calendar. Keep the hidden select for existing app state. */
+#ndProBetaPage .proref-branch-choice,
+#ndProBetaPage .proref-calendar-toolbar:has(> .proref-branch-choice){display:none!important;}
+#ndProBetaPage .proref-calendar-toolbar{margin:0!important;padding:0!important;min-height:0!important;height:0!important;border:0!important;overflow:hidden!important;}
+#ndProBetaPage .proref-calendar-grid button.proref-empty{pointer-events:auto!important;touch-action:manipulation!important;cursor:pointer!important;position:relative!important;z-index:2!important;}
+#ndProBetaPage .proref-calendar-grid button.proref-booking{pointer-events:auto!important;touch-action:manipulation!important;position:relative!important;z-index:3!important;}
+#ndProBetaPage .proref-calendar-grid button.pro-resting{cursor:not-allowed!important;}
+#ndProBookingModal:not([hidden]){z-index:2147483000!important;}
+</style>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
@@ -36594,7 +36606,28 @@ function showBooking(){displayCustomer();appointmentCard.hidden=false;bookingMou
 function closeBooking(){closeCustomer();el('ndProBookingModal').hidden=true;bookingHome.appendChild(appointmentCard);appointmentCard.hidden=true;el('proQuickCustomer').hidden=true;}
 function reset(){form.reset();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
 function choose(a){form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=mins(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}form.elements.service.value=a.service_name;form.elements.employee.value=assigned(a.id)[0]||'';form.elements.room_id.value=a.room_id||'';displayCustomer();el('proAppointmentHeading').textContent=tr('Edit Appointment','编辑预约');el('proAppointmentSave').textContent=tr('Save Changes','保存修改');el('proAppointmentReset').hidden=false;el('proAppointmentCancel').hidden=a.status==='cancelled'||a.status==='completed';showBooking();}
-host.querySelectorAll('[data-slot]').forEach(b=>b.onclick=()=>{reset();form.elements.time.value=b.dataset.slot;form.elements.employee.value=b.dataset.staff;const member=staff.find(s=>String(s.id)===b.dataset.staff);if(branch==='all'&&member)form.elements.branch.value=member.outlet;if(b.dataset.room)form.elements.room_id.value=b.dataset.room;showBooking();});
+host.querySelectorAll('[data-slot]').forEach(b=>{
+  b.style.pointerEvents='auto';
+  b.style.touchAction='manipulation';
+  b.onclick=(event)=>{
+    event.preventDefault();
+    event.stopPropagation();
+    if(b.hasAttribute('data-rest-blocked')){stat(tr('This therapist is off during this period.','该技师在此时段休息。'),true);return;}
+    try{
+      reset();
+      const f=form.elements;
+      if(!f.time||!f.branch||!f.date)throw Error('Appointment form is missing a required field');
+      f.time.value=b.dataset.slot||'';
+      const employeeId=b.dataset.staff||'';
+      if(f.employee&&employeeId)f.employee.value=employeeId;
+      const member=staff.find(s=>String(s.id)===employeeId);
+      if(branch==='all'&&member&&valid.includes(member.outlet))f.branch.value=member.outlet;
+      if(f.room_id&&b.dataset.room)f.room_id.value=b.dataset.room;
+      showBooking();
+      requestAnimationFrame(()=>{const modal=el('ndProBookingModal');if(modal){modal.hidden=false;modal.style.display='';modal.style.zIndex='2147483000';}});
+    }catch(err){console.error('Nature Dao booking grid click failed',err);stat('Unable to open appointment: '+(err?.message||String(err)),true);alert('Unable to open appointment: '+(err?.message||String(err)));}
+  };
+});
 host.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const a=appointments.find(x=>x.id===b.dataset.edit);if(a)choose(a);});
 el('proNewBooking').onclick=()=>{reset();showBooking()};
 el('ndProBookingClose').onclick=closeBooking;
