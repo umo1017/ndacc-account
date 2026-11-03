@@ -6995,7 +6995,17 @@ return `<div class="history-date-card">
     root.querySelectorAll('[data-history-remove]').forEach(btn=>btn.onclick=async()=>{if(btn.disabled)return;btn.disabled=true;try{const result=await db.from("daily_history_access").delete().eq("email",btn.dataset.historyRemove);if(result.error)throw result.error;await renderHistoryAccessManager();}catch(error){alert('Unable to remove access: '+(error?.message||error));}finally{if(btn.isConnected)btn.disabled=false;}});
   }
 
+  // One in-flight cloud read shared by all callers. Prevents older requests
+  // committing after a newer request and corrupting cross-device balances.
+  let ndCashSnapshotInFlight=null;
   async function fetchRows({silent=false}={}){
+    if(ndCashSnapshotInFlight) return ndCashSnapshotInFlight;
+    const task=ndCashLoadSnapshot({silent});
+    ndCashSnapshotInFlight=task;
+    try{return await task;}
+    finally{if(ndCashSnapshotInFlight===task)ndCashSnapshotInFlight=null;}
+  }
+  async function ndCashLoadSnapshot({silent=false}={}){
     // Background cash refresh must not reset Daily Settlement's visible status.
     if(!silent){$("syncState").textContent="正在同步…";$("syncState").className="";}
     const advanceTask=(async()=>{
@@ -7023,28 +7033,43 @@ return `<div class="history-date-card">
         new Promise((_,reject)=>{ndFetchTimeoutHandle=setTimeout(()=>reject(new Error('云端读取超过25秒，请检查网络或数据库查询')),ndFetchTimeoutMs);})
       ]);
     }catch(err){
+      ndCashCloudSnapshotReady=false;
       if(!silent){$("syncState").textContent='同步失败：'+(err?.message||String(err));$("syncState").className='bad';}
       console.warn('Daily Settlement cloud fetch interrupted:',err);
+      updateTodayTotalCash();
+      if($("cashBalance"))$("cashBalance").value='Unavailable';
+      if($("metricCashBalance"))$("metricCashBalance").textContent='Unavailable';
       return false;
     }finally{clearTimeout(ndFetchTimeoutHandle);}
     const [dailyRes,remittanceRes,advanceRes,expenseRes]=ndFetchResults;
-    if(expenseRes.error){ndApprovedCashExpenseError=expenseRes.error.message||String(expenseRes.error);ndApprovedCashExpenseRows=[];}
-    else{ndApprovedCashExpenseError='';ndApprovedCashExpenseRows=expenseRes.data||[];}
-    if(advanceRes.error){ndCashAdvanceReady=false;ndCashAdvanceError=advanceRes.error.message||String(advanceRes.error);ndCashAdvanceEntries=[];}
-    else{ndCashAdvanceEntries=advanceRes.data;ndCashAdvanceReady=true;ndCashAdvanceError='';}
-    if(dailyRes.error){if(!silent){$("syncState").textContent="同步失败："+dailyRes.error.message;$("syncState").className="bad";}return false;}
-    allRows=dailyRes.data||[];
-    ndCashCloudSnapshotReady=true;
-    if(remittanceRes.error){
-      console.warn("cash_remittances unavailable:",remittanceRes.error.message);
-      ndCashRemittanceError=String(remittanceRes.error.message||remittanceRes.error);
-      cashRemittances=[];
-      renderMyCashRemittanceHistory(ndCashRemittanceError);
-    }else{
-      ndCashRemittanceError='';
-      cashRemittances=remittanceRes.data||[];
-      await loadSelectedCashTransferHistory();
+    const issues=[
+      dailyRes.error&&('Daily Settlement: '+(dailyRes.error.message||dailyRes.error)),
+      remittanceRes.error&&('Bank Transfer: '+(remittanceRes.error.message||remittanceRes.error)),
+      advanceRes.error&&('Salary Advance: '+(advanceRes.error.message||advanceRes.error)),
+      expenseRes.error&&('Approved Cash Expense: '+(expenseRes.error.message||expenseRes.error))
+    ].filter(Boolean);
+    if(issues.length){
+      // Keep the last complete snapshot for histories, but NEVER expose its
+      // balance as if the newer partial read were an authoritative amount.
+      ndCashCloudSnapshotReady=false;
+      ndCashAdvanceError=advanceRes.error?String(advanceRes.error.message||advanceRes.error):'';
+      ndCashRemittanceError=remittanceRes.error?String(remittanceRes.error.message||remittanceRes.error):'';
+      ndApprovedCashExpenseError=expenseRes.error?String(expenseRes.error.message||expenseRes.error):'';
+      if(!silent){$("syncState").textContent='同步失败：'+issues.join(' | ');$("syncState").className='bad';}
+      updateTodayTotalCash();
+      if($("cashBalance"))$("cashBalance").value='Unavailable';
+      if($("metricCashBalance"))$("metricCashBalance").textContent='Unavailable';
+      return false;
     }
+    // Commit the complete, validated cloud snapshot in a single JS turn.
+    allRows=dailyRes.data||[];
+    cashRemittances=remittanceRes.data||[];
+    ndCashAdvanceEntries=advanceRes.data||[];
+    ndApprovedCashExpenseRows=expenseRes.data||[];
+    ndCashAdvanceReady=true;
+    ndCashAdvanceError='';ndCashRemittanceError='';ndApprovedCashExpenseError='';
+    ndCashCloudSnapshotReady=true;
+    await loadSelectedCashTransferHistory();
     renderDailyBranchButtons();
     const cashProblems=[ndCashAdvanceError&&('Salary Advance: '+ndCashAdvanceError),ndCashRemittanceError&&('Cash Remittance: '+ndCashRemittanceError),ndApprovedCashExpenseError&&('Approved Cash Expenses: '+ndApprovedCashExpenseError)].filter(Boolean);
     if(!silent||cashProblems.length){
@@ -7095,7 +7120,7 @@ return `<div class="history-date-card">
   }
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')ndRefreshCashCloudBalance();});
   window.addEventListener('focus',ndRefreshCashCloudBalance);
-  window.setInterval(ndRefreshCashCloudBalance,120000);
+  window.setInterval(ndRefreshCashCloudBalance,30000);
 
   // Cash -> Petty reminder: only persisted transfers; X closes temporarily,
   // Understood acknowledges the saved branch/date/total for this browser session.
@@ -11609,7 +11634,7 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
       empId,t,"employee_socso_l24",employeeSocsoWithLindung(s),salaryMonth,source
     );
     // The input contains Employee SOCSO + L24. Recover the L24 component
-    // so its signed addition affects Allowance and Total Deduction immediately.
+    // so its amount affects Allowance and Total Deduction immediately.
     s.employee_lindung24=+(Number(s.employee_socso_l24||0)-Number(s.employee_socso||0)).toFixed(2);
   }
 
@@ -11657,11 +11682,10 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
 // Nature's Dao internal 7th worksheet formula. Manually entered amounts remain authoritative.
 function ndSevenUserDeduction(s={}){
   const v=k=>Number(s[k]||0);
-  // Signed 7th Total Deduction:
-  // - Employee EPF - Employee SOCSO + L24 - Employee EIS - Unpaid - PCB/Tax.
-  // The amounts in their input fields remain positive; signs apply to the total only.
-  return +(-v('employee_epf')-v('employee_socso')+v('employee_lindung24')-
-    v('employee_eis')-v('off_day_deduction')-v('tax')).toFixed(2);
+  // 7th Total Deduction: Employee EPF + Employee SOCSO + L24
+  // + Employee EIS + Unpaid + PCB / Tax.
+  return +(v('employee_epf')+v('employee_socso')+v('employee_lindung24')+
+    v('employee_eis')+v('off_day_deduction')+v('tax')).toFixed(2);
 }
 // Original Allowance stays editable and stored unchanged. The adjusted Allowance
 // is calculated once for display/Gross Pay, never written back as the source value.
@@ -11675,8 +11699,8 @@ function ndSevenUserTotals(s={}){
   const adjustedAllowance=ndSevenAdjustedAllowance(s);
   const gross=+(v('guaranteed_pay')+adjustedAllowance+v('ot')).toFixed(2);
   const deduction=ndSevenUserDeduction(s);
-  // Total Deduction is already signed: add it, do not subtract it twice.
-  const net=+(gross+deduction).toFixed(2);
+  // Total Deduction contains positive amounts, subtract once from Gross Pay.
+  const net=+(gross-deduction).toFixed(2);
   return {adjusted_allowance:adjustedAllowance,gross_pay:gross,total_deduction:deduction,net_pay:net};
 }
 
@@ -14947,9 +14971,9 @@ function bindSalaryTableActions(){
       // If the 7th payroll was already confirmed, update that confirmed snapshot too.
       if(snap){
         const oldTax=Number(snap.tax||0);
-        // PCB/Tax contributes negatively to the signed Total Deduction.
-        const newTotal=+(Number(snap.total_deduction||0)+oldTax-effectiveTax).toFixed(2);
-        const newNet=+(Number(snap.gross_pay||0)+newTotal).toFixed(2);
+        // PCB/Tax increases the positive Total Deduction.
+        const newTotal=+(Number(snap.total_deduction||0)-oldTax+effectiveTax).toFixed(2);
+        const newNet=+(Number(snap.gross_pay||0)-newTotal).toFixed(2);
         const {error}=await salaryDb.from("payroll_snapshot").update({
           tax:+effectiveTax.toFixed(2),
           total_deduction:newTotal,
@@ -20482,11 +20506,17 @@ async function ndRefreshVisibleData(changedTables){
     if(page==="daily" && dailyChanged){
       try{
         if(tables.has("daily_outlets")) await loadDailyOutlets();
-        await fetchRows();
-        const d=getActiveDailyDate();
-        if(document.getElementById("settlementDate")) document.getElementById("settlementDate").value=d;
-        await loadDate(d);
-        renderAll();
+        const ndCloudOk=await fetchRows({silent:true});
+        if(ndCloudOk){
+          // Remote changes refresh the official cloud balance, not draft form inputs.
+          if(!dailyDirty){
+            const d=getActiveDailyDate();
+            if(document.getElementById("settlementDate")) document.getElementById("settlementDate").value=d;
+            await loadDate(d);
+          }
+          renderAll();
+          calc();
+        }
 
         if(document.getElementById("historyModal")?.classList.contains("open")){
           renderCombinedHistory();
