@@ -11,7 +11,7 @@
 #ndExpenseRequestHistory [data-exp-close]{background:#fff0f0!important;border:1px solid #ffd0d0!important;color:#b42318!important;font-size:22px;font-weight:800;min-width:40px;min-height:40px;padding:4px!important}
 #ndExpenseRequestHistory .nd-exp-history-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
 #ndExpenseRequestHistory .nd-exp-history-controls label{margin:0;font-size:13px}
-#ndExpenseRequestHistory [data-exp-month]{min-height:40px;width:160px}
+#ndExpenseRequestHistory [data-exp-date]{min-height:40px;width:170px}
 #ndExpenseRequestHistory [data-exp-message]{font-size:12px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;margin:8px 0}
 #ndExpenseRequestHistory .nd-exp-history-list{display:block;width:100%}
 #ndExpenseRequestHistory .nd-exp-month-row{border:1px solid #e3eae5;border-radius:12px;padding:12px;margin:8px 0;background:#fff}
@@ -35397,15 +35397,14 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void load(
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const db=()=>window.salaryDb||window.supabaseClient||window.supabaseDb||null;
-const myMonth=()=>{const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit'}).formatToParts(new Date());return p.find(x=>x.type==='year').value+'-'+p.find(x=>x.type==='month').value};
+const myDay=()=>{const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const get=k=>p.find(x=>x.type===k)?.value||'';return get('year')+'-'+get('month')+'-'+get('day');};
 let rows=[],loading=false,again=false,loadedKey='',lastLoad=0,token=0,canVerify=false,canDelete=false,hasVerificationColumn=true;
 function branch(){return String(document.querySelector('#dailyBranchToggle .branch-btn.active')?.dataset.branch||localStorage.getItem('nd_daily_branch_v1')||'Eco Botanic');}
-function monthNext(ym){const [y,m]=ym.split('-').map(Number);return (m===12?y+1:y)+'-'+String(m===12?1:m+1).padStart(2,'0')+'-01';}
-function mount(){const old=$('pettyBody');if(!old)return null;let root=$('ndExpenseRequestHistory');if(root)return root;root=document.createElement('section');root.id='ndExpenseRequestHistory';root.innerHTML='<div class="nd-exp-history-heading"><strong>Cash Expense History</strong><button type="button" data-exp-close aria-label="Close history" title="Close">✕</button></div><div class="nd-exp-history-controls"><label>Month <input type="month" data-exp-month></label><button type="button" data-exp-refresh>Refresh</button></div><div data-exp-message role="status" aria-live="polite"></div><div class="nd-exp-history-list" data-exp-rows></div>';
+function mount(){const old=$('pettyBody');if(!old)return null;let root=$('ndExpenseRequestHistory');if(root)return root;root=document.createElement('section');root.id='ndExpenseRequestHistory';root.innerHTML='<div class="nd-exp-history-heading"><strong>Cash Expense History</strong><button type="button" data-exp-close aria-label="Close history" title="Close">✕</button></div><div class="nd-exp-history-controls"><label>Date <input type="date" data-exp-date></label><button type="button" data-exp-refresh>Refresh</button></div><div data-exp-message role="status" aria-live="polite"></div><div class="nd-exp-history-list" data-exp-rows></div>';
  (old.closest('.nd-petty-history-table')||old.parentElement).after(root);
- root.querySelector('[data-exp-month]').value=($('settlementDate')?.value||myMonth()).slice(0,7);
+ root.querySelector('[data-exp-date]').value=$('settlementDate')?.value||myDay();
  root.querySelector('[data-exp-refresh]').onclick=()=>void load(true);
- root.querySelector('[data-exp-month]').onchange=()=>void load(true);
+ root.querySelector('[data-exp-date]').onchange=()=>void load(true);
  root.querySelector('[data-exp-close]').onclick=()=>{root.hidden=true;};
  root.addEventListener('click',onClick);return root;}
 function value(r){return Number(r.status==='approved'?(r.review_amount??r.amount):r.amount)||0;}
@@ -35413,17 +35412,17 @@ function render(){const root=mount();if(!root)return;const amount=n=>'RM '+Numbe
  const status=r.receipt_verification||'pending';const proof=!!r.receipt_path;
  const badge=proof?(status==='correct'?'<span class="nd-exp-v-good">✓ Correct</span>':status==='error'?'<span class="nd-exp-v-bad">✕ Error</span>':'<span class="nd-exp-v-wait">Unverified</span>'):'<span class="nd-exp-v-wait">No receipt</span>';
  return `<article class="nd-exp-month-row"><div class="nd-exp-month-top"><strong>${esc(r.expense_date)}</strong><strong style="color:${window.ndCashExpenseIsDebited?.(r)?'#b42318':'#64748b'}">${window.ndCashExpenseIsDebited?.(r)?'− ':''}${amount(value(r))}</strong></div><div class="nd-exp-month-reason">${esc(r.expense_reason||'Cash Expense')}</div><div class="nd-exp-month-meta">${esc(r.branch)} · ${esc(r.status||'pending')} · ${badge}</div><div class="nd-exp-actions">${proof?`<button type="button" data-exp-receipt="${esc(r.id)}">View Receipt</button>`:''}${canVerify&&hasVerificationColumn?`<button type="button" class="nd-exp-correct" data-exp-verify="${esc(r.id)}" data-exp-status="correct">Correct</button><button type="button" class="nd-exp-error" data-exp-verify="${esc(r.id)}" data-exp-status="error">Error</button>`:''}${canDelete?`<button type="button" data-exp-delete="${esc(r.id)}">Delete</button>`:''}</div></article>`;
- }).join('')||'<p class="nd-exp-empty">No submitted Cash Expenses for this month.</p>';
+ }).join('')||'<p class="nd-exp-empty">No submitted Cash Expenses for this date.</p>';
 }
 async function load(force=false){const root=mount(),client=db();if(!root)return;if(!client){root.querySelector('[data-exp-message]').textContent='Please sign in to load Cash Expense History.';return;}if(root.hidden&&!force)return;
- const ym=root.querySelector('[data-exp-month]').value||myMonth();if(!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(ym))return;
- const br=branch(),key=br+'|'+ym;if(!force&&key===loadedKey&&Date.now()-lastLoad<15000)return;
+ const day=root.querySelector('[data-exp-date]').value||myDay();if(!/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/.test(day))return;
+ const br=branch(),key=br+'|'+day;if(!force&&key===loadedKey&&Date.now()-lastLoad<15000)return;
  if(loading){again=true;return;}loading=true;const seq=++token;root.querySelector('[data-exp-message]').textContent='Loading saved records…';
  try{
   const auth=await client.auth.getUser();if(auth.error)throw auth.error;const email=String(auth.data?.user?.email||'').toLowerCase();canVerify=email==='umo1017@gmail.com';canDelete=['umo1017@gmail.com','mars83002566@gmail.com'].includes(email);
-  const start=ym+'-01',end=monthNext(ym);let all=[],schemaReady=true;
+  let all=[],schemaReady=true;
   for(let offset=0;offset<10000;offset+=500){
-   const build=cols=>{let q=client.from('nd_cash_expense_requests').select(cols).gte('expense_date',start).lt('expense_date',end).order('expense_date',{ascending:false}).order('submitted_at',{ascending:false}).range(offset,offset+499);if(br&&br!=='Global'&&br!=='All'&&br!=='all')q=q.eq('branch',br);return q;};
+   const build=cols=>{let q=client.from('nd_cash_expense_requests').select(cols).eq('expense_date',day).order('expense_date',{ascending:false}).order('submitted_at',{ascending:false}).range(offset,offset+499);if(br&&br!=='Global'&&br!=='All'&&br!=='all')q=q.eq('branch',br);return q;};
    const cols='id,branch,expense_date,expense_reason,amount,review_amount,status,receipt_path,submitted_at,receipt_verification';
    let result=await build(cols);
    if(result.error&&(/receipt_verification|PGRST204|42703/i).test(String(result.error.message||'')+' '+String(result.error.code||''))){schemaReady=false;result=await build(cols.replace(',receipt_verification',''));}
@@ -35443,8 +35442,8 @@ async function onClick(e){const button=e.target.closest('button');if(!button)ret
  }catch(err){alert('Cash Expense action failed: '+(err?.message||err));}finally{button.disabled=false;}}
 function start(){const root=mount(),expand=$('ndExpenseExpand');if(!root)return;
  // This history is embedded inside Cash Expense, not a second navigation button.
- expand?.addEventListener('toggle',()=>{if(expand.open){root.hidden=false;root.querySelector('[data-exp-month]').value=($('settlementDate')?.value||myMonth()).slice(0,7);void load(true);}});
- $('settlementDate')?.addEventListener('change',()=>{const month=String($('settlementDate').value||'').slice(0,7);if(month)root.querySelector('[data-exp-month]').value=month;if(expand?.open)void load(true);});
+ expand?.addEventListener('toggle',()=>{if(expand.open){root.hidden=false;root.querySelector('[data-exp-date]').value=$('settlementDate')?.value||myDay();void load(true);}});
+ $('settlementDate')?.addEventListener('change',()=>{const day=String($('settlementDate').value||'');if(day)root.querySelector('[data-exp-date]').value=day;if(expand?.open)void load(true);});
  $('dailyBranchToggle')?.addEventListener('click',e=>{if(e.target.closest('[data-branch]')&&expand?.open)setTimeout(()=>void load(true),200);});
  window.addEventListener('nd-cash-expense-reviewed',()=>{if(expand?.open&&!root.hidden)void load(true);});
  window.addEventListener('nd-cash-expense-submitted',()=>{if(expand?.open&&!root.hidden)void load(true);});
