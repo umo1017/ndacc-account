@@ -29,7 +29,7 @@
 @media(max-width:600px){#ndExpenseRequestHistory{padding:10px}#ndExpenseRequestHistory .nd-exp-history-heading{flex-wrap:nowrap}#ndExpenseRequestHistory .nd-exp-actions button{flex:1 1 auto}}
 </style>
 
-<meta name="nd-app-build" content="ND-20261102-14TH-AUTO-READONLY">
+<meta name="nd-app-build" content="ND-20261104-CASH-SYNC-REVIEW">
 <style id="nd-cash-flow-simple-umo">
 #ndCashFlowAuditHistoryBtn{display:none!important}
 #ndCashFlowAuditDialog{width:min(730px,96vw)!important;max-width:96vw!important;padding:16px!important;max-height:85dvh!important}
@@ -5477,6 +5477,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     if(entries){
       let pin=0,pout=0;
       entries.forEach(e=>{
+        if(ndIsNonCashCorrectionEntry(e,r)) return;
         const amount=Number(e?.amount||0);
         if(String(e?.type||"")==="in") pin+=amount;
         else if(String(e?.type||"")==="out") pout+=amount;
@@ -5995,28 +5996,19 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   }
 
 function computedCarryBefore(branch,date,sourceRows=allRows){
-    const rows=(sourceRows||[])
-      .filter(r=>String(r.branch||"")===String(branch||"") && String(r.settlement_date||"")<String(date||""))
-      .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
-
-    if(!rows.length) return {cash:0,petty:0};
-
-    // CASH opening is fully derived from earlier CASH / Withdrawal records.
-    // The first-ever record for a branch starts at RM0 so an old stale
-    // cash_opening cannot contaminate Nusa (or any branch) forever.
-    let cash=0;
-    // Petty Cash may have an intentional starting float, so preserve its first opening.
-    let petty=Number(rows[0].petty_opening||0);
-
-    rows.forEach(r=>{
-      if(String(r.settlement_date||'')>=ND_CASH_LEDGER_START)cash+=Number(r.cash||0)-Number(r.cash_withdrawal||0);
-      const mv=pettyMovementFromRow(r);
-      petty+=mv.pin-mv.pout;
-    });
-    cash-=ndVerifiedTransfers(branch,"",date)
-      .filter(x=>String(x.remittance_date||'')>=ND_CASH_LEDGER_START)
-      .reduce((sum,x)=>sum+Number(x.amount||0),0);
-    cash-=ndCashAdvanceTotal(branch,date,false);
+    const earlier=(sourceRows||[])
+      .filter(r=>String(r.branch||'').trim()===String(branch||'').trim() &&
+        String(r.settlement_date||'')<String(date||'') && !r._missing)
+      .sort((a,b)=>String(a.settlement_date||'').localeCompare(String(b.settlement_date||'')));
+    const selectedDay=new Date(String(date||'')+'T12:00:00Z');
+    if(!Number.isFinite(selectedDay.getTime())) return {cash:0,petty:0};
+    selectedDay.setUTCDate(selectedDay.getUTCDate()-1);
+    const beforeDate=selectedDay.toISOString().slice(0,10);
+    // Explicit cutoff prevents future cash expenses, transfers and advances
+    // from reducing a historical opening balance.
+    const cash=ndCashLedgerBreakdown(branch,earlier,beforeDate).balance;
+    let petty=earlier.length?Number(earlier[0].petty_opening||0):0;
+    for(const r of earlier){const mv=pettyMovementFromRow(r);petty+=mv.pin-mv.pout;}
     return {cash,petty};
   }
 
@@ -6118,88 +6110,16 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
   }
 
   async function repairAllHistoricalCarryForwardBalances(options={}){
-    const silent=options.silent!==false;
-    const {data,error}=await db.from("daily_settlements")
-      .select("*")
-      .order("branch",{ascending:true})
-      .order("settlement_date",{ascending:true});
-
-    if(error){
-      if(!silent){
-        $("syncState").textContent="历史余额检查失败："+error.message;
-        $("syncState").className="bad";
-      }
-      return false;
+    // Never bulk-overwrite stored financial figures using browser state.
+    // A reviewed database reconciliation is required before adjusting history.
+    console.warn('Historical cash rewrite is disabled pending database reconciliation.');
+    if(options.silent===false && $('syncState')){
+      $('syncState').textContent='历史余额批量改写已禁用：请先执行数据库对账。';
+      $('syncState').className='bad';
     }
-
-    const rows=data||[];
-    const branches=[...new Set(rows.map(r=>String(r.branch||"").trim()).filter(Boolean))];
-    let changed=0;
-
-    for(const branch of branches){
-      const branchRows=rows
-        .filter(r=>String(r.branch||"").trim()===branch)
-        .sort((a,b)=>String(a.settlement_date||"").localeCompare(String(b.settlement_date||"")));
-      if(!branchRows.length) continue;
-
-      // CASH opening is derived from historical CASH, withdrawals and verified remittances.
-      // Petty Cash can retain an intentional historical starting float.
-      let carryPetty=Number(branchRows[0].petty_opening||0);
-
-      for(const r of branchRows){
-        const mv=pettyMovementFromRow(r);
-        const grand=["visa","master","amex","bed_fee","tng","cash","alipay","online_card","bank_transfer","tips"]
-          .reduce((sum,k)=>sum+Number(r[k]||0),0);
-        const cashOpening=computedCarryBefore(branch,r.settlement_date,rows).cash;
-        const remittanceToday=verifiedCashRemittanceForDate(branch,r.settlement_date);
-        const cashBalance=String(r.settlement_date||'')<ND_CASH_LEDGER_START?0:cashOpening+Number(r.cash||0)-Number(r.cash_withdrawal||0)-remittanceToday-(ndCashAdvanceTotal(branch,r.settlement_date)-ndCashAdvanceTotal(branch,r.settlement_date,false));
-        const pettyNet=carryPetty+mv.pin-mv.pout;
-
-        const patch={
-          grand_total:grand,
-          cash_opening:cashOpening,
-          cash_balance:cashBalance,
-          petty_opening:carryPetty,
-          petty_in:mv.pin,
-          petty_out:mv.pout,
-          petty_net:pettyNet
-        };
-
-        const differs=
-          Math.abs(Number(r.grand_total||0)-grand)>0.005 ||
-          Math.abs(Number(r.cash_opening||0)-cashOpening)>0.005 ||
-          Math.abs(Number(r.cash_balance||0)-cashBalance)>0.005 ||
-          Math.abs(Number(r.petty_opening||0)-carryPetty)>0.005 ||
-          Math.abs(Number(r.petty_in||0)-mv.pin)>0.005 ||
-          Math.abs(Number(r.petty_out||0)-mv.pout)>0.005 ||
-          Math.abs(Number(r.petty_net||0)-pettyNet)>0.005;
-
-        if(differs){
-          const {error:updateError}=await db.from("daily_settlements").update(patch).eq("id",r.id);
-          if(updateError){
-            if(!silent){
-              $("syncState").textContent="历史余额修复失败："+updateError.message;
-              $("syncState").className="bad";
-            }
-            return false;
-          }
-          changed++;
-        }
-
-        carryPetty=pettyNet;
-      }
-    }
-
-    if(changed>0) await fetchRows();
-
-    if(!silent){
-      $("syncState").textContent=changed?`历史余额已重新检查并修复 ${changed} 笔 ✓`:"历史余额检查完成，没有发现错误 ✓";
-      $("syncState").className="ok";
-    }
-    return true;
+    return false;
   }
 
-  const ND_PAYMENT_VERIFICATION_START="2026-09-01";
   function ndPaymentRequiresVerification(r){
     return !r._missing && String(r.settlement_date||"").slice(0,10)>=ND_PAYMENT_VERIFICATION_START;
   }
@@ -9413,8 +9333,12 @@ return `<div class="history-date-card">
       ids.add(id);const item=get(branch);if(status==='verified')item.verified+=Number(r.amount)||0;else if(status==='pending')item.pending+=Number(r.amount)||0;
     }
     return [...branches.values()].map(x=>{
-      const advances=ndCashAdvanceTotal(x.branch,cutoff),remaining=Math.round((x.cash-x.withdrawals-x.verified-advances)*100)/100;
-      return {...x,advances,balance:remaining,toBank:Math.max(0,remaining)};
+      const details=ndCashLedgerBreakdown(x.branch,allRows,cutoff);
+      const advances=details.advanceDeductions;
+      const remaining=Math.round(details.balance*100)/100;
+      return {...x,advances,expenses:details.legacyExpenses+details.approvedExpenses,
+        adjustments:details.pettyCashIn+details.internalTransferReversal,
+        balance:remaining,toBank:Math.max(0,remaining)};
     }).sort((a,b)=>a.branch.localeCompare(b.branch));
   }
   async function ndWeeklyCashRead(make){
@@ -9441,12 +9365,14 @@ return `<div class="history-date-card">
       const check=await db.auth.getUser();
       if(check.error||check.data?.user?.id!==auth.data.user.id||String(currentUserEmail).toLowerCase()!==actor||ndVerifyMalaysiaNow().ymd!==monday)return;
       if(document.querySelector('dialog[open],.salary-modal.open,#ndPettyGlobalAck.nd-show'))return;
-      if(!ndCashAdvanceReady)return; // Never publish an incomplete cash summary.
+      // Weekly Cash must use the SAME complete cloud snapshot as the Ledger.
+      // Never publish a figure based on a different/incomplete data source.
+      if(!ndCashCloudSnapshotReady || !ndCashAdvanceReady || ndApprovedCashExpenseError || ndCashRemittanceError)return;
       const items=ndWeeklyCashSnapshot(daily,transfers,cutoff);if(!items.length)return;
       let dialog=$('ndWeeklyCashDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndWeeklyCashDialog';document.body.append(dialog);}
       dialog.dataset.actor=actor;dialog.setAttribute('aria-label','Weekly Cash to Bank');
       const total=items.reduce((sum,x)=>sum+x.toBank,0);
-      dialog.innerHTML='<header><small>NATURE’S DAO</small><h2>Weekly Cash to Bank</h2><p>Today Cash through Sunday · '+escHtml(cutoff)+'</p></header><div class="nd-weekly-cash-body">'+items.map(x=>'<article><h3>'+escHtml(x.branch)+'</h3><dl><dt>Cash received</dt><dd>'+money(x.cash)+'</dd><dt>Cash withdrawals</dt><dd>'+money(x.withdrawals)+'</dd><dt>Verified bank deposits</dt><dd>'+money(x.verified)+'</dd><dt>Salary advances (cash paid out)</dt><dd>'+money(x.advances)+'</dd><dt>Cash balance through Sunday</dt><dd><strong>'+money(x.balance)+'</strong></dd>'+(x.pending>0?'<dt>Deposits awaiting verification</dt><dd>'+money(x.pending)+'</dd>':'')+'</dl></article>').join('')+'<div class="nd-weekly-cash-total"><span>Cash awaiting verified bank deposit</span><strong>'+money(total)+'</strong></div><button type="button" class="btn" data-weekly-cash-ack>I Understand</button></div>';
+      dialog.innerHTML='<header><small>NATURE’S DAO</small><h2>Weekly Cash to Bank</h2><p>Today Cash through Sunday · '+escHtml(cutoff)+'</p></header><div class="nd-weekly-cash-body">'+items.map(x=>'<article><h3>'+escHtml(x.branch)+'</h3><dl><dt>Cash received</dt><dd>'+money(x.cash)+'</dd><dt>Cash withdrawals</dt><dd>'+money(x.withdrawals)+'</dd><dt>Verified bank deposits</dt><dd>'+money(x.verified)+'</dd><dt>Salary advances (cash paid out)</dt><dd>'+money(x.advances)+'</dd><dt>Cash expenses (legacy + submitted)</dt><dd>'+money(x.expenses)+'</dd><dt>Other cash adjustments</dt><dd>'+money(x.adjustments)+'</dd><dt>Cash balance through Sunday</dt><dd><strong>'+money(x.balance)+'</strong></dd>'+(x.pending>0?'<dt>Deposits awaiting verification</dt><dd>'+money(x.pending)+'</dd>':'')+'</dl></article>').join('')+'<div class="nd-weekly-cash-total"><span>Cash awaiting verified bank deposit</span><strong>'+money(total)+'</strong></div><button type="button" class="btn" data-weekly-cash-ack>I Understand</button></div>';
       dialog.querySelector('[data-weekly-cash-ack]').onclick=()=>{ndWeeklyCashSeen.add(key);try{localStorage.setItem(key,'1');}catch(_){}dialog.close();};
       dialog.oncancel=()=>{ndWeeklyCashSeen.add(key);try{localStorage.setItem(key,'1');}catch(_){}};
       dialog.showModal();
@@ -35989,6 +35915,109 @@ document.addEventListener('click',event=>{
    for(const el of nodes){new MutationObserver(()=>{if(lock||!el.classList.contains('open'))return;lock=true;try{for(const other of nodes)if(other!==el)other.classList.remove('open');}finally{lock=false;}}).observe(el,{attributes:true,attributeFilter:['class']});}
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
+</script>
+<style id="nd-all-expense-history-v2-css">
+#ndAllExpensePanel{display:none}
+#ndAllExpensePanel .nda-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:12px 0}
+#ndAllExpensePanel .nda-toolbar label{min-width:130px;flex:1;font-size:13px;font-weight:650}
+#ndAllExpensePanel .nda-toolbar select,#ndAllExpensePanel .nda-toolbar input{min-height:40px}
+#ndAllExpensePanel .nda-card{border:1px solid #dce7df;border-radius:12px;padding:12px;margin:9px 0;background:#fff}
+#ndAllExpensePanel .nda-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}
+#ndAllExpensePanel .nda-meta{font-size:12px;color:#63796a;margin:5px 0}
+#ndAllExpensePanel .nda-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+#ndAllExpensePanel .nda-actions button{min-height:38px}
+#ndAllExpensePanel .nda-wait{color:#9b5b15;font-weight:700}
+#ndAllExpensePanel .nda-correct{color:#167747;font-weight:700}
+#ndAllExpensePanel .nda-error{color:#b42318;font-weight:700}
+#ndAllExpensePanel #ndaLoadMore{margin:14px auto;display:block}
+#ndAllExpensePanel [hidden]{display:none!important}
+#ndaUmoReminder{width:min(650px,95vw);max-height:88dvh;overflow:auto;padding:20px;border:0;border-radius:16px;background:white;color:#203d2d}
+#ndaUmoReminder::backdrop{background:#0008}
+#ndaUmoReminder .nda-reminder-row{border:1px solid #e0e9e2;border-radius:10px;padding:10px;margin:8px 0}
+#ndaUmoReminder button{padding:9px 12px;border-radius:9px;border:1px solid #c9d8cd;background:#f7faf8;cursor:pointer}
+@media(max-width:600px){#ndAllExpensePanel .nda-toolbar label{flex:1 1 45%}#ndaUmoReminder{padding:14px}}
+</style>
+<script id="nd-all-expense-history-v2">
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=v=>'RM '+Number(v||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+const db=()=>window.salaryDb||null;
+const today=()=>{const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const x=Object.fromEntries(p.map(z=>[z.type,z.value]));return x.year+'-'+x.month+'-'+x.day;};
+const columns='id,branch,expense_date,amount,review_amount,expense_reason,receipt_path,status,submitted_at,receipt_verification';
+const perPage=200;
+let items=[],offset=0,more=true,busy=false,request=0,verifySchema=true,umo=false,reminderShown=false,reminderRows=[];
+function mount(){const m=$('unifiedCashHistoryModal'),tabs=m?.querySelector('.nd-cash-history-tabs');if(!m||!tabs)return false;
+ if(!$('ndCashAllExpenseTab')){const tab=document.createElement('button');tab.type='button';tab.className='btn';tab.id='ndCashAllExpenseTab';tab.textContent='Cash Expense';tab.onclick=()=>window.ndOpenUnifiedCashHistory('expenseAll');tabs.append(tab);}
+ if(!$('ndAllExpensePanel')){const p=document.createElement('section');p.id='ndAllExpensePanel';p.innerHTML=`<div class="nda-toolbar"><label>Period<select id="ndaPeriod"><option value="all">All Dates · 查看全部花费</option><option value="month">Select Month</option></select></label><label id="ndaMonthLabel" hidden>Month<input type="month" id="ndaMonth"></label><label>Branch<select id="ndaBranch"><option value="all">Both Branches</option><option>Eco Botanic</option><option>Nusa Bestari</option></select></label><label>Status<select id="ndaStatus"><option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label><button class="btn" id="ndaRefresh" type="button">Refresh</button></div><p id="ndaSummary" role="status" aria-live="polite"></p><div id="ndaItems"></div><button class="btn" id="ndaLoadMore" type="button" hidden>Load More</button>`;m.querySelector('.salary-dialog').append(p);
+ $('ndaMonth').value=today().slice(0,7);
+ $('ndaPeriod').onchange=()=>{$('ndaMonthLabel').hidden=$('ndaPeriod').value!=='month';void reload();};
+ for(const id of ['ndaMonth','ndaBranch','ndaStatus'])$(id).onchange=()=>void reload();
+ $('ndaRefresh').onclick=()=>void reload();$('ndaLoadMore').onclick=()=>void fetchPage();$('ndaItems').onclick=e=>{const b=e.target.closest('button[data-nda-receipt],button[data-nda-verify]');if(!b)return;const r=items.find(x=>String(x.id)===String(b.dataset.ndaReceipt||b.dataset.ndaVerify));if(!r)return;if(b.dataset.ndaReceipt)void openReceipt(r);else void verify(r,b.dataset.ndaStatus).catch(e=>alert('Verification failed: '+(e?.message||e)));};
+ }
+ return true;
+}
+const originalOpen=window.ndOpenUnifiedCashHistory;
+if(typeof originalOpen==='function')window.ndOpenUnifiedCashHistory=function(type){
+ if(type!=='expenseAll'){const p=$('ndAllExpensePanel');if(p)p.style.display='none';$('ndCashAllExpenseTab')?.classList.remove('active');return originalOpen.apply(this,arguments);}
+ if(!mount())return;
+ // Reuse the established Cash History dialog, not a second stacked modal.
+ for(const id of ['ndCashBankPanel','ndCashWithdrawalPanel','ndCashPettyPanel']){const el=$(id);if(el)el.style.display='none';}
+ for(const id of ['ndCashBankTab','ndCashWithdrawalTab','ndCashPettyTab'])$(id)?.classList.remove('active');
+ $('ndCashAllExpenseTab').classList.add('active');$('ndAllExpensePanel').style.display='block';$('unifiedCashHistoryModal').classList.add('open');void reload();
+};
+async function auth(){const c=db();if(!c)throw Error('Please sign in.');const a=await c.auth.getUser();if(a.error)throw a.error;if(!a.data?.user)throw Error('Please sign in.');umo=String(a.data.user.email||'').trim().toLowerCase()==='umo1017@gmail.com';return c;}
+function filters(q){const branch=$('ndaBranch').value,status=$('ndaStatus').value,period=$('ndaPeriod').value;
+ if(branch!=='all')q=q.eq('branch',branch);if(status!=='all')q=q.eq('status',status);
+ if(period==='month'){const m=$('ndaMonth').value;if(!/^\d{4}-\d{2}$/.test(m))throw Error('Select a valid month.');const [y,mo]=m.split('-').map(Number);const next=new Date(Date.UTC(y,mo,1)).toISOString().slice(0,10);q=q.gte('expense_date',m+'-01').lt('expense_date',next);}return q;}
+function card(r){const status=String(r.receipt_verification||'pending').toLowerCase(),has=!!r.receipt_path;
+ const text=!has?'No receipt':status==='correct'?'✓ Correct':status==='error'?'✕ Error':'Unverified';const cls=status==='correct'?'nda-correct':status==='error'?'nda-error':'nda-wait';
+ return `<article class="nda-card"><div class="nda-top"><strong>${esc(r.expense_reason||'Cash Expense')}</strong><strong>${money(r.status==='approved'?(r.review_amount??r.amount):r.amount)}</strong></div><div class="nda-meta">${esc(r.branch)} · ${esc(r.expense_date)} · ${esc(r.status||'pending')}</div><div class="nda-meta">Submitted ${money(r.amount)}${r.review_amount!=null?' · Reviewed '+money(r.review_amount):''}</div><div class="${cls}">Receipt: ${esc(text)}</div><div class="nda-actions">${has?`<button type="button" class="btn" data-nda-receipt="${esc(r.id)}">View Receipt · Verify Amount</button>`:''}${umo&&has&&verifySchema?`<button type="button" class="btn" data-nda-verify="${esc(r.id)}" data-nda-status="correct">Correct</button><button type="button" class="btn" data-nda-verify="${esc(r.id)}" data-nda-status="error">Error</button>`:''}</div></article>`;}
+function draw(){const el=$('ndaItems');if(!el)return;el.innerHTML=items.map(card).join('')||'<p>No Cash Expense records for these filters.</p>';
+ const unverified=items.filter(r=>r.receipt_path&&!['correct','error'].includes(String(r.receipt_verification||'pending').toLowerCase())).length;
+ $('ndaSummary').textContent=`${items.length} loaded · ${unverified} receipt(s) awaiting verification in loaded records${!verifySchema?' · Verification SQL/column missing':''}`;
+ $('ndaLoadMore').hidden=!more;$('ndaLoadMore').disabled=busy;}
+async function fetchPage(){if(busy||!more)return;let c;try{c=await auth();}catch(e){$('ndaSummary').textContent='Unable to load history: '+(e?.message||e);return;}busy=true;const seq=request;const btn=$('ndaLoadMore');if(btn)btn.disabled=true;$('ndaSummary').textContent='Loading Cash Expense history…';
+ try{const build=cols=>filters(c.from('nd_cash_expense_requests').select(cols).order('expense_date',{ascending:false}).order('submitted_at',{ascending:false}).range(offset,offset+perPage-1));
+ let res=await build(columns);if(res.error&&(/receipt_verification|42703|PGRST204|schema cache/i.test(String(res.error.message||'')+' '+String(res.error.code||'')))){verifySchema=false;res=await build(columns.replace(',receipt_verification',''));}
+ if(res.error)throw res.error;if(seq!==request)return;items.push(...(res.data||[]));offset+=res.data?.length||0;more=(res.data?.length||0)===perPage;draw();
+ }catch(e){$('ndaSummary').textContent='Unable to load history: '+(e?.message||e);}finally{busy=false;if(btn)btn.disabled=false;}}
+async function reload(){++request;items=[];offset=0;more=true;verifySchema=true;draw();await fetchPage();}
+async function receiptUrl(r){let val=r.receipt_path,path='',url='',bucket='petty-receipts';
+ if(typeof val==='string'&&val.trim().startsWith('{'))val=JSON.parse(val);
+ if(typeof val==='object'&&val){path=val.path||'';url=val.url||val.signedUrl||'';bucket=val.bucket||bucket;}else{path=String(val||'');url=path;}
+ if(/^https:\/\//i.test(url))return url;if(!path)throw Error('Receipt file is missing.');const c=await auth();
+ if(typeof window.ndReceiptSignedUrl==='function'){const result=await window.ndReceiptSignedUrl(c,bucket,path,600);if(result.error)throw result.error;return result.data.signedUrl;}
+ const result=await c.storage.from(bucket).createSignedUrl(path,600);if(result.error)throw result.error;return result.data.signedUrl;
+}
+async function openReceipt(r){try{const url=await receiptUrl(r);if(typeof window.ndReceiptPreview==='function'){
+ const opts={amount:r.status==='approved'?(r.review_amount??r.amount):r.amount,status:'Receipt: '+String(r.receipt_verification||'Unverified')};
+ if(umo&&verifySchema)opts.verify=async v=>{await verify(r,v==='accepted'?'correct':'error',true);return true;};
+ window.ndReceiptPreview(url,opts);
+ }else window.open(url,'_blank','noopener,noreferrer');}catch(e){alert('Unable to view receipt: '+(e?.message||e));}}
+async function verify(r,status,fromPreview=false){if(!umo||!['correct','error'].includes(status))throw Error('Only UMO may verify Cash Expense receipts.');
+ if(!r.receipt_path)throw Error('No receipt is attached.');if(!verifySchema)throw Error('Receipt verification SQL setup is missing.');
+ if(!fromPreview&&!confirm(`Verify ${money(r.status==='approved'?(r.review_amount??r.amount):r.amount)} as ${status.toUpperCase()}?`))return;
+ const c=await auth();if(!umo)throw Error('Only UMO may verify receipts.');const result=await c.rpc('nd_cash_expense_receipt_verify',{p_id:r.id,p_status:status});if(result.error){if(fromPreview)throw result.error;alert('Verification failed: '+result.error.message);return;}
+ window.dispatchEvent(new Event('nd-cash-expense-reviewed'));if($('ndAllExpensePanel')?.style.display==='block')await reload();
+ reminderRows=reminderRows.filter(x=>String(x.id)!==String(r.id));drawReminder();}
+function reminder(){let d=$('ndaUmoReminder');if(d)return d;d=document.createElement('dialog');d.id='ndaUmoReminder';d.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><h3 style="margin:0">UMO · Cash Expense Receipt Verification</h3><button type="button" data-close>Close</button></div><p data-msg role="status"></p><div data-list></div><button type="button" data-history>View All Expenses</button>';document.body.append(d);
+ d.querySelector('[data-close]').onclick=()=>d.close();d.querySelector('[data-history]').onclick=()=>{d.close();window.ndOpenUnifiedCashHistory('expenseAll');};d.querySelector('[data-list]').onclick=e=>{const b=e.target.closest('[data-remind-receipt]');if(!b)return;const r=reminderRows.find(x=>String(x.id)===b.dataset.remindReceipt);if(r)void openReceipt(r);};return d;}
+function drawReminder(){const d=$('ndaUmoReminder');if(!d)return;d.querySelector('[data-msg]').textContent=reminderRows.length?`${reminderRows.length} unverified receipt(s) require checking (up to 100 most recent shown).`: 'All listed receipts have been verified.';
+ d.querySelector('[data-list]').innerHTML=reminderRows.slice(0,20).map(r=>`<div class="nda-reminder-row"><strong>${esc(r.branch)} · ${esc(r.expense_date)}</strong><div>${esc(r.expense_reason||'Cash Expense')} · ${money(r.status==='approved'?(r.review_amount??r.amount):r.amount)}</div><button type="button" data-remind-receipt="${esc(r.id)}">View Receipt &amp; Verify</button></div>`).join('');}
+let remindBusy=false;
+async function checkReminder(){if(remindBusy||reminderShown)return;const c=db();if(!c)return;remindBusy=true;
+ try{await auth();if(!umo)return;const result=await c.from('nd_cash_expense_requests').select(columns).not('receipt_path','is',null).or('receipt_verification.is.null,receipt_verification.eq.pending').order('expense_date',{ascending:false}).limit(100);
+ if(result.error){console.warn('[Cash Expense verification reminder]',result.error.message);return;}
+ reminderRows=(result.data||[]).filter(r=>!!r.receipt_path);if(reminderRows.length){reminderShown=true;const d=reminder();drawReminder();if(!d.open){try{d.showModal();}catch(e){console.warn(e);}}}
+ }catch(e){console.warn('[Cash Expense verification reminder]',e);}finally{remindBusy=false;}}
+function boot(){mount();void checkReminder();const c=db();if(c?.auth?.onAuthStateChange)c.auth.onAuthStateChange(event=>{if(event==='SIGNED_IN'){reminderShown=false;setTimeout(checkReminder,1500);}});
+ window.addEventListener('focus',()=>{if(!reminderShown)void checkReminder();});
+ window.addEventListener('nd-cash-expense-submitted',()=>{reminderShown=false;void checkReminder();});
+ window.addEventListener('nd-cash-expense-reviewed',()=>{if($('ndAllExpensePanel')?.style.display==='block')void reload();});
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
 </script>
 </body>
