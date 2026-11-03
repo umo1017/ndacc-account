@@ -39,6 +39,8 @@
 #ndCashFlowAuditDialog th:first-child,#ndCashFlowAuditDialog td:first-child{text-align:left!important;min-width:100px}
 #ndCashFlowAuditDialog tfoot{background:#eaf2eb;font-weight:750;position:sticky;bottom:0}
 @media(max-width:600px){#ndCashFlowAuditDialog{padding:10px!important}#ndCashFlowAuditDialog h2{font-size:19px!important}}
+#ndCashFlowAuditDialog .nd-cfa-balance{font-weight:800;border-left:2px solid #d8e7db;background:#f8fbf8}
+#ndCashFlowAuditDialog th:last-child,#ndCashFlowAuditDialog td:last-child{min-width:122px!important}
 </style><style id="nd-cash-flow-audit-style">
 #ndCashFlowAuditDialog{box-sizing:border-box;width:min(960px,96vw);max-width:96vw;max-height:88dvh;border:0;border-radius:18px;padding:18px;background:#fff;color:#243d32;box-shadow:0 15px 70px #0005;overflow:auto}
 #ndCashFlowAuditDialog::backdrop{background:#0008}
@@ -8868,7 +8870,7 @@ return `<div class="history-date-card">
       dlg.innerHTML=`<div class="nd-cfa-head"><h2>Cash Ledger</h2><button type="button" data-cfa-close aria-label="Close">×</button></div>
         <div class="nd-cfa-toolbar"><strong data-cfa-branch></strong><label>Month <input type="month" data-cfa-month></label><button type="button" data-cfa-refresh>Refresh</button></div>
         <div class="nd-cfa-status" data-cfa-status></div>
-        <div class="nd-cfa-scroll"><table><thead><tr><th>Date</th><th>Cash In (+)</th><th>Cash Out (−)</th><th>Salary Advance (−)</th><th>Bank In (−)</th></tr></thead><tbody data-cfa-rows></tbody><tfoot data-cfa-totals></tfoot></table></div>`;
+        <div class="nd-cfa-scroll"><table><thead><tr><th>Date</th><th>Cash In (+)</th><th>Cash Out (−)</th><th>Salary Advance (−)</th><th>Bank In (−)</th><th>Balance</th></tr></thead><tbody data-cfa-rows></tbody><tfoot data-cfa-totals></tfoot></table></div>`;
       document.body.appendChild(dlg);
       dlg.querySelector('[data-cfa-close]').onclick=()=>dlg.close();
       dlg.querySelector('[data-cfa-month]').onchange=ndCashFlowAuditRender;
@@ -8950,14 +8952,32 @@ return `<div class="history-date-card">
     const signed=(value,isIn)=>(num(value)===0?fmt(0):(isIn?'+ ':'− ')+fmt(value));
     const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const sum=empty();
-    const days=[...byDate.keys()].filter(visible).sort();
+    // Include earlier saved movements as opening balance for the selected month.
+    // Daily balance uses the same source snapshot as the official Today’s Cash figure.
+    const allDates=[...byDate.keys()].sort();
+    let runningBalance=0;
+    const cumulativeByDate=new Map();
+    for(const date of allDates){
+      const line=byDate.get(date);
+      runningBalance=Math.round((runningBalance+line.cashIn-line.cashOut-line.advance-line.bankIn)*100)/100;
+      cumulativeByDate.set(date,runningBalance);
+    }
+    const days=allDates.filter(visible);
+    const signedIn=value=>num(value)===0?fmt(0):'+ '+fmt(value);
+    const signedOut=value=>num(value)===0?fmt(0):'− '+fmt(value);
     rows.innerHTML=days.map(date=>{
       const line=byDate.get(date);
       for(const field of Object.keys(sum))sum[field]+=line[field];
-      return '<tr><td>'+esc(date)+'</td><td class="nd-cfa-in">'+fmt(line.cashIn)+'</td><td>'+fmt(line.cashOut)+'</td><td>'+fmt(line.advance)+'</td><td>'+fmt(line.bankIn)+'</td></tr>';
-    }).join('')||'<tr><td colspan="5">No saved cash records for this month</td></tr>';
-    totals.innerHTML='<tr><th>Total</th><th>'+fmt(sum.cashIn)+'</th><th>'+fmt(sum.cashOut)+'</th><th>'+fmt(sum.advance)+'</th><th>'+fmt(sum.bankIn)+'</th></tr>';
-    status.textContent='Saved records only · Net Cash = Cash In − Cash Out − Salary Advance − Bank In';
+      const balance=cumulativeByDate.get(date)||0;
+      const balanceClass=balance<0?'nd-cfa-out':balance>0?'nd-cfa-in':'';
+      return '<tr><td>'+esc(date)+'</td><td class="nd-cfa-in">'+signedIn(line.cashIn)+'</td><td class="nd-cfa-out">'+signedOut(line.cashOut)+'</td><td class="nd-cfa-out">'+signedOut(line.advance)+'</td><td class="nd-cfa-out">'+signedOut(line.bankIn)+'</td><td class="nd-cfa-balance '+balanceClass+'">'+fmt(balance)+'</td></tr>';
+    }).join('')||'<tr><td colspan="6">No saved cash records for this month</td></tr>';
+    const lastOfMonth=days.length?cumulativeByDate.get(days[days.length-1]):null;
+    const priorDates=allDates.filter(date=>date.slice(0,7)<month);
+    const opening=priorDates.length?cumulativeByDate.get(priorDates[priorDates.length-1]):0;
+    const closing=lastOfMonth==null?opening:lastOfMonth;
+    totals.innerHTML='<tr><th>Total</th><th class="nd-cfa-in">'+signedIn(sum.cashIn)+'</th><th class="nd-cfa-out">'+signedOut(sum.cashOut)+'</th><th class="nd-cfa-out">'+signedOut(sum.advance)+'</th><th class="nd-cfa-out">'+signedOut(sum.bankIn)+'</th><th class="'+(closing<0?'nd-cfa-out':closing>0?'nd-cfa-in':'')+'">'+fmt(closing)+'</th></tr>';
+    status.textContent='Opening Balance: '+fmt(opening)+' · Balance includes saved records only';
   }
   document.addEventListener('click',async event=>{
     const target=event.target;
