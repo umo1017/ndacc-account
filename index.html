@@ -11860,6 +11860,9 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
 
 // Nature's Dao internal 7th worksheet formula. Manually entered amounts remain authoritative.
 function ndSevenUserDeduction(s={}){
+  // Historical salary months may have no 7th snapshot for some staff.
+  // Treat a missing snapshot as empty inputs instead of crashing the whole Salary page.
+  if(!s || typeof s!=="object") s={};
   const v=k=>Number(s[k]||0);
   // The two additional deductions are separate monthly manual fields.
   // Never count manual_deduction a second time: legacy field is independent.
@@ -11870,11 +11873,17 @@ function ndSevenUserDeduction(s={}){
 // Original Allowance stays editable and stored unchanged. The adjusted Allowance
 // is calculated once for display/Gross Pay, never written back as the source value.
 function ndSevenAdjustedAllowance(s={}){
+  // Historical salary months may have no 7th snapshot for some staff.
+  // Treat a missing snapshot as empty inputs instead of crashing the whole Salary page.
+  if(!s || typeof s!=="object") s={};
   const v=k=>Number(s[k]||0);
   return +(v('allowance')-v('employer_epf')-v('employer_socso')-
     v('employer_eis')).toFixed(2);
 }
 function ndSevenUserTotals(s={}){
+  // Historical salary months may have no 7th snapshot for some staff.
+  // Treat a missing snapshot as empty inputs instead of crashing the whole Salary page.
+  if(!s || typeof s!=="object") s={};
   const v=k=>Number(s[k]||0);
   const adjustedAllowance=ndSevenAdjustedAllowance(s);
   const gross=+(v('guaranteed_pay')+adjustedAllowance+v('ot')).toFixed(2);
