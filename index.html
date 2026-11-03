@@ -13683,12 +13683,18 @@ async function loadSalaryData(){
       .gte("salary_month",year+"-01-01")
       .lte("salary_month",month+"-01");
     if(ovRes.error){
-      console.warn("Salary manual overrides unavailable:",ovRes.error);
+      console.error("Salary manual overrides unavailable:",ovRes.error);
+      byId("salarySyncState").textContent="Salary manual amounts unavailable — retry";
+      byId("salaryOutletRoot").innerHTML=`<div class="salary-card"><div class="bad">Salary manual amounts could not be loaded: ${String(ovRes.error.message||ovRes.error).replace(/</g,'&lt;')}. Please reload before confirming payroll.</div></div>`;
+      return;
     }else{
       salaryManualOverrides=ovRes.data||[];
     }
   }catch(err){
-    console.warn("Salary manual overrides unavailable:",err);
+    console.error("Salary manual overrides unavailable:",err);
+    byId("salarySyncState").textContent="Salary manual amounts unavailable — retry";
+    byId("salaryOutletRoot").innerHTML=`<div class="salary-card"><div class="bad">Salary manual amounts could not be loaded. Please reload before confirming payroll.</div></div>`;
+    return;
   }
 
   salaryLastLoadedMonth=month;
@@ -15450,6 +15456,35 @@ async function confirm7th(empId){
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || snapshotFor(empId)) return;
   if((e.employment_type||"full_time")==="part_time") return;
+  // Commit the exact visible SOCSO + L24 amount before freezing the 7th snapshot.
+  // A mobile tap on Confirm can race the input's asynchronous `change` upsert.
+  const socsoInput=Array.from(document.querySelectorAll('[data-salary-override][data-payroll-type="7"][data-override-field="employee_socso_l24"]'))
+    .find(input=>Number(input.dataset.salaryOverride)===Number(empId));
+  if(socsoInput){
+    const visibleCombined=Number(socsoInput.value);
+    if(!Number.isFinite(visibleCombined)||visibleCombined<0){
+      alert("Invalid Employee SOCSO + L24 amount.");return;
+    }
+    const savedRow={
+      employee_id:Number(empId),salary_month:monthDate(),payroll_type:"7",
+      field:"employee_socso_l24",value:+visibleCombined.toFixed(2),
+      updated_at:new Date().toISOString(),
+      updated_by:String(currentSalaryUserEmail||currentUserEmail||"").toLowerCase()
+    };
+    const saved=await salaryDb.from("salary_manual_overrides")
+      .upsert(savedRow,{onConflict:"employee_id,salary_month,payroll_type,field"})
+      .select().single();
+    if(saved.error){
+      alert("Cannot confirm: Employee SOCSO + L24 amount was not saved. "+saved.error.message);
+      return;
+    }
+    const i=salaryManualOverrides.findIndex(r=>
+      Number(r.employee_id)===Number(empId) &&
+      String(r.salary_month||"").slice(0,10)===monthDate() &&
+      String(r.payroll_type)==="7" && r.field==="employee_socso_l24");
+    if(i>=0) salaryManualOverrides[i]=saved.data||savedRow;
+    else salaryManualOverrides.push(saved.data||savedRow);
+  }
   const calc=applySevenManualOverrides(e,calculate7th(e,monthlyFor(empId)));
   // Lindung 24 Jam is display-only. The existing payroll_snapshot table
   // does not have an employee_lindung24 column, so never send it to Supabase.
