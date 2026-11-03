@@ -11768,39 +11768,50 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
   return s;
 }
 
+function ndFourteenSevenCosts(seven={}){
+  // Confirmed 7th salary is the single reference for the 14th deduction.
+  // Keep historical confirmed/pay-done 7th values exactly as saved.
+  const n=k=>Number(seven?.[k]||0);
+  const totalDeduction=seven?.total_deduction!=null
+    ? n('total_deduction') : ndSevenUserDeduction(seven);
+  return {
+    seventh_net_pay:n('net_pay'),
+    seventh_total_deduction:totalDeduction,
+    employer_epf:n('employer_epf'),
+    employer_socso:n('employer_socso'),
+    employer_eis:n('employer_eis')
+  };
+}
+function ndFourteenUpdateTotals(c,seven){
+  const cents=v=>Math.round((Number(v)||0)*100)/100;
+  const costs=ndFourteenSevenCosts(seven);
+  Object.assign(c,costs);
+  c.total_commission=cents(
+    Number(c.commission_a||0)+Number(c.commission_b||0)+
+    Number(c.customer_referral||0)+Number(c.staff_referral||0)+
+    Number(c.bonus||0)
+  );
+  c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+
+    costs.employer_epf+costs.employer_socso+costs.employer_eis);
+  c.raw_commission=cents(c.total_commission-c.total_employer_cost);
+  c.commission=c.raw_commission;
+  c.seventh_deduction_refund=0;
+  c.total_income=c.commission;
+  c.net_pay=c.commission;
+  c.has_payslip=c.net_pay>0;
+  return c;
+}
 function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryManualOverrides){
   if(!base) return base;
   const c={...base};
   const empId=Number(e?.id||base?.employee_id||0);
-  // Only the source commission components can be manually entered.
-  // Legacy overrides of calculated 14th fields are intentionally ignored.
-  for(const field of ["commission_a","commission_b","customer_referral","staff_referral","bonus","three_month_bonus"]){
+  // Only the editable 14th inputs may override the calculated values.
+  for(const field of ["commission_a","commission_b","customer_referral","staff_referral","bonus"]){
     if(salaryOverrideHas(empId,"14",field,salaryMonth,source)){
       c[field]=salaryOverrideValue(empId,"14",field,c[field],salaryMonth,source);
     }
   }
-  const cents=v=>Math.round((Number(v)||0)*100)/100;
-  c.total_commission=cents(
-    Number(c.commission_a||0)+Number(c.commission_b||0)+
-    Number(c.customer_referral||0)+Number(c.staff_referral||0)+
-    Number(c.bonus||0)+Number(c.three_month_bonus||0)+Number(c.w_bonus||0)
-  );
-  // All 7th costs come from the 7th snapshot, not editable 14th overrides.
-  const seven=snapshotFor(empId);
-  c.seventh_basic_pay=cents(seven?.guaranteed_pay);
-  c.seventh_allowance=cents(seven?.allowance);
-  c.employer_epf=cents(seven?.employer_epf);
-  c.employer_socso=cents(seven?.employer_socso);
-  c.lindung24=cents(seven?.employee_lindung24);
-  c.employer_eis=cents(seven?.employer_eis);
-  c.total_employer_cost=cents(c.seventh_basic_pay+c.seventh_allowance+c.employer_epf+c.employer_socso+c.lindung24+c.employer_eis);
-  c.raw_commission=cents(c.total_commission-c.total_employer_cost);
-  c.commission=Math.max(0,c.raw_commission);
-  c.seventh_deduction_refund=cents(seven?.off_day_deduction);
-  c.net_pay=cents(c.commission+c.seventh_deduction_refund);
-  c.total_income=c.net_pay;
-  c.has_payslip=c.commission>0;
-  return c;
+  return ndFourteenUpdateTotals(c,snapshotFor(empId));
 }
 
 // Nature's Dao internal 7th worksheet formula. Manually entered amounts remain authoritative.
@@ -12040,80 +12051,18 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
   const commissionB=Number(m.commission_b||0);
   const customer=Number(m.customer_referral||0);
   const staff=Number(m.staff_referral||0);
-  // New unconfirmed 14th: Target Bonus + quarterly Branch Bonus in ONE Bonus field.
-  // Historical confirmed snapshots retain their stored fields unchanged.
-  const bonus=Number(m.reward||0)+Number(threeBonus||0);
-  const threeMonthBonus=0;
-  const wBonus=Number(m.w_bonus||0);
-
-  // Requested order:
-  // Commission A + Commission B + Customer Referral + Staff Referral + Bonus + 3-Bonus
-  // = Total Commission
-  const totalCommission=+(
-    commissionA+
-    commissionB+
-    customer+
-    staff+
-    bonus+
-    threeMonthBonus+
-    wBonus
-  ).toFixed(2);
-
-  // 7th employer cost to be recovered from Total Commission.
-  const basicPay=Number(snapshot?.guaranteed_pay||0);
-  const allowance=Number(snapshot?.allowance||0);
-  const employerEpf=Number(snapshot?.employer_epf||0);
-  const employerSocso=Number(snapshot?.employer_socso||0);
-  const employerEis=Number(snapshot?.employer_eis||0);
-  const lindung24=Number(snapshot?.employee_lindung24||0);
-
-  const totalEmployerCost=+(
-    basicPay+
-    allowance+
-    employerEpf+
-    employerSocso+
-    lindung24+
-    employerEis
-  ).toFixed(2);
-
-  // Required rule:
-  // Total Commission - 7th Basic Pay - Allowance - Employer EPF
-  // - Employer SOCSO - Lindung 24 Jam - Employer EIS = Commission.
-  // Never allow a negative commission.
-  const rawCommission=+(totalCommission-totalEmployerCost).toFixed(2);
-  const commission=Math.max(0,rawCommission);
-
-  // Existing referral / bonus fields remain additional 14th income,
-  // but a non-positive commission does not produce a 14th payslip.
-  // Add back ONLY the 7th Unpaid (off-day) deduction on the 14th.
-  // Do not refund 7th manual Deduction, EPF, SOCSO, EIS, PCB or other deductions.
-  const seventhDeductionRefund = Math.max(0, Number(snapshot?.off_day_deduction || 0));
-  const totalIncome=+(commission + seventhDeductionRefund).toFixed(2);
-
-  return {
-    commission_a:commissionA,
-    commission_b:commissionB,
-    total_commission:totalCommission,
-    customer_referral:customer,
-    staff_referral:staff,
-    bonus,
-    three_month_bonus:threeMonthBonus,
-    w_bonus:wBonus,
-    seventh_basic_pay:basicPay,
-    seventh_allowance:allowance,
-    employer_epf:employerEpf,
-    employer_socso:employerSocso,
-    lindung24,
-    employer_eis:employerEis,
-    total_employer_cost:totalEmployerCost,
-    raw_commission:rawCommission,
-    seventh_deduction_refund:seventhDeductionRefund,
-    commission,
-    total_income:totalIncome,
-    net_pay:totalIncome,
-    has_payslip:commission>0
-  };
+  // Target Bonus every month; quarterly bonus is added only in the quarter's payout month.
+  // The bonus_is_total flag prevents adding quarterly bonus twice to confirmed snapshots.
+  const bonus=m.bonus_is_total===true
+    ? Number(m.reward||0)
+    : Number(m.reward||0)+Number(threeBonus||0);
+  return ndFourteenUpdateTotals({
+    commission_a:commissionA, commission_b:commissionB,
+    customer_referral:customer, staff_referral:staff,
+    bonus, three_month_bonus:0, w_bonus:0
+  },snapshot);
 }
+
 function monthlyFor(id){ return salaryMonthly.find(x=>Number(x.employee_id)===Number(id))||{}; }
 function snapshotFor(id){ return salarySnapshots.find(x=>Number(x.employee_id)===Number(id))||null; }
 function commissionSnapshotFor(id){ return salaryCommissionSnapshots.find(x=>Number(x.employee_id)===Number(id))||null; }
@@ -13897,10 +13846,9 @@ function summaryForOutlet(emps){
         commission_b:Number(cSnap.commission_b||0),
         customer_referral:Number(cSnap.customer_referral||0),
         staff_referral:Number(cSnap.staff_referral||0),
-        reward:Number(cSnap.bonus||0)
+        reward:Number(cSnap.bonus||0),bonus_is_total:true
       },snap,three);
-      const fourteen=applyFourteenManualOverrides(e,{...cSnap,...base,three_month_bonus:three});
-      out.fourteen[pm]=(out.fourteen[pm]||0)+Number(fourteen?.net_pay||0);
+      out.fourteen[pm]=(out.fourteen[pm]||0)+Number(cSnap?.net_pay||0);
     }
   });
   return out;
@@ -14080,7 +14028,7 @@ function renderSevenTable(emps){
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
 
-      <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset7="${e.id}" ${snap.payment_done?'disabled title="Payment DONE cannot be reset"':''}>Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
+      <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset7="${e.id}" ${snap.payment_done?'title="Payment DONE: Reset is locked; tap for details" aria-label="Reset locked: Payment DONE"':''}>Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
       <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${snap
@@ -14174,10 +14122,11 @@ function renderFourteenTable(emps){
           customer_referral:Number(cs.customer_referral||0),
           staff_referral:Number(cs.staff_referral||0),
           reward:Number(cs.bonus||0),
+          bonus_is_total:true,
           w_bonus:Number(cs.w_bonus||0)
         },snapshotFor(e.id),threeBonus)
       : calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(e.id),threeBonus);
-    const c=cs?.payment_done===true ? {...cs} : applyFourteenManualOverrides(e,{...(cs||{}),...base14,three_month_bonus:threeBonus});
+    const c=cs ? {...cs,...ndFourteenSevenCosts(snapshotFor(e.id))} : applyFourteenManualOverrides(e,base14);
     const a=Number(c.commission_a||0);
     const b=Number(c.commission_b||0);
     const customer=Number(c.customer_referral||0);
@@ -14201,18 +14150,14 @@ function renderFourteenTable(emps){
       <td>${cs?money(staff):salaryOverrideInput(e.id,"14","staff_referral",staff)}</td>
       <td>${cs?money(bonus):salaryOverrideInput(e.id,"14","bonus",bonus)}</td>
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
-      <td>${cs?money(c.seventh_basic_pay||0):money(c.seventh_basic_pay||0)}</td>
-      <td>${cs?money(c.seventh_allowance||0):money(c.seventh_allowance||0)}</td>
-      <td>${cs?money(c.employer_epf||0):money(c.employer_epf||0)}</td>
-      <td>${cs?money(c.employer_socso||0):money(c.employer_socso||0)}</td>
-      <td>${cs?money(c.lindung24||0):money(c.lindung24||0)}</td>
-      <td>${cs?money(c.employer_eis||0):money(c.employer_eis||0)}</td>
+      <td>${money(c.seventh_net_pay||0)}</td>
+      <td>${money(c.seventh_total_deduction||0)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
-      <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset14="${e.id}" ${cs.payment_done?'disabled title="Payment DONE cannot be reset"':''}>Reset</button>`:""}`:(String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()==="umo1017@gmail.com"?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
+      <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset14="${e.id}" ${cs.payment_done?'title="Payment DONE: Reset is locked; tap for details" aria-label="Reset locked: Payment DONE"':''}>Reset</button>`:""}`:(String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()==="umo1017@gmail.com"?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
       <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${cs
@@ -14234,12 +14179,8 @@ function renderFourteenTable(emps){
       <th rowspan="2">Staff Referral</th>
       <th rowspan="2">Bonus</th>
       <th rowspan="2">Total Commission</th>
-      <th rowspan="2">7th Basic Pay</th>
-      <th rowspan="2">Allowance</th>
-      <th rowspan="2">Employer EPF</th>
-      <th rowspan="2">Employer SOCSO</th>
-      <th rowspan="2">Lindung 24 Jam</th>
-      <th rowspan="2">Employer EIS</th>
+      <th rowspan="2">7th Net Pay</th>
+      <th rowspan="2">Total Deduction</th>
       <th rowspan="2">Commission</th>
       <th rowspan="2">Nett Pay</th><th colspan="3" class="netpay-group-head">Net Pay by Method</th><th rowspan="2">Confirm</th><th rowspan="2">14th Commission Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
     </tr><tr>
@@ -14248,7 +14189,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="15" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="11" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -14256,7 +14197,7 @@ function renderFourteenTable(emps){
       </tr>
       ${rows}
       <tr class="netpay-summary-row" style="display:none">
-        <td colspan="15" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
+        <td colspan="11" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
@@ -14906,8 +14847,9 @@ function ndRefreshNetPayTotals(day){
     }else{
       const cs=commissionSnapshotFor(e.id);
       const bonus=cs?Number(cs.three_month_bonus??salaryQuarter3BonusFor(e.id)):salaryQuarter3BonusFor(e.id);
-      const base=cs?calculate14th({commission_a:Number(cs.commission_a||0),commission_b:Number(cs.commission_b||0),customer_referral:Number(cs.customer_referral||0),staff_referral:Number(cs.staff_referral||0),reward:Number(cs.bonus||0),w_bonus:Number(cs.w_bonus||0)},snapshotFor(e.id),bonus):calculate14th({...monthlyFor(e.id),reward:Number(monthlyFor(e.id).reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(e.id),bonus);
-      amount=Number((cs?.payment_done===true?cs:applyFourteenManualOverrides(e,{...(cs||{}),...base,three_month_bonus:bonus})).net_pay||0);
+      const base=cs?calculate14th({commission_a:Number(cs.commission_a||0),commission_b:Number(cs.commission_b||0),customer_referral:Number(cs.customer_referral||0),staff_referral:Number(cs.staff_referral||0),reward:Number(cs.bonus||0),
+          bonus_is_total:true,w_bonus:Number(cs.w_bonus||0)},snapshotFor(e.id),bonus):calculate14th({...monthlyFor(e.id),reward:Number(monthlyFor(e.id).reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(e.id),bonus);
+      amount=Number((cs||applyFourteenManualOverrides(e,base)).net_pay||0);
     }
     sums[key]+=amount;
   }
@@ -14969,7 +14911,10 @@ function recalc7thLive(empId){
 
 function recalc14thLive(empId){
   const m=monthlyFor(empId);
-  const calc=calculate14th(m,snapshotFor(empId),salaryQuarter3BonusFor(empId));
+  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
+  const calc=applyFourteenManualOverrides(e,calculate14th(
+    {...m,reward:Number(m.reward||0)+(e?ndTargetBonusForEmployee(e):0),w_bonus:0},
+    snapshotFor(empId),salaryQuarter3BonusFor(empId)));
 
   const totalCell=document.querySelector(`[data-live-totalcommission14="${empId}"]`);
   if(totalCell) totalCell.textContent=money(calc.total_commission);
@@ -15147,7 +15092,7 @@ document.addEventListener('click',function(ev){
   if(!btn)return;
   ev.preventDefault();
   ev.stopImmediatePropagation();
-  if(btn.disabled)return;
+  if(btn.disabled){alert('Reset is currently processing. Please retry after it finishes.');return;}
   const seven=btn.hasAttribute('data-reset7');
   const id=Number(seven?btn.dataset.reset7:btn.dataset.reset14);
   if(!Number.isSafeInteger(id)||id<=0)return;
@@ -15534,7 +15479,12 @@ async function ndResetSalaryToAutomatic(empId,payrollType){
     const {data:removed,error:deleteError}=await salaryDb.from(table)
       .delete().eq("employee_id",Number(empId)).eq("salary_month",month)
       .select("id");
-    if(deleteError){alert("Reset failed: "+deleteError.message);return;}
+    if(deleteError){
+      const reason=String(deleteError.message||'');
+      const aged=/60.day|older than|old record|historical|locked|cannot be (changed|deleted|modified)/i.test(reason);
+      alert((aged?`Reset blocked by historical payroll lock for ${month}. The record was not deleted. Database administrator approval is required to change the lock.\n\n`:'Reset failed: ')+reason);
+      return;
+    }
     if((removed||[]).length!==(existing||[]).length){
       alert("Reset blocked: the confirmed salary could not be deleted. Manual amounts were preserved.");
       await refreshSalaryStayHere();return;
@@ -16724,15 +16674,14 @@ async function openPayslip(empId,type){
       customer_referral:Number(rawC.customer_referral||0),
       staff_referral:Number(rawC.staff_referral||0),
       reward:Number(rawC.bonus||0),
+      bonus_is_total:true,
       w_bonus:Number(rawC.w_bonus||0)
     },sevenSnapshot,threeBonus);
 
     // Use the same source precedence as the 14th Salary table.
     // Saved manual Net Pay wins over the automatic refund calculation.
     // Payment DONE always uses the immutable confirmed snapshot.
-    const c=rawC.payment_done===true
-      ? {...rawC}
-      : applyFourteenManualOverrides(e,{...rawC,...recalculated,three_month_bonus:threeBonus});
+    const c={...rawC};
     if(rawC.payment_done!==true){
       c.total_income=Number(c.net_pay??0);
     }
@@ -16743,7 +16692,7 @@ async function openPayslip(empId,type){
     }
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}${rawC.payment_done===true ? "" : payslipLine("7th Unpaid Refund (+)",recalculated.seventh_deduction_refund)}${rawC.payment_done===true ? "" : (Math.abs(Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0))>0.005 ? payslipLine("Manual Net Pay Adjustment",Number(c.net_pay||0)-Number(c.commission||0)-Number(recalculated.seventh_deduction_refund||0)) : "")}${payslipLine("W-Bonus (included)",c.w_bonus||0)}<div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}<div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
 <div class="payslip-net-grid"><div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div></div>
 <div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
@@ -34530,7 +34479,8 @@ async function load(outlet,date){
   const seven=part?null:applySevenManualOverrides(e,snap?normalizedSevenSnapshot(e,snap,ctx):calculate7th(e,m,ctx),date,overrides);
   if(seven){totals.salary7+=Number(seven.net_pay||0);totals.epf+=Number(seven.employee_epf||0)+Number(seven.employer_epf||0);totals.socso_eis+=Number(seven.employee_socso_l24??(Number(seven.employee_socso||0)+Number(seven.employee_lindung24||0)))+Number(seven.employer_socso||0)+Number(seven.employee_eis||0)+Number(seven.employer_eis||0);totals.taxpcb+=Number(seven.tax||0);}
   const bonus=Number(cs?.three_month_bonus??m.three_month_bonus??0);
-  const basis=cs?{commission_a:Number(cs.commission_a||0),commission_b:Number(cs.commission_b||0),customer_referral:Number(cs.customer_referral||0),staff_referral:Number(cs.staff_referral||0),reward:Number(cs.bonus||0),w_bonus:Number(cs.w_bonus||0)}:m;
+  const basis=cs?{commission_a:Number(cs.commission_a||0),commission_b:Number(cs.commission_b||0),customer_referral:Number(cs.customer_referral||0),staff_referral:Number(cs.staff_referral||0),reward:Number(cs.bonus||0),
+          bonus_is_total:true,w_bonus:Number(cs.w_bonus||0)}:m;
   const calc=calculate14th(basis,snap,bonus);
   const fourteen=cs?.payment_done===true?cs:applyFourteenManualOverrides(e,{...(cs||{}),...calc,three_month_bonus:bonus},date,overrides);
   totals.salary14+=Number(fourteen.net_pay||0);
