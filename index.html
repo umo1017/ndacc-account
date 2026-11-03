@@ -11780,6 +11780,53 @@ function salaryPaymentMethodSelect(e){
     : `<span class="helper">—</span>`;
 }
 
+// 7th recurring payroll amounts: one employee's latest saved month is the
+// default for later months. Each field rolls forward independently until edited.
+// Historical months are never modified by this read-only carry-forward.
+const ND_SEVEN_RECURRING_FIELDS=new Set([
+  'employee_epf','employer_epf','employee_socso_l24','employer_socso',
+  'employee_eis','employer_eis','off_day_deduction','tax'
+]);
+function ndSevenRecurringSaved(empId,field,targetMonth,source=salaryManualOverrides){
+  if(!ND_SEVEN_RECURRING_FIELDS.has(String(field)))return null;
+  const target=String(targetMonth||monthDate()).slice(0,10);
+  const id=Number(empId);
+  let chosen=null;
+  // Exact month's edits take priority, then the most recent preceding month.
+  for(const row of Array.isArray(source)?source:[]){
+    if(Number(row?.employee_id)!==id || String(row?.payroll_type)!=='7' || String(row?.field)!==String(field))continue;
+    const d=String(row.salary_month||'').slice(0,10);
+    if(!d || d>target || !Number.isFinite(Number(row.value)))continue;
+    if(!chosen || d>chosen.date || (d===chosen.date && chosen.kind!=='override')){
+      chosen={date:d,value:Number(row.value),kind:'override'};
+    }
+  }
+  // A confirmed previous month is also a saved value, even if nobody edited it.
+  // Do not read the CURRENT month's snapshot here: that is handled by the
+  // original confirmed-snapshot rendering path.
+  for(const snap of [
+    ...(Array.isArray(salaryYtdSnapshots)?salaryYtdSnapshots:[]),
+    ...(Array.isArray(window.ndSevenCarryPriorSnapshots)?window.ndSevenCarryPriorSnapshots:[])
+  ]){
+    if(Number(snap?.employee_id)!==id)continue;
+    const d=String(snap.salary_month||'').slice(0,10);
+    if(!d || d>=target)continue;
+    let val;
+    if(field==='employee_socso_l24'){
+      val=Number(snap.employee_socso||0)+Number(snap.employee_lindung24||0);
+    }else{
+      val=Number(snap[field]);
+    }
+    if(!Number.isFinite(val))continue;
+    if(!chosen || d>chosen.date){chosen={date:d,value:val,kind:'snapshot'};}
+  }
+  return chosen;
+}
+function ndSevenRecurringValue(empId,field,autoValue,salaryMonth=monthDate(),source=salaryManualOverrides){
+  const saved=ndSevenRecurringSaved(empId,field,salaryMonth,source);
+  return saved? saved.value : Number(autoValue||0);
+}
+
 function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryManualOverrides){
   if(!base) return base;
   const s={...base};
@@ -11791,19 +11838,29 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
     "employer_socso","employee_eis","employer_eis","off_day_deduction",
     "tax","ot","manual_deduction","salary_advance_deduction","staff_fine_deduction"
   ];
+  const selectedMonth=String(salaryMonth||monthDate()).slice(0,10);
+  const currentConfirmed=(salarySnapshots||[]).some(x=>
+    Number(x.employee_id)===empId &&
+    String(x.salary_month||'').slice(0,10)===selectedMonth &&
+    (x.confirmed_at || x.payment_done)
+  );
   simpleFields.forEach(field=>{
     if(salaryOverrideHas(empId,t,field,salaryMonth,source)){
       s[field]=salaryOverrideValue(empId,t,field,s[field],salaryMonth,source);
+    }else if(!currentConfirmed && ND_SEVEN_RECURRING_FIELDS.has(field)){
+      s[field]=ndSevenRecurringValue(empId,field,s[field],salaryMonth,source);
     }
   });
 
-  if(salaryOverrideHas(empId,t,"employee_socso_l24",salaryMonth,source)){
-    s.employee_socso_l24=salaryOverrideValue(
-      empId,t,"employee_socso_l24",employeeSocsoWithLindung(s),salaryMonth,source
-    );
-    // The input contains Employee SOCSO + L24. Recover the L24 component
-    // so its amount affects Allowance and Total Deduction immediately.
-    s.employee_lindung24=+Math.max(0,Number(s.employee_socso_l24||0)-Number(s.employee_socso||0)).toFixed(2);
+  const monthHasSocso=salaryOverrideHas(empId,t,'employee_socso_l24',salaryMonth,source);
+  const carrySocso=(!currentConfirmed || monthHasSocso)
+    ? ndSevenRecurringSaved(empId,'employee_socso_l24',salaryMonth,source) : null;
+  if(carrySocso){
+    s.employee_socso_l24=Number(carrySocso.value);
+    // The combined SOCSO + L24 value is authoritative for the month.
+    // Keep the split internally consistent with that saved combined amount.
+    s.employee_socso=Math.min(Math.max(0,Number(s.employee_socso||0)),Math.max(0,s.employee_socso_l24));
+    s.employee_lindung24=+Math.max(0,s.employee_socso_l24-Number(s.employee_socso||0)).toFixed(2);
   }
 
   // Gross, Total Deduction and Net Pay are derived from the user's 7th formula.
@@ -13790,6 +13847,26 @@ async function loadSalaryData(){
   salarySnapshots=snapRes.data||[];
   salaryCommissionSnapshots=commissionRes.data||[];
   salaryYtdSnapshots=ytdRes.data||[];
+  // Allow January to inherit the previous December without changing YTD totals.
+  let ndPriorDecemberSnapshots=[];
+  let ndPriorDecemberOverrides=[];
+  if(month.endsWith('-01')){
+    const priorDecember=(Number(year)-1)+'-12-01';
+    try{
+      const [priorSnap,priorOv]=await Promise.all([
+        salaryDb.from('payroll_snapshot').select('*').eq('salary_month',priorDecember),
+        salaryDb.from('salary_manual_overrides').select('*').eq('salary_month',priorDecember).eq('payroll_type','7')
+      ]);
+      if(priorSnap.error||priorOv.error)throw priorSnap.error||priorOv.error;
+      ndPriorDecemberSnapshots=priorSnap.data||[];
+      ndPriorDecemberOverrides=priorOv.data||[];
+    }catch(err){
+      console.warn('Previous December salary carry-forward unavailable:',err);
+      // Do not block salary load on a historical read, but never silently
+      // substitute another employee's amounts.
+    }
+  }
+  window.ndSevenCarryPriorSnapshots=ndPriorDecemberSnapshots;
 
   // Manual Salary edits are stored separately so auto formulas remain available.
   // Load the whole selected year so current-month and YTD views stay consistent.
@@ -13804,7 +13881,7 @@ async function loadSalaryData(){
       byId("salaryOutletRoot").innerHTML=`<div class="salary-card"><div class="bad">Salary manual amounts could not be loaded: ${String(ovRes.error.message||ovRes.error).replace(/</g,'&lt;')}. Please reload before confirming payroll.</div></div>`;
       return;
     }else{
-      salaryManualOverrides=ovRes.data||[];
+      salaryManualOverrides=[...(ovRes.data||[]),...ndPriorDecemberOverrides];
     }
   }catch(err){
     console.error("Salary manual overrides unavailable:",err);
