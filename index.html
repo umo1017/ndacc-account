@@ -2183,6 +2183,13 @@ html,body{width:100%;max-width:100%;margin:0;overflow-x:hidden}
   .daily-proof-grid{grid-template-columns:1fr}
 }
 </style>
+
+<style id="nd-history-records-accessibility-fix">
+#historyRecordsBtn{min-height:42px;touch-action:manipulation}
+#historyModal.open{z-index:5200!important}
+#historyModal .salary-dialog{max-height:calc(100dvh - 26px);overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:700px){#historyModal{padding:6px!important;align-items:flex-start!important}#historyModal .salary-dialog{width:calc(100vw - 12px)!important;max-height:calc(100dvh - 12px)!important;margin:6px auto!important}}
+</style>
 <style id="daily-history-admin-only-style">
 #historyRecordsBtn,
 #pettyCashHistoryBtn,
@@ -7004,6 +7011,8 @@ return `<div class="history-date-card">
 
   // One in-flight cloud read shared by all callers. Prevents older requests
   // committing after a newer request and corrupting cross-device balances.
+  // True only after a complete, successful cloud ledger snapshot has loaded.
+  let ndCashCloudSnapshotReady=false;
   let ndCashSnapshotInFlight=null;
   async function fetchRows({silent=false}={}){
     if(ndCashSnapshotInFlight) return ndCashSnapshotInFlight;
@@ -8968,7 +8977,42 @@ return `<div class="history-date-card">
     const saveOutletBtn=$("saveDailyOutletBtn"); if(saveOutletBtn) saveOutletBtn.onclick=saveDailyOutlet;
     const dailyOutletInput=$("dailyOutletName"); if(dailyOutletInput) dailyOutletInput.onkeydown=e=>{if(e.key==="Enter")saveDailyOutlet();};
 
-    const hb=$("historyRecordsBtn"); if(hb) hb.onclick=async()=>{ await refreshDailyHistoryPermission(); if(!canViewDailyHistory){alert("History access is not enabled for this account.");return;} await fetchRows(); /* Historical ledger remains read-only during navigation. */ if($("historyMonth")) $("historyMonth").value=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7)); renderCombinedHistory(); $("historyModal").classList.add("open"); };
+    const hb=$("historyRecordsBtn"); if(hb) hb.onclick=async()=>{
+      if(hb.dataset.ndHistoryOpening==='1')return;
+      hb.dataset.ndHistoryOpening='1';
+      try{
+        await Promise.race([refreshDailyHistoryPermission(),new Promise(resolve=>setTimeout(resolve,3000))]);
+        if(!canViewDailyHistory){alert("History access is not enabled for this account.");return;}
+        const modal=$("historyModal"),root=$("historyCombinedRoot");
+        if(!modal||!root){alert("History Records window is missing. Please refresh the page.");return;}
+        if($("historyMonth"))$("historyMonth").value=($("reviewMonth")?.value||getActiveDailyDate().slice(0,7)||today().slice(0,7));
+        // Display the window immediately. A full multi-table cash refresh may be slow.
+        modal.classList.add("open");
+        modal.style.setProperty('z-index','5200','important');
+        root.innerHTML='<div class="helper" role="status">Loading History Records…</div>';
+        // Preserve already loaded records while the independent background refresh runs.
+        try{renderCombinedHistory();}catch(renderErr){console.warn('History initial render:',renderErr);}
+        if(!root.innerHTML.trim())root.innerHTML='<div class="helper">Loading History Records…</div>';
+        // Run asynchronously so a 25-second cloud request cannot freeze the button/modal.
+        Promise.resolve().then(async()=>{
+          let ok=false,err=null;
+          try{ok=!!(await fetchRows({silent:true}));}
+          catch(e){err=e;console.warn('History cloud refresh:',e);}
+          if(!modal.classList.contains('open'))return;
+          if(ok){
+            try{renderCombinedHistory();}
+            catch(e){console.error('History render:',e);root.textContent='History display error: '+(e?.message||String(e));}
+          }else{
+            const info=document.createElement('div');info.className='helper bad';
+            info.textContent='History cloud refresh failed: '+(err?.message||'Please check the Daily Settlement sync status and retry.');
+            root.prepend(info);
+            const retry=document.createElement('button');retry.className='btn';retry.type='button';retry.textContent='Retry History';
+            retry.onclick=()=>hb.click();root.prepend(retry);
+          }
+        });
+      }catch(e){console.error('Open History Records:',e);alert('History Records error: '+(e?.message||e));}
+      finally{hb.dataset.ndHistoryOpening='0';}
+    };
     const hc=$("closeHistoryModal"); if(hc) hc.onclick=()=>$("historyModal").classList.remove("open");
     const hm=$("historyMonth"); if(hm) hm.onchange=renderCombinedHistory;
 
@@ -11745,7 +11789,7 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
   const simpleFields=[
     "guaranteed_pay","allowance","employee_epf","employer_epf",
     "employer_socso","employee_eis","employer_eis","off_day_deduction",
-    "tax","ot","manual_deduction"
+    "tax","ot","manual_deduction","salary_advance_deduction","staff_fine_deduction"
   ];
   simpleFields.forEach(field=>{
     if(salaryOverrideHas(empId,t,field,salaryMonth,source)){
@@ -11759,7 +11803,7 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
     );
     // The input contains Employee SOCSO + L24. Recover the L24 component
     // so its amount affects Allowance and Total Deduction immediately.
-    s.employee_lindung24=+(Number(s.employee_socso_l24||0)-Number(s.employee_socso||0)).toFixed(2);
+    s.employee_lindung24=+Math.max(0,Number(s.employee_socso_l24||0)-Number(s.employee_socso||0)).toFixed(2);
   }
 
   // Gross, Total Deduction and Net Pay are derived from the user's 7th formula.
@@ -11817,10 +11861,11 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
 // Nature's Dao internal 7th worksheet formula. Manually entered amounts remain authoritative.
 function ndSevenUserDeduction(s={}){
   const v=k=>Number(s[k]||0);
-  // 7th Total Deduction: Employee EPF + Employee SOCSO + L24
-  // + Employee EIS + Unpaid + PCB / Tax.
+  // The two additional deductions are separate monthly manual fields.
+  // Never count manual_deduction a second time: legacy field is independent.
   return +(v('employee_epf')+v('employee_socso')+v('employee_lindung24')+
-    v('employee_eis')+v('off_day_deduction')+v('tax')).toFixed(2);
+    v('employee_eis')+v('off_day_deduction')+v('tax')+
+    v('salary_advance_deduction')+v('staff_fine_deduction')).toFixed(2);
 }
 // Original Allowance stays editable and stored unchanged. The adjusted Allowance
 // is calculated once for display/Gross Pay, never written back as the source value.
@@ -11906,8 +11951,12 @@ function calculate7th(e,m={},context=null){
   const employee_epf=kwsp.employee;
   const employer_epf=kwsp.employer;
 
-  // SOCSO/EIS wages include overtime and use the actual remuneration paid.
-  const statutoryRaw=statutory(pcbRemuneration);
+  // Use the SAME gross wage bracket in initial 7th calculation and snapshot preview.
+  // The previous calculation used pcbRemuneration (after unpaid adjustments) while
+  // the snapshot preview used gross_pay, creating different SOCSO/EIS automatically.
+  // PCB continues to use pcbRemuneration independently.
+  const statutoryWage=Math.max(0,Number(gross||0));
+  const statutoryRaw=statutory(statutoryWage);
   const st=hasSocso ? {...statutoryRaw, employee_lindung24:hasKwsp ? statutoryRaw.employee_lindung24 : 0} : {
     employee_socso:0,
     employer_socso:0,
@@ -11940,7 +11989,8 @@ function calculate7th(e,m={},context=null){
   const formulaTotals=ndSevenUserTotals({
     guaranteed_pay:guaranteed, allowance, ot,
     employee_epf, employer_epf,
-    ...st, tax, off_day_deduction:offDayDeduction
+    ...st, tax, off_day_deduction:offDayDeduction,
+    salary_advance_deduction:0,staff_fine_deduction:0
   });
   const totalDeduction=formulaTotals.total_deduction;
 
@@ -11964,6 +12014,7 @@ function calculate7th(e,m={},context=null){
     off_day_daily_rate:+dailyRate.toFixed(2),
     off_day_deduction:offDayDeduction,
     manual_deduction:manualDeduction,
+    salary_advance_deduction:0,staff_fine_deduction:0,
     gross_pay:gross,
     total_deduction:totalDeduction,
     net_pay:formulaTotals.net_pay
@@ -14010,7 +14061,7 @@ function renderSevenTable(emps){
       </td>
       <td>${snap?money(s.employee_epf):salaryOverrideInput(e.id,"7","employee_epf",s.employee_epf)}</td>
       <td>${snap?money(s.employer_epf):salaryOverrideInput(e.id,"7","employer_epf",s.employer_epf)}</td>
-      <td title="Includes Lindung 24 Jam">${snap?money(employeeSocsoWithLindung(s)):salaryOverrideInput(e.id,"7","employee_socso_l24",employeeSocsoWithLindung(s))}</td>
+      <td title="Employee SOCSO + L24: automatic by this employee’s gross wage bracket and SOCSO/EPF registration; saved manual overrides are employee-specific.">${snap?money(employeeSocsoWithLindung(s)):salaryOverrideInput(e.id,"7","employee_socso_l24",employeeSocsoWithLindung(s))}</td>
       <td>${snap?money(s.employer_socso):salaryOverrideInput(e.id,"7","employer_socso",s.employer_socso)}</td>
       <td>${snap?money(s.employee_eis):salaryOverrideInput(e.id,"7","employee_eis",s.employee_eis)}</td>
       <td>${snap?money(s.employer_eis):salaryOverrideInput(e.id,"7","employer_eis",s.employer_eis)}</td>
@@ -14021,6 +14072,8 @@ function renderSevenTable(emps){
       <td data-live-ottotalhrs="${e.id}"><strong>${Number(s.ot_total_hours||calculateOtTotalHours(snap?s:m)).toFixed(2)}</strong></td>
       <td data-live-otamount="${e.id}"><strong>${money(s.ot||0)}</strong></td>
       <td>${snap?money(s.manual_deduction||0):salaryOverrideInput(e.id,"7","manual_deduction",s.manual_deduction||0)}</td>
+      <td>${snap?money(s.salary_advance_deduction||0):salaryOverrideInput(e.id,"7","salary_advance_deduction",s.salary_advance_deduction||0)}</td>
+      <td>${snap?money(s.staff_fine_deduction||0):salaryOverrideInput(e.id,"7","staff_fine_deduction",s.staff_fine_deduction||0)}</td>
       <td data-live-gross7="${e.id}">${snap?money(s.gross_pay):salaryOverrideInput(e.id,"7","gross_pay",s.gross_pay)}</td>
       <td data-live-deduction7="${e.id}">${snap?money(s.total_deduction):salaryOverrideInput(e.id,"7","total_deduction",s.total_deduction)}</td>
 
@@ -14028,7 +14081,7 @@ function renderSevenTable(emps){
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay7-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
 
-      <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset7="${e.id}" ${snap.payment_done?'title="Payment DONE: Reset is locked; tap for details" aria-label="Reset locked: Payment DONE"':''}>Reset</button>`:""}`:(isGlobalAdmin?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
+      <td>${snap?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset7="${e.id}" ${snap.payment_done?'title="Payment DONE: Reset is locked; tap for details" aria-label="Reset locked: Payment DONE"':''}>Reset</button>`:""}`:(String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()==="umo1017@gmail.com"?`<button class="btn" data-confirm7="${e.id}">Confirm 7th</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,7,!!snap)}</td>
       <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${snap
@@ -14064,7 +14117,7 @@ function renderSevenTable(emps){
         <th rowspan="2">Unpaid</th>
         <th rowspan="2">PCB / Tax</th>
         <th rowspan="2">Clocked Hrs</th><th rowspan="2">Off-Days</th><th rowspan="2">Total Hrs</th><th rowspan="2">Overtime (RM)</th>
-        <th rowspan="2">Deduction</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
+        <th rowspan="2">Deduction</th><th rowspan="2">Salary Advance</th><th rowspan="2">Staff Fine</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
         <th colspan="3" class="netpay-group-head">Net Pay</th>
         <th rowspan="2">Confirm</th><th rowspan="2">7th Monthly Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
       </tr>
@@ -14076,7 +14129,7 @@ function renderSevenTable(emps){
     </thead>
     <tbody>
       <tr class="netpay-summary-row" data-netpay-summary="7">
-        <td colspan="19" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="21" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="7-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="7-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="7-tng">${money(tngTotal)}</td>
@@ -14084,7 +14137,7 @@ function renderSevenTable(emps){
       </tr>
       ${emps.map(rowHtml).join("")}
       <tr class="netpay-summary-row" style="display:none">
-        <td colspan="19" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
+        <td colspan="21" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
@@ -15509,45 +15562,53 @@ async function reset7th(empId){
 }
 
 async function confirm7th(empId){
-  if(!isGlobalAdmin){alert("No Confirm permission.");return;}
+  if(String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()!=="umo1017@gmail.com"){alert("Only UMO can Confirm 7th Salary.");return;}
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || snapshotFor(empId)) return;
   if((e.employment_type||"full_time")==="part_time") return;
-  // Commit the exact visible SOCSO + L24 amount before freezing the 7th snapshot.
-  // A mobile tap on Confirm can race the input's asynchronous `change` upsert.
-  const socsoInput=Array.from(document.querySelectorAll('[data-salary-override][data-payroll-type="7"][data-override-field="employee_socso_l24"]'))
-    .find(input=>Number(input.dataset.salaryOverride)===Number(empId));
-  if(socsoInput){
-    const visibleCombined=Number(socsoInput.value);
-    if(!Number.isFinite(visibleCombined)||visibleCombined<0){
-      alert("Invalid Employee SOCSO + L24 amount.");return;
+  // Save EVERY editable 7th value before confirming, not only SOCSO + L24.
+  // A mobile tap can race the async change handler. Prevent silent amount changes.
+  const visibleInputs=Array.from(document.querySelectorAll(
+    '[data-salary-override][data-payroll-type="7"][data-override-field]'
+  )).filter(input=>Number(input.dataset.salaryOverride)===Number(empId));
+  const allowed7=new Set([
+    'guaranteed_pay','allowance','employee_epf','employer_epf',
+    'employee_socso_l24','employer_socso','employee_eis','employer_eis',
+    'off_day_deduction','tax','ot','manual_deduction',
+    'salary_advance_deduction','staff_fine_deduction'
+  ]);
+  for(const input of visibleInputs){
+    const field=String(input.dataset.overrideField||'');
+    if(!allowed7.has(field)) continue;
+    const num=Number(input.value);
+    if(!Number.isFinite(num)||num<0){
+      alert('Invalid 7th amount: '+field);return;
     }
-    const savedRow={
-      employee_id:Number(empId),salary_month:monthDate(),payroll_type:"7",
-      field:"employee_socso_l24",value:+visibleCombined.toFixed(2),
-      updated_at:new Date().toISOString(),
-      updated_by:String(currentSalaryUserEmail||currentUserEmail||"").toLowerCase()
+    const row={
+      employee_id:Number(empId),salary_month:monthDate(),payroll_type:'7',
+      field,value:+num.toFixed(2),updated_at:new Date().toISOString(),
+      updated_by:String(currentSalaryUserEmail||currentUserEmail||'').toLowerCase()
     };
-    const saved=await salaryDb.from("salary_manual_overrides")
-      .upsert(savedRow,{onConflict:"employee_id,salary_month,payroll_type,field"})
+    const result=await salaryDb.from('salary_manual_overrides')
+      .upsert(row,{onConflict:'employee_id,salary_month,payroll_type,field'})
       .select().single();
-    if(saved.error){
-      alert("Cannot confirm: Employee SOCSO + L24 amount was not saved. "+saved.error.message);
+    if(result.error){
+      alert('Cannot confirm: '+field+' was not saved. '+result.error.message);
       return;
     }
-    const i=salaryManualOverrides.findIndex(r=>
-      Number(r.employee_id)===Number(empId) &&
-      String(r.salary_month||"").slice(0,10)===monthDate() &&
-      String(r.payroll_type)==="7" && r.field==="employee_socso_l24");
-    if(i>=0) salaryManualOverrides[i]=saved.data||savedRow;
-    else salaryManualOverrides.push(saved.data||savedRow);
+    const at=salaryManualOverrides.findIndex(r=>
+      Number(r.employee_id)===Number(empId)&&
+      String(r.salary_month||'').slice(0,10)===monthDate()&&
+      String(r.payroll_type)==='7'&&String(r.field)===field);
+    if(at>=0) salaryManualOverrides[at]=result.data||row;
+    else salaryManualOverrides.push(result.data||row);
   }
   const calc=applySevenManualOverrides(e,calculate7th(e,monthlyFor(empId)));
   // Lindung 24 Jam is display-only. The existing payroll_snapshot table
   // does not have an employee_lindung24 column, so never send it to Supabase.
   // These are UI/calculated helper fields, not columns in payroll_snapshot.
   // SOCSO + L24 is persisted in salary_manual_overrides separately above.
-  const {employee_lindung24,employee_socso_l24,adjusted_allowance,...snapshotCalc}=calc;
+  const {employee_lindung24,employee_socso_l24,adjusted_allowance,salary_advance_deduction,staff_fine_deduction,...snapshotCalc}=calc;
   const {error}=await salaryDb.from("payroll_snapshot").upsert({
     employee_id:e.id,salary_month:monthDate(),...snapshotCalc
   },{
@@ -36983,38 +37044,7 @@ body > #ndProHamburger.nd-pro-portal-menu {
  else init();
 })();
 </script>
-<style id="nd-pro-home-color-cards">
-#ndProBetaPage{background:#f4f4f9!important;color:#242b35}
-#ndProBetaPage .pro-head{background:#fff;border-radius:18px;padding:12px 15px;margin-bottom:12px;box-shadow:0 6px 20px #2428360d}
-#ndProBetaPage .pro-head h1{font-size:18px!important;letter-spacing:-.02em}
-#ndProBetaPage .pro-head .pro-muted{display:none}
-#ndProBetaPage .nd-pro-home{max-width:1000px;margin:0 auto;padding:4px 3px 45px}
-#ndProBetaPage .nd-pro-home-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 8px 28px}
-#ndProBetaPage .nd-pro-home-brand{display:flex;align-items:center;gap:14px;min-width:0}
-#ndProBetaPage .nd-pro-home-logo{width:60px;height:60px;border-radius:50%;background:#fff;box-shadow:0 6px 22px #202a3b17;display:flex;flex-direction:column;justify-content:center;align-items:center;flex:none;font-weight:850;color:#273b35;letter-spacing:-.05em;font-size:18px}
-#ndProBetaPage .nd-pro-home-logo small{font-size:6px;letter-spacing:.08em;line-height:1.5}
-#ndProBetaPage .nd-pro-home-name{font-size:clamp(18px,3vw,28px);font-weight:900;letter-spacing:-.04em;white-space:nowrap}#ndProBetaPage .nd-pro-home-name span{color:#1678ea}
-#ndProBetaPage .nd-pro-home-sub{color:#8794a0;font-size:12px;font-weight:650}
-#ndProBetaPage .nd-pro-home-tools{display:flex;gap:7px}#ndProBetaPage .nd-pro-home-tools button{background:#fff;border:0;border-radius:16px;font-size:22px;min-width:43px;height:43px;box-shadow:0 3px 12px #1f34480a}
-#ndProBetaPage .nd-pro-home-welcome{display:flex;justify-content:space-between;align-items:center;margin:0 6px 13px;font-size:13px;color:#6b7884;font-weight:750}
-#ndProBetaPage .nd-pro-home-welcome strong{color:#1c6ce0;background:#e5f0ff;border-radius:18px;padding:6px 10px;font-size:12px}
-#ndProBetaPage .nd-pro-home-lead{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
-#ndProBetaPage .nd-pro-home-tile{position:relative;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;text-align:left;min-height:150px;border:0;border-radius:24px;padding:19px 20px;background:white;box-shadow:0 9px 25px #34355b0b;transition:transform .2s,box-shadow .2s}
-#ndProBetaPage .nd-pro-home-tile:active,#ndProBetaPage .nd-pro-home-mini:active{transform:scale(.97)}
-#ndProBetaPage .nd-pro-home-ico{font-size:38px;line-height:1.1}
-#ndProBetaPage .nd-pro-home-label{font-size:18px;font-weight:900;color:#253040;line-height:1.2}
-#ndProBetaPage .nd-pro-home-number{position:absolute;right:19px;top:20px;color:#2d77ed;font-size:21px;font-weight:900}
-#ndProBetaPage .nd-pro-home-section{font-size:19px;font-weight:900;margin:32px 4px 16px;color:#2d3440}
-#ndProBetaPage .nd-pro-home-quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-#ndProBetaPage .nd-pro-home-mini{display:flex;align-items:center;gap:11px;padding:16px 13px;min-height:72px;background:#fff;border:none;border-radius:20px;box-shadow:0 6px 18px #34355b0b;text-align:left;transition:transform .2s}
-#ndProBetaPage .nd-pro-home-mini span{display:grid;place-items:center;width:38px;height:38px;background:#e9f2ff;border-radius:13px;font-size:24px;flex:none}
-#ndProBetaPage .nd-pro-home-mini strong{font-size:13px;font-weight:850;color:#293446;flex:1;line-height:1.2}
-#ndProBetaPage .nd-pro-home-mini small{font-size:12px;font-weight:900;color:#2677e7}
-#ndProBetaPage .nd-pro-home-mini.coral span{background:#fff0ee}#ndProBetaPage .nd-pro-home-mini.gold span{background:#fff4df}#ndProBetaPage .nd-pro-home-mini.violet span{background:#f4ecff}#ndProBetaPage .nd-pro-home-mini.mint span{background:#e5f8f1}
-#ndProBetaPage .nd-pro-home-back{border:1px solid #d6dde5;border-radius:13px;background:#fff;padding:10px 14px;color:#2e5c84;font-weight:800;margin-bottom:8px}
-#ndProBetaPage .nd-pro-home-back[hidden]{display:none!important}
-@media(max-width:450px){#ndProBetaPage .nd-pro-home-tile{min-height:136px;padding:16px;border-radius:21px}#ndProBetaPage .nd-pro-home-label{font-size:16px}#ndProBetaPage .nd-pro-home-ico{font-size:32px}#ndProBetaPage .nd-pro-home-mini{padding:12px 9px;gap:7px}#ndProBetaPage .nd-pro-home-mini strong{font-size:12px}#ndProBetaPage .nd-pro-home-name{font-size:17px}#ndProBetaPage .nd-pro-home-logo{width:50px;height:50px;font-size:16px}}
-</style>
+
 <style id="nd-pro-premium-crm-booking-v1">
 #ndProBetaPage .procrm,#ndProBetaPage .pro-card#proAppointmentCard{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#202d43}
 #ndProBetaPage .procrm{background:#f4f3fa;border-radius:24px;padding:12px;min-height:62vh;max-width:860px;margin:auto}
