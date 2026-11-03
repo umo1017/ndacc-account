@@ -7125,8 +7125,8 @@ return `<div class="history-date-card">
       if(success){
         updateTodayTotalCash();
         const date=$("settlementDate")?.value||today();
-        const authoritative=directCashRemainingForBranch(currentBranch,allRows,date);
-        const ready=ndCashCloudSnapshotReady&&ndCashAdvanceReady&&!ndCashRemittanceError&&!ndApprovedCashExpenseError;
+        const authoritative=ndCashShownValue();
+        const ready=authoritative!==null;
         if($("cashBalance"))$("cashBalance").value=ready?money(authoritative):'Unavailable';
         if($("metricCashBalance"))$("metricCashBalance").textContent=ready?money(authoritative):'Unavailable';
       }
@@ -7198,8 +7198,8 @@ return `<div class="history-date-card">
     $("grandTotal").value=money(total);
     // Cloud-authoritative balance. Unsubmitted edits NEVER change the official number.
     const selectedCashDate=$("settlementDate")?.value||today();
-    const unifiedCash=directCashRemainingForBranch(currentBranch,allRows,selectedCashDate);
-    const unifiedCashReady=ndCashCloudSnapshotReady&&ndCashAdvanceReady&&!ndCashRemittanceError&&!ndApprovedCashExpenseError;
+    const unifiedCash=ndCashShownValue();
+    const unifiedCashReady=unifiedCash!==null;
     $("cashBalance").value=unifiedCashReady?money(unifiedCash):'Unavailable';
     $("pettyRemaining").value=money(pettyRemaining);
     $("metricGrandTotal").textContent=money(total);if($("metricCashBalance"))$("metricCashBalance").textContent=unifiedCashReady?money(unifiedCash):'Unavailable';
@@ -8646,6 +8646,93 @@ return `<div class="history-date-card">
     });
   }
 
+  // Balance-only, server-saved read. Never reads unsaved form fields.
+  // Keeping this separate from the full reporting history prevents a slow
+  // unrelated report from hiding today's amount.
+  let ndCashQuickValue=null, ndCashQuickBusy=false,ndCashQuickLastKey='';
+  function ndCashQuickKey(){return String(currentBranch||'').trim()+'|'+String($('settlementDate')?.value||getActiveDailyDate());}
+  function ndCashShownValue(){
+    const key=ndCashQuickKey();
+    if(ndCashQuickValue&&ndCashQuickValue.key===key)return ndCashQuickValue.amount;
+    if(ndCashCloudSnapshotReady&&ndCashAdvanceReady&&!ndCashRemittanceError&&!ndApprovedCashExpenseError)
+      return directCashRemainingForBranch(currentBranch,allRows,$('settlementDate')?.value||getActiveDailyDate());
+    return null;
+  }
+  async function ndCashQuickRead(){
+    if(ndCashQuickBusy||!db)return;
+    const branch=String(currentBranch||'').trim();
+    const cutoff=String($('settlementDate')?.value||getActiveDailyDate());
+    if(!branch||!cutoff)return;
+    const key=branch+'|'+cutoff;
+    ndCashQuickBusy=true;
+    const start=ND_CASH_LEDGER_START;
+    async function pages(build,label){
+      const output=[];
+      for(let offset=0;offset<10000;offset+=500){
+        const r=await build().range(offset,offset+499);
+        if(r.error)throw Error(label+': '+(r.error.message||r.error));
+        const batch=Array.isArray(r.data)?r.data:[];
+        output.push(...batch);
+        if(batch.length<500)return output;
+      }
+      throw Error(label+' exceeds safe read limit');
+    }
+    const pause=ms=>new Promise((_,reject)=>setTimeout(()=>reject(Error('现金云端查询超时')),ms));
+    try{
+      const [days,transfers,advances,expenses]=await Promise.race([
+        Promise.all([
+          pages(()=>db.from('daily_settlements').select('id,branch,settlement_date,cash,cash_withdrawal,petty_entries').eq('branch',branch).gte('settlement_date',start).lte('settlement_date',cutoff).order('settlement_date',{ascending:false}), 'Daily Settlement'),
+          pages(()=>db.from('cash_remittances').select('id,branch,remittance_date,status,amount').eq('branch',branch).gte('remittance_date',start).lte('remittance_date',cutoff).order('remittance_date',{ascending:false}),'Bank Transfer'),
+          pages(()=>db.rpc('nd_cash_advance_entries'),'Salary Advance'),
+          pages(()=>db.from('nd_cash_expense_daily_approved').select('branch,expense_date,approved_amount').eq('branch',branch).gte('expense_date',start).lte('expense_date',cutoff).order('expense_date',{ascending:false}),'Cash Expense')
+        ]),pause(20000)
+      ]);
+      if(key!==ndCashQuickKey())return;
+      const seenDates=new Set();
+      const savedDays=days.filter(row=>{const d=String(row.settlement_date||'');if(seenDates.has(d))return false;seenDates.add(d);return true;});
+      const sum=(rows,field)=>rows.reduce((v,r)=>v+(Number(r[field])||0),0);
+      const cash=sum(savedDays,'cash'),withdrawals=sum(savedDays,'cash_withdrawal');
+      const transferIds=new Set();
+      const verifiedTransfers=transfers.filter(r=>{
+        if(String(r.status||'').toLowerCase()!=='verified')return false;
+        const id=String(r.id??'');if(id&&transferIds.has(id))return false;
+        if(id)transferIds.add(id);return true;
+      });
+      const cashToPetty=savedDays.reduce((v,r)=>v+(Array.isArray(r.petty_entries)?r.petty_entries:[]).filter(e=>e?.type==='in'&&(e.transfer_to_petty===true||e.reason==='Cash Withdrawal to Petty Cash')).reduce((q,e)=>q+(Number(e.amount)||0),0),0);
+      const genuinePettyIn=savedDays.reduce((v,r)=>v+(Array.isArray(r.petty_entries)?r.petty_entries:[]).filter(e=>e?.type==='in'&&e.transfer_to_petty!==true&&e.reason!=='Cash Withdrawal to Petty Cash').reduce((q,e)=>q+(Number(e.amount)||0),0),0);
+      const legacyExpenses=savedDays.reduce((v,r)=>v+(Array.isArray(r.petty_entries)?r.petty_entries:[]).filter(e=>e?.type==='out').reduce((q,e)=>q+(Number(e.amount)||0),0),0);
+      const salaryAdvance=advances.filter(r=>String(r.branch||'').trim()===branch&&String(r.advance_date||'')>=ND_CASH_ADVANCE_START&&String(r.advance_date||'')<=cutoff).reduce((v,r)=>v+(Number(r.cash_deduction)||0),0);
+      const balance=cash+genuinePettyIn-sum(verifiedTransfers,'amount')-legacyExpenses-sum(expenses,'approved_amount')-salaryAdvance-(withdrawals-Math.min(Math.max(0,withdrawals),Math.max(0,cashToPetty)));
+      if(!Number.isFinite(balance))throw Error('现金账本包含无效金额');
+      ndCashQuickValue={key,amount:Math.round(balance*100)/100,updated:Date.now()};
+      ndCashQuickLastKey=key;
+      updateTodayTotalCash();
+      const shown=money(ndCashQuickValue.amount);
+      if($('cashBalance'))$('cashBalance').value=shown;
+      if($('metricCashBalance'))$('metricCashBalance').textContent=shown;
+      const state=$('syncState');
+      if(state&&(/正在同步|现金余额读取失败|同步失败|云端已同步/.test(state.textContent||''))){
+        state.textContent='Today’s Cash 云端已更新 ✓';state.className='ok';
+      }
+    }catch(error){
+      if(key!==ndCashQuickKey())return;
+      if(!ndCashQuickValue||ndCashQuickValue.key!==key){
+        const fallback=ndCashShownValue();
+        if(fallback===null){
+          const state=$('syncState');
+          if(state){state.textContent='现金余额读取失败：'+(error?.message||String(error))+' · 点击此处重试';state.className='bad';state.style.cursor='pointer';state.onclick=()=>ndCashQuickRead();}
+        }
+      }
+      console.warn('Today cash quick cloud read failed:',error);
+    }finally{ndCashQuickBusy=false;}
+  }
+  function ndCashScheduleQuickRead(){
+    if(ndCashQuickBusy)return;
+    ndCashQuickRead().catch(error=>console.warn('Cash read:',error));
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')ndCashScheduleQuickRead();});
+  window.addEventListener('focus',ndCashScheduleQuickRead);
+  window.setInterval(()=>{if(document.visibilityState!=='hidden')ndCashScheduleQuickRead();},45000);
   function updateTodayTotalCash(){
     const el=$("todayTotalCash"); if(!el) return;
     const selectedDate=$("settlementDate")?.value||getActiveDailyDate();
@@ -8657,8 +8744,8 @@ return `<div class="history-date-card">
 
     // The official balance always comes from the most recent cloud snapshot.
     // Do not mix unsaved input values with persisted settlement movements.
-    const balance=directCashRemainingForBranch(currentBranch,allRows,selectedDate);
-    if(!ndCashCloudSnapshotReady||!ndCashAdvanceReady||ndCashRemittanceError||ndApprovedCashExpenseError){
+    const balance=ndCashShownValue();
+    if(balance===null){
       el.textContent='Unavailable';el.style.color='';if($('ndTodayCashNegativeHint'))$('ndTodayCashNegativeHint').style.display='none';
       el.title=ndCashRemittanceError?'Cash Remittance data unavailable: '+ndCashRemittanceError:(ndApprovedCashExpenseError?'Approved Cash Expense data unavailable: '+ndApprovedCashExpenseError:(ndCashAdvanceError?'Salary Advance Cash unavailable: '+ndCashAdvanceError:'Loading salary advance deductions'));
       ndRenderCashAdvanceHistory();return;
@@ -8674,6 +8761,7 @@ return `<div class="history-date-card">
       hint.textContent=negative?'Cash received is less than recorded expenses and bank transfers. Check the selected period.':'';
     }
     const breakdown=ndCashLedgerBreakdown(currentBranch,allRows,selectedDate);
+    if(ndCashQuickValue?.key===ndCashQuickKey()&&!ndCashCloudSnapshotReady){el.title="Cloud-saved cash balance · "+ndCashQuickValue.key;el.dataset.cashBreakdown=el.title;return;}
     el.title=`Cash received: ${money(breakdown.cash)} | Petty Cash IN: ${money(breakdown.pettyCashIn)} | Bank transfers: ${money(breakdown.transfers)} | Cash expenses (legacy): ${money(breakdown.legacyExpenses)} | Cash expenses (UMO approved): ${money(breakdown.approvedExpenses)} | Salary advance cash paid (net): ${money(breakdown.advanceDeductions)} | Cash withdrawals: ${money(breakdown.withdrawals-breakdown.internalTransferReversal)} | Remaining: ${money(balance)}`;
     el.dataset.cashBreakdown=el.title;
     // Keep the audit breakdown available for diagnostics, but do not display a note.
@@ -8736,7 +8824,7 @@ return `<div class="history-date-card">
     const activeDate=getActiveDailyDate();$("settlementDate").value=activeDate;$("reviewMonth").value=activeDate.slice(0,7);$("branchRecordState").textContent=currentBranch;
     renderDailyBranchButtons();
     $("cash")?.closest(".grid")?.querySelectorAll("input").forEach(el=>{if(!["reviewMonth","settlementDate","pettyAmount","pettyReason"].includes(el.id))el.oninput=()=>{calc();scheduleSave();};});
-    $("settlementDate").onchange=async()=>{const d=$("settlementDate").value;rememberActiveDailyDate(d);await loadDate(d);$("reviewMonth").value=d.slice(0,7);renderMonth();ndRenderCashAdvanceHistory();setDailyClean();};
+    $("settlementDate").onchange=async()=>{const d=$("settlementDate").value;rememberActiveDailyDate(d);await loadDate(d);$("reviewMonth").value=d.slice(0,7);renderMonth();ndRenderCashAdvanceHistory();setDailyClean();ndCashScheduleQuickRead();};
     $("reviewMonth").onchange=renderMonth;
     $("cash").oninput=()=>{calc();scheduleSave();};
     $("cashWithdrawal").oninput=()=>{calc();scheduleSave();};
@@ -8919,6 +9007,8 @@ return `<div class="history-date-card">
     if(canViewDailySettlement){
       // Form records and ledger reconciliation are independent: do not leave the
       // entire Daily Settlement blank if an unrelated ledger RPC fails.
+      // The balance-only cloud request is independent of the full history load.
+      ndCashScheduleQuickRead();
       await fetchRows();
       const d=getActiveDailyDate();
       $("settlementDate").value=d;
