@@ -12036,6 +12036,73 @@ function ndSevenRecurringValue(empId,field,autoValue,salaryMonth=monthDate(),sou
   return saved? saved.value : Number(autoValue||0);
 }
 
+// Payroll deductions: cloud-backed summary, never fabricate a missing balance.
+// Staff Fine is an incident record, NOT an authorized wage deduction.
+window.ndPayrollDeductionLedger = {month:'',ready:false,error:'',advances:new Map(),fines:new Map()};
+async function ndLoadPayrollDeductionLedger(selectedMonth){
+  const ledger={month:String(selectedMonth||'').slice(0,7),ready:false,error:'',advances:new Map(),fines:new Map()};
+  window.ndPayrollDeductionLedger=ledger;
+  if(!salaryDb || !/^\d{4}-\d{2}$/.test(ledger.month)){
+    ledger.error='Payroll deduction records cannot be loaded.';
+    return ledger;
+  }
+  const first=ledger.month+'-01';
+  const [yy,mm]=ledger.month.split('-').map(Number);
+  const next=mm===12?(yy+1)+'-01-01':yy+'-'+String(mm+1).padStart(2,'0')+'-01';
+  try{
+    // Use the same signed advance history that the Salary Advance page displays.
+    // All pages are fetched so a 500-row boundary cannot understate deductions.
+    const advances=[];
+    for(let offset=0;offset<100000;offset+=500){
+      const result=await salaryDb.rpc('nd_salary_advance_simple_history').range(offset,offset+499);
+      if(result.error)throw result.error;
+      const page=Array.isArray(result.data)?result.data:[];
+      advances.push(...page);
+      if(page.length<500)break;
+    }
+    for(const a of advances){
+      const m=String(a.deduction_month||'').slice(0,7);
+      const id=Number(a.employee_id);
+      const amount=Number(a.amount);
+      const status=String(a.status||'').trim().toLowerCase();
+      if(m!==ledger.month||!Number.isInteger(id)||id<=0||!Number.isFinite(amount)||amount<=0)continue;
+      if(a.deleted_at||a.nd_deleted_at||a.is_deleted===true||/deleted|cancelled|canceled|reversed|void/.test(status))continue;
+      const old=ledger.advances.get(id)||0;
+      ledger.advances.set(id,Math.round((old+amount)*100)/100);
+    }
+    // Fine approval is an internal disciplinary record; approval alone
+    // does not authorize deduction from an employee's salary.
+    const fines=[];
+    for(let offset=0;offset<100000;offset+=500){
+      const result=await salaryDb.from('nd_staff_incidents')
+        .select('id,employee_id,incident_date,approved_amount,review_status,nd_deleted_at,legal_basis')
+        .gte('incident_date',first).lt('incident_date',next)
+        .eq('review_status','approved').order('id',{ascending:true})
+        .range(offset,offset+499);
+      if(result.error)throw result.error;
+      const page=Array.isArray(result.data)?result.data:[];
+      fines.push(...page);
+      if(page.length<500)break;
+    }
+    for(const f of fines){
+      const id=Number(f.employee_id),amount=Number(f.approved_amount);
+      if(f.nd_deleted_at||!Number.isInteger(id)||id<=0||!Number.isFinite(amount)||amount<=0)continue;
+      ledger.fines.set(id,Math.round(((ledger.fines.get(id)||0)+amount)*100)/100);
+    }
+    ledger.ready=true;
+  }catch(error){
+    ledger.ready=false;
+    ledger.error=String(error?.message||error||'Unable to read payroll deduction records');
+    console.error('Payroll deduction sync failed:',error);
+  }
+  return ledger;
+}
+function ndAutoPayrollAmount(e,kind){
+  const ledger=window.ndPayrollDeductionLedger;
+  if(!ledger?.ready||ledger.month!==monthKey())return 0;
+  return Number((kind==='advance'?ledger.advances:ledger.fines).get(Number(e?.id))||0);
+}
+
 function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryManualOverrides){
   if(!base) return base;
   const s={...base};
@@ -12061,6 +12128,15 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
     }
   });
 
+  // The signed advance ledger is authoritative for open 7th payroll.
+  // Show approved fines automatically, but do NOT take them out of wages:
+  // the existing incident approval explicitly says no wage deduction authorized.
+  if(!currentConfirmed && window.ndPayrollDeductionLedger?.ready &&
+      window.ndPayrollDeductionLedger.month===String(salaryMonth).slice(0,7)){
+    s.salary_advance_deduction=ndAutoPayrollAmount(e,'advance');
+    s.staff_fine_deduction=ndAutoPayrollAmount(e,'fine');
+  }
+
   const monthHasSocso=salaryOverrideHas(empId,t,'employee_socso_l24',salaryMonth,source);
   const carrySocso=(!currentConfirmed || monthHasSocso)
     ? ndSevenRecurringSaved(empId,'employee_socso_l24',salaryMonth,source) : null;
@@ -12074,7 +12150,12 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
 
   // Gross, Total Deduction and Net Pay are derived from the user's 7th formula.
   // Legacy manual total overrides are ignored to prevent stale sums.
-  Object.assign(s,ndSevenUserTotals(s));
+  // Preserve saved gross/deduction/net amounts for confirmed 7th payroll.
+  const hasStoredSnapshot=(salarySnapshots||[]).some(x=>
+    Number(x.employee_id)===empId &&
+    String(x.salary_month||'').slice(0,10)===selectedMonth
+  );
+  if(!hasStoredSnapshot)Object.assign(s,ndSevenUserTotals(s));
   return s;
 }
 
@@ -12106,8 +12187,15 @@ function ndFourteenUpdateTotals(c,seven){
   c.raw_commission=cents(c.total_commission-c.total_employer_cost);
   c.commission=c.raw_commission;
   c.seventh_deduction_refund=0;
-  c.total_income=c.commission;
-  c.net_pay=c.commission;
+  // 14th Nett Pay: Total Commission - 7th Net Pay - Total Deduction
+  // - Commission - (Original Allowance - adjusted Allowance).
+  // Original/adjusted Allowance come from the same 7th snapshot.
+  c.original_allowance=cents(seven?.allowance||0);
+  c.adjusted_allowance=cents(ndSevenAdjustedAllowance(seven||{}));
+  c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
+  c.total_income=c.total_commission;
+  c.net_pay=cents(c.total_commission-costs.seventh_net_pay-
+    costs.seventh_total_deduction-c.commission-c.allowance_difference);
   c.has_payslip=c.net_pay>0;
   return c;
 }
@@ -12134,8 +12222,9 @@ function ndSevenUserDeduction(s={}){
   // The separately editable "Deduction" column is manual_deduction.
   return +(v('employee_epf')+v('employee_socso')+v('employee_lindung24')+
     v('employee_eis')+v('off_day_deduction')+v('tax')+
-    v('manual_deduction')+v('salary_advance_deduction')+
-    v('staff_fine_deduction')).toFixed(2);
+    v('manual_deduction')+v('salary_advance_deduction')).toFixed(2);
+  // Staff Fine is displayed for tracking only; no payroll deduction
+  // without separate lawful authorization and implementation.
 }
 // Original Allowance stays editable and stored unchanged. The adjusted Allowance
 // is calculated once for display/Gross Pay, never written back as the source value.
@@ -14100,6 +14189,13 @@ async function loadSalaryData(){
     return;
   }
 
+  // Auto-populate signed salary advances and approved staff fines.
+  // An incomplete read must never be silently treated as RM0.
+  const deductionLedger=await ndLoadPayrollDeductionLedger(month);
+  if(!deductionLedger.ready){
+    byId('salarySyncState').textContent='Salary deductions not synced — retry before Confirm 7th';
+  }
+
   salaryLastLoadedMonth=month;
 
   // If a live refresh happens while the user is editing 14th Commission,
@@ -14168,7 +14264,9 @@ async function loadSalaryData(){
     byId("salarySyncState").textContent="Bonus V4 unavailable: "+String(err?.message||err);
   }
 
-  byId("salarySyncState").textContent=`Cloud Synced ✓ · ${salaryEmployees.length} Staff`;
+  byId('salarySyncState').textContent=window.ndPayrollDeductionLedger?.ready
+    ? `Cloud Synced ✓ · ${salaryEmployees.length} Staff · Advance / Fine loaded`
+    : 'Payroll Advance / Fine not synced — refresh before Confirm 7th';
   try{if(byId("empNo") && !byId("empNo").value) prepareAutoEmployeeNo();}catch(_){}
   await ndLoadWBonusForSalary();
   renderSalary();
@@ -14368,8 +14466,8 @@ function renderSevenTable(emps){
       <td data-live-ottotalhrs="${e.id}"><strong>${Number(s.ot_total_hours||calculateOtTotalHours(snap?s:m)).toFixed(2)}</strong></td>
       <td data-live-otamount="${e.id}"><strong>${money(s.ot||0)}</strong></td>
       <td>${snap?money(s.manual_deduction||0):salaryOverrideInput(e.id,"7","manual_deduction",s.manual_deduction||0)}</td>
-      <td>${snap?money(s.salary_advance_deduction||0):salaryOverrideInput(e.id,"7","salary_advance_deduction",s.salary_advance_deduction||0)}</td>
-      <td>${snap?money(s.staff_fine_deduction||0):salaryOverrideInput(e.id,"7","staff_fine_deduction",s.staff_fine_deduction||0)}</td>
+      <td>${money(s.salary_advance_deduction||0)}<div class="helper" style="font-size:10px">${snap?"Saved":"Auto from Salary Advance"}</div></td>
+      <td>${money(s.staff_fine_deduction||0)}<div class="helper" style="font-size:10px">${snap?"Saved record":"Approved record · not deducted"}</div></td>
       <td data-live-gross7="${e.id}">${snap?money(s.gross_pay):salaryOverrideInput(e.id,"7","gross_pay",s.gross_pay)}</td>
       <td data-live-deduction7="${e.id}">${snap?money(s.total_deduction):salaryOverrideInput(e.id,"7","total_deduction",s.total_deduction)}</td>
 
@@ -15510,6 +15608,8 @@ document.addEventListener("click",async(ev)=>{
 });
 
 window.addEventListener('nd-daily-rest-saved',()=>{if(window.activeMainPage==='salary'&&!commissionPendingChanges.size)void loadSalaryData();});
+window.addEventListener('nd-cash-advance-changed',()=>{if(window.activeMainPage==='salary'&&!commissionPendingChanges.size)void loadSalaryData();});
+window.addEventListener('nd-staff-incident-reviewed',()=>{if(window.activeMainPage==='salary'&&!commissionPendingChanges.size)void loadSalaryData();});
 
 async function refreshSalaryStayHere(){
   const savedMonth = byId("salaryMonth").value;
@@ -15862,6 +15962,30 @@ async function confirm7th(empId){
   const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   if(!e || snapshotFor(empId)) return;
   if((e.employment_type||"full_time")==="part_time") return;
+  if(!window.ndPayrollDeductionLedger?.ready ||
+     window.ndPayrollDeductionLedger.month!==monthKey()){
+    alert('Salary Advance / Staff Fine records are not synced. Refresh Salary before confirming.');
+    return;
+  }
+  // Persist exact auto ledger values for the payslip as read-only overrides.
+  // Fine remains a memo amount and is excluded from Total Deduction.
+  for(const [field,value] of [
+    ['salary_advance_deduction',ndAutoPayrollAmount(e,'advance')],
+    ['staff_fine_deduction',ndAutoPayrollAmount(e,'fine')]
+  ]){
+    const row={employee_id:Number(empId),salary_month:monthDate(),payroll_type:'7',
+      field,value:Number(value.toFixed(2)),updated_at:new Date().toISOString(),
+      updated_by:String(currentSalaryUserEmail||currentUserEmail||'').toLowerCase()};
+    const result=await salaryDb.from('salary_manual_overrides')
+      .upsert(row,{onConflict:'employee_id,salary_month,payroll_type,field'})
+      .select().single();
+    if(result.error){alert('Cannot confirm: auto '+field+' could not be saved. '+result.error.message);return;}
+    const idx=salaryManualOverrides.findIndex(r=>Number(r.employee_id)===Number(empId)&&
+      String(r.salary_month||'').slice(0,10)===monthDate()&&
+      String(r.payroll_type)==='7'&&r.field===field);
+    if(idx>=0)salaryManualOverrides[idx]=result.data||row;
+    else salaryManualOverrides.push(result.data||row);
+  }
   // Save EVERY editable 7th value before confirming, not only SOCSO + L24.
   // A mobile tap can race the async change handler. Prevent silent amount changes.
   const visibleInputs=Array.from(document.querySelectorAll(
@@ -15870,8 +15994,7 @@ async function confirm7th(empId){
   const allowed7=new Set([
     'guaranteed_pay','allowance','employee_epf','employer_epf',
     'employee_socso_l24','employer_socso','employee_eis','employer_eis',
-    'off_day_deduction','tax','ot','manual_deduction',
-    'salary_advance_deduction','staff_fine_deduction'
+    'off_day_deduction','tax','ot','manual_deduction'
   ]);
   for(const input of visibleInputs){
     const field=String(input.dataset.overrideField||'');
@@ -15914,36 +16037,65 @@ async function confirm7th(empId){
   await refreshSalaryStayHere();
 }
 
+const ndConfirm14thInFlight = new Set();
 async function confirm14th(empId){
+  const id=Number(empId);
   if(String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()!=="umo1017@gmail.com"){
     alert("Only UMO can confirm 14th Salary.");return;
   }
-  if(commissionPendingChanges.has(Number(empId))){
-    alert("Please Submit Commission Changes first.");
-    return;
+  if(ndConfirm14thInFlight.has(id)) return;
+  if(commissionPendingChanges.has(id)){
+    alert("Please Submit Commission Changes first.");return;
   }
-  const e=salaryEmployees.find(x=>Number(x.id)===Number(empId));
-  if(!e || commissionSnapshotFor(empId)) return;
-  const m=monthlyFor(empId);
-  const c=applyFourteenManualOverrides(e,calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(empId),salaryQuarter3BonusFor(empId)));
-  const row={
-    employee_id:e.id,
-    salary_month:monthDate(),
-    commission_a:Number(c.commission_a||0),
-    commission_b:Number(c.commission_b||0),
-    total_commission:Number(c.total_commission||0),
-    customer_referral:Number(m.customer_referral||0),
-    staff_referral:Number(m.staff_referral||0),
-    bonus:Number(c.bonus||0),
-    three_month_bonus:Number(c.three_month_bonus||0),
-    w_bonus:Number(c.w_bonus||0),
-    commission:Number(c.commission||0),
-    total_income:Number(c.total_income||0),
-    net_pay:Number(c.net_pay||0)
-  };
-  const {error}=await salaryDb.from("payroll_commission_snapshot").insert(row);
-  if(error){alert("Confirm 14th failed: "+error.message);return;}
-  await refreshSalaryStayHere();
+  const e=salaryEmployees.find(x=>Number(x.id)===id);
+  if(!e)return;
+  const salaryMonth=monthDate();
+  ndConfirm14thInFlight.add(id);
+  try{
+    // Always check cloud, not just the page's possibly stale snapshot cache.
+    const existing=await salaryDb.from("payroll_commission_snapshot")
+      .select("employee_id,salary_month")
+      .eq("employee_id",id).eq("salary_month",salaryMonth)
+      .maybeSingle();
+    if(existing.error)throw existing.error;
+    if(existing.data){
+      await refreshSalaryStayHere();
+      alert("This employee's 14th Salary is already confirmed for this month. Existing confirmed pay was not changed.");
+      return;
+    }
+    const m=monthlyFor(id);
+    const c=applyFourteenManualOverrides(e,calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(id),salaryQuarter3BonusFor(id)));
+    const row={
+      employee_id:e.id,
+      salary_month:salaryMonth,
+      commission_a:Number(c.commission_a||0),
+      commission_b:Number(c.commission_b||0),
+      total_commission:Number(c.total_commission||0),
+      customer_referral:Number(m.customer_referral||0),
+      staff_referral:Number(m.staff_referral||0),
+      bonus:Number(c.bonus||0),
+      three_month_bonus:Number(c.three_month_bonus||0),
+      w_bonus:Number(c.w_bonus||0),
+      commission:Number(c.commission||0),
+      total_income:Number(c.total_income||0),
+      net_pay:Number(c.net_pay||0)
+    };
+    const result=await salaryDb.from("payroll_commission_snapshot").insert(row);
+    if(result.error){
+      // Concurrent confirmation from another tab/device: never overwrite.
+      if(result.error.code==="23505" || /duplicate key value|unique constraint/i.test(result.error.message||"")){
+        await refreshSalaryStayHere();
+        alert("Already confirmed for this employee and month. No duplicate or overwrite was made.");
+        return;
+      }
+      throw result.error;
+    }
+    await refreshSalaryStayHere();
+  }catch(error){
+    alert("Confirm 14th failed: "+(error?.message||String(error)));
+  }finally{
+    ndConfirm14thInFlight.delete(id);
+  }
 }
 async function reset14th(empId){
   await ndResetSalaryToAutomatic(empId,"14");
@@ -16953,11 +17105,11 @@ async function openPayslip(empId,type){
   try{ await ndRefreshPayslipSource(Number(empId)); }
   catch(err){ alert("Payslip sync failed: "+(err.message||err)); return false; }
   if(type===7){
-    const rawS=snapshotFor(empId); const s=rawS?(rawS.payment_done===true ? rawS : applySevenManualOverrides(e,normalizedSevenSnapshot(e,rawS))):rawS;
+    const rawS=snapshotFor(empId); const s=rawS?applySevenManualOverrides(e,normalizedSevenSnapshot(e,rawS)):rawS;
     if(!s){alert("Please confirm 7th payroll first.");return false;}
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Basic Pay",s.guaranteed_pay)}${payslipLine("Allowance",ndSevenAdjustedAllowance(s))}${Number(s.ot||0)>0?payslipLine(payslipOtLabel(s),s.ot):""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div>${payslipLine("Employee EPF",s.employee_epf)}${payslipLine("Employee SOCSO",employeeSocsoWithLindung(s))}${payslipLine("Employee EIS",s.employee_eis)}${String(e.tax_no||"").trim()?payslipLine("Income Tax PCB",s.tax):""}${payslipLine("Unpaid",s.off_day_deduction)}${payslipLine("Deduction",s.manual_deduction)}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Basic Pay",s.guaranteed_pay)}${payslipLine("Allowance",ndSevenAdjustedAllowance(s))}${Number(s.ot||0)>0?payslipLine(payslipOtLabel(s),s.ot):""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div>${payslipLine("Employee EPF",s.employee_epf)}${payslipLine("Employee SOCSO",employeeSocsoWithLindung(s))}${payslipLine("Employee EIS",s.employee_eis)}${String(e.tax_no||"").trim()?payslipLine("Income Tax PCB",s.tax):""}${payslipLine("Unpaid",s.off_day_deduction)}${payslipLine("Deduction",s.manual_deduction)}${payslipLine("Salary Advance",s.salary_advance_deduction)}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}${Number(s.staff_fine_deduction||0)>0?`<div class="payslip-line"><span>Staff Fine (record only; not deducted)</span><span class="amt">${Number(s.staff_fine_deduction).toFixed(2)}</span></div>`:""}</div></div>
 <div class="ref-pay-summary">
   <div class="ref-gross-area">
     <div class="ref-total-line"><span>GROSS PAY</span><span>${Number(s.gross_pay||0).toFixed(2)}</span></div>
