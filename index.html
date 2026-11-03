@@ -11608,6 +11608,9 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
     s.employee_socso_l24=salaryOverrideValue(
       empId,t,"employee_socso_l24",employeeSocsoWithLindung(s),salaryMonth,source
     );
+    // The input contains Employee SOCSO + L24. Recover the L24 component
+    // so its signed addition affects Allowance and Total Deduction immediately.
+    s.employee_lindung24=+(Number(s.employee_socso_l24||0)-Number(s.employee_socso||0)).toFixed(2);
   }
 
   // Gross, Total Deduction and Net Pay are derived from the user's 7th formula.
@@ -11654,10 +11657,11 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
 // Nature's Dao internal 7th worksheet formula. Manually entered amounts remain authoritative.
 function ndSevenUserDeduction(s={}){
   const v=k=>Number(s[k]||0);
-  // User's 7th worksheet: Employee EPF + Employee SOCSO + Employer EIS + Unpaid + PCB.
-  // L24 is displayed separately and is not included in Employee SOCSO.
-  return +(v('employee_epf')+v('employee_socso')+v('employer_eis')+
-    v('off_day_deduction')+v('tax')).toFixed(2);
+  // Signed 7th Total Deduction:
+  // - Employee EPF - Employee SOCSO + L24 - Employee EIS - Unpaid - PCB/Tax.
+  // The amounts in their input fields remain positive; signs apply to the total only.
+  return +(-v('employee_epf')-v('employee_socso')+v('employee_lindung24')-
+    v('employee_eis')-v('off_day_deduction')-v('tax')).toFixed(2);
 }
 // Original Allowance stays editable and stored unchanged. The adjusted Allowance
 // is calculated once for display/Gross Pay, never written back as the source value.
@@ -11671,7 +11675,8 @@ function ndSevenUserTotals(s={}){
   const adjustedAllowance=ndSevenAdjustedAllowance(s);
   const gross=+(v('guaranteed_pay')+adjustedAllowance+v('ot')).toFixed(2);
   const deduction=ndSevenUserDeduction(s);
-  const net=+(gross-deduction).toFixed(2);
+  // Total Deduction is already signed: add it, do not subtract it twice.
+  const net=+(gross+deduction).toFixed(2);
   return {adjusted_allowance:adjustedAllowance,gross_pay:gross,total_deduction:deduction,net_pay:net};
 }
 
@@ -14942,8 +14947,9 @@ function bindSalaryTableActions(){
       // If the 7th payroll was already confirmed, update that confirmed snapshot too.
       if(snap){
         const oldTax=Number(snap.tax||0);
-        const newTotal=+(Number(snap.total_deduction||0)-oldTax+effectiveTax).toFixed(2);
-        const newNet=+(Number(snap.gross_pay||0)-newTotal).toFixed(2);
+        // PCB/Tax contributes negatively to the signed Total Deduction.
+        const newTotal=+(Number(snap.total_deduction||0)+oldTax-effectiveTax).toFixed(2);
+        const newNet=+(Number(snap.gross_pay||0)+newTotal).toFixed(2);
         const {error}=await salaryDb.from("payroll_snapshot").update({
           tax:+effectiveTax.toFixed(2),
           total_deduction:newTotal,
@@ -18610,10 +18616,12 @@ function settlementCalculate7thBudget(e,m={},ym,snapshot=null){
   let tax=Math.max(0,Number(m?.tax_final ?? m?.tax_manual ?? m?.tax ?? 0));
   const manualDeduction=Math.max(0,Number(m?.manual_deduction||0));
 
-  const totalDeduction=ndSevenUserDeduction({
+  const formulaTotals=ndSevenUserTotals({
+    guaranteed_pay:guaranteed, allowance, ot,
     employee_epf,employer_epf,...st,
     tax,off_day_deduction:unpaid
   });
+  const totalDeduction=formulaTotals.total_deduction;
 
   return {
     guaranteed_pay:guaranteed,
@@ -18625,9 +18633,9 @@ function settlementCalculate7thBudget(e,m={},ym,snapshot=null){
     tax,
     off_day_deduction:unpaid,
     manual_deduction:manualDeduction,
-    gross_pay:gross,
+    gross_pay:formulaTotals.gross_pay,
     total_deduction:totalDeduction,
-    net_pay:+Math.max(0,gross-totalDeduction).toFixed(2)
+    net_pay:formulaTotals.net_pay
   };
 }
 
