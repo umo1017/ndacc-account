@@ -6021,6 +6021,21 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
   }
 
   let ndApprovedCashExpenseRows=[],ndApprovedCashExpenseError="";
+  // Verified historical reconciliation corrections (not physical cash received):
+  // 2026-09-01 Nusa Bestari: petty_entries in RM200, reason "in".
+  // 2026-10-06 Nusa Bestari: petty_entries in RM200, reason "CC".
+  // Keep both original records in Supabase for audit purposes; exclude only
+  // these specific entries from Cash In and cumulative cash balances.
+  function ndIsNonCashCorrectionEntry(entry,settlement){
+    if(String(settlement?.branch||'').trim()!=='Nusa Bestari'
+       || String(entry?.type||'').toLowerCase()!=='in'
+       || Math.abs(Number(entry?.amount||0)-200)>=0.005)return false;
+    const date=String(settlement?.settlement_date||'').slice(0,10);
+    const reason=String(entry?.reason||'').trim().toLowerCase();
+    return (date==='2026-09-01' && reason==='in')
+        || (date==='2026-10-06' && reason==='cc');
+  }
+
   function ndCashLedgerBreakdown(branch,sourceRows=allRows,cutoffDate=""){
     const target=String(branch||"").trim(), cutoff=String(cutoffDate||"").trim();
     const seen=new Set();
@@ -6046,7 +6061,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     // Exclude old Cash Withdrawal to Petty Cash transfers: these are internal
     // movements already neutralised by internalTransferReversal below.
     const pettyCashIn=rows.reduce((sum,r)=>sum+(Array.isArray(r.petty_entries)?r.petty_entries:[])
-      .filter(e=>e?.type==='in' && e?.transfer_to_petty!==true && String(e?.reason||'').trim()!=='Cash Withdrawal to Petty Cash')
+      .filter(e=>e?.type==='in' && e?.transfer_to_petty!==true && String(e?.reason||'').trim()!=='Cash Withdrawal to Petty Cash' && !ndIsNonCashCorrectionEntry(e,r))
       .reduce((n,e)=>n+(Number(e.amount)||0),0),0);
     const legacyExpenses=rows.reduce((sum,r)=>sum+(Array.isArray(r.petty_entries)?r.petty_entries:[])
       .filter(e=>e?.type==='out').reduce((n,e)=>n+(Number(e.amount)||0),0),0);
@@ -8830,7 +8845,7 @@ return `<div class="history-date-card">
         if(id)transferIds.add(id);return true;
       });
       const cashToPetty=savedDays.reduce((v,r)=>v+(Array.isArray(r.petty_entries)?r.petty_entries:[]).filter(e=>e?.type==='in'&&(e.transfer_to_petty===true||e.reason==='Cash Withdrawal to Petty Cash')).reduce((q,e)=>q+(Number(e.amount)||0),0),0);
-      const genuinePettyIn=savedDays.reduce((v,r)=>v+(Array.isArray(r.petty_entries)?r.petty_entries:[]).filter(e=>e?.type==='in'&&e.transfer_to_petty!==true&&e.reason!=='Cash Withdrawal to Petty Cash').reduce((q,e)=>q+(Number(e.amount)||0),0),0);
+      const genuinePettyIn=savedDays.reduce((v,r)=>v+(Array.isArray(r.petty_entries)?r.petty_entries:[]).filter(e=>e?.type==='in'&&e.transfer_to_petty!==true&&e.reason!=='Cash Withdrawal to Petty Cash'&&!ndIsNonCashCorrectionEntry(e,r)).reduce((q,e)=>q+(Number(e.amount)||0),0),0);
       const legacyExpenses=savedDays.reduce((v,r)=>v+(Array.isArray(r.petty_entries)?r.petty_entries:[]).filter(e=>e?.type==='out').reduce((q,e)=>q+(Number(e.amount)||0),0),0);
       const salaryAdvance=advances.filter(r=>String(r.branch||'').trim()===branch&&String(r.advance_date||'')>=ND_CASH_ADVANCE_START&&String(r.advance_date||'')<=cutoff).reduce((v,r)=>v+(Number(r.cash_deduction)||0),0);
       const balance=cash+genuinePettyIn-sum(verifiedTransfers,'amount')-legacyExpenses-sum(expenses,'approved_amount')-salaryAdvance-(withdrawals-Math.min(Math.max(0,withdrawals),Math.max(0,cashToPetty)));
@@ -8969,7 +8984,7 @@ return `<div class="history-date-card">
         if(entry?.type==='out')record.cashOut+=num(entry.amount);
         else if(entry?.type==='in'){
           if(entry.transfer_to_petty===true||entry.reason==='Cash Withdrawal to Petty Cash')allInternalTransfers+=num(entry.amount);
-          else record.cashIn+=num(entry.amount);
+          else if(!ndIsNonCashCorrectionEntry(entry,day))record.cashIn+=num(entry.amount);
         }
       }
     }
@@ -35451,24 +35466,33 @@ const db=()=>window.salaryDb||window.supabaseClient||window.supabaseDb||null;
 const myDay=()=>{const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const get=k=>p.find(x=>x.type===k)?.value||'';return get('year')+'-'+get('month')+'-'+get('day');};
 let rows=[],loading=false,again=false,loadedKey='',lastLoad=0,token=0,canVerify=false,canDelete=false,hasVerificationColumn=true;
 function branch(){return String(document.querySelector('#dailyBranchToggle .branch-btn.active')?.dataset.branch||localStorage.getItem('nd_daily_branch_v1')||'Eco Botanic');}
-function mount(){const old=$('pettyBody');if(!old)return null;let root=$('ndExpenseRequestHistory');if(root)return root;root=document.createElement('section');root.id='ndExpenseRequestHistory';root.innerHTML='<div class="nd-exp-history-heading"><strong>Cash Expense History</strong><button type="button" data-exp-close aria-label="Close history" title="Close">✕</button></div><div class="nd-exp-history-controls"><label>Date <input type="date" data-exp-date></label><button type="button" data-exp-refresh>Refresh</button></div><div data-exp-message role="status" aria-live="polite"></div><div class="nd-exp-history-list" data-exp-rows></div>';
+function mount(){
+ const old=$('pettyBody');if(!old)return null;
+ let root=$('ndExpenseRequestHistory');if(root)return root;
+ root=document.createElement('section');root.id='ndExpenseRequestHistory';
+ root.innerHTML='<div class="nd-exp-history-heading"><strong>Submissions</strong><button type="button" class="mini" data-exp-refresh aria-label="Refresh submissions" title="Refresh">↻</button></div><div data-exp-message role="status" aria-live="polite"></div><div class="nd-exp-history-list" data-exp-rows></div>';
  (old.closest('.nd-petty-history-table')||old.parentElement).after(root);
- root.querySelector('[data-exp-date]').value=$('settlementDate')?.value||myDay();
  root.querySelector('[data-exp-refresh]').onclick=()=>void load(true);
- root.querySelector('[data-exp-date]').onchange=()=>void load(true);
- root.querySelector('[data-exp-close]').onclick=()=>{root.hidden=true;};
- root.addEventListener('click',onClick);return root;}
-function value(r){return Number(r.status==='approved'?(r.review_amount??r.amount):r.amount)||0;}
-function render(){const root=mount();if(!root)return;const amount=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});root.querySelector('[data-exp-rows]').innerHTML=rows.map(r=>{
- const status=r.receipt_verification||'pending';const proof=!!r.receipt_path;
- const badge=proof?(status==='correct'?'<span class="nd-exp-v-good">✓ Correct</span>':status==='error'?'<span class="nd-exp-v-bad">✕ Error</span>':'<span class="nd-exp-v-wait">Unverified</span>'):'<span class="nd-exp-v-wait">No receipt</span>';
- return `<article class="nd-exp-month-row"><div class="nd-exp-month-top"><strong>${esc(r.expense_date)}</strong><strong style="color:${window.ndCashExpenseIsDebited?.(r)?'#b42318':'#64748b'}">${window.ndCashExpenseIsDebited?.(r)?'− ':''}${amount(value(r))}</strong></div><div class="nd-exp-month-reason">${esc(r.expense_reason||'Cash Expense')}</div><div class="nd-exp-month-meta">${esc(r.branch)} · ${esc(r.status||'pending')} · ${badge}</div><div class="nd-exp-actions">${proof?`<button type="button" data-exp-receipt="${esc(r.id)}">View Receipt</button>`:''}${canVerify&&hasVerificationColumn?`<button type="button" class="nd-exp-correct" data-exp-verify="${esc(r.id)}" data-exp-status="correct">Correct</button><button type="button" class="nd-exp-error" data-exp-verify="${esc(r.id)}" data-exp-status="error">Error</button>`:''}${canDelete?`<button type="button" data-exp-delete="${esc(r.id)}">Delete</button>`:''}</div></article>`;
- }).join('')||'<p class="nd-exp-empty">No submitted Cash Expenses for this date.</p>';
+ root.addEventListener('click',onClick);
+ return root;
 }
-async function load(force=false){const root=mount(),client=db();if(!root)return;if(!client){root.querySelector('[data-exp-message]').textContent='Please sign in to load Cash Expense History.';return;}if(root.hidden&&!force)return;
- const day=root.querySelector('[data-exp-date]').value||myDay();if(!/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/.test(day))return;
+function value(r){return Number(r.status==='approved'?(r.review_amount??r.amount):r.amount)||0;}
+function render(){
+ const root=mount();if(!root)return;
+ const amount=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+ root.querySelector('[data-exp-rows]').innerHTML=rows.length?'<div class="nd-exp-submissions-scroll"><table class="nd-exp-submissions-table"><thead><tr><th>Reason</th><th>Amount</th><th>Receipt</th><th>Status</th></tr></thead><tbody>'+rows.map(r=>{
+   const verification=r.receipt_verification||'pending',proof=!!r.receipt_path;
+   const status=String(r.status||'pending');
+   const receipt=proof?`<button type="button" class="mini" data-exp-receipt="${esc(r.id)}">View</button>`:'—';
+   const actions=(canVerify&&hasVerificationColumn?`<button type="button" class="mini nd-exp-correct" data-exp-verify="${esc(r.id)}" data-exp-status="correct">Correct</button><button type="button" class="mini nd-exp-error" data-exp-verify="${esc(r.id)}" data-exp-status="error">Error</button>`:'')+(canDelete?`<button type="button" class="mini" data-exp-delete="${esc(r.id)}">Delete</button>`:'');
+   const verifyText=proof?(verification==='correct'?' · ✓ Correct':verification==='error'?' · ✕ Error':' · Unverified'):'';
+   return `<tr><td data-label="Reason">${esc(r.expense_reason||'Cash Expense')}</td><td data-label="Amount"><strong>${amount(value(r))}</strong></td><td data-label="Receipt">${receipt}</td><td data-label="Status">${esc(status)}${verifyText}</td></tr>${actions?`<tr class="nd-exp-action-row"><td colspan="4"><div class="nd-exp-actions">${actions}</div></td></tr>`:''}`;
+ }).join('')+'</tbody></table></div>':'<div class="helper" style="padding:10px 0">No submissions.</div>';
+}
+async function load(force=false){const root=mount(),client=db();if(!root)return;if(!client){root.querySelector('[data-exp-message]').textContent='Please sign in to load submissions.';return;}if(root.hidden&&!force)return;
+ const day=String($('settlementDate')?.value||myDay());if(!/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/.test(day))return;
  const br=branch(),key=br+'|'+day;if(!force&&key===loadedKey&&Date.now()-lastLoad<15000)return;
- if(loading){again=true;return;}loading=true;const seq=++token;root.querySelector('[data-exp-message]').textContent='Loading saved records…';
+ if(loading){again=true;return;}loading=true;const seq=++token;root.querySelector('[data-exp-message]').textContent='Loading submissions…';
  try{
   const auth=await client.auth.getUser();if(auth.error)throw auth.error;const email=String(auth.data?.user?.email||'').toLowerCase();canVerify=email==='umo1017@gmail.com';canDelete=['umo1017@gmail.com','mars83002566@gmail.com'].includes(email);
   let all=[],schemaReady=true;
@@ -35481,8 +35505,8 @@ async function load(force=false){const root=mount(),client=db();if(!root)return;
   }
   if(seq!==token)return;rows=all;hasVerificationColumn=schemaReady;loadedKey=key;lastLoad=Date.now();
   const debited=rows.filter(x=>window.ndCashExpenseIsDebited?.(x)).reduce((sum,x)=>sum+value(x),0);
-  root.querySelector('[data-exp-message]').textContent=rows.length+' saved record(s) · Cash deducted '+debited.toLocaleString('en-MY',{style:'currency',currency:'MYR'})+(schemaReady?'':' · Receipt verification requires SQL setup');render();
- }catch(e){root.querySelector('[data-exp-message]').textContent='History unavailable: '+(e?.message||e);root.querySelector('[data-exp-rows]').replaceChildren();}
+  root.querySelector('[data-exp-message]').textContent=schemaReady?'':'Receipt verification requires SQL setup';render();
+ }catch(e){root.querySelector('[data-exp-message]').textContent='Unable to load submissions: '+(e?.message||e);root.querySelector('[data-exp-rows]').replaceChildren();}
  finally{loading=false;if(again){again=false;void load(true);}}
 }
 async function openReceipt(r){let path=r.receipt_path,url=path,bucket='petty-receipts';if(typeof path==='string'&&path.trim().startsWith('{')){const obj=JSON.parse(path);path=obj.path||'';url=obj.url||obj.signedUrl||path;bucket=obj.bucket||bucket;}if(!/^https:\/\//i.test(url)){const result=await db().storage.from(bucket).createSignedUrl(path,600);if(result.error)throw result.error;url=result.data.signedUrl;}if(typeof window.ndReceiptPreview==='function')window.ndReceiptPreview(url,{amount:value(r),status:r.receipt_verification||'Pending'});else window.open(url,'_blank','noopener,noreferrer');}
@@ -35491,20 +35515,37 @@ async function onClick(e){const button=e.target.closest('button');if(!button)ret
  if(button.dataset.expVerify){const auth=await db().auth.getUser();if(auth.error||String(auth.data?.user?.email||'').toLowerCase()!=='umo1017@gmail.com')throw Error('Only UMO can verify receipts.');if(!hasVerificationColumn)throw Error('Run the Cash Expense receipt verification SQL.');const status=button.dataset.expStatus;if(!['correct','error'].includes(status))throw Error('Invalid receipt verification');const res=await db().rpc('nd_cash_expense_receipt_verify',{p_id:r.id,p_status:status});if(res.error)throw res.error;await load(true);window.dispatchEvent(new Event('nd-cash-expense-reviewed'));return;}
  if(button.dataset.expDelete){if(!canDelete)throw Error('Access denied');if(!confirm('Delete this saved Cash Expense?'))return;const res=await db().rpc('nd_cash_expense_delete',{p_id:r.id});if(res.error)throw res.error;await load(true);window.dispatchEvent(new Event('nd-cash-expense-reviewed'));}
  }catch(err){alert('Cash Expense action failed: '+(err?.message||err));}finally{button.disabled=false;}}
-function start(){const root=mount(),expand=$('ndExpenseExpand');if(!root)return;
- // This history is embedded inside Cash Expense, not a second navigation button.
- expand?.addEventListener('toggle',()=>{if(expand.open){root.hidden=false;root.querySelector('[data-exp-date]').value=$('settlementDate')?.value||myDay();void load(true);}});
- $('settlementDate')?.addEventListener('change',()=>{const day=String($('settlementDate').value||'');if(day)root.querySelector('[data-exp-date]').value=day;if(expand?.open)void load(true);});
- $('dailyBranchToggle')?.addEventListener('click',e=>{if(e.target.closest('[data-branch]')&&expand?.open)setTimeout(()=>void load(true),200);});
- window.addEventListener('nd-cash-expense-reviewed',()=>{if(expand?.open&&!root.hidden)void load(true);});
- window.addEventListener('nd-cash-expense-submitted',()=>{if(expand?.open&&!root.hidden)void load(true);});
- window.addEventListener('focus',()=>{if(expand?.open&&!root.hidden)void load();});
- setInterval(()=>{if(!document.hidden&&expand?.open&&!root.hidden)void load();},45000);
+function start(){
+ const root=mount(),expand=$('ndExpenseExpand');if(!root)return;
+ expand?.addEventListener('toggle',()=>{if(expand.open){root.hidden=false;void load(true);}});
+ $('settlementDate')?.addEventListener('change',()=>{if(expand?.open)void load(true);});
+ $('dailyBranchToggle')?.addEventListener('click',e=>{if(e.target.closest('[data-branch]')&&expand?.open)setTimeout(()=>void load(true),100);});
+ window.addEventListener('nd-cash-expense-reviewed',()=>{if(expand?.open)void load(true);});
+ window.addEventListener('nd-cash-expense-submitted',()=>{if(expand?.open)void load(true);});
+ window.addEventListener('focus',()=>{if(expand?.open)void load();});
  if(expand?.open)void load(true);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
 </script>
+<style id="nd-cash-expense-submissions-20261104">
+#ndExpenseRequestHistory{border:0!important;padding:12px 0 0!important;margin-top:10px!important;background:transparent!important;overflow:visible!important}
+#ndExpenseRequestHistory .nd-exp-history-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:nowrap;margin:0 0 8px!important}
+#ndExpenseRequestHistory .nd-exp-history-heading strong{font-size:15px}
+#ndExpenseRequestHistory [data-exp-refresh]{min-width:38px;min-height:35px;font-size:20px;padding:4px 10px}
+#ndExpenseRequestHistory [data-exp-message]:empty{display:none}
+#ndExpenseRequestHistory .nd-exp-submissions-scroll{overflow-x:auto;max-width:100%}
+#ndExpenseRequestHistory .nd-exp-submissions-table{width:100%!important;min-width:0!important;table-layout:auto!important;border-collapse:collapse!important}
+#ndExpenseRequestHistory .nd-exp-submissions-table thead{display:table-header-group!important}
+#ndExpenseRequestHistory .nd-exp-submissions-table tbody{display:table-row-group!important}
+#ndExpenseRequestHistory .nd-exp-submissions-table tr{display:table-row!important;border:0!important;background:transparent!important;margin:0!important;padding:0!important}
+#ndExpenseRequestHistory .nd-exp-submissions-table th,#ndExpenseRequestHistory .nd-exp-submissions-table td{display:table-cell!important;width:auto!important;padding:9px 5px!important;border-bottom:1px solid #e3e9e5!important;text-align:left!important;vertical-align:middle!important;font-size:12px!important;white-space:normal!important;overflow-wrap:anywhere!important}
+#ndExpenseRequestHistory .nd-exp-submissions-table td[data-label]:before{display:none!important;content:none!important}
+#ndExpenseRequestHistory .nd-exp-submissions-table td:nth-child(2){white-space:nowrap!important}
+#ndExpenseRequestHistory .nd-exp-action-row td{padding:4px 5px 10px!important}
+#ndExpenseRequestHistory .nd-exp-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:480px){#ndExpenseRequestHistory .nd-exp-submissions-table th,#ndExpenseRequestHistory .nd-exp-submissions-table td{font-size:11px!important;padding:8px 3px!important}}
+</style>
 
 
 
