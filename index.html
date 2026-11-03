@@ -5175,6 +5175,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       btn.onclick=async()=>{
         if(dailySubmitting||dailyWriteBusy||btn.dataset.branch===currentBranch)return;
         currentBranch=btn.dataset.branch;
+        // Never carry the previous branch's official cash amount into this branch.
+        ndCashQuickValue=null;
+        for(const id of ['todayTotalCash','metricCashBalance']){const node=$(id);if(node)node.textContent='同步中…';}
+        if($('cashBalance'))$('cashBalance').value='同步中…';
+        ndCashQuickPending=true;
 
         renderDailyBranchButtons();
         $("branchRecordState").textContent=currentBranch;
@@ -5184,6 +5189,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         await loadDate(d);
         renderAll();
         setDailyClean();
+        // A previous branch request may still be running; queue this branch's read.
+        ndCashScheduleQuickRead();
       };
     });
 
@@ -8649,17 +8656,20 @@ return `<div class="history-date-card">
   // Balance-only, server-saved read. Never reads unsaved form fields.
   // Keeping this separate from the full reporting history prevents a slow
   // unrelated report from hiding today's amount.
-  let ndCashQuickValue=null, ndCashQuickBusy=false,ndCashQuickLastKey='';
+  let ndCashQuickValue=null, ndCashQuickBusy=false,ndCashQuickPending=false,ndCashQuickLastKey='';
   function ndCashQuickKey(){return String(currentBranch||'').trim()+'|'+String($('settlementDate')?.value||getActiveDailyDate());}
   function ndCashShownValue(){
     const key=ndCashQuickKey();
     if(ndCashQuickValue&&ndCashQuickValue.key===key)return ndCashQuickValue.amount;
-    if(ndCashCloudSnapshotReady&&ndCashAdvanceReady&&!ndCashRemittanceError&&!ndApprovedCashExpenseError)
-      return directCashRemainingForBranch(currentBranch,allRows,$('settlementDate')?.value||getActiveDailyDate());
+    // Do not show the full-report cache after a branch/date switch: its partial
+    // or asynchronously loaded state may belong to a different screen context.
+    // Only branch+date matching quick-read results are authoritative.
+
     return null;
   }
   async function ndCashQuickRead(){
-    if(ndCashQuickBusy||!db)return;
+    if(ndCashQuickBusy){ndCashQuickPending=true;return;}
+    if(!db)return;
     const branch=String(currentBranch||'').trim();
     const cutoff=String($('settlementDate')?.value||getActiveDailyDate());
     if(!branch||!cutoff)return;
@@ -8724,10 +8734,17 @@ return `<div class="history-date-card">
         }
       }
       console.warn('Today cash quick cloud read failed:',error);
-    }finally{ndCashQuickBusy=false;}
+    }finally{
+      ndCashQuickBusy=false;
+      if(ndCashQuickPending){
+        ndCashQuickPending=false;
+        // Pending branch/date changes must be read even when the old request finished later.
+        ndCashQuickRead().catch(error=>console.warn('Pending cash read:',error));
+      }
+    }
   }
   function ndCashScheduleQuickRead(){
-    if(ndCashQuickBusy)return;
+    if(ndCashQuickBusy){ndCashQuickPending=true;return;}
     ndCashQuickRead().catch(error=>console.warn('Cash read:',error));
   }
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')ndCashScheduleQuickRead();});
