@@ -5944,9 +5944,53 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     // only simplify the display, never mutate or recalculate records.
     if(note)note.textContent='';
     const deducted=Math.max(0, Math.round(total*100)/100);
-    root.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px">'+
-      '<strong style="font-size:14px;color:#33463d">Total Deducted</strong>'+
-      '<strong style="font-size:21px;font-weight:800;color:#b42318">− '+money(deducted)+'</strong></div>';
+    // Show the employee behind each saved advance; leave the underlying
+    // cash deductions and reversal calculation exactly as recorded in the ledger.
+    root.replaceChildren();
+    const summary=document.createElement('div');
+    summary.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px;border-bottom:1px solid #d9e5dd';
+    const totalLabel=document.createElement('strong');
+    totalLabel.style.cssText='font-size:14px;color:#33463d';
+    totalLabel.textContent='Total Deducted';
+    const totalAmount=document.createElement('strong');
+    totalAmount.style.cssText='font-size:21px;font-weight:800;color:#b42318;white-space:nowrap';
+    totalAmount.textContent='− '+money(deducted);
+    summary.append(totalLabel,totalAmount);
+    root.append(summary);
+    // Deleted advances are excluded from visible employee history. Only debit
+    // entries are listed; refund/restoration events remain in ledger totals.
+    const employeeDebits=rows.filter(e=>
+      Number(e.cash_deduction||0)>0 &&
+      e.event_type!=='refund' && e.event_type!=='restored'
+    );
+    const groupMap=new Map();
+    for(const e of employeeDebits){
+      const name=String(e.employee_name||e.staff_name||e.name||'Employee').trim()||'Employee';
+      const key=String(e.employee_id||'')?String(e.employee_id):name.toLocaleLowerCase();
+      let item=groupMap.get(key);
+      if(!item){item={name,amount:0,dates:new Set()};groupMap.set(key,item);}
+      item.amount+=Number(e.cash_deduction||0);
+      if(e.advance_date)item.dates.add(String(e.advance_date).slice(0,10));
+    }
+    const employeeGroups=[...groupMap.values()].sort((a,b)=>a.name.localeCompare(b.name));
+    for(const item of employeeGroups){
+      const line=document.createElement('div');
+      line.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 4px;border-bottom:1px solid #edf0ed';
+      const person=document.createElement('div');
+      person.style.minWidth='0';
+      const employee=document.createElement('strong');
+      employee.style.cssText='display:block;font-size:14px;overflow-wrap:anywhere';
+      employee.textContent=item.name;
+      const dates=document.createElement('small');
+      dates.style.cssText='display:block;font-size:12px;color:#76837b;margin-top:3px';
+      dates.textContent=[...item.dates].sort().join(', ');
+      person.append(employee,dates);
+      const amount=document.createElement('strong');
+      amount.style.cssText='font-size:16px;color:#b42318;white-space:nowrap';
+      amount.textContent='− '+money(Math.round(item.amount*100)/100);
+      line.append(person,amount);
+      root.append(line);
+    }
 
   }
 
@@ -16340,7 +16384,14 @@ async function saveStaff(){
   if(!ndReadItems(pending.notes)?.confirmed_at||!ndReadNotice(pending.notes)){const intended=JSON.parse(pending._notes);const notes=JSON.stringify({...ndItemsEnvelope(pending.notes,ndReadItems(pending.notes)||intended.issued_items),employment_notice_agreement:intended.employment_notice_agreement});await ndSaveStaffNotes(pending,notes);if(!ndReadItems(pending.notes)?.confirmed_at||!ndReadNotice(pending.notes))throw Error('Onboarding records could not be verified. Retry Save.');}
   const number=pending.employee_no||'';if(draft)window.dispatchEvent(new CustomEvent('nd-interview-converted'));
   byId('staffReviewModal').classList.remove('open');resetSubmitStaffForm();byId('staffSaveMsg').textContent='Employee onboarded ✓ '+number;await refreshSalaryStayHere();window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));renderStaffList();window.ndOpenStaffManagement?.();
- }catch(err){byId('staffReviewMsg').textContent='Save failed ['+saveStage+']: '+(err.message||err);}finally{button.disabled=button.dataset.onboardingLocked==='1';}
+ }catch(err){
+   const raw=String(err?.message||err);
+   if(saveStage==='Create employee from signed contract'&&/company representative must match the signed-in account/i.test(raw)){
+    const signed=window.ndOnboardAgreement||{};
+    const signedBy=String(signed.representative_name||signed.representative_email||'the original company representative');
+    byId('staffReviewMsg').textContent='Employee creation blocked by database representative validation. The signed contract belongs to '+signedBy+'. The onboarding operator may use a different account. The existing contract and signatures are unchanged. Ask UMO to review nd_complete_signed_onboarding in Supabase; do not re-sign under another person’s name.';
+   }else byId('staffReviewMsg').textContent='Save failed ['+saveStage+']: '+raw;
+  }finally{button.disabled=button.dataset.onboardingLocked==='1';}
 }
 
 
