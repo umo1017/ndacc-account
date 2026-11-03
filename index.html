@@ -15578,7 +15578,9 @@ async function confirm7th(empId){
   const calc=applySevenManualOverrides(e,calculate7th(e,monthlyFor(empId)));
   // Lindung 24 Jam is display-only. The existing payroll_snapshot table
   // does not have an employee_lindung24 column, so never send it to Supabase.
-  const {employee_lindung24,adjusted_allowance,...snapshotCalc}=calc;
+  // These are UI/calculated helper fields, not columns in payroll_snapshot.
+  // SOCSO + L24 is persisted in salary_manual_overrides separately above.
+  const {employee_lindung24,employee_socso_l24,adjusted_allowance,...snapshotCalc}=calc;
   const {error}=await salaryDb.from("payroll_snapshot").upsert({
     employee_id:e.id,salary_month:monthDate(),...snapshotCalc
   },{
