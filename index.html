@@ -4901,6 +4901,9 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 #ndProBetaPage .proref-calendar-grid .proref-empty{background:#f2f3f5!important;border-radius:12px!important}
 @media(max-width:480px){#ndProBetaPage .proref-calendar-grid{grid-template-columns:65px repeat(var(--cols),minmax(122px,138px))!important}#ndProBetaPage .proref-calendar-grid .pro-time{max-width:65px!important}}
 </style>
+<style id="nd-pro-explicit-customer-search-20261105">
+.proref-lookup-modal[hidden]{display:none!important}.proref-lookup-modal{position:fixed;inset:0;z-index:2147483100;background:#f3f2f8;overflow:auto;overscroll-behavior:contain}.proref-lookup-sheet{min-height:100dvh;padding:env(safe-area-inset-top) 12px max(20px,env(safe-area-inset-bottom));max-width:760px;margin:auto;color:#20242b}.proref-lookup-sheet>header{display:flex;align-items:center;justify-content:space-between;height:66px;gap:12px}.proref-lookup-sheet>header strong{font-size:21px}.proref-lookup-sheet>header button{border:0;background:transparent;color:#2378ff;font-size:34px;width:48px;height:48px;cursor:pointer}.proref-lookup-search{display:flex;align-items:center;gap:12px;background:#eeeef0;border-radius:15px;padding:0 16px;margin:8px 0 14px;height:58px}.proref-lookup-search span{color:#9ca0a6;font-size:29px}.proref-lookup-search input{border:0!important;background:transparent!important;outline:0;box-shadow:none!important;flex:1;min-width:0;font-size:17px}.proref-lookup-tabs{display:flex;overflow-x:auto;gap:12px;border-bottom:1px solid #dddde4;scrollbar-width:none}.proref-lookup-tabs button{flex-shrink:0;background:none;border:0;border-bottom:3px solid transparent;border-radius:0;padding:12px 9px;color:#92949b;font-size:15px;font-weight:700;cursor:pointer}.proref-lookup-tabs button.active{color:#2478ff;border-bottom-color:#2478ff}.proref-lookup-list{display:grid;gap:10px;padding-top:12px}.proref-lookup-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left;background:white;border:0;border-radius:17px;padding:19px 20px;cursor:pointer;box-shadow:none;color:#222}.proref-lookup-card strong{font-size:18px}.proref-lookup-card span{font-size:15px;color:#687487}.proref-lookup-empty{text-align:center;color:#7a808b;padding:35px 12px}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -37905,7 +37908,7 @@ const showCustomerModal=()=>{customerModal.hidden=false;el('proQuickPhone').valu
 let guestCount=1;const updateGuests=()=>{el('proGuestsCount').textContent=String(guestCount);};el('proGuestsMinus').onclick=()=>{guestCount=Math.max(1,guestCount-1);updateGuests();};el('proGuestsPlus').onclick=()=>{guestCount=Math.min(20,guestCount+1);updateGuests();};
 const appointmentCard=el('proAppointmentCard'), bookingHome=appointmentCard.parentElement,bookingMount=el('ndProBookingMount');
 function showBooking(){displayCustomer();appointmentCard.hidden=false;bookingMount.appendChild(appointmentCard);el('ndProBookingModal').hidden=false;el('ndProBookingClose').focus();}
-function closeBooking(){closeCustomer();el('ndProBookingModal').hidden=true;bookingHome.appendChild(appointmentCard);appointmentCard.hidden=true;el('proQuickCustomer').hidden=true;}
+function closeBooking(){lookupClose();closeCustomer();el('ndProBookingModal').hidden=true;bookingHome.appendChild(appointmentCard);appointmentCard.hidden=true;el('proQuickCustomer').hidden=true;}
 function reset(){form.reset();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
 function choose(a){form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=mins(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}form.elements.service.value=a.service_name;form.elements.employee.value=assigned(a.id)[0]||'';form.elements.room_id.value=a.room_id||'';displayCustomer();el('proAppointmentHeading').textContent=tr('Edit Appointment','编辑预约');el('proAppointmentSave').textContent=tr('Save Changes','保存修改');el('proAppointmentReset').hidden=false;el('proAppointmentCancel').hidden=a.status==='cancelled'||a.status==='completed';showBooking();}
 host.querySelectorAll('[data-slot]').forEach(b=>{
@@ -37977,9 +37980,46 @@ host.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const a=appointme
 el('proNewBooking').onclick=()=>{reset();showBooking()};
 el('ndProBookingClose').onclick=closeBooking;
 el('ndProBookingBackdrop').onclick=closeBooking;
-el('proCustomerFind').oninput=e=>{const q=e.target.value.trim().toLowerCase();const filtered=customers.filter(c=>(c.full_name+' '+(c.phone||'')).toLowerCase().includes(q));const sel=form.elements.customer;const previous=sel.value;sel.innerHTML='<option value="">'+tr('Select customer','选择顾客')+'</option>'+opt(filtered.map(c=>[c.id,c.full_name+' · '+(c.phone||'')]),previous);if(filtered.length===1)sel.value=filtered[0].id;else if(!q)sel.value='';displayCustomer();selection.hidden=filtered.length<=1;el('proAddCustomer').classList.toggle('probooking-suggest-new',!!q&&!filtered.length);};
+// Customer lookup is explicitly triggered by the magnifying-glass button only.
+const lookupModal=document.createElement('div');
+lookupModal.id='proRefLookupModal';lookupModal.className='proref-lookup-modal';lookupModal.hidden=true;
+lookupModal.innerHTML=`<section class="proref-lookup-sheet" role="dialog" aria-modal="true" aria-label="会员搜索"><header><button type="button" data-lookup-close aria-label="关闭">×</button><strong>会员</strong><button type="button" data-lookup-add aria-label="注册顾客">＋</button></header><div class="proref-lookup-search"><span>⌕</span><input type="search" data-lookup-input autocomplete="off" placeholder="搜索姓名或电话号码"></div><div class="proref-lookup-tabs"><button type="button" data-lookup-tab="recent" class="active">近期</button><button type="button" data-lookup-tab="new">新</button><button type="button" data-lookup-tab="birthday">生日</button><button type="button" data-lookup-tab="name">名字</button><button type="button" data-lookup-tab="credit">Credits+Vouchers</button></div><div class="proref-lookup-list" data-lookup-results></div></section>`;
+document.body.append(lookupModal);
+let lookupTab='recent';
+const lookupInput=lookupModal.querySelector('[data-lookup-input]');
+const lookupResults=lookupModal.querySelector('[data-lookup-results]');
+const lookupClose=()=>{lookupModal.hidden=true;};
+function lookupDraw(){
+ const q=lookupInput.value.trim().toLowerCase();
+ let matches=customers.filter(c=>(String(c.full_name||'')+' '+String(c.phone||'')+' '+String(c.email||'')).toLowerCase().includes(q));
+ if(lookupTab==='name')matches.sort((a,b)=>String(a.full_name||'').localeCompare(String(b.full_name||'')));
+ if(lookupTab==='new')matches=matches.slice().reverse();
+ // Birthday and credit metadata are not available in the appointment's customer query.
+ // Do not fabricate these attributes or filter customers using missing fields.
+ lookupResults.replaceChildren();
+ if(!matches.length){const empty=document.createElement('p');empty.className='proref-lookup-empty';empty.textContent='没有找到顾客，请点击右上角 ＋ 注册';lookupResults.append(empty);return;}
+ for(const c of matches.slice(0,200)){
+  const card=document.createElement('button');card.type='button';card.className='proref-lookup-card';
+  const name=document.createElement('strong');name.textContent=c.full_name||'—';
+  const phone=document.createElement('span');const raw=String(c.phone||'');phone.textContent=raw.length>4?'••••••'+raw.slice(-4):(raw||'无电话号码');
+  card.append(name,phone);
+  card.onclick=()=>{
+   const sel=form.elements.customer;
+   if(!Array.from(sel.options).some(o=>o.value===String(c.id)))sel.add(new Option(c.full_name+' · '+(c.phone||''),c.id));
+   sel.value=String(c.id);lookupClose();displayCustomer();
+  };
+  lookupResults.append(card);
+ }
+}
+lookupModal.querySelector('[data-lookup-close]').onclick=lookupClose;
+lookupModal.querySelector('[data-lookup-add]').onclick=()=>{lookupClose();showCustomerModal();};
+lookupInput.addEventListener('input',lookupDraw);
+lookupModal.querySelectorAll('[data-lookup-tab]').forEach(btn=>btn.onclick=()=>{lookupTab=btn.dataset.lookupTab;lookupModal.querySelectorAll('[data-lookup-tab]').forEach(x=>x.classList.toggle('active',x===btn));lookupDraw();});
+function openLookup(){lookupTab='recent';lookupModal.querySelectorAll('[data-lookup-tab]').forEach(x=>x.classList.toggle('active',x.dataset.lookupTab==='recent'));lookupInput.value=phoneSearch.value.trim();lookupModal.hidden=false;lookupDraw();lookupInput.focus();}
+phoneSearch.oninput=()=>{ /* Do not open, select, or autofill while typing. */ };
+phoneSearch.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();openLookup();}};
+el('proRefSearch').onclick=openLookup;
 el('proAddCustomer').onclick=showCustomerModal;
-el('proRefSearch').onclick=()=>{const q=phoneSearch.value.trim();const matches=customers.filter(c=>(c.full_name+' '+(c.phone||'')).toLowerCase().includes(q.toLowerCase()));if(matches.length===1){form.elements.customer.value=matches[0].id;displayCustomer();return;}if(matches.length===0){showCustomerModal();return;}selection.hidden=false;form.elements.customer.focus();};
 form.elements.customer.onchange=()=>{form.elements.customer.size=0;displayCustomer();selection.hidden=true};
 el('proQuickSave').onclick=async()=>{
   const button=el('proQuickSave'),nameEl=el('proQuickName'),phoneEl=el('proQuickPhone');
