@@ -12499,7 +12499,7 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
 
 function monthlyFor(id){ return salaryMonthly.find(x=>Number(x.employee_id)===Number(id))||{}; }
 function snapshotFor(id){ return salarySnapshots.find(x=>Number(x.employee_id)===Number(id))||null; }
-function commissionSnapshotFor(id){ return salaryCommissionSnapshots.find(x=>Number(x.employee_id)===Number(id))||null; }
+function commissionSnapshotFor(id){ return salaryCommissionSnapshots.find(x=>Number(x.employee_id)===Number(id) && !!x.confirmed_at)||null; }
 
 
 function updateSalaryNavVisibility(){
@@ -14623,7 +14623,7 @@ function renderFourteenTable(emps){
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
-      <td>${cs?`<span class="confirmed-pill">Confirmed</span>${isGlobalAdmin?` <button type="button" class="btn" data-reset14="${e.id}" ${cs.payment_done?'title="Payment DONE: Reset is locked; tap for details" aria-label="Reset locked: Payment DONE"':''}>Reset</button>`:""}`:(String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()==="umo1017@gmail.com"?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button>`:`<span class="helper">View only</span>`)}</td>
+      <td>${cs?`<span class="confirmed-pill">Confirmed</span>${String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()==="umo1017@gmail.com"?(cs.payment_done?` <span class="helper" title="Payment DONE: salary locked">Paid · Locked</span>`:` <button type="button" class="btn" data-reopen14="${e.id}">Reopen 14th</button>`):""}`:(String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()==="umo1017@gmail.com"?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button> <button type="button" class="btn" data-reset14="${e.id}">Reset</button>`:`<span class="helper">View only</span>`)}</td>
       <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
       <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${cs
@@ -15565,6 +15565,46 @@ document.querySelectorAll("[data-confirm7]").forEach(btn=>btn.onclick=()=>ndGuar
 
 
 
+// UMO-only audited reopen for confirmed but unpaid 14th salary.
+// Never delete its snapshot or manual overrides. Server RPC enforces identity and locks.
+const ndSalaryReopenPending = new Set();
+document.addEventListener('click',async function(ev){
+  const target=ev.target instanceof Element?ev.target:null;
+  const button=target?.closest('[data-reopen14]');
+  if(!button)return;
+  ev.preventDefault();ev.stopImmediatePropagation();
+  const email=String(currentSalaryUserEmail||currentUserEmail||'').trim().toLowerCase();
+  if(email!=='umo1017@gmail.com'){alert('Only UMO can reopen 14th Salary.');return;}
+  const employeeId=Number(button.dataset.reopen14);
+  if(!Number.isSafeInteger(employeeId)||employeeId<=0)return;
+  const month=monthDate();
+  const requestKey=employeeId+':'+month;
+  if(ndSalaryReopenPending.has(requestKey))return;
+  const employee=salaryEmployees.find(e=>Number(e.id)===employeeId);
+  const reason=prompt('Reopen 14th Salary\nEmployee: '+String(employee?.name||employeeId)+'\nMonth: '+month+'\n\nReason for reopening (required):');
+  if(reason===null)return;
+  if(reason.trim().length<5){alert('Please enter a reason of at least 5 characters.');return;}
+  if(!confirm('Reopen this confirmed but unpaid 14th Salary? The original confirmed snapshot will be saved in the audit history. No salary will be deleted.'))return;
+  ndSalaryReopenPending.add(requestKey);
+  button.disabled=true;
+  const label=button.textContent;button.textContent='Reopening...';
+  try{
+    const {data,error}=await salaryDb.rpc('nd_reopen_salary_14th',{
+      p_employee_id:employeeId,p_salary_month:month,p_reason:reason.trim()
+    });
+    if(error)throw error;
+    if(data?.success===false)throw Error('Reopen was not completed.');
+    await refreshSalaryStayHere();
+    alert('14th Salary reopened. Review the amounts and Confirm 14th again when ready.');
+  }catch(err){
+    alert('Reopen 14th failed: '+String(err?.message||err));
+    try{await refreshSalaryStayHere();}catch(_){}
+  }finally{
+    ndSalaryReopenPending.delete(requestKey);
+    if(button.isConnected){button.disabled=false;button.textContent=label;}
+  }
+},true);
+
 // Salary Reset uses one persistent delegated handler. It works after table redraws.
 const ndSalaryResetPending = new Set();
 document.addEventListener('click',function(ev){
@@ -15944,11 +15984,14 @@ async function ndResetSalaryToAutomatic(empId,payrollType){
   const table=type==="7"?"payroll_snapshot":"payroll_commission_snapshot";
   const label=type==="7"?"7th":"14th";
   const {data:existing,error:readError}=await salaryDb.from(table)
-    .select("id,payment_done,payment_on_hold")
+    .select(type==='14'?'id,payment_done,payment_on_hold,confirmed_at':'id,payment_done,payment_on_hold')
     .eq("employee_id",Number(empId)).eq("salary_month",month);
   if(readError){alert("Reset failed: "+readError.message);return;}
   if((existing||[]).some(row=>row.payment_done===true)){
     alert("Payment DONE salary is locked and cannot be reset.");return;
+  }
+  if(type==='14' && (existing||[]).some(row=>!!row.confirmed_at)){
+    alert('Confirmed 14th Salary cannot be Reset. Use UMO Reopen 14th instead.');return;
   }
   if((existing||[]).some(row=>row.payment_on_hold===true)){
     alert("Salary ON HOLD cannot be reset until the hold is resolved.");return;
@@ -16088,11 +16131,14 @@ async function confirm14th(empId){
   try{
     // Always check cloud, not just the page's possibly stale snapshot cache.
     const existing=await salaryDb.from("payroll_commission_snapshot")
-      .select("employee_id,salary_month")
+      .select("employee_id,salary_month,confirmed_at,payment_done")
       .eq("employee_id",id).eq("salary_month",salaryMonth)
       .maybeSingle();
     if(existing.error)throw existing.error;
-    if(existing.data){
+    if(existing.data?.payment_done===true){
+      alert('Payment DONE: paid 14th Salary cannot be changed.');return;
+    }
+    if(existing.data?.confirmed_at){
       await refreshSalaryStayHere();
       alert("This employee's 14th Salary is already confirmed for this month. Existing confirmed pay was not changed.");
       return;
@@ -16114,12 +16160,31 @@ async function confirm14th(empId){
       total_income:Number(c.total_income||0),
       net_pay:Number(c.net_pay||0)
     };
-    const result=await salaryDb.from("payroll_commission_snapshot").insert(row);
-    if(result.error){
-      // Concurrent confirmation from another tab/device: never overwrite.
-      if(result.error.code==="23505" || /duplicate key value|unique constraint/i.test(result.error.message||"")){
+    // A reopened 14th keeps its original row and unique key. Update that
+    // unconfirmed unpaid row, rather than inserting a duplicate.
+    let result;
+    if(existing.data){
+      const identity=await salaryDb.auth.getUser();
+      if(identity.error || !identity.data?.user?.id ||
+         String(identity.data.user.email||'').trim().toLowerCase()!=='umo1017@gmail.com'){
+        throw Error('UMO sign-in must be verified before confirming salary.');
+      }
+      result=await salaryDb.from('payroll_commission_snapshot')
+        .update({...row,confirmed_at:new Date().toISOString(),confirmed_by:identity.data.user.id})
+        .eq('employee_id',id).eq('salary_month',salaryMonth)
+        .is('confirmed_at',null).eq('payment_done',false)
+        .select('employee_id');
+      if(!result.error && (!result.data || result.data.length!==1)){
         await refreshSalaryStayHere();
-        alert("Already confirmed for this employee and month. No duplicate or overwrite was made.");
+        throw Error('Salary changed on another device or update permission denied. No overwrite was made.');
+      }
+    }else{
+      result=await salaryDb.from('payroll_commission_snapshot').insert(row);
+    }
+    if(result.error){
+      if(result.error.code==='23505'||/duplicate key value|unique constraint/i.test(result.error.message||'')){
+        await refreshSalaryStayHere();
+        alert('Another device already saved this salary. No duplicate was created.');
         return;
       }
       throw result.error;
