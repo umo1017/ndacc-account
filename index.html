@@ -4834,7 +4834,26 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
  #ndAnnouncementsPage{padding:8px 10px 24px!important}
 }
 </style>
-
+<script id="nd-announcements-compact-clean-controller">
+(()=>{
+ function init(){
+  const page=document.getElementById('ndAnnouncementsPage');
+  if(!page||document.getElementById('ndAnnCompactActions'))return;
+  const mode=document.getElementById('ndAnnMode');
+  if(!mode)return;
+  const bar=document.createElement('div');bar.id='ndAnnCompactActions';bar.className='nd-ann-compact-actions';
+  const tasks=document.createElement('button');tasks.type='button';tasks.textContent='My Tasks';
+  tasks.addEventListener('click',()=>document.getElementById('ndAnnouncementTasksButton')?.click());
+  const notifications=document.createElement('button');notifications.type='button';notifications.textContent='Notifications';
+  notifications.addEventListener('click',()=>document.getElementById('ndAnnouncementNotificationsButton')?.click());
+  bar.append(tasks,notifications);mode.before(bar);
+  const source=document.getElementById('ndAnnouncementTasksButton');
+  if(source){const sync=()=>{const count=source.querySelector('.nd-notification-count')?.textContent?.trim();tasks.textContent='My Tasks'+(count&&count!=='0'?' ('+count+')':'');};sync();new MutationObserver(sync).observe(source,{childList:true,subtree:true,characterData:true});}
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+ window.addEventListener('load',init,{once:true});
+})();
+</script>
 
 <style id="nd-pro-beta-layout-audit-fix-20261105">
 /* Preserve Pro's existing navigation, data operations, and permission handlers. */
@@ -4897,189 +4916,6 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 .nd-booking-detail .nd-detail-worker-links{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
 .nd-pro-staff-viewer[hidden]{display:none!important}.nd-pro-staff-viewer{position:fixed;inset:0;z-index:2147483650;display:flex;align-items:center;justify-content:center}.nd-pro-staff-shade{position:absolute;inset:0;background:#0007}.nd-pro-staff-sheet{position:relative;background:#f3f3f8;color:#202938;width:min(460px,94vw);max-height:85dvh;overflow:auto;border-radius:22px;padding:20px}.nd-pro-staff-sheet header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;font-size:20px}.nd-pro-staff-sheet header button{border:0;background:none;color:#1976ed;font-size:30px;min-width:44px;min-height:44px;cursor:pointer}.nd-pro-staff-row{background:#fff;padding:16px;border-radius:13px;margin:9px 0}.nd-pro-staff-row small{display:block;color:#77808e;margin-bottom:5px}.nd-pro-staff-row strong{display:block;font-size:17px;overflow-wrap:anywhere}
 @media(max-width:700px){.nd-pro-staff-viewer{align-items:flex-end}.nd-pro-staff-sheet{width:100%;max-width:100%;border-radius:22px 22px 0 0;padding-bottom:max(26px,env(safe-area-inset-bottom))}}
-</style>
-
-<style id="nd-records-mobile-two-column-tabs-20261105">
-/* Records: two buttons per row on phones, no sideways scrolling. */
-@media (max-width:760px){
- #salaryPage #salaryViewTabs.salary-view-tabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important;width:100%!important;max-width:100%!important;overflow:visible!important;flex-wrap:wrap!important;padding:10px 0!important;scrollbar-width:none!important}
- #salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn{display:flex!important;align-items:center!important;justify-content:center!important;min-width:0!important;max-width:100%!important;width:100%!important;min-height:54px!important;height:auto!important;padding:10px 7px!important;margin:0!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;text-align:center!important;line-height:1.3!important;font-size:13px!important;flex:auto!important}
- #salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn:empty{display:none!important}
-}
-</style>
-
-<style id="nd-hub-three-tabs-tight-20261105">
-/* Three primary navigation tabs, without repeated page titles or Close. */
-.nd-hub-nav{gap:clamp(10px,3vw,24px)!important;min-height:42px!important;padding:0 4px!important;overflow-x:auto!important;scrollbar-width:none!important}
-.nd-hub-nav::-webkit-scrollbar{display:none}
-.nd-hub-option{min-height:42px!important;padding:8px 2px!important;font-size:clamp(12px,3.3vw,15px)!important;white-space:nowrap!important}
-.nd-hub-layout{gap:5px!important}
-#ndAnnouncementsPage .topbar,#ndAnnouncementsPage #ndAnnCompactActions,#ndAnnouncementsPage #ndWorkspaceNav{display:none!important}
-#ndAnnouncementsPage{padding:4px 10px 18px!important}
-#ndAnnouncementsPage #ndAnnMode{margin:0 0 8px!important}
-#ndAnnouncementsPage #ndAnnMode button{min-height:38px!important;padding:8px!important}
-#ndAnnouncementsPage .nd-ann-buttons:has(#ndAnnMonth){margin:6px 0!important;padding:7px!important}
-#ndAnnouncementsPage #ndAnnTabs{margin:8px 0!important}
-#ndAnnouncementsPage .nd-ann-panel{margin:8px 0!important;padding:12px!important}
-#ndStaffFinancePage .nd-hub-content>h1,#ndStaffFinancePage .nd-hub-content>h2{display:none!important}
-#ndStaffFinancePage .nd-hub-content{padding-top:0!important}
-@media(max-width:760px){
- .nd-hub-nav{padding-left:52px!important;gap:13px!important;min-height:40px!important}
- .nd-hub-option{min-height:40px!important;font-size:12px!important}
- #ndAnnouncementsPage{padding:2px 6px 16px!important}
-}
-</style>
-<script id="nd-hub-three-tabs-controller-20261105">
-(()=>{'use strict';
-function init(){
- document.querySelectorAll('.nd-hub-nav').forEach(nav=>{
-  if(nav.querySelector('[data-nd-hub-tasks]'))return;
-  const button=document.createElement('button');button.type='button';button.className='nd-hub-option';button.dataset.ndHubTasks='';button.textContent='My Tasks';
-  button.addEventListener('click',event=>{
-   event.preventDefault();
-   const source=document.getElementById('ndAnnouncementTasksButton');
-   if(!source){alert('My Tasks is not available.');return;}
-   source.click();
-  });
-  nav.append(button);
- });
- // Preserve original task/notification handlers; only remove redundant navigation.
- const close=document.getElementById('ndAnnClose');if(close)close.hidden=true;
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-})();
-</script>
-
-<style id="nd-unified-compact-navigation-20261105">
-/* Scoped compact navigation: no changes to salary calculations or data access. */
-#salaryPage,#salaryContent,#salaryPage .salary-card{min-width:0!important;max-width:100%!important;box-sizing:border-box}
-#salaryPage .salary-card{padding:12px!important;margin-top:10px!important}
-#salaryPage .salary-top{margin-bottom:8px!important;gap:8px!important}
-#salaryPage .salary-title{font-size:23px!important;line-height:1.2!important}
-#salaryPage .salary-toolbar{display:flex!important;flex-wrap:wrap!important;align-items:end!important;gap:7px!important;margin-bottom:9px!important}
-#salaryPage .salary-toolbar .field{min-width:145px!important;flex:1 1 145px!important;margin:0!important}
-#salaryPage .salary-toolbar .field input{height:38px!important;min-height:38px!important;padding:5px 9px!important}
-#salaryPage .salary-toolbar .btn{min-height:38px!important;height:auto!important;padding:7px 10px!important;font-size:12px!important;line-height:1.2!important;white-space:normal!important}
-#salaryPage #salaryViewTabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;overscroll-behavior-x:contain;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;gap:7px!important;padding:2px 1px 7px!important;max-width:100%!important;scrollbar-width:thin}
-#salaryPage #salaryViewTabs>.salary-view-btn{flex:0 0 auto!important;width:auto!important;min-width:66px!important;max-width:230px!important;min-height:40px!important;height:40px!important;padding:7px 13px!important;margin:0!important;font-size:13px!important;line-height:1.2!important;white-space:nowrap!important;scroll-snap-align:start;border-radius:10px!important}
-#ndAnnouncementsPage{padding:8px 12px 18px!important;margin-top:0!important}
-#ndAnnouncementsPage>div{max-width:1100px!important}
-#ndAnnouncementsPage .nd-ann-legacy-close,#ndAnnouncementsPage #ndAnnClose{display:none!important}
-#ndAnnouncementsPage .nd-ann-buttons{gap:7px!important;margin:0 0 10px!important;padding:0!important;align-items:center!important}
-#ndAnnouncementsPage .nd-ann-buttons:not(#ndAnnTabs) button{min-height:36px!important;height:auto!important;padding:6px 10px!important;font-size:13px!important;line-height:1.2!important}
-#ndAnnouncementsPage #ndAnnMonth{height:36px!important;min-height:36px!important;max-width:150px!important;font-size:13px!important}
-#ndAnnouncementsPage #ndAnnTabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;scrollbar-width:thin;max-width:100%!important;padding:2px 0 7px!important}
-#ndAnnouncementsPage #ndAnnTabs button{flex:0 0 auto!important;white-space:nowrap!important;min-height:35px!important;padding:7px 12px!important;font-size:13px!important}
-#ndAnnouncementsPage .nd-ann-panel{padding:12px!important;margin:8px 0!important}
-#ndAnnouncementsPage #ndAnnList .nd-ann-category-section{margin:12px 0 16px!important}
-#ndAnnouncementsPage #ndCompanyPolicyCard{margin:8px 0!important}
-@media(max-width:700px){
-#salaryPage{overflow-x:clip!important}
-#salaryPage .salary-shell{min-width:0!important;padding-left:8px!important;padding-right:8px!important}
-#salaryPage .salary-toolbar .field{flex-basis:100%!important}
-#ndAnnouncementsPage{padding:4px 9px 14px!important}
-#ndAnnouncementsPage .nd-ann-buttons:not(#ndAnnTabs){flex-wrap:wrap!important}
-#ndAnnouncementsPage #ndAnnMonthUnread{font-size:11px!important}
-}
-</style>
-<script id="nd-unified-compact-heading-cleanup-20261105">
-(function(){
-  function clean(){
-    // Remove only the known redundant page heading, not announcement card headings.
-    document.querySelectorAll('h1,h2,h3,.nd-ann-page-title,.nd-ann-heading').forEach(function(el){
-      if(!el.closest('#ndAnnouncementsPage') && !el.closest('#ndTasksDialog'))return;
-      if(el.closest('#ndAnnList,#ndAnnEditor,#ndCompanyPolicyCard'))return;
-      var t=(el.textContent||'').trim().replace(/\s+/g,' ');
-      if(t==='Tasks & Announcements')el.style.display='none';
-    });
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',clean);else clean();
-})();
-</script>
-
-<style id="nd-ui-final-compact-20261105">
-/* Final scoped UI rules: presentation only; keep existing database/actions untouched. */
-html,body{max-width:100%;overflow-x:clip}
-.nd-hub-layout,.nd-hub-content{min-width:0!important;max-width:100%!important}
-.nd-hub-content{overflow-x:clip!important}
-.nd-hub-nav{gap:clamp(10px,3vw,22px)!important;min-height:42px!important;max-width:100%!important;overflow-x:auto!important;overflow-y:hidden!important;padding:0 3px!important;scrollbar-width:none!important}
-.nd-hub-option{min-height:42px!important;padding:8px 2px!important;font-size:clamp(12px,3.3vw,14px)!important;line-height:1.2!important}
-#ndAnnouncementsPage{padding:6px 10px 18px!important;min-height:0!important;max-width:100%!important;overflow-x:clip!important}
-#ndAnnouncementsPage>div{width:100%;max-width:1100px!important;min-width:0}
-#ndAnnouncementsPage .topbar,#ndAnnouncementsPage #ndWorkspaceNav,#ndAnnouncementsPage .nd-ann-feed-title,#ndAnnouncementsPage #ndAnnClose,#ndAnnouncementsPage .nd-ann-legacy-close,#ndAnnouncementsPage #ndAnnCompactActions{display:none!important}
-#ndAnnouncementsPage .nd-ann-buttons{gap:6px!important;margin:5px 0 9px!important;padding:0!important;align-items:center!important}
-#ndAnnouncementsPage .nd-ann-buttons button{min-height:34px!important;padding:6px 10px!important;font-size:12px!important;line-height:1.2!important;border-radius:10px!important}
-#ndAnnouncementsPage #ndAnnMode{margin:0 0 7px!important;gap:6px!important}
-#ndAnnouncementsPage #ndAnnMode[hidden]{display:none!important}
-#ndAnnouncementsPage #ndAnnMode button{flex:0 1 auto!important;width:auto!important;min-height:34px!important;padding:6px 10px!important;font-size:12px!important}
-#ndAnnouncementsPage #ndAnnMonth{width:125px!important;min-width:110px!important;max-width:135px!important;height:34px!important;min-height:34px!important;padding:4px 6px!important;font-size:12px!important}
-#ndAnnouncementsPage #ndAnnPrev,#ndAnnouncementsPage #ndAnnNext{width:34px!important;min-width:34px!important;padding:4px!important}
-#ndAnnouncementsPage #ndAnnMonthUnread{font-size:11px!important;flex:1 1 100%!important;line-height:1.3!important}
-#ndAnnouncementsPage #ndAnnTabs{display:flex!important;flex-wrap:wrap!important;overflow:visible!important;gap:6px!important;margin:7px 0 9px!important;padding:0!important;max-width:100%!important}
-#ndAnnouncementsPage #ndAnnTabs button{flex:0 0 auto!important;width:auto!important;min-height:32px!important;padding:5px 9px!important;font-size:12px!important;white-space:normal!important}
-#ndAnnouncementsPage .nd-ann-panel{padding:12px!important;margin:8px 0!important;max-width:100%!important;min-width:0!important}
-#ndAnnouncementsPage #ndAnnList .nd-ann-category-section{margin:10px 0 13px!important}
-#ndAnnouncementsPage #ndAnnList .nd-ann-category-section-heading{margin-bottom:7px!important}
-#ndAnnouncementsPage #ndCompanyPolicyCard{margin:7px 0!important}
-#ndAnnouncementsPage #ndCompanyPolicyCard h3{margin:0 0 9px!important;font-size:17px!important}
-#ndAnnouncementsPage #ndCompanyPolicyCard .actions{gap:7px!important}
-#ndAnnouncementsPage #ndCompanyPolicyCard .btn{min-height:34px!important;padding:6px 10px!important;font-size:12px!important}
-#salaryPage{max-width:100%!important;overflow-x:clip!important}
-#salaryPage .salary-shell,#salaryPage #salaryContent{min-width:0!important;max-width:100%!important}
-#salaryPage .salary-toolbar{gap:6px!important;align-items:end!important}
-#salaryPage .salary-toolbar .btn{flex:0 0 auto!important;width:auto!important;max-width:100%!important;min-width:0!important;min-height:35px!important;padding:6px 9px!important;font-size:12px!important;line-height:1.2!important;white-space:normal!important}
-#salaryPage .salary-toolbar .field{min-width:130px!important;flex:0 1 180px!important}
-#salaryPage .salary-toolbar .field input{height:35px!important;min-height:35px!important}
-#salaryPage #salaryViewTabs.salary-view-tabs{display:flex!important;flex-wrap:wrap!important;overflow:visible!important;gap:7px!important;width:100%!important;max-width:100%!important;padding:5px 0 8px!important}
-#salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn{flex:0 0 auto!important;width:auto!important;max-width:100%!important;min-width:0!important;height:auto!important;min-height:36px!important;padding:7px 12px!important;margin:0!important;white-space:normal!important;font-size:12px!important;line-height:1.2!important;border-radius:10px!important}
-@media(max-width:760px){
- .nd-hub-nav{padding-left:52px!important;gap:12px!important}
- #ndAnnouncementsPage{padding:4px 7px 14px!important}
- #ndAnnouncementsPage #ndAnnMode button{font-size:11px!important}
- #ndAnnouncementsPage #ndAnnTabs{gap:5px!important}
- #ndAnnouncementsPage #ndAnnTabs button{font-size:11px!important;padding:6px 8px!important}
- #salaryPage .salary-toolbar .field{flex:1 1 140px!important;min-width:0!important}
- #salaryPage #salaryViewTabs.salary-view-tabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;overflow:visible!important}
- #salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn{display:flex!important;justify-content:center!important;align-items:center!important;width:100%!important;max-width:100%!important;min-height:38px!important;height:auto!important;padding:8px 6px!important;font-size:12px!important;text-align:center!important;overflow-wrap:anywhere!important}
-}
-</style>
-<script id="nd-ui-final-cleanup-20261105">
-(()=>{'use strict';
-function clean(){
- const page=document.getElementById('ndAnnouncementsPage');if(!page)return;
- // Hide redundant empty banner elements without touching any announcement records.
- for(const el of page.querySelectorAll('h1,h2,h3,.nd-ann-page-title,.nd-ann-heading')){
-  if(el.closest('#ndAnnList,#ndAnnEditor,#ndCompanyPolicyCard'))continue;
-  const label=(el.textContent||'').replace(/\s+/g,' ').trim();
-  if(label==='Tasks & Announcements'||label==='Announcements')el.hidden=true;
- }
- // Keep the original publish/history handlers; only shorten the visible labels.
- const publish=page.querySelector('#ndAnnMode [data-ann-mode="publish"]');
- if(publish)publish.textContent=' + New';
- const history=page.querySelector('#ndAnnMode [data-ann-mode="history"]');
- if(history)history.textContent='History';
- // Remove a decorative banner if it contains no interactive or textual content.
- for(const el of page.querySelectorAll('[class*="banner"],[class*="hero"]')){
-  if(el.closest('#ndAnnList,#ndAnnEditor'))continue;
-  if(!(el.textContent||'').trim()&&!el.querySelector('button,input,select,a,img'))el.hidden=true;
- }
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',clean,{once:true});else clean();
-})();
-</script>
-
-<style id="nd-ann-single-action-fix-20261105">
-/* The old mode switch is still used by existing handlers but is not a second navigation bar. */
-#ndAnnouncementsPage #ndAnnMode,
-#ndAnnouncementsPage #ndAnnMode:not([hidden]) {display:none!important;}
-#ndAnnouncementsPage #ndAnnCompactHeader{display:flex!important;justify-content:flex-end!important;align-items:center!important;margin:0 0 8px!important;padding:0!important;min-height:0!important;}
-#ndAnnouncementsPage #ndAnnCompactNew{min-height:34px!important;height:34px!important;padding:5px 12px!important;white-space:nowrap!important;}
-#ndAnnouncementsPage .nd-ann-buttons:has(#ndAnnMonth){gap:6px!important;align-items:center!important;flex-wrap:wrap!important;padding:8px!important;margin:0 0 8px!important;}
-#ndAnnouncementsPage #ndAnnMonth{background:#fff!important;color:#294b39!important;min-width:115px!important;width:135px!important;max-width:135px!important;}
-#ndAnnouncementsPage #ndAnnMonthUnread{display:none!important;}
-#ndAnnouncementsPage #ndAnnTabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overscroll-behavior-x:contain!important;scrollbar-width:none!important;gap:7px!important;max-width:100%!important;}
-#ndAnnouncementsPage #ndAnnTabs::-webkit-scrollbar{display:none!important;}
-#ndAnnouncementsPage #ndAnnTabs>*{flex-shrink:0!important;}
 </style>
 </head>
 <body>
@@ -32378,7 +32214,8 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function report(r){
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
-   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'</body></html>';
+   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
+</body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
  }
@@ -32758,7 +32595,7 @@ body[data-nd-visible-page="announcements"] #appView,body[data-nd-visible-page="a
 @media(max-width:700px){#ndAnnouncementsPage{padding:65px 12px 20px}}
 </style>
 <section class="sidebar-offset" id="ndAnnouncementsPage"><div style="max-width:1100px;margin:auto">
-<div class="topbar nd-ann-legacy-close" hidden><button class="btn" id="ndAnnClose" type="button">Close</button></div><div class="nd-ann-buttons" id="ndAnnMode" hidden><button type="button" data-ann-mode="publish">Publish Announcement</button><button type="button" data-ann-mode="history">Announcement History</button></div><div id="ndAnnCompactHeader"><button type="button" id="ndAnnCompactNew">+ New</button></div>
+<div class="topbar"><h2>Tasks &amp; Announcements</h2><button class="btn" id="ndAnnClose" type="button">Close</button></div><div class="nd-ann-buttons" id="ndAnnMode" hidden><button type="button" data-ann-mode="publish">Publish Announcement</button><button type="button" data-ann-mode="history">Announcement History</button></div>
 <div class="nd-ann-buttons"><button id="ndAnnPrev" type="button">◀</button><input id="ndAnnMonth" style="max-width:190px" type="month"/><button type="button" id="ndAnnAllMonths" class="nd-ann-all-unread-btn" aria-pressed="true">All Months</button><button id="ndAnnNext" type="button">▶</button><button type="button" class="nd-ann-all-unread-btn" id="ndAnnViewUnread" aria-pressed="false">All Unread</button><span class="nd-ann-muted" id="ndAnnMonthUnread"></span></div>
 <div class="nd-ann-buttons" id="ndAnnTabs"><button class="selected" data-cat="all">All</button><button data-cat="promotion">Promotions</button><button data-cat="treatment">New Treatments</button><button data-cat="policy">Policies</button><button data-cat="commission">Commission</button><button data-cat="menu">Menu</button></div><nav id="ndMenuSubTabs" class="nd-menu-subtabs" aria-label="Menu categories" hidden></nav>
 <div class="nd-ann-panel" hidden="" id="ndAnnEditor"><h3 id="ndAnnEditHeading">New Announcement</h3><label>Category</label><select id="ndAnnCategory"><option value="promotion">Promotions</option><option value="treatment">New Treatments</option><option value="policy">Policies</option><option value="commission">Commission</option><option value="menu">Menu</option></select><div id="ndMenuEditorGroup" class="nd-menu-editor-group" hidden><label for="ndMenuGroup">Menu Section</label><div class="nd-menu-edit-row"><select id="ndMenuGroup"></select><button type="button" class="btn" id="ndMenuGroupAdd" title="Add menu category" aria-label="Add menu category">+</button></div></div><label>Title</label><input id="ndAnnTitle" maxlength="160"/><label>Content</label><textarea id="ndAnnContent" maxlength="10000"></textarea><label for="ndAnnPhotos">Photos / PDF Files</label><input id="ndAnnPhotos" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" multiple><div id="ndAnnSelectedPhotos" class="nd-ann-muted"></div><div class="actions" style="margin-top:10px"><button class="btn" id="ndAnnSave" type="button">Publish</button><button class="btn" id="ndAnnCancel" type="button">Cancel Edit</button></div></div>
@@ -36892,48 +36729,6 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
-
-<style id="nd-salary-small-buttons-final-20261105">
-/* Salary: compact, horizontally scrollable navigation; no oversized grid buttons. */
-#salaryPage #salaryViewTabs.salary-view-tabs,
-#ndBonusSalaryTabs {
- display:flex!important; flex-direction:row!important; flex-wrap:nowrap!important;
- grid-template-columns:none!important; align-items:center!important; justify-content:flex-start!important;
- gap:7px!important; padding:3px 0 7px!important; margin:7px 0!important;
- width:100%!important; max-width:100%!important; min-width:0!important;
- overflow-x:auto!important; overflow-y:hidden!important;
- -webkit-overflow-scrolling:touch; scrollbar-width:thin;
-}
-#salaryPage #salaryViewTabs.salary-view-tabs > button.salary-view-btn,
-#ndBonusSalaryTabs > button.salary-view-btn {
- box-sizing:border-box!important; flex:0 0 auto!important; display:inline-flex!important;
- width:auto!important; max-width:none!important; min-width:60px!important;
- height:38px!important; min-height:38px!important; max-height:38px!important;
- padding:6px 12px!important; margin:0!important;
- font-size:13px!important; line-height:18px!important; font-weight:700!important;
- white-space:nowrap!important; border-radius:10px!important;
- align-items:center!important; justify-content:center!important;
-}
-#salaryPage .salary-card {padding:12px!important;max-width:100%!important;min-width:0!important;}
-#salaryPage .salary-toolbar {display:flex!important;flex-wrap:wrap!important;gap:7px!important;align-items:end!important;}
-#salaryPage .salary-toolbar > .btn,
-#salaryPage .salary-toolbar > button {
- height:36px!important;min-height:36px!important;max-height:36px!important;
- width:auto!important;flex:0 0 auto!important;
- padding:6px 10px!important;font-size:12px!important;line-height:18px!important;
- border-radius:10px!important;white-space:nowrap!important;
-}
-#salaryPage .salary-toolbar .field {margin:0!important;flex:0 1 190px!important;min-width:150px!important;}
-#salaryPage .salary-toolbar input[type="month"] {height:36px!important;min-height:36px!important;padding:5px 8px!important;font-size:13px!important;}
-#salaryPage .salary-toolbar label {margin-bottom:3px!important;font-size:12px!important;}
-#salaryPage, #salaryPage .salary-card {box-sizing:border-box!important;}
-@media(max-width:760px){
- #salaryPage #salaryViewTabs.salary-view-tabs > button.salary-view-btn,
- #ndBonusSalaryTabs > button.salary-view-btn {height:36px!important;min-height:36px!important;max-height:36px!important;font-size:12px!important;padding:5px 10px!important;}
- #salaryPage .salary-card {padding:10px!important;}
- #salaryPage .salary-toolbar .field {flex:1 1 155px!important;min-width:140px!important;}
-}
-</style>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
@@ -38449,23 +38244,8 @@ function ndOpenServiceEditor(serviceId,host){
  }
  draw();
 }
-function renderPos(host){
- const filtered=services.filter(s=>prices.some(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch)));
- host.innerHTML=`<div class="pro-card pro-line"><div>${field(tr('Branch','分行'),chooseBranch())}</div><strong>购物车 · 结账预览（不收款）</strong></div>
- <div class="pro-grid">${filtered.map(s=>{const p=prices.find(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch));return `<div class="pro-card"><strong>${esc(lang==='zh'&&s.name_zh?s.name_zh:s.name_en)}</strong><p class="pro-muted">${esc(p?.branch||'')}</p><p>RM ${Number(p?.price||0).toFixed(2)}</p><button type="button" class="pro-tab" data-add="${s.id}" data-price="${p?.id||''}">＋ 加入购物车</button></div>`;}).join('')}</div>
- <div class="pro-card" id="ndProCartPanel"><h3>🛒 购物车 <span id="ndProCartCount">0</span></h3><div id="proCart"></div><div class="pro-row"><button class="pro-action" type="button" id="proClearCart">清空购物车</button><button class="pro-action" type="button" id="ndProOpenCheckout">查看结账 ›</button></div><p class="pro-muted">这是结账预览，不会产生收据或扣除余额。</p></div>
- <div class="pro-card" id="ndProCheckoutPanel" hidden><h3>结账 Checkout</h3><label>顾客（预览）<input id="ndProCheckoutCustomer" placeholder="顾客名字 / 电话号码" autocomplete="off"></label><div id="ndProCheckoutItems"></div><label>付款方式（仅预览）<select id="ndProCheckoutMethod"><option>Cash</option><option>Card</option><option>TNG</option><option>Bank Transfer</option><option>Online</option><option>Alipay</option></select></label><div class="pro-row"><strong>应付金额</strong><strong id="ndProCheckoutTotal">RM 0.00</strong></div><p class="pro-muted">已购买 Voucher、Credit、Points 尚未连接真实余额；此页面不会扣款或核销。</p><button class="pro-action" type="button" id="ndProCheckoutBack">返回购物车</button><button class="pro-action" type="button" disabled title="需要数据库交易和收据逻辑">确认付款（待接入）</button></div>`;
- el('proBranch').value=branch;
- el('proBranch').onchange=e=>{branch=e.target.value;cart=[];render();};
- host.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const s=services.find(x=>String(x.id)===b.dataset.add),p=prices.find(x=>String(x.id)===b.dataset.price);if(s&&p){cart.push({name:s.name_en,price:Number(p.price),branch:p.branch});drawCart();}});
- el('proClearCart').onclick=()=>{cart=[];drawCart();};
- el('ndProOpenCheckout').onclick=()=>{if(!cart.length){alert('请先选择服务');return;}el('ndProCheckoutPanel').hidden=false;el('ndProCheckoutPanel').scrollIntoView({behavior:'smooth',block:'start'});drawCart();};
- el('ndProCheckoutBack').onclick=()=>{el('ndProCheckoutPanel').hidden=true;el('ndProCartPanel').scrollIntoView({behavior:'smooth',block:'start'});};
- function drawCart(){const total=cart.reduce((n,x)=>n+(Number(x.price)||0),0);el('ndProCartCount').textContent=String(cart.length);
- el('proCart').innerHTML=cart.length?cart.map((x,i)=>`<div class="pro-row"><span>${esc(x.name)} (${esc(x.branch)})</span><span><strong>RM ${Number(x.price).toFixed(2)}</strong> <button type="button" class="pro-tab" data-remove-cart="${i}" aria-label="移除">×</button></span></div>`).join('')+`<div class="pro-row"><strong>合计</strong><strong>RM ${total.toFixed(2)}</strong></div>`:'<p class="pro-muted">购物车暂无服务</p>';
- el('proCart').querySelectorAll('[data-remove-cart]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.removeCart),1);drawCart();});
- el('ndProCheckoutItems').innerHTML=cart.map(x=>`<div class="pro-row"><span>${esc(x.name)}</span><strong>RM ${Number(x.price).toFixed(2)}</strong></div>`).join('');el('ndProCheckoutTotal').textContent='RM '+total.toFixed(2);if(!cart.length)el('ndProCheckoutPanel').hidden=true;
- }drawCart();}
+function renderPos(host){const filtered=services.filter(s=>prices.some(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch)));host.innerHTML=`<div class="pro-card pro-line"><div>${field(tr('Branch','分行'),chooseBranch())}</div><strong>${tr('POS Demo — Not a real payment','POS 测试 — 不进行真实付款')}</strong></div><div class="pro-grid">${filtered.map(s=>{const p=prices.find(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch));return `<div class="pro-card"><strong>${esc(lang==='zh'&&s.name_zh?s.name_zh:s.name_en)}</strong><p class="pro-muted">${esc(p?.branch||'')}</p><p>RM ${Number(p?.price||0).toFixed(2)}</p><button type="button" class="pro-tab" data-add="${s.id}" data-price="${p?.id||''}">+ Add</button></div>`;}).join('')}</div><div class="pro-card"><h3>${tr('Demo Cart','测试购物车')}</h3><div id="proCart"></div><button class="pro-action" type="button" id="proClearCart">${tr('Clear Cart','清空购物车')}</button><p class="pro-muted">Checkout, cash settlement, wallet deductions, commissions and WhatsApp sending are intentionally disabled.</p></div>`;
+el('proBranch').value=branch;el('proBranch').onchange=e=>{branch=e.target.value;cart=[];render();};host.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const s=services.find(x=>x.id===b.dataset.add),p=prices.find(x=>x.id===b.dataset.price);if(s&&p){cart.push({name:s.name_en,price:Number(p.price),branch:p.branch});drawCart();}});el('proClearCart').onclick=()=>{cart=[];drawCart();};function drawCart(){el('proCart').innerHTML=cart.map((x,i)=>`<div class="pro-row"><span>${esc(x.name)} (${esc(x.branch)})</span><strong>RM ${x.price.toFixed(2)}</strong></div>`).join('')+`<div class="pro-row"><strong>Total</strong><strong>RM ${cart.reduce((n,x)=>n+x.price,0).toFixed(2)}</strong></div>`;}drawCart();}
 function init(){if(!nav||!page)return;nav.hidden=true;nav.style.display='none';void updateNav();
   try{getDb()?.auth?.onAuthStateChange?.(()=>setTimeout(()=>void updateNav(),0));}catch(_e){}
   // Fallback for login initialization in the legacy application.
@@ -38552,34 +38332,6 @@ document.addEventListener('input',e=>{let x=e.target;if(x?.classList?.contains('
 document.addEventListener('change',e=>{let x=e.target;if(x?.classList?.contains('nd-required-error'))mark(x)},true);
 })();</script>
 
-<style id="nd-company-fine-compact-final">
-/* Company Fine only: preserve existing event handlers and financial calculations. */
-#ndCompanyFinePage{max-width:100%;overflow-x:hidden}
-#ndCompanyFinePage .ncf-shell{padding:0 10px 24px!important}
-#ndCompanyFinePage .ncf-top{gap:9px!important;margin:6px 0 10px!important;justify-content:flex-start!important}
-#ndCompanyFinePage .ncf-top h2{font-size:19px!important;line-height:1.2!important}
-#ndCompanyFinePage #ncfClose{display:none!important}
-#ndCompanyFinePage #ndFineMenuBtn{display:inline-flex!important;align-items:center;justify-content:center;flex:0 0 38px!important;width:38px!important;height:38px!important;min-height:38px!important;padding:0!important;font-size:20px!important;color:#2464c7!important}
-#ndCompanyFinePage .ncf-controls{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px!important;padding:12px!important;border-radius:14px!important}
-#ndCompanyFinePage .ncf-controls label{min-width:0!important;font-size:12px!important;gap:4px!important}
-#ndCompanyFinePage .ncf-controls input,#ndCompanyFinePage .ncf-controls select{box-sizing:border-box!important;width:100%!important;min-width:0!important;height:42px!important;padding:6px 9px!important;font-size:14px!important}
-#ndCompanyFinePage .ncf-status{margin:7px 0!important;min-height:0!important;font-size:12px!important}
-#ndCompanyFinePage .ncf-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;margin:9px 0!important}
-#ndCompanyFinePage .ncf-card{min-width:0!important;padding:10px 12px!important;border-radius:13px!important}
-#ndCompanyFinePage .ncf-card small{font-size:11px!important;line-height:1.25!important}
-#ndCompanyFinePage .ncf-card strong{font-size:20px!important;margin-top:5px!important}
-#ndCompanyFinePage .ncf-panel{margin-top:10px!important;border-radius:14px!important}
-#ndCompanyFinePage .ncf-panel h3{font-size:16px!important;padding:12px 14px!important}
-#ndCompanyFinePage .ncf-payout{display:flex!important;flex-wrap:wrap!important;align-items:end!important;gap:9px!important;padding:0 14px 14px!important}
-#ndCompanyFinePage .ncf-payout>div:first-child{flex:1 1 160px!important;min-width:0!important}
-#ndCompanyFinePage .ncf-payout label{min-width:0!important;font-size:12px!important}
-#ndCompanyFinePage #ncfPayoutAmount{box-sizing:border-box!important;width:100%!important;height:40px!important;padding:7px 10px!important}
-#ndCompanyFinePage #ncfPrepareExpense{min-height:40px!important;height:40px!important;padding:7px 12px!important;font-size:13px!important;border-radius:10px!important}
-#ndCompanyFinePage #ncfExpenseStatus:empty{display:none!important}
-#ndCompanyFinePage .ncf-scroll{max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch}
-#ndCompanyFinePage .ncf-scroll table{min-width:640px}
-@media(max-width:400px){#ndCompanyFinePage .ncf-shell{padding-left:4px!important;padding-right:4px!important}#ndCompanyFinePage .ncf-payout{display:block!important}#ndCompanyFinePage #ncfPrepareExpense{margin-top:9px!important;max-width:100%!important}}
-</style>
 <style id="nd-fine-expense-handoff-css">#ndCompanyFinePage .ncf-payout{display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:18px}#ndCompanyFinePage .ncf-payout label{min-width:210px}#ndCompanyFinePage #ncfPrepareExpense{background:#197b68;color:white;border-color:#197b68;min-height:42px}#ndCompanyFinePage #ncfExpenseStatus{width:100%;font-size:13px;color:#a44e25;min-height:16px}</style>
 
 
@@ -38990,149 +38742,3 @@ body > #ndProHamburger.nd-pro-portal-menu {
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 </script>
-
-<style id="nd-ann-structural-rebuild-20261105">
-/* Compact navigation: preserve existing application handlers and data. */
-#ndAnnouncementsPage{padding-top:0!important}
-#ndAnnouncementsPage>div{margin-top:0!important}
-#ndAnnouncementsPage #ndAnnMode{display:none!important}
-#ndAnnouncementsPage #ndAnnCompactHeader{display:flex!important;justify-content:flex-end;align-items:center;margin:0 0 8px!important;min-height:0!important;padding:0!important}
-#ndAnnouncementsPage #ndAnnCompactNew{background:#28513b!important;color:#fff!important;border:0!important;border-radius:9px!important;padding:7px 12px!important;font-size:13px!important;font-weight:700!important;min-height:34px!important;height:34px!important;line-height:18px!important;width:auto!important}
-#ndAnnouncementsPage .nd-ann-buttons:has(#ndAnnMonth){display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:6px!important;padding:7px!important;margin:0 0 8px!important;min-height:0!important}
-#ndAnnouncementsPage #ndAnnMonth{flex:1 1 120px!important;min-width:105px!important;max-width:180px!important;height:34px!important;min-height:34px!important;margin:0!important;padding:4px 6px!important}
-#ndAnnouncementsPage #ndAnnPrev,#ndAnnouncementsPage #ndAnnNext{width:34px!important;min-width:34px!important;height:34px!important;min-height:34px!important;padding:0!important}
-#ndAnnouncementsPage #ndAnnAllMonths,#ndAnnouncementsPage #ndAnnViewUnread{width:auto!important;min-height:34px!important;height:34px!important;padding:5px 9px!important;font-size:12px!important;white-space:nowrap!important}
-#ndAnnouncementsPage #ndAnnMonthUnread{display:none!important}
-#ndAnnouncementsPage #ndAnnTabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:7px!important;margin:0 0 10px!important;padding:2px 0 6px!important;scrollbar-width:none!important;-webkit-overflow-scrolling:touch!important}
-#ndAnnouncementsPage #ndAnnTabs::-webkit-scrollbar{display:none!important}
-#ndAnnouncementsPage #ndAnnTabs button{flex:0 0 auto!important;white-space:nowrap!important;width:auto!important;min-height:34px!important;height:34px!important;padding:6px 10px!important;font-size:12px!important;border-radius:18px!important}
-#ndAnnouncementsPage .nd-ann-panel{margin:8px 0!important;padding:12px!important}
-#ndAnnouncementsPage .nd-ann-panel h3{margin:0 0 8px!important}
-#ndAnnouncementsPage #ndAnnList article{margin:8px 0!important;padding:12px!important}
-#ndAnnouncementsPage .nd-ann-legacy-close{display:none!important}
-@media(max-width:600px){#ndAnnouncementsPage{padding-left:8px!important;padding-right:8px!important}#ndAnnouncementsPage #ndAnnCompactHeader{margin-top:0!important}}
-</style>
-<script id="nd-ann-structural-actions-20261105">
-(()=>{'use strict';
-function setup(){
- const page=document.getElementById('ndAnnouncementsPage');if(!page)return;
- const newBtn=document.getElementById('ndAnnCompactNew');
- if(newBtn&&!newBtn.dataset.bound){newBtn.dataset.bound='1';newBtn.addEventListener('click',()=>{
-  const original=document.querySelector('#ndAnnMode [data-ann-mode="publish"]');if(original)original.click();
-  document.getElementById('ndAnnEditor')?.scrollIntoView({block:'nearest',behavior:'smooth'});
- });}
- // Remove the old heading wrapper only if it has no interactive content.
- const hideRedundant=()=>{
-  for(const el of page.querySelectorAll('h1,h2,h3')){
-   if(el.closest('#ndAnnEditor,#ndAnnList,#ndCompanyPolicyCard'))continue;
-   if(/^(Tasks & Announcements|Announcements)$/i.test((el.textContent||'').trim())){
-    const wrapper=el.parentElement;
-    if(wrapper&&wrapper!==page&&!wrapper.querySelector('button,input,select,a,textarea')&&wrapper.children.length===1)wrapper.style.display='none';
-    else el.style.display='none';
-   }
-  }
- };
- hideRedundant();
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
-})();
-</script>
-
-<!-- Company Fine mobile menu fix: use existing main sidebar, keep finance logic unchanged -->
-<style id="nd-fine-mobile-menu-fix-20261105">
-#ndCompanyFinePage .ncf-top{display:flex!important;align-items:center!important;gap:9px!important;justify-content:flex-start!important;margin:0 0 10px!important}
-#ndCompanyFinePage .ncf-top h2{flex:1!important;font-size:19px!important}
-#ndCompanyFinePage #ndFineMenuBtn{display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 40px!important;width:40px!important;height:40px!important;padding:0!important;border-radius:11px!important;background:#fff!important;color:#2463d7!important;font-size:23px!important;border:1px solid #d8e0ee!important}
-#ndCompanyFinePage #ncfClose{padding:7px 11px!important;font-size:12px!important;min-height:36px!important}
-#ndCompanyFinePage .nd-fine-shared-nav{padding:0 0 7px!important;margin:0 0 9px!important;gap:6px!important}
-#ndCompanyFinePage .nd-fine-shared-nav button{min-height:36px!important;padding:6px 11px!important;font-size:12px!important}
-@media(max-width:600px){#ndCompanyFinePage{padding:12px 12px 28px!important}#ndCompanyFinePage .ncf-controls{padding:12px!important;gap:8px!important}#ndCompanyFinePage .ncf-stats{gap:8px!important;margin:10px 0!important}#ndCompanyFinePage .ncf-card{padding:11px!important}}
-</style>
-<script id="nd-fine-mobile-menu-action-20261105">
-(()=>{'use strict';
- function install(){
-  const fine=document.getElementById('ndCompanyFinePage');
-  const top=fine?.querySelector('.ncf-top');
-  if(!top||top.querySelector('#ndFineMenuBtn'))return;
-  const b=document.createElement('button');
-  b.type='button';b.id='ndFineMenuBtn';b.textContent='☰';b.setAttribute('aria-label','Open main menu');
-  b.addEventListener('click',()=>{
-   // Company Fine is a full-screen overlay above the original sidebar.
-   // Close the overlay first, then open the existing app sidebar.
-   const close=document.getElementById('ncfClose');
-   if(close)close.click();
-   const sidebar=document.getElementById('mainSidebar');
-   if(sidebar){sidebar.classList.add('open');return;}
-   document.getElementById('mobileSidebarBtn')?.click();
-  });
-  top.insertBefore(b,top.firstChild);
- }
- document.addEventListener('click',e=>{
-  if(e.target?.closest?.('#ndCompanyFineBtn,#ndBonusCompanyFineTab'))queueMicrotask(install);
- },true);
- const start=()=>{
-  install();
-  new MutationObserver(()=>{const fine=document.getElementById('ndCompanyFinePage');if(fine&&!fine.hidden)install()}).observe(document.body,{childList:true,subtree:false});
- };
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
-})();
-</script>
-
-
-<style id="nd-salary-horizontal-tabs-compact-20261105">
-/* Salary only: compact horizontal tabs; keep the report page fixed width. */
-#salaryPage #salaryViewTabs.salary-view-tabs{
- display:flex!important;grid-template-columns:none!important;flex-flow:row nowrap!important;
- align-items:center!important;justify-content:flex-start!important;gap:8px!important;
- width:100%!important;max-width:100%!important;min-width:0!important;
- overflow-x:auto!important;overflow-y:hidden!important;overscroll-behavior-x:contain;
- -webkit-overflow-scrolling:touch;scrollbar-width:thin!important;
- padding:5px 2px 9px!important;margin-top:7px!important;
- scroll-snap-type:x proximity;touch-action:pan-x pan-y;
-}
-#salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn{
- display:inline-flex!important;flex:0 0 auto!important;align-items:center!important;justify-content:center!important;
- width:auto!important;max-width:none!important;min-width:0!important;min-height:40px!important;
- height:40px!important;padding:8px 13px!important;margin:0!important;
- border-radius:10px!important;font-size:13px!important;line-height:1.2!important;
- white-space:nowrap!important;overflow-wrap:normal!important;word-break:normal!important;
- scroll-snap-align:start;
-}
-#salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn:empty{display:none!important}
-#salaryPage .salary-card{min-width:0;max-width:100%}
-#salaryPage .salary-toolbar{gap:7px!important;align-items:end!important}
-#salaryPage .salary-toolbar .btn{min-height:38px!important;padding:7px 11px!important;font-size:12px!important;line-height:1.2!important}
-#salaryPage .salary-toolbar input[type=month]{min-height:38px!important;max-width:100%!important}
-@media(max-width:760px){
- #salaryPage #salaryViewTabs.salary-view-tabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important}
- #salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn{width:auto!important;min-height:40px!important;height:40px!important;white-space:nowrap!important;padding:8px 13px!important}
-}
-</style>
-
-<style id="nd-ann-redesign-english-v2">
-/* Announcements: one navigation, one action, compact filters. */
-#ndAnnouncementsPage{padding:4px 10px 20px!important}
-#ndAnnouncementsPage>div{max-width:1100px!important}
-#ndAnnouncementsPage .topbar,#ndAnnouncementsPage #ndWorkspaceNav,#ndAnnouncementsPage .nd-ann-compact-actions{display:none!important}
-#ndAnnouncementsPage #ndAnnMode:not([hidden]){display:flex!important;justify-content:flex-end!important;margin:0 0 8px!important;padding:0!important;gap:8px!important}
-#ndAnnouncementsPage #ndAnnMode [data-ann-mode="publish"]{background:#2c503e!important;color:#fff!important;border-color:#2c503e!important}
-#ndAnnouncementsPage #ndAnnMode button{width:auto!important;min-height:36px!important;padding:7px 12px!important;border-radius:10px!important;font-size:13px!important}
-#ndAnnouncementsPage .nd-ann-buttons{margin:0 0 8px!important;gap:6px!important;padding:0!important}
-#ndAnnouncementsPage #ndAnnPrev,#ndAnnouncementsPage #ndAnnNext{min-width:32px!important;width:32px!important;padding:6px!important}
-#ndAnnouncementsPage #ndAnnMonth{width:125px!important;min-width:0!important;max-width:125px!important}
-#ndAnnouncementsPage #ndAnnAllMonths,#ndAnnouncementsPage #ndAnnViewUnread{min-height:34px!important;padding:6px 10px!important;font-size:12px!important}
-#ndAnnouncementsPage #ndAnnMonthUnread{font-size:11px!important}
-#ndAnnouncementsPage #ndAnnTabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important;-webkit-overflow-scrolling:touch!important;padding:3px 0 8px!important;gap:6px!important}
-#ndAnnouncementsPage #ndAnnTabs::-webkit-scrollbar{display:none!important}
-#ndAnnouncementsPage #ndAnnTabs button{flex:0 0 auto!important;white-space:nowrap!important;min-height:34px!important;padding:6px 11px!important;font-size:12px!important;border-radius:18px!important}
-#ndAnnouncementsPage .nd-ann-feed-title{display:none!important}
-#ndAnnouncementsPage .nd-ann-panel{margin-top:8px!important}
-@media(max-width:760px){
- .nd-hub-nav{padding-left:66px!important;gap:12px!important;overflow-x:auto!important}
- .nd-hub-option{font-size:12px!important;min-height:38px!important;padding:7px 2px!important}
- #ndAnnouncementsPage{padding:0 8px 16px!important}
- #ndAnnouncementsPage .nd-ann-buttons:not(#ndAnnTabs){align-items:center!important;flex-wrap:wrap!important}
- #ndAnnouncementsPage #ndAnnMonth{width:112px!important}
-}
-</style>
-
