@@ -36612,7 +36612,37 @@ function signedView(document){
 async function openHistory(){mount();const h=$('ndSimpleAdvanceHistory');if(!h.hasAttribute('open')){h.querySelector('[data-sa-month]').value=myDate().slice(0,7);showDialog(h);}return loadHistory();}
 async function loadHistory(){const seq=++historyToken,h=$('ndSimpleAdvanceHistory'),status=h.querySelector('[data-sa-status]');status.textContent='Loading…';try{const client=db();if(!client)throw Error('Please sign in.');const auth=await wait(client.auth.getUser(),'Account');if(auth.error||!auth.data?.user)throw Error('Please sign in.');const email=auth.data.user.email.toLowerCase();let all=[];for(let offset=0;;offset+=500){const result=await wait(client.rpc('nd_salary_advance_simple_history').range(offset,offset+499),'History');if(seq!==historyToken)return;if(result.error)throw result.error;const page=result.data||[];all.push(...page);if(page.length<500)break;}if(seq!==historyToken)return;actor=email;if(pendingPayload&&all.some(r=>r.record_source==='simple'&&r.request_id===pendingPayload.p_request)){pendingPayload=null;request=null;}rows=all.sort((a,b)=>String(b.created_at||b.advance_date).localeCompare(String(a.created_at||a.advance_date)));status.textContent='';renderHistory();return true;}catch(error){if(seq===historyToken){rows=[];renderHistory();status.textContent='History unavailable: '+error.message;}return false;}}
 function renderHistory(){const h=$('ndSimpleAdvanceHistory'),month=h.querySelector('[data-sa-month]').value,visible=rows.filter(r=>String(r.advance_date||'').startsWith(month)),admin=actor==='umo1017@gmail.com';h.querySelector('[data-sa-rows]').innerHTML='<table><thead><tr><th>Employee</th><th>Branch</th><th>Date</th><th>Amount</th><th>Status</th><th>Person in Charge</th><th>Record</th>'+(admin?'<th>Action</th>':'')+'</tr></thead><tbody>'+visible.map(r=>{const key=esc(r.record_source+':'+r.id);return '<tr><td>'+esc(r.employee_name)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.advance_date)+'</td><td class="nd-sa-money">RM '+Number(r.amount).toFixed(2)+'</td><td>'+esc(r.status||'Pending 7th Payroll')+'</td><td>'+esc(r.document_snapshot?.representative_name||r.nd_submitter_name||'—')+'</td><td><button type="button" class="btn" data-sa-view="'+key+'">View / Print</button></td>'+(admin?'<td><button type="button" class="btn" data-sa-delete="'+key+'">Delete</button></td>':'')+'</tr>';}).join('')+(visible.length?'':'<tr><td colspan="'+(admin?8:7)+'">No records for this month.</td></tr>')+'</tbody></table>';}
-function view(row){if(row.document_snapshot)return signedView(row.document_snapshot);if(row.record_source!=='simple'){window.ndViewPayrollAdvance(row);return;}const fields=[['Employee',row.employee_name],['Branch',row.outlet],['Advance Date',row.advance_date],['Amount','RM '+Number(row.amount).toFixed(2)],['Deduction Month',String(row.deduction_month||'').slice(0,7)],['Person in Charge',row.nd_submitter_email],['Status',row.status]];window.ndOpenInlineDocument('<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px/1.5 Arial;color:#234335;margin:0;padding:32px}h1{font-size:28px;border-bottom:2px solid #b59b61;padding-bottom:20px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:14px 10px;border-bottom:1px solid #dce4df;overflow-wrap:anywhere}th{width:35%;font-size:14px;color:#627b6c}footer{margin-top:36px;font-size:11px;color:#667c70}@page{size:A4;margin:16mm}</style></head><body><h1>Salary Advance Repayment</h1><table>'+fields.map(([k,v])=>'<tr><th>'+esc(k)+'</th><td>'+esc(v)+'</td></tr>').join('')+'</table><footer>NATURES DAO GROUP - CONFIDENTIAL LEGAL DOCUMENT</footer></body></html>','Salary Advance Repayment');}
+function view(row){if(row.document_snapshot)return signedView(row.document_snapshot);if(row.record_source!=='simple'){window.ndViewPayrollAdvance(row);return;}const fields=[['Employee',row.employee_name],['Branch',row.outlet],['Advance Date',row.advance_date],['Amount','RM '+Number(row.amount).toFixed(2)],['Deduction Month',String(row.deduction_month||'').slice(0,7)],['Person in Charge',row.nd_submitter_email],['Status',row.status]];window.ndOpenInlineDocument('<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px/1.5 Arial;color:#234335;margin:0;padding:32px}h1{font-size:28px;border-bottom:2px solid #b59b61;padding-bottom:20px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:14px 10px;border-bottom:1px solid #dce4df;overflow-wrap:anywhere}th{width:35%;font-size:14px;color:#627b6c}footer{margin-top:36px;font-size:11px;color:#667c70}@page{size:A4;margin:16mm}</style>
+<style id="nd-salary-horizontal-tabs-compact-20261105">
+/* Salary only: compact horizontal tabs; keep the report page fixed width. */
+#salaryPage #salaryViewTabs.salary-view-tabs{
+ display:flex!important;grid-template-columns:none!important;flex-flow:row nowrap!important;
+ align-items:center!important;justify-content:flex-start!important;gap:8px!important;
+ width:100%!important;max-width:100%!important;min-width:0!important;
+ overflow-x:auto!important;overflow-y:hidden!important;overscroll-behavior-x:contain;
+ -webkit-overflow-scrolling:touch;scrollbar-width:thin!important;
+ padding:5px 2px 9px!important;margin-top:7px!important;
+ scroll-snap-type:x proximity;touch-action:pan-x pan-y;
+}
+#salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn{
+ display:inline-flex!important;flex:0 0 auto!important;align-items:center!important;justify-content:center!important;
+ width:auto!important;max-width:none!important;min-width:0!important;min-height:40px!important;
+ height:40px!important;padding:8px 13px!important;margin:0!important;
+ border-radius:10px!important;font-size:13px!important;line-height:1.2!important;
+ white-space:nowrap!important;overflow-wrap:normal!important;word-break:normal!important;
+ scroll-snap-align:start;
+}
+#salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn:empty{display:none!important}
+#salaryPage .salary-card{min-width:0;max-width:100%}
+#salaryPage .salary-toolbar{gap:7px!important;align-items:end!important}
+#salaryPage .salary-toolbar .btn{min-height:38px!important;padding:7px 11px!important;font-size:12px!important;line-height:1.2!important}
+#salaryPage .salary-toolbar input[type=month]{min-height:38px!important;max-width:100%!important}
+@media(max-width:760px){
+ #salaryPage #salaryViewTabs.salary-view-tabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important}
+ #salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn{width:auto!important;min-height:40px!important;height:40px!important;white-space:nowrap!important;padding:8px 13px!important}
+}
+</style>
+</head><body><h1>Salary Advance Repayment</h1><table>'+fields.map(([k,v])=>'<tr><th>'+esc(k)+'</th><td>'+esc(v)+'</td></tr>').join('')+'</table><footer>NATURES DAO GROUP - CONFIDENTIAL LEGAL DOCUMENT</footer></body></html>','Salary Advance Repayment');}
 window.addEventListener('click',event=>{if(event.target?.closest?.('#mainSidebar .sidebar-btn')&&!busy){closeDialog($('ndSimpleAdvance'));closeDialog($('ndSimpleAdvanceHistory'));}},true);
 window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
 })();
