@@ -4799,6 +4799,22 @@ function init(){ensure();const card=$('ndStockCheckCard');if(card&&!$('ndMonthly
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 </script>
+<style id="nd-unified-records-announcements-style">
+#sidebarRecords,#sidebarAnnouncements{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important}
+#sidebarKnowledge{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#sidebarKnowledge.active{background:var(--text);color:#fff}
+.nd-hub-layout{display:flex;flex-direction:column;gap:12px;width:100%;max-width:1320px;margin:0 auto;min-width:0}
+.nd-hub-nav{display:flex;align-items:center;gap:26px;width:100%;min-height:48px;padding:0 4px;border:0;border-bottom:1px solid #e4e8e4;border-radius:0;background:transparent;position:static;box-shadow:none}
+.nd-hub-label{display:none!important}
+.nd-hub-option{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:7px;flex:0 0 auto;min-height:48px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:12px 3px 10px;color:#7a847e;text-align:center;font-size:14px;font-weight:650;cursor:pointer;white-space:nowrap}
+.nd-hub-option:hover{color:#315641}
+.nd-hub-option.active{background:transparent;color:#214e37;border-bottom-color:#2b6548;font-weight:800}
+.nd-hub-count{font-size:10px;background:#b04c42;color:white;border-radius:20px;padding:2px 6px;min-width:18px;text-align:center}
+.nd-hub-count[hidden]{display:none!important}
+.nd-hub-content{width:100%;min-width:0}
+body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-page="announcements"] #ndAnnouncementsPage{max-width:none!important}
+@media(max-width:760px){.nd-hub-layout{display:flex!important;flex-direction:column!important;gap:10px!important;width:100%!important}.nd-hub-nav{display:flex!important;gap:22px!important;min-height:46px!important;overflow-x:auto!important;white-space:nowrap!important;padding:0 3px!important}.nd-hub-option{display:inline-flex!important;min-height:46px!important;padding:11px 2px 9px!important;font-size:14px!important}.nd-hub-content{min-width:0!important;width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch}}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -16227,16 +16243,38 @@ async function confirm14th(empId){
         throw Error('Salary changed on another device or update permission denied. No overwrite was made.');
       }
     }else{
-      result=await salaryDb.from('payroll_commission_snapshot').insert(row);
+      // A newly confirmed row must carry confirmation metadata too.
+      // Never create a draft snapshot and call it confirmed.
+      const identity=await salaryDb.auth.getUser();
+      if(identity.error || !identity.data?.user?.id ||
+         String(identity.data.user.email||'').trim().toLowerCase()!=='umo1017@gmail.com'){
+        throw Error('UMO sign-in must be verified before confirming salary.');
+      }
+      result=await salaryDb.from('payroll_commission_snapshot')
+        .insert({...row,confirmed_at:new Date().toISOString(),confirmed_by:identity.data.user.id})
+        .select('employee_id');
     }
     if(result.error){
       if(result.error.code==='23505'||/duplicate key value|unique constraint/i.test(result.error.message||'')){
+        // A concurrent insert won the race. Read its actual cloud state;
+        // never silently overwrite a salary saved by another device.
+        const latest=await salaryDb.from('payroll_commission_snapshot')
+          .select('employee_id,salary_month,confirmed_at,payment_done')
+          .eq('employee_id',id).eq('salary_month',salaryMonth).maybeSingle();
+        if(latest.error)throw latest.error;
         await refreshSalaryStayHere();
-        alert('Another device already saved this salary. No duplicate was created.');
+        if(latest.data?.payment_done){
+          alert('Salary was paid on another device. Latest cloud data loaded; payment is locked.');
+        }else if(latest.data?.confirmed_at){
+          alert('Salary was confirmed on another device. Latest cloud data loaded; no duplicate created.');
+        }else{
+          alert('An unconfirmed salary was saved on another device. Latest cloud data loaded. Review it before confirming.');
+        }
         return;
       }
       throw result.error;
     }
+    if(!result.data?.length)throw Error('Confirmation was not returned by the database. Reload and verify before retrying.');
     await refreshSalaryStayHere();
   }catch(error){
     alert("Confirm 14th failed: "+(error?.message||String(error)));
@@ -32074,7 +32112,8 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function report(r){
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
-   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'</body></html>';
+   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
+</body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
  }
@@ -36556,6 +36595,38 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
 })();
 </script>
 
+<script id="nd-unified-records-announcements-controller">
+(function(){'use strict';
+ const $=id=>document.getElementById(id);
+ function init(){
+  const sidebar=$('mainSidebar'),records=$('sidebarRecords'),ann=$('sidebarAnnouncements');
+  if(!sidebar||!records||!ann||$('sidebarKnowledge'))return;
+  const hub=document.createElement('button');hub.type='button';hub.id='sidebarKnowledge';hub.className='sidebar-btn';hub.textContent='Announcements & Records';
+  records.before(hub);
+  const labels=[['records','Records'],['announcements','Announcements']];
+  for(const [page,label] of labels){
+   const screen=$(page==='records'?'ndStaffFinancePage':'ndAnnouncementsPage');if(!screen)continue;
+   const shell=document.createElement('div');shell.className='nd-hub-layout';
+   const nav=document.createElement('nav');nav.className='nd-hub-nav';nav.setAttribute('aria-label','Announcements and Records');
+   const caption=document.createElement('div');caption.className='nd-hub-label';caption.textContent='MANAGEMENT';nav.append(caption);
+   for(const [target,name] of labels){const b=document.createElement('button');b.type='button';b.className='nd-hub-option';b.dataset.ndHubTarget=target;b.textContent=name;if(target==='announcements'){const count=document.createElement('span');count.className='nd-hub-count';count.dataset.ndHubUnread='';b.append(count);}nav.append(b);}
+   const content=document.createElement('div');content.className='nd-hub-content';
+   while(screen.firstChild)content.append(screen.firstChild);
+   shell.append(nav,content);screen.append(shell);
+  }
+  function update(){const page=document.body.dataset.ndVisiblePage||window.activeMainPage;hub.classList.toggle('active',page==='records'||page==='announcements');for(const b of document.querySelectorAll('[data-nd-hub-target]'))b.classList.toggle('active',b.dataset.ndHubTarget===page);
+   const original=$('ndAnnSidebarCount');const count=original?.textContent?.trim()||'';for(const b of document.querySelectorAll('[data-nd-hub-unread]')){b.textContent=count;b.hidden=!count;}
+  }
+  function navigate(target){const original=$(target==='records'?'sidebarRecords':'sidebarAnnouncements');if(!original||original.disabled||original.hidden)return;original.click();setTimeout(update,80);}
+  hub.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();navigate(document.body.dataset.ndVisiblePage==='announcements'?'announcements':'records');});
+  document.addEventListener('click',e=>{const b=e.target.closest?.('[data-nd-hub-target]');if(b){e.preventDefault();navigate(b.dataset.ndHubTarget);}},true);
+  new MutationObserver(update).observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});
+  const count=$('ndAnnSidebarCount');if(count)new MutationObserver(update).observe(count,{childList:true,characterData:true,subtree:true});
+  update();
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
