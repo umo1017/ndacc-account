@@ -36723,28 +36723,64 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
 <script id="nd-unified-records-announcements-controller">
 (function(){'use strict';
  const $=id=>document.getElementById(id);
+ const tabs=[['records','Records'],['announcements','Announcements'],['tasks','My Tasks'],['notifications','Notifications']];
+ let active='announcements';
  function init(){
   const sidebar=$('mainSidebar'),records=$('sidebarRecords'),ann=$('sidebarAnnouncements');
   if(!sidebar||!records||!ann||$('sidebarKnowledge'))return;
-  const hub=document.createElement('button');hub.type='button';hub.id='sidebarKnowledge';hub.className='sidebar-btn';hub.textContent='Announcements & Records';
-  records.before(hub);
-  const labels=[['records','Records'],['announcements','Announcements']];
-  for(const [page,label] of labels){
+  const hub=document.createElement('button');hub.type='button';hub.id='sidebarKnowledge';hub.className='sidebar-btn';hub.textContent='Announcements & Records';records.before(hub);
+  for(const page of ['records','announcements']){
    const screen=$(page==='records'?'ndStaffFinancePage':'ndAnnouncementsPage');if(!screen)continue;
    const shell=document.createElement('div');shell.className='nd-hub-layout';
-   const nav=document.createElement('nav');nav.className='nd-hub-nav';nav.setAttribute('aria-label','Announcements and Records');
-   const caption=document.createElement('div');caption.className='nd-hub-label';caption.textContent='MANAGEMENT';nav.append(caption);
-   for(const [target,name] of labels){const b=document.createElement('button');b.type='button';b.className='nd-hub-option';b.dataset.ndHubTarget=target;b.textContent=name;if(target==='announcements'){const count=document.createElement('span');count.className='nd-hub-count';count.dataset.ndHubUnread='';b.append(count);}nav.append(b);}
+   const nav=document.createElement('nav');nav.className='nd-hub-nav';nav.setAttribute('aria-label','Records, Announcements, My Tasks and Notifications');
+   for(const [target,name] of tabs){
+    const btn=document.createElement('button');btn.type='button';btn.className='nd-hub-option';btn.dataset.ndHubTarget=target;
+    btn.textContent=name;
+    if(target==='announcements'){
+     const badge=document.createElement('span');badge.className='nd-hub-count';badge.dataset.ndHubUnread='';btn.append(badge);
+    }
+    nav.append(btn);
+   }
    const content=document.createElement('div');content.className='nd-hub-content';
    while(screen.firstChild)content.append(screen.firstChild);
    shell.append(nav,content);screen.append(shell);
   }
-  function update(){const page=document.body.dataset.ndVisiblePage||window.activeMainPage;hub.classList.toggle('active',page==='records'||page==='announcements');for(const b of document.querySelectorAll('[data-nd-hub-target]'))b.classList.toggle('active',b.dataset.ndHubTarget===page);
-   const original=$('ndAnnSidebarCount');const count=original?.textContent?.trim()||'';for(const b of document.querySelectorAll('[data-nd-hub-unread]')){b.textContent=count;b.hidden=!count;}
+  function update(){
+   const page=document.body.dataset.ndVisiblePage||window.activeMainPage;
+   hub.classList.toggle('active',['records','announcements'].includes(page));
+   const selected=page==='records'?'records':(page==='announcements'?active:'');
+   for(const btn of document.querySelectorAll('[data-nd-hub-target]')){
+    const isActive=btn.dataset.ndHubTarget===selected;
+    btn.classList.toggle('active',isActive);
+    if(isActive)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');
+   }
+   const count=$('ndAnnSidebarCount')?.textContent?.trim()||'';
+   for(const badge of document.querySelectorAll('[data-nd-hub-unread]')){badge.textContent=count;badge.hidden=!count||count==='0';}
   }
-  function navigate(target){const original=$(target==='records'?'sidebarRecords':'sidebarAnnouncements');if(!original||original.disabled||original.hidden)return;original.click();setTimeout(update,80);}
-  hub.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();navigate(document.body.dataset.ndVisiblePage==='announcements'?'announcements':'records');});
-  document.addEventListener('click',e=>{const b=e.target.closest?.('[data-nd-hub-target]');if(b){e.preventDefault();navigate(b.dataset.ndHubTarget);}},true);
+  function navigate(target){
+   const pageTarget=target==='records'?'records':'announcements';
+   const button=$(pageTarget==='records'?'sidebarRecords':'sidebarAnnouncements');
+   if(!button||button.disabled)return;
+   active=target==='records'?'records':target;
+   const current=document.body.dataset.ndVisiblePage||window.activeMainPage;
+   if(current!==pageTarget)button.click();
+   // The existing task / notification handlers own their dialogs, permissions and unread counts.
+   if(target==='tasks'||target==='notifications'){
+    const buttonId=target==='tasks'?'ndAnnouncementTasksButton':'ndAnnouncementNotificationsButton';
+    const invoke=(attempt=0)=>{
+     const source=$(buttonId);
+     if(source){source.click();update();}
+     else if(attempt<8)setTimeout(()=>invoke(attempt+1),80);
+    };
+    setTimeout(()=>invoke(),60);
+   }
+   setTimeout(update,90);
+  }
+  hub.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();navigate('records');});
+  document.addEventListener('click',e=>{
+   const btn=e.target.closest?.('[data-nd-hub-target]');
+   if(btn){e.preventDefault();navigate(btn.dataset.ndHubTarget);}
+  },true);
   new MutationObserver(update).observe(document.body,{attributes:true,attributeFilter:['data-nd-visible-page']});
   const count=$('ndAnnSidebarCount');if(count)new MutationObserver(update).observe(count,{childList:true,characterData:true,subtree:true});
   update();
@@ -38749,3 +38785,30 @@ body > #ndProHamburger.nd-pro-portal-menu {
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 </script>
+
+<style id="nd-four-tab-management-final">
+/* One ordered navigation, identical on mobile and desktop. */
+#ndStaffFinancePage .nd-hub-nav,#ndAnnouncementsPage .nd-hub-nav{
+ display:flex!important;flex-wrap:nowrap!important;justify-content:flex-start!important;gap:clamp(10px,2vw,24px)!important;
+ overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important;
+ padding:0 6px!important;margin:0!important;white-space:nowrap!important;
+ border-bottom:1px solid #dce4dd!important;
+}
+#ndStaffFinancePage .nd-hub-nav::-webkit-scrollbar,#ndAnnouncementsPage .nd-hub-nav::-webkit-scrollbar{display:none}
+#ndStaffFinancePage .nd-hub-option,#ndAnnouncementsPage .nd-hub-option{
+ flex:0 0 auto!important;min-width:0!important;white-space:nowrap!important;
+ font-size:clamp(12px,1.5vw,14px)!important;min-height:44px!important;
+ padding:10px 3px!important;border-radius:0!important;
+}
+#ndStaffFinancePage .nd-hub-option.active,#ndAnnouncementsPage .nd-hub-option.active{color:#264b38!important;border-bottom:2px solid #2b6548!important}
+/* Legacy page heading and Close are redundant once the four-tab navigator is visible. */
+#ndAnnouncementsPage .topbar,#ndAnnouncementsPage #ndAnnClose,
+#ndAnnouncementsPage #ndWorkspaceNav,#ndAnnouncementsPage .nd-ann-feed-title,
+#ndAnnouncementsPage #ndAnnNotificationActions,#ndAnnouncementsPage #ndAnnCompactActions{display:none!important}
+/* Keep the publish action; hide the duplicate announcement mode button. */
+#ndAnnouncementsPage #ndAnnMode [data-ann-mode="history"]{display:none!important}
+@media(max-width:760px){
+ #ndAnnouncementsPage .nd-hub-nav,#ndStaffFinancePage .nd-hub-nav{padding-left:66px!important;gap:14px!important}
+ #ndAnnouncementsPage .nd-hub-layout,#ndStaffFinancePage .nd-hub-layout{gap:6px!important}
+}
+</style>
