@@ -12193,8 +12193,14 @@ function ndFourteenUpdateTotals(c,seven){
     Number(c.bonus||0)
   );
   c.company_expense=cents(costs.employer_epf+costs.employer_socso+costs.employer_eis);
+  // Auto-sync from the SAME MONTH's stored 7th Salary snapshot.
+  // 7th allowance is the original amount; the actual allowance is the
+  // saved adjusted_allowance when present, otherwise the 7th payroll formula.
+  // Never use a manually entered 14th allowance or the current staff default.
   c.original_allowance=cents(seven?.allowance||0);
-  c.adjusted_allowance=cents(c.original_allowance-c.company_expense);
+  const savedActual=seven?.adjusted_allowance;
+  c.adjusted_allowance=cents(savedActual!==null && savedActual!==undefined && savedActual!==''
+    ? savedActual : ndSevenAdjustedAllowance(seven||{}));
   c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
   c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
   // 14th Salary: Total Commission is the sum of five editable inputs.
@@ -14611,7 +14617,7 @@ function renderFourteenTable(emps){
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
       <td>${money(c.seventh_net_pay||0)}</td>
       <td>${money(c.seventh_total_deduction||0)}</td>
-      <td>${money(c.seventh_deducted_allowance ?? c.allowance_difference ?? 0)}</td>
+      <td title="7th Original Allowance: ${money(c.original_allowance ?? snapshotFor(e.id)?.allowance ?? 0)} | 7th Actual Allowance: ${money(c.adjusted_allowance ?? ndSevenAdjustedAllowance(snapshotFor(e.id)||{}))}" data-live-seven-deducted14="${e.id}">${money(c.seventh_deducted_allowance ?? c.allowance_difference ?? 0)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
@@ -15379,6 +15385,13 @@ function recalc14thLive(empId){
 
   const totalCell=document.querySelector(`[data-live-totalcommission14="${empId}"]`);
   if(totalCell) totalCell.textContent=money(calc.total_commission);
+
+  const deductedCell=document.querySelector(`[data-live-seven-deducted14="${empId}"]`);
+  if(deductedCell){
+    deductedCell.textContent=money(calc.seventh_deducted_allowance);
+    deductedCell.title='7th Original Allowance: '+money(calc.original_allowance)
+      +' | 7th Actual Allowance: '+money(calc.adjusted_allowance);
+  }
 
   const commissionCell=document.querySelector(`[data-live-commission="${empId}"]`);
   if(commissionCell) commissionCell.textContent=money(calc.commission);
