@@ -4919,7 +4919,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <div class="form-row">
 <label for="cashierBalance" id="ndCashierLabel">Cashier Balance</label>
 <div id="ndCashierLocalRow" class="nd-cashier-input-row"><div class="money-wrap"><span class="rm-prefix">RM</span><input id="cashierBalance" min="0" step="0.01" type="number" value="0"/></div><button type="button" class="mini" id="ndCashCountOpen" aria-label="Cash denomination calculator" title="Count cash">🧮</button></div>
-<section id="ndGlobalCardPanel" hidden class="nd-global-cards"><div class="nd-global-card-head"><strong>需要刷卡的顾客</strong><span id="ndGlobalCardPending">待验证 RM 0.00</span></div><div class="nd-global-card-fields"><input id="ndGlobalCustomerName" maxlength="120" placeholder="顾客名字" aria-label="Customer name"><input id="ndGlobalCustomerAmount" type="number" min="0.01" step="0.01" placeholder="金额 RM" aria-label="Pending amount"><button type="button" class="mini" id="ndGlobalCustomerAdd">+ 添加</button></div><div id="ndGlobalCardList" class="nd-global-card-list"></div><p id="ndGlobalCardStatus" class="helper" role="status"></p></section>
+<section id="ndGlobalCardPanel" hidden class="nd-global-cards" aria-label="Card Payment Queue"><div class="nd-global-card-head"><div><strong>Card Payment Queue</strong><span class="nd-global-card-subtitle">Track card payments awaiting confirmation</span></div><div class="nd-global-pending-amount"><small>Pending Verification</small><strong id="ndGlobalCardPending">RM 0.00</strong></div></div><div class="nd-global-card-fields"><label class="nd-global-card-field"><span>Customer Name</span><input id="ndGlobalCustomerName" maxlength="120" placeholder="Enter customer name" autocomplete="off" aria-label="Customer Name"></label><label class="nd-global-card-field"><span>Amount (RM)</span><input id="ndGlobalCustomerAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Amount (RM)"></label><button type="button" class="mini" id="ndGlobalCustomerAdd">+ Add Customer</button></div><div id="ndGlobalCardList" class="nd-global-card-list"></div><p id="ndGlobalCardStatus" class="helper" role="status" aria-live="polite"></p></section>
 </div>
 </div>
 <input id="pettyOpening" type="hidden" value="0"/><input id="cashOpening" type="hidden" value="0"/>
@@ -7254,7 +7254,7 @@ return `<div class="history-date-card">
     const cashRow=$("ndCashierLocalRow"),globalPanel=$("ndGlobalCardPanel"),cashLabel=$("ndCashierLabel");
     if(cashRow) cashRow.hidden=isGlobal;
     if(globalPanel) globalPanel.hidden=!isGlobal;
-    if(cashLabel) cashLabel.textContent=isGlobal?"待刷卡顾客 · 名字 + 金额":"Cashier Balance";
+    if(cashLabel){cashLabel.hidden=isGlobal;cashLabel.textContent="Cashier Balance";}
     if(isGlobal && window.ndGlobalCardRefresh) void window.ndGlobalCardRefresh();
     const proofCard=$("dailySettlementProofCard");
     if(proofCard) proofCard.style.display=isGlobal?"none":"";
@@ -12197,18 +12197,17 @@ function ndFourteenUpdateTotals(c,seven){
   c.adjusted_allowance=cents(c.original_allowance-c.company_expense);
   c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
   c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
-  // Requested 14th formula:
-  // Commission A + B + Customer Referral + Staff Referral + Bonus = Total Commission.
-  // Commission = Total Commission - 7th Net Pay
-  //              - (Original Allowance - Adjusted Allowance)
-  //              - Total Deduction.
-  // Do not subtract Commission from itself again in Nett Pay.
-  c.raw_commission=cents(c.total_commission-costs.seventh_net_pay-
-    c.allowance_difference-costs.seventh_total_deduction);
+  // 14th Salary: Total Commission is the sum of five editable inputs.
+  // Commission = Total Commission - 7th Net Pay.
+  // Nett Pay = Commission - 7th Total Deduction - 7th Deducted Allowance.
+  // 7th Deducted Allowance = original 7th allowance - adjusted 7th allowance.
+  // Keep confirmed historical snapshots unchanged; only recalculate drafts.
+  c.seventh_deducted_allowance=c.allowance_difference;
+  c.raw_commission=cents(c.total_commission-costs.seventh_net_pay);
   c.commission=c.raw_commission;
   c.seventh_deduction_refund=0;
   c.total_income=c.total_commission;
-  c.net_pay=c.commission;
+  c.net_pay=cents(c.commission-costs.seventh_total_deduction-c.seventh_deducted_allowance);
   c.has_payslip=c.net_pay>0;
   return c;
 }
@@ -14612,6 +14611,7 @@ function renderFourteenTable(emps){
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
       <td>${money(c.seventh_net_pay||0)}</td>
       <td>${money(c.seventh_total_deduction||0)}</td>
+      <td>${money(c.seventh_deducted_allowance ?? c.allowance_difference ?? 0)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
@@ -14640,7 +14640,8 @@ function renderFourteenTable(emps){
       <th rowspan="2">Bonus</th>
       <th rowspan="2">Total Commission</th>
       <th rowspan="2">7th Net Pay</th>
-      <th rowspan="2">Total Deduction</th>
+      <th rowspan="2">7th Total Deduction</th>
+      <th rowspan="2">7th Deducted Allowance</th>
       <th rowspan="2">Commission</th>
       <th rowspan="2">Nett Pay</th><th colspan="3" class="netpay-group-head">Net Pay by Method</th><th rowspan="2">Confirm</th><th rowspan="2">14th Commission Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
     </tr><tr>
@@ -14649,7 +14650,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="11" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="12" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -14657,7 +14658,7 @@ function renderFourteenTable(emps){
       </tr>
       ${rows}
       <tr class="netpay-summary-row" style="display:none">
-        <td colspan="11" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
+        <td colspan="12" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
@@ -15384,6 +15385,13 @@ function recalc14thLive(empId){
 
   const netCell=document.querySelector(`[data-live-netpay14="${empId}"]`);
   if(netCell) netCell.textContent=money(calc.net_pay);
+
+  const pm=String(e?.payment_method||'').trim();
+  for(const [key,method] of [['cash','Cash'],['transfer','Bank Transfer'],['tng','TNG']]){
+    const cell=document.querySelector(`[data-live-netpay14-${key}="${empId}"]`);
+    if(cell) cell.textContent=pm===method ? money(calc.net_pay) : '—';
+  }
+  ndRefreshNetPayTotals(14);
 }
 
 function bindSalaryTableActions(){
@@ -36296,8 +36304,30 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
 <style id="nd-cashier-global-and-counter-ui">
 .nd-cashier-input-row{display:flex;align-items:center;gap:8px}.nd-cashier-input-row>.money-wrap{flex:1;min-width:0}.nd-cashier-input-row>button{font-size:22px;min-width:48px;min-height:44px}
 #ndCashierLocalRow[hidden],#ndGlobalCardPanel[hidden]{display:none!important}
-.nd-global-cards{border:1px solid #dde6df;border-radius:12px;padding:12px;background:#fbfdfb}.nd-global-card-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}.nd-global-card-head span{font-size:14px;color:#75550b;font-weight:700}
-.nd-global-card-fields{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(100px,1fr) auto;gap:8px}.nd-global-card-fields input{min-width:0}.nd-global-card-list{display:grid;gap:8px;margin-top:12px}.nd-global-card-line{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:white;border:1px solid #e2e8e3;border-radius:10px}.nd-global-card-line .nd-meta{font-size:12px;color:#69786c}.nd-global-card-line button{padding:6px 9px}
+/* Full-width Global card queue — compact, readable on mobile */
+.form-row:has(#ndGlobalCardPanel:not([hidden])){display:block!important}
+#ndCashierLabel[hidden]{display:none!important}
+.nd-global-cards{width:100%;min-width:0;border:1px solid #dce5de;border-radius:18px;padding:18px;background:#fff;box-shadow:none}
+.nd-global-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}
+.nd-global-card-head>div:first-child{min-width:0;flex:1}
+.nd-global-card-head>div:first-child>strong{display:block;font-size:18px;line-height:1.3;color:#294539;font-weight:800}
+.nd-global-card-subtitle{display:block;font-size:12px;color:#879389;margin-top:5px;line-height:1.4}
+.nd-global-pending-amount{text-align:right;flex-shrink:0;white-space:nowrap}
+.nd-global-pending-amount small{display:block;font-size:11px;font-weight:650;color:#7b867c;margin-bottom:4px}
+#ndGlobalCardPending{display:block;color:#294539;font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.nd-global-card-fields{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:10px;align-items:end}
+.nd-global-card-field{display:flex;flex-direction:column;gap:6px;min-width:0;margin:0!important;color:#55665a;font-size:12px;font-weight:650}
+.nd-global-card-field input{width:100%;min-width:0;height:46px;border-radius:10px;font-size:15px!important;background:#fff}
+#ndGlobalCustomerAdd{grid-column:1/-1;width:100%;min-height:44px;background:#2e5141;color:#fff;border:1px solid #2e5141;border-radius:10px;font-size:14px}
+.nd-global-card-list{display:grid;gap:8px;margin-top:16px}
+.nd-global-card-line{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #edf0ed;min-width:0}
+.nd-global-card-line>div{flex:1;min-width:0;overflow-wrap:anywhere}
+.nd-global-card-line>strong{white-space:nowrap;font-variant-numeric:tabular-nums;color:#294539;font-size:14px}
+.nd-global-card-line .nd-meta{font-size:11px;color:#819087;margin-top:4px}
+.nd-global-card-line button{padding:7px 9px;font-size:12px;border-radius:8px}
+.nd-global-empty{padding:16px 0 8px;text-align:center;color:#919c93;font-size:13px}
+#ndGlobalCardStatus:empty{display:none}
+@media(max-width:560px){.nd-global-cards{padding:14px}.nd-global-card-head{gap:8px}.nd-global-card-head>div:first-child>strong{font-size:16px}.nd-global-card-subtitle{font-size:11px}.nd-global-pending-amount small{font-size:10px}#ndGlobalCardPending{font-size:17px}.nd-global-card-fields{gap:8px}.nd-global-card-field input{padding:9px;font-size:14px!important}.nd-global-card-line{flex-wrap:wrap}}
 #ndCashCounterDialog{width:min(470px,94vw);border:0;border-radius:18px;padding:20px;max-height:90dvh;overflow:auto;box-shadow:0 12px 45px #0003}#ndCashCounterDialog::backdrop{background:#17281d88}#ndCashCounterDialog .nd-cash-count-row{display:grid;grid-template-columns:1fr 110px 120px;gap:10px;align-items:center;margin:7px 0}#ndCashCounterDialog input{text-align:center}#ndCashCounterDialog .nd-counter-total{display:flex;justify-content:space-between;align-items:center;padding:14px 0;font-size:20px;font-weight:800}#ndCashCounterDialog footer{display:flex;gap:8px;justify-content:flex-end}
 @media(max-width:560px){.nd-global-card-fields{grid-template-columns:1fr 110px}.nd-global-card-fields button{grid-column:1/-1}.nd-global-card-line{flex-wrap:wrap}#ndCashCounterDialog .nd-cash-count-row{grid-template-columns:1fr 85px 94px}}
 </style>
@@ -36313,14 +36343,14 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
   function status(t){if($('ndGlobalCardStatus'))$('ndGlobalCardStatus').textContent=t;}
   function render(){const list=$('ndGlobalCardList');if(!list)return;
     const pending=globalRows.filter(r=>r.status==='pending');
-    if($('ndGlobalCardPending'))$('ndGlobalCardPending').textContent='待验证 '+fmt(pending.reduce((a,r)=>a+Number(r.amount||0),0));
-    list.innerHTML=globalRows.length?globalRows.map(r=>`<div class="nd-global-card-line"><div><strong>${esc(r.customer_name)}</strong><div class="nd-meta">${esc(r.card_date)} · ${r.status==='pending'?'待验证':'已验证'}</div></div><strong>${fmt(r.amount)}</strong>${r.status==='pending'?'<button type="button" class="mini" data-nd-verify-card="'+esc(r.id)+'">UMO 验证</button>':''}</div>`).join(''):'<span class="helper">当天没有待刷卡顾客。</span>';
+    if($('ndGlobalCardPending'))$('ndGlobalCardPending').textContent=fmt(pending.reduce((a,r)=>a+Number(r.amount||0),0));
+    list.innerHTML=globalRows.length?globalRows.map(r=>`<div class="nd-global-card-line"><div><strong>${esc(r.customer_name)}</strong><div class="nd-meta">${esc(r.card_date)} · ${r.status==='pending'?'Pending':'Verified'}</div></div><strong>${fmt(r.amount)}</strong>${r.status==='pending'?'<button type="button" class="mini" data-nd-verify-card="'+esc(r.id)+'">Verify</button>':''}</div>`).join(''):'<div class="nd-global-empty">No card payments for this date.</div>';
     list.querySelectorAll('[data-nd-verify-card]').forEach(b=>{b.hidden=window.ndGlobalCardIsUmo!==true;});
     window.dispatchEvent(new CustomEvent('nd-global-pending-cards-updated',{detail:{date:day(),total:window.ndGlobalPendingCardTotal}}));
   }
   window.ndGlobalCardRefresh=async()=>{
     if(branch()!=='Global')return;
-    const k=++seq,db=client();if(!db){status('请先登录');return;}
+    const k=++seq,db=client();if(!db){status('Please sign in first.');return;}
     try{
       const [auth,result,totalResult]=await Promise.all([db.auth.getUser(),db.from('nd_global_card_customers').select('id,card_date,customer_name,amount,status').eq('card_date',day()).order('created_at',{ascending:false}),db.rpc('nd_global_pending_card_total')]);
       if(k!==seq)return;
@@ -36329,34 +36359,34 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
       window.ndGlobalPendingCardTotal=Number(totalResult.data||0);
       window.ndGlobalCardIsUmo=String(auth.data?.user?.email||'').toLowerCase()==='umo1017@gmail.com';
       globalRows=result.data||[];status('');render();
-    }catch(e){if(k===seq){globalRows=[];render();status('待刷卡记录暂时无法加载，请检查数据库同步。');console.error('[Global Cards]',e);}}
+    }catch(e){if(k===seq){globalRows=[];render();status('Unable to load card payments. Please retry.');console.error('[Global Cards]',e);}}
   };
   document.addEventListener('click',async e=>{
     const add=e.target.closest?.('#ndGlobalCustomerAdd');
     const verify=e.target.closest?.('[data-nd-verify-card]');
     if(!add&&!verify)return;
     if(busy)return;
-    const db=client();if(!db){status('请先登录');return;}
+    const db=client();if(!db){status('Please sign in first.');return;}
     busy=true;add&&(add.disabled=true);verify&&(verify.disabled=true);
     try{
       if(add){
         const name=$('ndGlobalCustomerName').value.trim(),amount=Number($('ndGlobalCustomerAmount').value);
-        if(!name||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100 && Math.abs(Math.round(amount*100)-amount*100)>1e-6)throw Error('请填写顾客名字及正确金额');
+        if(!name||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100 && Math.abs(Math.round(amount*100)-amount*100)>1e-6)throw Error('Enter a customer name and a valid amount.');
         const result=await db.from('nd_global_card_customers').insert({card_date:day(),customer_name:name,amount:Math.round(amount*100)/100});
         if(result.error)throw result.error;
         $('ndGlobalCustomerName').value='';$('ndGlobalCustomerAmount').value='';
       }else{
-        if(!window.ndGlobalCardIsUmo)throw Error('仅 UMO 可以验证');
-        if(!confirm('确认这位顾客的刷卡金额已经核实？'))return;
+        if(!window.ndGlobalCardIsUmo)throw Error('Only UMO can verify card payments.');
+        if(!confirm('Confirm this card payment has been verified?'))return;
         const result=await db.rpc('nd_verify_global_card_customer',{p_id:verify.dataset.ndVerifyCard});
         if(result.error)throw result.error;
       }
       await window.ndGlobalCardRefresh();
-    }catch(err){status('无法保存：'+(err.message||err));}finally{busy=false;add&&(add.disabled=false);verify&&(verify.disabled=false);}
+    }catch(err){status('Unable to save: '+(err.message||err));}finally{busy=false;add&&(add.disabled=false);verify&&(verify.disabled=false);}
   });
   const denom=[100,50,20,10,5,1,.5,.2,.1];
   function mountCounter(){if($('ndCashCounterDialog'))return;
-    const dlg=document.createElement('dialog');dlg.id='ndCashCounterDialog';dlg.innerHTML='<h3>🧮 现金点算器</h3><p class="helper" id="ndCounterContext"></p><div id="ndCounterRows"></div><div class="nd-counter-total"><span>总数</span><strong id="ndCounterTotal">RM 0.00</strong></div><p class="helper" id="ndCounterState"></p><footer><button type="button" class="mini" data-nd-count-close>关闭</button><button type="button" class="btn" id="ndCounterSave">保存余额</button></footer>';
+    const dlg=document.createElement('dialog');dlg.id='ndCashCounterDialog';dlg.innerHTML='<h3>🧮 Cash Counter</h3><p class="helper" id="ndCounterContext"></p><div id="ndCounterRows"></div><div class="nd-counter-total"><span>Total</span><strong id="ndCounterTotal">RM 0.00</strong></div><p class="helper" id="ndCounterState"></p><footer><button type="button" class="mini" data-nd-count-close>Close</button><button type="button" class="btn" id="ndCounterSave">Save Balance</button></footer>';
     document.body.appendChild(dlg);
     $('ndCounterRows').innerHTML=denom.map((v,i)=>'<label class="nd-cash-count-row"><span>RM '+v.toFixed(v<1?2:0)+'</span><input type="number" min="0" step="1" inputmode="numeric" data-nd-denom="'+i+'" value="0"><strong data-nd-subtotal="'+i+'">RM 0.00</strong></label>').join('');
     dlg.addEventListener('input',e=>{if(e.target.matches('[data-nd-denom]'))sumCounter();});
@@ -36365,11 +36395,11 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
   }
   function sumCounter(){let totalCents=0,valid=true;
     $('ndCounterRows').querySelectorAll('[data-nd-denom]').forEach(inp=>{const i=Number(inp.dataset.ndDenom),n=Number(inp.value);if(!Number.isInteger(n)||n<0)valid=false;const sub=Math.round(denom[i]*100)*(Number.isInteger(n)&&n>=0?n:0);totalCents+=sub;$('ndCounterRows').querySelector('[data-nd-subtotal="'+i+'"]').textContent=fmt(sub/100);});
-    $('ndCounterTotal').textContent=valid?fmt(totalCents/100):'请输入正确数量';return valid?totalCents/100:null;
+    $('ndCounterTotal').textContent=valid?fmt(totalCents/100):'Enter valid quantities';return valid?totalCents/100:null;
   }
   document.addEventListener('click',async e=>{if(!e.target.closest?.('#ndCashCountOpen'))return;
     if(branch()==='Global')return;
-    mountCounter();const dlg=$('ndCashCounterDialog');$('ndCounterContext').textContent=branch()+' · '+day();$('ndCounterState').textContent='正在加载之前保存的现金数量...';
+    mountCounter();const dlg=$('ndCashCounterDialog');$('ndCounterContext').textContent=branch()+' · '+day();$('ndCounterState').textContent='Loading saved cash counts...';
     $('ndCounterSave').disabled=true;
     $('ndCounterRows').querySelectorAll('[data-nd-denom]').forEach(x=>x.value='0');sumCounter();dlg.showModal();
     try{const db=client();if(!db)throw Error('Please sign in');
@@ -36377,23 +36407,23 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
       if(result.error)throw result.error;
       const saved=result.data?.denominations||{};
       $('ndCounterRows').querySelectorAll('[data-nd-denom]').forEach((x,i)=>x.value=String(saved[String(denom[i])]??0));sumCounter();
-      $('ndCounterState').textContent='按纸币及硬币数量计算；保存后同步 Cashier Balance。';$('ndCounterSave').disabled=false;
-    }catch(err){$('ndCounterState').textContent='无法读取之前点算记录：'+(err.message||err)+'。请先检查同步。';}
+      $('ndCounterState').textContent='Enter the quantity of each note and coin. Saving will update Cashier Balance.';$('ndCounterSave').disabled=false;
+    }catch(err){$('ndCounterState').textContent='Unable to load saved cash counts: '+(err.message||err)+'. Please check synchronization.';}
   });
   async function saveCount(){const total=sumCounter(),db=client(),btn=$('ndCounterSave');
-    if(total===null){$('ndCounterState').textContent='数量必须是非负整数';return;}
+    if(total===null){$('ndCounterState').textContent='Quantities must be non-negative whole numbers.';return;}
     if(!db||branch()==='Global')return;
-    if(total===0 && Number($('cashierBalance')?.value||0)>0 && !confirm('点算总额为 RM0.00，确定要覆盖原有 Cashier Balance？'))return;
-    btn.disabled=true;$('ndCounterState').textContent='正在同步...';
+    if(total===0 && Number($('cashierBalance')?.value||0)>0 && !confirm('The counted total is RM 0.00. Overwrite the existing Cashier Balance?'))return;
+    btn.disabled=true;$('ndCounterState').textContent='Syncing...';
     try{
       const quantities=$('ndCounterRows').querySelectorAll('[data-nd-denom]');
       const counted={};quantities.forEach((x,i)=>counted[String(denom[i])]=Number(x.value));
       const result=await db.rpc('nd_save_cashier_count',{p_branch:branch(),p_date:day(),p_counts:counted});
       if(result.error)throw result.error;
       $('cashierBalance').value=total;
-      $('ndCounterState').textContent='已保存并同步 '+fmt(total);
+      $('ndCounterState').textContent='Saved and synced: '+fmt(total);
       window.dispatchEvent(new CustomEvent('nd-cashier-count-saved',{detail:{branch:branch(),date:day(),total}}));
-    }catch(e){$('ndCounterState').textContent='保存失败：'+(e.message||e);}finally{btn.disabled=false;}
+    }catch(e){$('ndCounterState').textContent='Unable to save: '+(e.message||e);}finally{btn.disabled=false;}
   }
   document.addEventListener('change',e=>{if(e.target?.id==='settlementDate')setTimeout(()=>{if(branch()==='Global')void window.ndGlobalCardRefresh();},0);});
   window.addEventListener('nd-global-pending-cards-updated',e=>{const el=$('ndGlobalPendingHistorySummary');if(el)el.textContent=fmt(e.detail.total);const total=$('ndAllUnverifiedTotal');if(total)total.textContent=fmt(Number(total.dataset.baseUnverified||0)+Number(e.detail.total||0));});
