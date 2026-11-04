@@ -12117,6 +12117,11 @@ function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryM
   if(!base) return base;
   const s={...base};
   const empId=Number(e?.id||base?.employee_id||0);
+  // CRITICAL: a confirmed/paid 7th snapshot is an immutable payroll source.
+  // Never overlay mutable salary_manual_overrides or re-run today's formulas on it.
+  // Otherwise two devices (or accounts with different RLS visibility) show
+  // different net pay for the exact same historical salary month.
+  if (base.confirmed_at || base.payment_done) return s;
   const t="7";
 
   const simpleFields=[
@@ -12251,6 +12256,11 @@ function ndSevenAdjustedAllowance(s={}){
   // Treat a missing snapshot as empty inputs instead of crashing the whole Salary page.
   if(!s || typeof s!=="object") s={};
   const v=k=>Number(s[k]||0);
+  // Persisted adjusted allowance wins for confirmed salary; do not reprice it.
+  if ((s.confirmed_at || s.payment_done) &&
+      s.adjusted_allowance !== null && s.adjusted_allowance !== undefined && s.adjusted_allowance !== '') {
+    return +Number(s.adjusted_allowance).toFixed(2);
+  }
   return +(v('allowance')-v('employer_epf')-v('employer_socso')-
     v('employer_eis')).toFixed(2);
 }
@@ -12658,6 +12668,38 @@ function showDaily(){
 }
 
 let ndSalaryNavigationLoad=null,ndSalaryNavigationKey='';
+// Cross-device salary sync: Supabase is the source of truth, not browser cache.
+// Refresh selected month when the salary page is visible or user returns to tab.
+let ndPayrollCloudRefreshRunning=false;
+let ndPayrollCloudLastRefresh=0;
+async function ndPayrollRefreshFromCloud(force=false){
+  if(ndPayrollCloudRefreshRunning || window.activeMainPage!=="salary" || document.hidden) return;
+  if(!force && Date.now()-ndPayrollCloudLastRefresh < 15000) return;
+  // Do not overwrite unsaved 14th inputs. Their save handler refreshes after commit.
+  if(typeof commissionPendingChanges!=="undefined" && commissionPendingChanges?.size) return;
+  ndPayrollCloudRefreshRunning=true;
+  try{
+    const selected=byId('salaryMonth')?.value||'';
+    const previousScroll=window.scrollY;
+    await loadSalaryData();
+    // Avoid restoring a month that was switched during an async refresh.
+    if(selected && byId('salaryMonth')?.value===selected){
+      requestAnimationFrame(()=>window.scrollTo(0,previousScroll));
+    }
+    ndPayrollCloudLastRefresh=Date.now();
+  }catch(err){
+    console.warn('Payroll cross-device refresh failed:',err);
+    const status=byId('salarySyncState');
+    if(status)status.textContent='Cloud sync failed — please reload: '+String(err?.message||err);
+  }finally{ndPayrollCloudRefreshRunning=false;}
+}
+window.ndPayrollRefreshFromCloud=ndPayrollRefreshFromCloud;
+window.addEventListener('focus',()=>{void ndPayrollRefreshFromCloud(true);});
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden)void ndPayrollRefreshFromCloud(true);
+});
+window.setInterval(()=>{void ndPayrollRefreshFromCloud(false);},30000);
+
 function showSalary(){
   try{document.getElementById("bonusPage")?.classList.remove("active","sidebar-offset");}catch(_){}
   // Salary navigation remains visible; protected payroll data is scoped by outlet access.
@@ -12678,7 +12720,11 @@ function showSalary(){
   if(!ndSalaryNavigationLoad||ndSalaryNavigationKey!==key){
     ndSalaryNavigationKey=key;
     const task=loadSalaryData();ndSalaryNavigationLoad=task;
-    task.catch(error=>{byId('salarySyncState').textContent='Unable to load salary: '+error.message;}).finally(()=>{if(ndSalaryNavigationLoad===task)ndSalaryNavigationLoad=null;});
+    task.then(()=>{ndPayrollCloudLastRefresh=Date.now();})
+      .catch(error=>{byId('salarySyncState').textContent='Unable to load salary: '+error.message;})
+      .finally(()=>{if(ndSalaryNavigationLoad===task)ndSalaryNavigationLoad=null;});
+  }else{
+    void ndPayrollRefreshFromCloud(true);
   }
 }
 
@@ -14297,7 +14343,9 @@ function summaryForOutlet(emps){
     const isPartTime=(e.employment_type||"full_time")==="part_time";
     const snap=snapshotFor(e.id);
     const cSnap=commissionSnapshotFor(e.id);
-    const pm=e.payment_method||"Cash";
+    const pm=(snap?.confirmed_at || snap?.payment_done)
+      ? (snap.payment_method || e.payment_method || "Cash")
+      : (e.payment_method || "Cash");
     if(!isPartTime && snap){
       const seven=applySevenManualOverrides(e,normalizedSevenSnapshot(e,snap));
       out.seven[pm]=(out.seven[pm]||0)+Number(seven?.net_pay||0);
