@@ -4834,26 +4834,7 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
  #ndAnnouncementsPage{padding:8px 10px 24px!important}
 }
 </style>
-<script id="nd-announcements-compact-clean-controller">
-(()=>{
- function init(){
-  const page=document.getElementById('ndAnnouncementsPage');
-  if(!page||document.getElementById('ndAnnCompactActions'))return;
-  const mode=document.getElementById('ndAnnMode');
-  if(!mode)return;
-  const bar=document.createElement('div');bar.id='ndAnnCompactActions';bar.className='nd-ann-compact-actions';
-  const tasks=document.createElement('button');tasks.type='button';tasks.textContent='My Tasks';
-  tasks.addEventListener('click',()=>document.getElementById('ndAnnouncementTasksButton')?.click());
-  const notifications=document.createElement('button');notifications.type='button';notifications.textContent='Notifications';
-  notifications.addEventListener('click',()=>document.getElementById('ndAnnouncementNotificationsButton')?.click());
-  bar.append(tasks,notifications);mode.before(bar);
-  const source=document.getElementById('ndAnnouncementTasksButton');
-  if(source){const sync=()=>{const count=source.querySelector('.nd-notification-count')?.textContent?.trim();tasks.textContent='My Tasks'+(count&&count!=='0'?' ('+count+')':'');};sync();new MutationObserver(sync).observe(source,{childList:true,subtree:true,characterData:true});}
- }
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
- window.addEventListener('load',init,{once:true});
-})();
-</script>
+
 
 <style id="nd-pro-beta-layout-audit-fix-20261105">
 /* Preserve Pro's existing navigation, data operations, and permission handlers. */
@@ -32646,7 +32627,7 @@ body[data-nd-visible-page="announcements"] #appView,body[data-nd-visible-page="a
 @media(max-width:700px){#ndAnnouncementsPage{padding:65px 12px 20px}}
 </style>
 <section class="sidebar-offset" id="ndAnnouncementsPage"><div style="max-width:1100px;margin:auto">
-<div class="topbar"><h2>Tasks &amp; Announcements</h2><button class="btn" id="ndAnnClose" type="button">Close</button></div><div class="nd-ann-buttons" id="ndAnnMode" hidden><button type="button" data-ann-mode="publish">Publish Announcement</button><button type="button" data-ann-mode="history">Announcement History</button></div>
+<div class="topbar nd-ann-legacy-close" hidden><button class="btn" id="ndAnnClose" type="button">Close</button></div><div class="nd-ann-buttons" id="ndAnnMode" hidden><button type="button" data-ann-mode="publish">Publish Announcement</button><button type="button" data-ann-mode="history">Announcement History</button></div>
 <div class="nd-ann-buttons"><button id="ndAnnPrev" type="button">◀</button><input id="ndAnnMonth" style="max-width:190px" type="month"/><button type="button" id="ndAnnAllMonths" class="nd-ann-all-unread-btn" aria-pressed="true">All Months</button><button id="ndAnnNext" type="button">▶</button><button type="button" class="nd-ann-all-unread-btn" id="ndAnnViewUnread" aria-pressed="false">All Unread</button><span class="nd-ann-muted" id="ndAnnMonthUnread"></span></div>
 <div class="nd-ann-buttons" id="ndAnnTabs"><button class="selected" data-cat="all">All</button><button data-cat="promotion">Promotions</button><button data-cat="treatment">New Treatments</button><button data-cat="policy">Policies</button><button data-cat="commission">Commission</button><button data-cat="menu">Menu</button></div><nav id="ndMenuSubTabs" class="nd-menu-subtabs" aria-label="Menu categories" hidden></nav>
 <div class="nd-ann-panel" hidden="" id="ndAnnEditor"><h3 id="ndAnnEditHeading">New Announcement</h3><label>Category</label><select id="ndAnnCategory"><option value="promotion">Promotions</option><option value="treatment">New Treatments</option><option value="policy">Policies</option><option value="commission">Commission</option><option value="menu">Menu</option></select><div id="ndMenuEditorGroup" class="nd-menu-editor-group" hidden><label for="ndMenuGroup">Menu Section</label><div class="nd-menu-edit-row"><select id="ndMenuGroup"></select><button type="button" class="btn" id="ndMenuGroupAdd" title="Add menu category" aria-label="Add menu category">+</button></div></div><label>Title</label><input id="ndAnnTitle" maxlength="160"/><label>Content</label><textarea id="ndAnnContent" maxlength="10000"></textarea><label for="ndAnnPhotos">Photos / PDF Files</label><input id="ndAnnPhotos" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" multiple><div id="ndAnnSelectedPhotos" class="nd-ann-muted"></div><div class="actions" style="margin-top:10px"><button class="btn" id="ndAnnSave" type="button">Publish</button><button class="btn" id="ndAnnCancel" type="button">Cancel Edit</button></div></div>
@@ -36640,6 +36621,32 @@ function view(row){if(row.document_snapshot)return signedView(row.document_snaps
 @media(max-width:760px){
  #salaryPage #salaryViewTabs.salary-view-tabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important}
  #salaryPage #salaryViewTabs.salary-view-tabs>.salary-view-btn{width:auto!important;min-height:40px!important;height:40px!important;white-space:nowrap!important;padding:8px 13px!important}
+}
+</style>
+<style id="nd-ann-redesign-english-v2">
+/* Announcements: one navigation, one action, compact filters. */
+#ndAnnouncementsPage{padding:4px 10px 20px!important}
+#ndAnnouncementsPage>div{max-width:1100px!important}
+#ndAnnouncementsPage .topbar,#ndAnnouncementsPage #ndWorkspaceNav,#ndAnnouncementsPage .nd-ann-compact-actions{display:none!important}
+#ndAnnouncementsPage #ndAnnMode:not([hidden]){display:flex!important;justify-content:flex-end!important;margin:0 0 8px!important;padding:0!important;gap:8px!important}
+#ndAnnouncementsPage #ndAnnMode [data-ann-mode="publish"]{background:#2c503e!important;color:#fff!important;border-color:#2c503e!important}
+#ndAnnouncementsPage #ndAnnMode button{width:auto!important;min-height:36px!important;padding:7px 12px!important;border-radius:10px!important;font-size:13px!important}
+#ndAnnouncementsPage .nd-ann-buttons{margin:0 0 8px!important;gap:6px!important;padding:0!important}
+#ndAnnouncementsPage #ndAnnPrev,#ndAnnouncementsPage #ndAnnNext{min-width:32px!important;width:32px!important;padding:6px!important}
+#ndAnnouncementsPage #ndAnnMonth{width:125px!important;min-width:0!important;max-width:125px!important}
+#ndAnnouncementsPage #ndAnnAllMonths,#ndAnnouncementsPage #ndAnnViewUnread{min-height:34px!important;padding:6px 10px!important;font-size:12px!important}
+#ndAnnouncementsPage #ndAnnMonthUnread{font-size:11px!important}
+#ndAnnouncementsPage #ndAnnTabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important;-webkit-overflow-scrolling:touch!important;padding:3px 0 8px!important;gap:6px!important}
+#ndAnnouncementsPage #ndAnnTabs::-webkit-scrollbar{display:none!important}
+#ndAnnouncementsPage #ndAnnTabs button{flex:0 0 auto!important;white-space:nowrap!important;min-height:34px!important;padding:6px 11px!important;font-size:12px!important;border-radius:18px!important}
+#ndAnnouncementsPage .nd-ann-feed-title{display:none!important}
+#ndAnnouncementsPage .nd-ann-panel{margin-top:8px!important}
+@media(max-width:760px){
+ .nd-hub-nav{padding-left:66px!important;gap:12px!important;overflow-x:auto!important}
+ .nd-hub-option{font-size:12px!important;min-height:38px!important;padding:7px 2px!important}
+ #ndAnnouncementsPage{padding:0 8px 16px!important}
+ #ndAnnouncementsPage .nd-ann-buttons:not(#ndAnnTabs){align-items:center!important;flex-wrap:wrap!important}
+ #ndAnnouncementsPage #ndAnnMonth{width:112px!important}
 }
 </style>
 </head><body><h1>Salary Advance Repayment</h1><table>'+fields.map(([k,v])=>'<tr><th>'+esc(k)+'</th><td>'+esc(v)+'</td></tr>').join('')+'</table><footer>NATURES DAO GROUP - CONFIDENTIAL LEGAL DOCUMENT</footer></body></html>','Salary Advance Repayment');}
