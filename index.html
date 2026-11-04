@@ -266,36 +266,40 @@ function ndLocalMonthISO(d=new Date()){
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script id="nd-cash-expense-auto-debit-source-v1">
+<script id="nd-cash-expense-auto-debit-source-v2-ledger">
 (function(){'use strict';
-  const INVALID=new Set(['deleted','cancelled','canceled','void','voided']);
+  // Single authoritative source for Cash Expense money movements.
+  // Positive delta = money paid out; negative delta = refunded to cash.
+  // Never combine this with nd_cash_expense_requests totals.
   window.ndCashExpenseIsDebited=function(row){
-    return row && !INVALID.has(String(row.status||'').toLowerCase()) &&
-      String(row.receipt_verification||'pending').toLowerCase()!=='error';
+    return row && Number.isFinite(Number(row.delta)) && Number(row.delta)!==0;
   };
   window.ndCashExpenseCloudDebits=async function(client,options={}){
     if(!client)throw Error('Cash database not ready');
-    const out=[],lower=String(options.start||'2026-10-26'),upper=String(options.end||'');
+    const lower=String(options.start||'2026-09-01'),upper=String(options.end||'');
+    const out=[];
     for(let offset=0;offset<30000;offset+=500){
-      let query=client.from('nd_cash_expense_requests')
-        .select('id,branch,expense_date,amount,review_amount,status,receipt_verification')
-        .gte('expense_date',lower).order('expense_date',{ascending:false})
+      let query=client.from('nd_cash_expense_cash_events')
+        .select('id,expense_id,branch,cash_date,event_type,delta')
+        .gte('cash_date',lower)
+        .order('cash_date',{ascending:false})
+        .order('id',{ascending:false})
         .range(offset,offset+499);
       if(options.branch)query=query.eq('branch',options.branch);
-      if(upper)query=query.lte('expense_date',upper);
+      if(upper)query=query.lte('cash_date',upper);
       const result=await query;
-      if(result.error)throw Error('Cash Expense: '+result.error.message+
-        (/receipt_verification|schema cache|42703|PGRST204/i.test(result.error.message||'')?
-        ' · Apply Cash Expense Receipt Verification SQL first.':''));
+      if(result.error)throw Error('Cash Expense events: '+result.error.message);
       const part=result.data||[];
-      for(const r of part){if(!window.ndCashExpenseIsDebited(r))continue;
-        const amount=Number(r.status==='approved'?(r.review_amount??r.amount):r.amount);
-        if(!Number.isFinite(amount)||amount<0)throw Error('Invalid Cash Expense amount on '+r.expense_date);
-        out.push({branch:r.branch,expense_date:r.expense_date,approved_amount:amount,id:r.id});
+      for(const r of part){
+        if(!window.ndCashExpenseIsDebited(r))continue;
+        const amount=Number(r.delta);
+        if(!Number.isFinite(amount))throw Error('Invalid Cash Expense event amount');
+        out.push({id:r.id,expense_id:r.expense_id,branch:r.branch,
+          expense_date:r.cash_date,event_type:r.event_type,approved_amount:amount});
       }
       if(part.length<500)return out;
     }
-    throw Error('Cash Expense history exceeded 30,000 rows.');
+    throw Error('Cash Expense events exceeded 30,000 rows.');
   };
 })();
 </script>
@@ -4913,8 +4917,9 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <div class="nd-staff-date-field"><input aria-label="Date" id="settlementDate" type="date"/></div>
 </div>
 <div class="form-row">
-<label for="cashierBalance">Cashier Balance</label>
-<div class="money-wrap"><span class="rm-prefix">RM</span><input id="cashierBalance" min="0" step="0.01" type="number" value="0"/></div>
+<label for="cashierBalance" id="ndCashierLabel">Cashier Balance</label>
+<div id="ndCashierLocalRow" class="nd-cashier-input-row"><div class="money-wrap"><span class="rm-prefix">RM</span><input id="cashierBalance" min="0" step="0.01" type="number" value="0"/></div><button type="button" class="mini" id="ndCashCountOpen" aria-label="Cash denomination calculator" title="Count cash">🧮</button></div>
+<section id="ndGlobalCardPanel" hidden class="nd-global-cards"><div class="nd-global-card-head"><strong>需要刷卡的顾客</strong><span id="ndGlobalCardPending">待验证 RM 0.00</span></div><div class="nd-global-card-fields"><input id="ndGlobalCustomerName" maxlength="120" placeholder="顾客名字" aria-label="Customer name"><input id="ndGlobalCustomerAmount" type="number" min="0.01" step="0.01" placeholder="金额 RM" aria-label="Pending amount"><button type="button" class="mini" id="ndGlobalCustomerAdd">+ 添加</button></div><div id="ndGlobalCardList" class="nd-global-card-list"></div><p id="ndGlobalCardStatus" class="helper" role="status"></p></section>
 </div>
 </div>
 <input id="pettyOpening" type="hidden" value="0"/><input id="cashOpening" type="hidden" value="0"/>
@@ -5994,8 +5999,8 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     // opening may already be included in the original cash opening balance.
     // Keep it visible in diagnostics but never silently add it twice.
     const legacyOpening=floatRows.length?Number(floatRows[0].petty_opening||0):0;
-    // Submitted requests are a distinct source from historical petty_entries.
-    // Receipt Error excludes a record; no approval is required to debit cash.
+    // Net Cash Expense events include original debit and later refund/adjustment.
+    // Never add raw Cash Expense requests a second time.
     const approvedExpenses=ndApprovedCashExpenseRows.filter(x=>
       String(x.branch||'').trim()===target && (!cutoff || String(x.expense_date||'')<=cutoff) &&
       String(x.expense_date||'')>=ND_CASH_LEDGER_START
@@ -6104,7 +6109,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
           <div class="helper">Total Unverified</div>
           <strong>${money(visaMaster+tng)}</strong>
         </div>
-      </div>`;
+      </div><div class="salary-card nd-unverified-card" style="margin-top:8px"><div class="helper">Global · 全部待刷卡顾客金额（历史未验证）</div><strong id="ndGlobalPendingHistorySummary">${window.ndGlobalPendingCardTotal==null?'待同步':money(window.ndGlobalPendingCardTotal)}</strong></div>`;
   }
 
   function renderHistoryMonthlyBranchSummary(){
@@ -7062,7 +7067,7 @@ return `<div class="history-date-card">
       dailyRes.error&&('Daily Settlement: '+(dailyRes.error.message||dailyRes.error)),
       remittanceRes.error&&('Bank Transfer: '+(remittanceRes.error.message||remittanceRes.error)),
       advanceRes.error&&('Salary Advance: '+(advanceRes.error.message||advanceRes.error)),
-      expenseRes.error&&('Approved Cash Expense: '+(expenseRes.error.message||expenseRes.error))
+      expenseRes.error&&('Cash Expense events: '+(expenseRes.error.message||expenseRes.error))
     ].filter(Boolean);
     if(issues.length){
       // Keep the last complete snapshot for histories, but NEVER expose its
@@ -7098,7 +7103,7 @@ return `<div class="history-date-card">
     try{await loadSelectedCashTransferHistory();}
     catch(e){console.warn('Bank transfer submissions failed to refresh:',e);}
     renderDailyBranchButtons();
-    const cashProblems=[ndCashAdvanceError&&('Salary Advance: '+ndCashAdvanceError),ndCashRemittanceError&&('Cash Remittance: '+ndCashRemittanceError),ndApprovedCashExpenseError&&('Approved Cash Expenses: '+ndApprovedCashExpenseError)].filter(Boolean);
+    const cashProblems=[ndCashAdvanceError&&('Salary Advance: '+ndCashAdvanceError),ndCashRemittanceError&&('Cash Remittance: '+ndCashRemittanceError),ndApprovedCashExpenseError&&('Cash Expense events: '+ndApprovedCashExpenseError)].filter(Boolean);
     if(!silent||cashProblems.length){
       $("syncState").textContent=cashProblems.length?'部分同步失败，Cash Balance 暂不可用：'+cashProblems.join(' | '):'云端已同步 ✓';
       $("syncState").className=cashProblems.length?'bad':'ok';
@@ -7246,6 +7251,11 @@ return `<div class="history-date-card">
       if(isGlobal) staffInput.placeholder="Staff";
     }
 
+    const cashRow=$("ndCashierLocalRow"),globalPanel=$("ndGlobalCardPanel"),cashLabel=$("ndCashierLabel");
+    if(cashRow) cashRow.hidden=isGlobal;
+    if(globalPanel) globalPanel.hidden=!isGlobal;
+    if(cashLabel) cashLabel.textContent=isGlobal?"待刷卡顾客 · 名字 + 金额":"Cashier Balance";
+    if(isGlobal && window.ndGlobalCardRefresh) void window.ndGlobalCardRefresh();
     const proofCard=$("dailySettlementProofCard");
     if(proofCard) proofCard.style.display=isGlobal?"none":"";
 
@@ -12182,20 +12192,23 @@ function ndFourteenUpdateTotals(c,seven){
     Number(c.customer_referral||0)+Number(c.staff_referral||0)+
     Number(c.bonus||0)
   );
-  c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+
-    costs.employer_epf+costs.employer_socso+costs.employer_eis);
-  c.raw_commission=cents(c.total_commission-c.total_employer_cost);
+  c.company_expense=cents(costs.employer_epf+costs.employer_socso+costs.employer_eis);
+  c.original_allowance=cents(seven?.allowance||0);
+  c.adjusted_allowance=cents(c.original_allowance-c.company_expense);
+  c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
+  c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
+  // Requested 14th formula:
+  // Commission A + B + Customer Referral + Staff Referral + Bonus = Total Commission.
+  // Commission = Total Commission - 7th Net Pay
+  //              - (Original Allowance - Adjusted Allowance)
+  //              - Total Deduction.
+  // Do not subtract Commission from itself again in Nett Pay.
+  c.raw_commission=cents(c.total_commission-costs.seventh_net_pay-
+    c.allowance_difference-costs.seventh_total_deduction);
   c.commission=c.raw_commission;
   c.seventh_deduction_refund=0;
-  // 14th Nett Pay: Total Commission - 7th Net Pay - Total Deduction
-  // - Commission - (Original Allowance - adjusted Allowance).
-  // Original/adjusted Allowance come from the same 7th snapshot.
-  c.original_allowance=cents(seven?.allowance||0);
-  c.adjusted_allowance=cents(ndSevenAdjustedAllowance(seven||{}));
-  c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
   c.total_income=c.total_commission;
-  c.net_pay=cents(c.total_commission-costs.seventh_net_pay-
-    costs.seventh_total_deduction-c.commission-c.allowance_difference);
+  c.net_pay=c.commission;
   c.has_payslip=c.net_pay>0;
   return c;
 }
@@ -35447,9 +35460,9 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void load(
 
 <script id="nd-cash-expense-ledger-integrity-v1">
 (()=>{'use strict';
-  // Cash Expense approvals and the legacy petty_entries ledger are distinct
-  // until a server-side reconciliation is deployed. Never add the two balances.
-  window.ndCashExpenseLedgerMode='submitted-expenses-except-error';
+  // Cash Expense cash-event ledger is the one source for debits and refunds.
+  // Legacy petty entries are separate; never include raw Cash Expense requests.
+  window.ndCashExpenseLedgerMode='signed-cash-events';
   async function check(){
     const db=window.salaryDb;if(!db)return;
     try{window.ndCashExpenseApprovedTotals=await window.ndCashExpenseCloudDebits(db,{start:'2026-10-26'});
@@ -36279,6 +36292,114 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
 })();
 
 </script>
+
+<style id="nd-cashier-global-and-counter-ui">
+.nd-cashier-input-row{display:flex;align-items:center;gap:8px}.nd-cashier-input-row>.money-wrap{flex:1;min-width:0}.nd-cashier-input-row>button{font-size:22px;min-width:48px;min-height:44px}
+#ndCashierLocalRow[hidden],#ndGlobalCardPanel[hidden]{display:none!important}
+.nd-global-cards{border:1px solid #dde6df;border-radius:12px;padding:12px;background:#fbfdfb}.nd-global-card-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}.nd-global-card-head span{font-size:14px;color:#75550b;font-weight:700}
+.nd-global-card-fields{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(100px,1fr) auto;gap:8px}.nd-global-card-fields input{min-width:0}.nd-global-card-list{display:grid;gap:8px;margin-top:12px}.nd-global-card-line{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:white;border:1px solid #e2e8e3;border-radius:10px}.nd-global-card-line .nd-meta{font-size:12px;color:#69786c}.nd-global-card-line button{padding:6px 9px}
+#ndCashCounterDialog{width:min(470px,94vw);border:0;border-radius:18px;padding:20px;max-height:90dvh;overflow:auto;box-shadow:0 12px 45px #0003}#ndCashCounterDialog::backdrop{background:#17281d88}#ndCashCounterDialog .nd-cash-count-row{display:grid;grid-template-columns:1fr 110px 120px;gap:10px;align-items:center;margin:7px 0}#ndCashCounterDialog input{text-align:center}#ndCashCounterDialog .nd-counter-total{display:flex;justify-content:space-between;align-items:center;padding:14px 0;font-size:20px;font-weight:800}#ndCashCounterDialog footer{display:flex;gap:8px;justify-content:flex-end}
+@media(max-width:560px){.nd-global-card-fields{grid-template-columns:1fr 110px}.nd-global-card-fields button{grid-column:1/-1}.nd-global-card-line{flex-wrap:wrap}#ndCashCounterDialog .nd-cash-count-row{grid-template-columns:1fr 85px 94px}}
+</style>
+<script id="nd-global-card-customers-and-cash-counter">
+(()=>{'use strict';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const client=()=>window.salaryDb;
+  const day=()=>$('settlementDate')?.value;
+  const branch=()=>document.getElementById('branchRecordState')?.textContent?.trim()||'';
+  let globalRows=[],seq=0,busy=false;
+  function status(t){if($('ndGlobalCardStatus'))$('ndGlobalCardStatus').textContent=t;}
+  function render(){const list=$('ndGlobalCardList');if(!list)return;
+    const pending=globalRows.filter(r=>r.status==='pending');
+    if($('ndGlobalCardPending'))$('ndGlobalCardPending').textContent='待验证 '+fmt(pending.reduce((a,r)=>a+Number(r.amount||0),0));
+    list.innerHTML=globalRows.length?globalRows.map(r=>`<div class="nd-global-card-line"><div><strong>${esc(r.customer_name)}</strong><div class="nd-meta">${esc(r.card_date)} · ${r.status==='pending'?'待验证':'已验证'}</div></div><strong>${fmt(r.amount)}</strong>${r.status==='pending'?'<button type="button" class="mini" data-nd-verify-card="'+esc(r.id)+'">UMO 验证</button>':''}</div>`).join(''):'<span class="helper">当天没有待刷卡顾客。</span>';
+    list.querySelectorAll('[data-nd-verify-card]').forEach(b=>{b.hidden=window.ndGlobalCardIsUmo!==true;});
+    window.dispatchEvent(new CustomEvent('nd-global-pending-cards-updated',{detail:{date:day(),total:window.ndGlobalPendingCardTotal}}));
+  }
+  window.ndGlobalCardRefresh=async()=>{
+    if(branch()!=='Global')return;
+    const k=++seq,db=client();if(!db){status('请先登录');return;}
+    try{
+      const [auth,result,totalResult]=await Promise.all([db.auth.getUser(),db.from('nd_global_card_customers').select('id,card_date,customer_name,amount,status').eq('card_date',day()).order('created_at',{ascending:false}),db.rpc('nd_global_pending_card_total')]);
+      if(k!==seq)return;
+      if(result.error)throw result.error;
+      if(totalResult.error)throw totalResult.error;
+      window.ndGlobalPendingCardTotal=Number(totalResult.data||0);
+      window.ndGlobalCardIsUmo=String(auth.data?.user?.email||'').toLowerCase()==='umo1017@gmail.com';
+      globalRows=result.data||[];status('');render();
+    }catch(e){if(k===seq){globalRows=[];render();status('待刷卡记录暂时无法加载，请检查数据库同步。');console.error('[Global Cards]',e);}}
+  };
+  document.addEventListener('click',async e=>{
+    const add=e.target.closest?.('#ndGlobalCustomerAdd');
+    const verify=e.target.closest?.('[data-nd-verify-card]');
+    if(!add&&!verify)return;
+    if(busy)return;
+    const db=client();if(!db){status('请先登录');return;}
+    busy=true;add&&(add.disabled=true);verify&&(verify.disabled=true);
+    try{
+      if(add){
+        const name=$('ndGlobalCustomerName').value.trim(),amount=Number($('ndGlobalCustomerAmount').value);
+        if(!name||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100 && Math.abs(Math.round(amount*100)-amount*100)>1e-6)throw Error('请填写顾客名字及正确金额');
+        const result=await db.from('nd_global_card_customers').insert({card_date:day(),customer_name:name,amount:Math.round(amount*100)/100});
+        if(result.error)throw result.error;
+        $('ndGlobalCustomerName').value='';$('ndGlobalCustomerAmount').value='';
+      }else{
+        if(!window.ndGlobalCardIsUmo)throw Error('仅 UMO 可以验证');
+        if(!confirm('确认这位顾客的刷卡金额已经核实？'))return;
+        const result=await db.rpc('nd_verify_global_card_customer',{p_id:verify.dataset.ndVerifyCard});
+        if(result.error)throw result.error;
+      }
+      await window.ndGlobalCardRefresh();
+    }catch(err){status('无法保存：'+(err.message||err));}finally{busy=false;add&&(add.disabled=false);verify&&(verify.disabled=false);}
+  });
+  const denom=[100,50,20,10,5,1,.5,.2,.1];
+  function mountCounter(){if($('ndCashCounterDialog'))return;
+    const dlg=document.createElement('dialog');dlg.id='ndCashCounterDialog';dlg.innerHTML='<h3>🧮 现金点算器</h3><p class="helper" id="ndCounterContext"></p><div id="ndCounterRows"></div><div class="nd-counter-total"><span>总数</span><strong id="ndCounterTotal">RM 0.00</strong></div><p class="helper" id="ndCounterState"></p><footer><button type="button" class="mini" data-nd-count-close>关闭</button><button type="button" class="btn" id="ndCounterSave">保存余额</button></footer>';
+    document.body.appendChild(dlg);
+    $('ndCounterRows').innerHTML=denom.map((v,i)=>'<label class="nd-cash-count-row"><span>RM '+v.toFixed(v<1?2:0)+'</span><input type="number" min="0" step="1" inputmode="numeric" data-nd-denom="'+i+'" value="0"><strong data-nd-subtotal="'+i+'">RM 0.00</strong></label>').join('');
+    dlg.addEventListener('input',e=>{if(e.target.matches('[data-nd-denom]'))sumCounter();});
+    dlg.querySelector('[data-nd-count-close]').onclick=()=>dlg.close();
+    $('ndCounterSave').onclick=saveCount;
+  }
+  function sumCounter(){let totalCents=0,valid=true;
+    $('ndCounterRows').querySelectorAll('[data-nd-denom]').forEach(inp=>{const i=Number(inp.dataset.ndDenom),n=Number(inp.value);if(!Number.isInteger(n)||n<0)valid=false;const sub=Math.round(denom[i]*100)*(Number.isInteger(n)&&n>=0?n:0);totalCents+=sub;$('ndCounterRows').querySelector('[data-nd-subtotal="'+i+'"]').textContent=fmt(sub/100);});
+    $('ndCounterTotal').textContent=valid?fmt(totalCents/100):'请输入正确数量';return valid?totalCents/100:null;
+  }
+  document.addEventListener('click',async e=>{if(!e.target.closest?.('#ndCashCountOpen'))return;
+    if(branch()==='Global')return;
+    mountCounter();const dlg=$('ndCashCounterDialog');$('ndCounterContext').textContent=branch()+' · '+day();$('ndCounterState').textContent='正在加载之前保存的现金数量...';
+    $('ndCounterSave').disabled=true;
+    $('ndCounterRows').querySelectorAll('[data-nd-denom]').forEach(x=>x.value='0');sumCounter();dlg.showModal();
+    try{const db=client();if(!db)throw Error('Please sign in');
+      const result=await db.from('nd_cashier_denomination_counts').select('denominations').eq('branch',branch()).eq('count_date',day()).maybeSingle();
+      if(result.error)throw result.error;
+      const saved=result.data?.denominations||{};
+      $('ndCounterRows').querySelectorAll('[data-nd-denom]').forEach((x,i)=>x.value=String(saved[String(denom[i])]??0));sumCounter();
+      $('ndCounterState').textContent='按纸币及硬币数量计算；保存后同步 Cashier Balance。';$('ndCounterSave').disabled=false;
+    }catch(err){$('ndCounterState').textContent='无法读取之前点算记录：'+(err.message||err)+'。请先检查同步。';}
+  });
+  async function saveCount(){const total=sumCounter(),db=client(),btn=$('ndCounterSave');
+    if(total===null){$('ndCounterState').textContent='数量必须是非负整数';return;}
+    if(!db||branch()==='Global')return;
+    if(total===0 && Number($('cashierBalance')?.value||0)>0 && !confirm('点算总额为 RM0.00，确定要覆盖原有 Cashier Balance？'))return;
+    btn.disabled=true;$('ndCounterState').textContent='正在同步...';
+    try{
+      const quantities=$('ndCounterRows').querySelectorAll('[data-nd-denom]');
+      const counted={};quantities.forEach((x,i)=>counted[String(denom[i])]=Number(x.value));
+      const result=await db.rpc('nd_save_cashier_count',{p_branch:branch(),p_date:day(),p_counts:counted});
+      if(result.error)throw result.error;
+      $('cashierBalance').value=total;
+      $('ndCounterState').textContent='已保存并同步 '+fmt(total);
+      window.dispatchEvent(new CustomEvent('nd-cashier-count-saved',{detail:{branch:branch(),date:day(),total}}));
+    }catch(e){$('ndCounterState').textContent='保存失败：'+(e.message||e);}finally{btn.disabled=false;}
+  }
+  document.addEventListener('change',e=>{if(e.target?.id==='settlementDate')setTimeout(()=>{if(branch()==='Global')void window.ndGlobalCardRefresh();},0);});
+  window.addEventListener('nd-global-pending-cards-updated',e=>{const el=$('ndGlobalPendingHistorySummary');if(el)el.textContent=fmt(e.detail.total);const total=$('ndAllUnverifiedTotal');if(total)total.textContent=fmt(Number(total.dataset.baseUnverified||0)+Number(e.detail.total||0));});
+})();
+</script>
+
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
