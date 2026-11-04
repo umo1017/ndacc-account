@@ -32365,6 +32365,46 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
    const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
+
+<!-- Company Fine mobile menu fix: use existing main sidebar, keep finance logic unchanged -->
+<style id="nd-fine-mobile-menu-fix-20261105">
+#ndCompanyFinePage .ncf-top{display:flex!important;align-items:center!important;gap:9px!important;justify-content:flex-start!important;margin:0 0 10px!important}
+#ndCompanyFinePage .ncf-top h2{flex:1!important;font-size:19px!important}
+#ndCompanyFinePage #ndFineMenuBtn{display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 40px!important;width:40px!important;height:40px!important;padding:0!important;border-radius:11px!important;background:#fff!important;color:#2463d7!important;font-size:23px!important;border:1px solid #d8e0ee!important}
+#ndCompanyFinePage #ncfClose{padding:7px 11px!important;font-size:12px!important;min-height:36px!important}
+#ndCompanyFinePage .nd-fine-shared-nav{padding:0 0 7px!important;margin:0 0 9px!important;gap:6px!important}
+#ndCompanyFinePage .nd-fine-shared-nav button{min-height:36px!important;padding:6px 11px!important;font-size:12px!important}
+@media(max-width:600px){#ndCompanyFinePage{padding:12px 12px 28px!important}#ndCompanyFinePage .ncf-controls{padding:12px!important;gap:8px!important}#ndCompanyFinePage .ncf-stats{gap:8px!important;margin:10px 0!important}#ndCompanyFinePage .ncf-card{padding:11px!important}}
+</style>
+<script id="nd-fine-mobile-menu-action-20261105">
+(()=>{'use strict';
+ function install(){
+  const fine=document.getElementById('ndCompanyFinePage');
+  const top=fine?.querySelector('.ncf-top');
+  if(!top||top.querySelector('#ndFineMenuBtn'))return;
+  const b=document.createElement('button');
+  b.type='button';b.id='ndFineMenuBtn';b.textContent='☰';b.setAttribute('aria-label','Open main menu');
+  b.addEventListener('click',()=>{
+   // Company Fine is a full-screen overlay above the original sidebar.
+   // Close the overlay first, then open the existing app sidebar.
+   const close=document.getElementById('ncfClose');
+   if(close)close.click();
+   const sidebar=document.getElementById('mainSidebar');
+   if(sidebar){sidebar.classList.add('open');return;}
+   document.getElementById('mobileSidebarBtn')?.click();
+  });
+  top.insertBefore(b,top.firstChild);
+ }
+ document.addEventListener('click',e=>{
+  if(e.target?.closest?.('#ndCompanyFineBtn,#ndBonusCompanyFineTab'))queueMicrotask(install);
+ },true);
+ const start=()=>{
+  install();
+  new MutationObserver(()=>{const fine=document.getElementById('ndCompanyFinePage');if(fine&&!fine.hidden)install()}).observe(document.body,{childList:true,subtree:false});
+ };
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
+</script>
 </body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
@@ -32745,7 +32785,7 @@ body[data-nd-visible-page="announcements"] #appView,body[data-nd-visible-page="a
 @media(max-width:700px){#ndAnnouncementsPage{padding:65px 12px 20px}}
 </style>
 <section class="sidebar-offset" id="ndAnnouncementsPage"><div style="max-width:1100px;margin:auto">
-<div class="topbar nd-ann-legacy-close" hidden><button class="btn" id="ndAnnClose" type="button">Close</button></div><div class="nd-ann-buttons" id="ndAnnMode" hidden><button type="button" data-ann-mode="publish">Publish Announcement</button><button type="button" data-ann-mode="history">Announcement History</button></div>
+<div class="topbar nd-ann-legacy-close" hidden><button class="btn" id="ndAnnClose" type="button">Close</button></div><div class="nd-ann-buttons" id="ndAnnMode" hidden><button type="button" data-ann-mode="publish">Publish Announcement</button><button type="button" data-ann-mode="history">Announcement History</button></div><div id="ndAnnCompactHeader"><button type="button" id="ndAnnCompactNew">+ New</button></div>
 <div class="nd-ann-buttons"><button id="ndAnnPrev" type="button">◀</button><input id="ndAnnMonth" style="max-width:190px" type="month"/><button type="button" id="ndAnnAllMonths" class="nd-ann-all-unread-btn" aria-pressed="true">All Months</button><button id="ndAnnNext" type="button">▶</button><button type="button" class="nd-ann-all-unread-btn" id="ndAnnViewUnread" aria-pressed="false">All Unread</button><span class="nd-ann-muted" id="ndAnnMonthUnread"></span></div>
 <div class="nd-ann-buttons" id="ndAnnTabs"><button class="selected" data-cat="all">All</button><button data-cat="promotion">Promotions</button><button data-cat="treatment">New Treatments</button><button data-cat="policy">Policies</button><button data-cat="commission">Commission</button><button data-cat="menu">Menu</button></div><nav id="ndMenuSubTabs" class="nd-menu-subtabs" aria-label="Menu categories" hidden></nav>
 <div class="nd-ann-panel" hidden="" id="ndAnnEditor"><h3 id="ndAnnEditHeading">New Announcement</h3><label>Category</label><select id="ndAnnCategory"><option value="promotion">Promotions</option><option value="treatment">New Treatments</option><option value="policy">Policies</option><option value="commission">Commission</option><option value="menu">Menu</option></select><div id="ndMenuEditorGroup" class="nd-menu-editor-group" hidden><label for="ndMenuGroup">Menu Section</label><div class="nd-menu-edit-row"><select id="ndMenuGroup"></select><button type="button" class="btn" id="ndMenuGroupAdd" title="Add menu category" aria-label="Add menu category">+</button></div></div><label>Title</label><input id="ndAnnTitle" maxlength="160"/><label>Content</label><textarea id="ndAnnContent" maxlength="10000"></textarea><label for="ndAnnPhotos">Photos / PDF Files</label><input id="ndAnnPhotos" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" multiple><div id="ndAnnSelectedPhotos" class="nd-ann-muted"></div><div class="actions" style="margin-top:10px"><button class="btn" id="ndAnnSave" type="button">Publish</button><button class="btn" id="ndAnnCancel" type="button">Cancel Edit</button></div></div>
@@ -39003,5 +39043,52 @@ body > #ndProHamburger.nd-pro-portal-menu {
  const observer=new MutationObserver(()=>{const page=document.getElementById('ndCompanyFinePage');if(page&&!page.hidden)mount()});
  const start=()=>{observer.observe(document.body,{childList:true,subtree:false});mount()};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
+</script>
+
+<style id="nd-ann-structural-rebuild-20261105">
+/* Compact navigation: preserve existing application handlers and data. */
+#ndAnnouncementsPage{padding-top:0!important}
+#ndAnnouncementsPage>div{margin-top:0!important}
+#ndAnnouncementsPage #ndAnnMode{display:none!important}
+#ndAnnouncementsPage #ndAnnCompactHeader{display:flex!important;justify-content:flex-end;align-items:center;margin:0 0 8px!important;min-height:0!important;padding:0!important}
+#ndAnnouncementsPage #ndAnnCompactNew{background:#28513b!important;color:#fff!important;border:0!important;border-radius:9px!important;padding:7px 12px!important;font-size:13px!important;font-weight:700!important;min-height:34px!important;height:34px!important;line-height:18px!important;width:auto!important}
+#ndAnnouncementsPage .nd-ann-buttons:has(#ndAnnMonth){display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:6px!important;padding:7px!important;margin:0 0 8px!important;min-height:0!important}
+#ndAnnouncementsPage #ndAnnMonth{flex:1 1 120px!important;min-width:105px!important;max-width:180px!important;height:34px!important;min-height:34px!important;margin:0!important;padding:4px 6px!important}
+#ndAnnouncementsPage #ndAnnPrev,#ndAnnouncementsPage #ndAnnNext{width:34px!important;min-width:34px!important;height:34px!important;min-height:34px!important;padding:0!important}
+#ndAnnouncementsPage #ndAnnAllMonths,#ndAnnouncementsPage #ndAnnViewUnread{width:auto!important;min-height:34px!important;height:34px!important;padding:5px 9px!important;font-size:12px!important;white-space:nowrap!important}
+#ndAnnouncementsPage #ndAnnMonthUnread{display:none!important}
+#ndAnnouncementsPage #ndAnnTabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:7px!important;margin:0 0 10px!important;padding:2px 0 6px!important;scrollbar-width:none!important;-webkit-overflow-scrolling:touch!important}
+#ndAnnouncementsPage #ndAnnTabs::-webkit-scrollbar{display:none!important}
+#ndAnnouncementsPage #ndAnnTabs button{flex:0 0 auto!important;white-space:nowrap!important;width:auto!important;min-height:34px!important;height:34px!important;padding:6px 10px!important;font-size:12px!important;border-radius:18px!important}
+#ndAnnouncementsPage .nd-ann-panel{margin:8px 0!important;padding:12px!important}
+#ndAnnouncementsPage .nd-ann-panel h3{margin:0 0 8px!important}
+#ndAnnouncementsPage #ndAnnList article{margin:8px 0!important;padding:12px!important}
+#ndAnnouncementsPage .nd-ann-legacy-close{display:none!important}
+@media(max-width:600px){#ndAnnouncementsPage{padding-left:8px!important;padding-right:8px!important}#ndAnnouncementsPage #ndAnnCompactHeader{margin-top:0!important}}
+</style>
+<script id="nd-ann-structural-actions-20261105">
+(()=>{'use strict';
+function setup(){
+ const page=document.getElementById('ndAnnouncementsPage');if(!page)return;
+ const newBtn=document.getElementById('ndAnnCompactNew');
+ if(newBtn&&!newBtn.dataset.bound){newBtn.dataset.bound='1';newBtn.addEventListener('click',()=>{
+  const original=document.querySelector('#ndAnnMode [data-ann-mode="publish"]');if(original)original.click();
+  document.getElementById('ndAnnEditor')?.scrollIntoView({block:'nearest',behavior:'smooth'});
+ });}
+ // Remove the old heading wrapper only if it has no interactive content.
+ const hideRedundant=()=>{
+  for(const el of page.querySelectorAll('h1,h2,h3')){
+   if(el.closest('#ndAnnEditor,#ndAnnList,#ndCompanyPolicyCard'))continue;
+   if(/^(Tasks & Announcements|Announcements)$/i.test((el.textContent||'').trim())){
+    const wrapper=el.parentElement;
+    if(wrapper&&wrapper!==page&&!wrapper.querySelector('button,input,select,a,textarea')&&wrapper.children.length===1)wrapper.style.display='none';
+    else el.style.display='none';
+   }
+  }
+ };
+ hideRedundant();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
