@@ -16047,8 +16047,8 @@ document.querySelectorAll("[data-confirm7]").forEach(btn=>btn.onclick=()=>ndGuar
   document.querySelectorAll("[data-confirm14]").forEach(btn=>btn.onclick=()=>ndGuardSalaryConfirm(btn,()=>confirm14th(Number(btn.dataset.confirm14))));
   // Reset clicks handled by persistent delegated listener.
   // Payment clicks handled by delegated listener so they continue to work after re-render.
-  document.querySelectorAll("[data-payslip7]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip7),7));
-  document.querySelectorAll("[data-payslip14]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip14),14));
+  // Payslip clicks are handled by a single persistent listener below.
+  // This survives salary table re-rendering and branch/payment switching.
 }
 
 
@@ -17698,7 +17698,26 @@ async function ndRefreshPayslipSource(empId){
   salaryYtdSnapshots.push(...(ytd.data||[]));
 }
 
+// Persistent Payslip handler: identical behavior for Cash, Bank Transfer and TNG.
+// Do not depend on buttons being in the DOM at initial render.
+document.addEventListener('click',function ndSalaryPayslipDelegatedClick(event){
+  const target=event.target?.closest?.('[data-payslip7],[data-payslip14]');
+  if(!target||target.disabled||target.dataset.ndPayslipBusy==='1')return;
+  const is7=target.hasAttribute('data-payslip7');
+  const id=Number(target.getAttribute(is7?'data-payslip7':'data-payslip14'));
+  if(!Number.isSafeInteger(id)||id<=0){alert('Invalid employee ID for payslip.');return;}
+  event.preventDefault();
+  target.dataset.ndPayslipBusy='1';
+  Promise.resolve().then(()=>openPayslip(id,is7?7:14))
+    .catch(error=>{
+      console.error('Unable to open payslip',error);
+      alert('Unable to open payslip: '+(error?.message||String(error)));
+    })
+    .finally(()=>{delete target.dataset.ndPayslipBusy;});
+});
+
 async function openPayslip(empId,type){
+  try {
   const selectedEmp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   window.currentPayslipStaff=selectedEmp ? {
     id:Number(selectedEmp.id),
@@ -17827,6 +17846,11 @@ ${payslipTransferDetailsHtml(e)}
   if(typeof openPayslipModalOverlay==="function")openPayslipModalOverlay(slipModal);
   else{slipModal.style.removeProperty("display");slipModal.classList.add("open");}
   return true;
+  } catch(error) {
+    console.error('Payslip rendering error:',error);
+    alert('Unable to open payslip: '+(error?.message||String(error)));
+    return false;
+  }
 }
 
 async function initialize(){
@@ -31413,8 +31437,8 @@ if($('ndConnectTikTokBtn'))$('ndConnectTikTokBtn').onclick=()=>{
 
 function openPayslipModalOverlay(modal){
   if(!modal) return;
+  modal.style.removeProperty('display');
   modal.classList.add("open");
-  modal.style.display="";
   document.body.style.overflow="hidden";
   requestAnimationFrame(()=>{
     modal.scrollTop=0;
