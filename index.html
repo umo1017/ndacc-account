@@ -5148,6 +5148,29 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
  #ndAnnouncementsPage #ndAnnPrev,#ndAnnouncementsPage #ndAnnNext{min-width:30px!important;width:30px!important;}
 }
 </style>
+<style id="nd-salary-payment-details-bottom-20261105">
+/* Applies only to the payment destination footer on the two salary slips. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-transfer-details,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-transfer-details{
+  display:grid!important;grid-template-columns:1fr 1fr!important;gap:5px 12px!important;
+  margin:9px 0 0!important;padding:8px 0 0!important;border-top:1px solid #777!important;
+  font-size:9px!important;line-height:1.4!important;color:#252525!important;
+  break-inside:avoid;page-break-inside:avoid;
+}
+#salaryPayslipPrint .payslip-transfer-details .payslip-transfer-heading{
+  grid-column:1/-1;font-size:9px;font-weight:800;letter-spacing:.05em;
+}
+#salaryPayslipPrint .payslip-transfer-details .detail-row{
+  display:grid;grid-template-columns:minmax(70px,auto) minmax(0,1fr);gap:6px;
+  min-width:0;overflow-wrap:anywhere;
+}
+@media(max-width:500px){
+ #salaryPayslipPrint .payslip-transfer-details .detail-row{grid-template-columns:minmax(0,1fr)}
+}
+@media print{
+ #salaryPayslipPrint .payslip-transfer-details{display:grid!important;break-inside:avoid!important;page-break-inside:avoid!important}
+}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -17556,22 +17579,19 @@ function metaRows(e,type){
 
 
 function payslipTransferDetailsHtml(e){
-  const method=String(e.payment_method||"");
-  if(method!=="Bank Transfer" && method!=="TNG") return "";
-
-  const transferRows = method==="Bank Transfer"
-    ? `
-      <div class="detail-row"><div class="detail-k">Bank Name</div><div>${e.bank_name||"-"}</div></div>
-      <div class="detail-row"><div class="detail-k">Bank Account</div><div>${e.bank_account||"-"}</div></div>`
-    : `
-      <div class="detail-row"><div class="detail-k">TNG Account</div><div>${e.bank_account||e.phone||"-"}</div></div>`;
-
-  return `
-    <div class="payslip-transfer-details">
-      ${transferRows}
-    </div>`;
+  // Employee's current payment destination: never imply that payment was completed.
+  const method=String(e?.payment_method||'').trim().toLowerCase();
+  if(!['bank transfer','bank','tng','touch n go','touch n go ewallet'].includes(method))return '';
+  const safe=v=>escapeHtml(String(v??'').trim()||'—');
+  const bank=method==='bank transfer'||method==='bank';
+  const rows=bank
+    ? [['Payment Method','Bank Transfer'],['Bank Name',e.bank_name],['Bank Account Number',e.bank_account]]
+    : [['Payment Method','TNG eWallet'],['TNG Account / Phone Number',e.bank_account||e.phone]];
+  return `<section class="payslip-transfer-details" aria-label="Payment destination">
+    <div class="payslip-transfer-heading">PAYMENT DETAILS</div>
+    ${rows.map(([label,value])=>`<div class="detail-row"><span class="detail-k">${safe(label)}</span><span>${safe(value)}</span></div>`).join('')}
+  </section>`;
 }
-
 
 function payslipAmount(value){
   const n=Number(value||0);
@@ -17692,6 +17712,7 @@ async function openPayslip(empId,type){
 <div class="ref-first-half">
   <span>First Half Date</span><span>:</span><span></span><span>To</span>
 </div>
+${payslipTransferDetailsHtml(e)}
 </div>`;
   } else {
     const sevenSnapshot=snapshotFor(empId);
