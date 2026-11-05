@@ -5232,13 +5232,12 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 #ndProAppointmentSale .nd-sale-checkout:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:380px){#ndProAppointmentSale .nd-sale-member-balances small{font-size:10px}#ndProAppointmentSale .nd-sale-products{gap:6px}#ndProAppointmentSale .nd-sale-product{padding:8px}#ndProAppointmentSale .nd-sale-pic{width:36px;height:36px}}
 </style>
-
-<style id="nd-pro-pos-supabase-draft-style-20261105">
-#ndProAppointmentSale .nd-sale-cloud-status{flex:none;padding:6px 14px;background:#eef5ff;color:#346091;font-size:11px;font-weight:650;line-height:1.3;overflow-wrap:anywhere}
-#ndProAppointmentSale .nd-sale-cloud-status.error{background:#fff0ed;color:#a43625}
-#ndProAppointmentSale .nd-sale-save{width:100%;min-height:37px;border:1px solid #b9cadf;background:#fff;color:#285c92;border-radius:11px;font-size:12px;font-weight:750;cursor:pointer;margin-bottom:7px}
-#ndProAppointmentSale .nd-sale-save:disabled{opacity:.5;cursor:progress}
-#ndProAppointmentSale .nd-sale-cloud-retry{max-width:230px;margin:15px;padding:11px;background:#216ad7;color:#fff;border:0;border-radius:12px}
+<style id="nd-payslip-payment-bank-details-20261106">
+/* Payslip payment information: show bank details on both 7th and 14th slips. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-transfer-details{display:grid!important}
+#salaryPayslipPrint .payslip-transfer-details{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px;margin-top:9px;padding:7px 2px 0;border-top:1px solid #777;font-size:10px;break-inside:avoid}
+#salaryPayslipPrint .payslip-transfer-details .detail-row{display:grid;grid-template-columns:90px minmax(0,1fr);gap:7px;overflow-wrap:anywhere}
+@media(max-width:580px){#salaryPayslipPrint .payslip-transfer-details{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -7546,7 +7545,7 @@ return `<div class="history-date-card">
     renderDailyBranchButtons();
     const cashProblems=[ndCashAdvanceError&&('Salary Advance: '+ndCashAdvanceError),ndCashRemittanceError&&('Cash Remittance: '+ndCashRemittanceError),ndApprovedCashExpenseError&&('Cash Expense events: '+ndApprovedCashExpenseError)].filter(Boolean);
     if(!silent||cashProblems.length){
-      $("syncState").textContent=cashProblems.length?'部分同步失败，Cash Balance 暂不可用：'+cashProblems.join(' | '):'Synced ✓';
+      $("syncState").textContent=cashProblems.length?'部分同步失败，Cash Balance 暂不可用：'+cashProblems.join(' | '):'云端已同步 ✓';
       $("syncState").className=cashProblems.length?'bad':'ok';
     }
     return true;
@@ -9191,7 +9190,7 @@ return `<div class="history-date-card">
       if($('cashBalance'))$('cashBalance').value=shown;
       if($('metricCashBalance'))$('metricCashBalance').textContent=shown;
       const state=$('syncState');
-      if(state&&(/正在同步|现金余额读取失败|同步失败|Synced/.test(state.textContent||''))){
+      if(state&&(/正在同步|现金余额读取失败|同步失败|云端已同步/.test(state.textContent||''))){
         state.textContent='Today’s Cash 云端已更新 ✓';state.className='ok';state.title='';state.onclick=null;state.style.cursor='';
       }
     }catch(error){
@@ -17653,10 +17652,10 @@ function payslipTransferDetailsHtml(e){
 
   const transferRows = method==="Bank Transfer"
     ? `
-      <div class="detail-row"><div class="detail-k">Bank Name</div><div>${e.bank_name||"-"}</div></div>
-      <div class="detail-row"><div class="detail-k">Bank Account</div><div>${e.bank_account||"-"}</div></div>`
+      <div class="detail-row"><div class="detail-k">Bank Name</div><div>${esc(e.bank_name||"-")}</div></div>
+      <div class="detail-row"><div class="detail-k">Bank Account</div><div>${esc(e.bank_account||"-")}</div></div>`
     : `
-      <div class="detail-row"><div class="detail-k">TNG Account</div><div>${e.bank_account||e.phone||"-"}</div></div>`;
+      <div class="detail-row"><div class="detail-k">TNG Account</div><div>${esc(e.bank_account||e.phone||"-")}</div></div>`;
 
   return `
     <div class="payslip-transfer-details">
@@ -17784,6 +17783,7 @@ async function openPayslip(empId,type){
 <div class="ref-first-half">
   <span>First Half Date</span><span>:</span><span></span><span>To</span>
 </div>
+${payslipTransferDetailsHtml(e)}
 </div>`;
   } else {
     const sevenSnapshot=snapshotFor(empId);
@@ -27874,7 +27874,7 @@ input,select,textarea,button,a{
    managerSetting={manager_percent:Number(fixedManagerSetting?.manager_percent||0)};
 
    renderBonus();
-   if(state)state.textContent="Synced ✓";
+   if(state)state.textContent="Cloud synced ✓";
  }
  function renderBonus(){
    const grossPool=bonusBranchTotal*0.01;
@@ -38426,10 +38426,9 @@ function openBookingSale(a){
    return {id:String(s.id),name,alt,category,duration:Number(s.duration_minutes||0),price};
  }).filter(Boolean);
  const selected=new Map();
- const savedItemDetails=new Map();
  const bookedQty=Math.max(1,assigned(a.id).length);
  const booked=menu.find(x=>normalize(x.name)===normalize(a.service_name)||normalize(x.alt)===normalize(a.service_name));
- // Prepopulate only after cloud lookup confirms that no saved draft exists.
+ if(booked)selected.set(booked.id,bookedQty);
  const missingBooking=booked?'':String(a.service_name||'');
  let stage='menu',cat='promotion',duration='all',query='',showSearch=false,favoritesOnly=false,customerProfile=null,profileError='';
  let modal=document.getElementById('ndProAppointmentSale');
@@ -38438,180 +38437,30 @@ function openBookingSale(a){
  const lineItems=()=>menu.filter(x=>selected.has(x.id)).map(x=>({...x,qty:selected.get(x.id)}));
  const total=()=>lineItems().reduce((n,x)=>n+x.price*x.qty,0);
  const quantity=()=>lineItems().reduce((n,x)=>n+x.qty,0);
- let cloudOrderId=null,cloudUpdatedAt=null,loaded=false,dirty=false,saveTimer=null;
- let saving=false,savePromise=Promise.resolve(),cloudNotice='正在读取云端购物车…',cloudError=false;
- let cartVersion=0;
- const draftSnapshot=()=>({items:lineItems().map(x=>({
-   service_id:x.id, item_name:x.name, quantity:x.qty,
-   unit_price:x.price, discount_amount:0,
-   employee_id:assigned(a.id).length===1?Number(assigned(a.id)[0]):null
- })), subtotal:total()});
- const close=async()=>{
-   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
-   if(saving){
-     const priorOk=await savePromise.catch(()=>false);
-     if(!priorOk)return;
-   }
-   if(dirty && loaded){
-     const ok=await saveDraft();
-     if(!ok)return;
-   }
-   modal.hidden=true;modal.replaceChildren();
- };
- const safeMoney=n=>Math.round((Number(n)||0)*100)/100;
- function recordChange(){
-   dirty=true;cartVersion++;cloudNotice='未同步 · 正在准备保存';cloudError=false;
-   if(saveTimer)clearTimeout(saveTimer);
-   saveTimer=setTimeout(()=>{saveTimer=null;void saveDraft();},750);
- }
- async function commitDraft(snapshot){
-   if(!c?.id||!a.id||!a.branch)throw Error('预约缺少顾客、ID 或分行，无法保存购物车。');
-   const user=await db.auth.getUser();
-   if(user.error||!user.data?.user)throw Error('请先登录 UMO 账号后保存购物车。');
-   // Create an order only after the user has edited the cart.
-   if(!cloudOrderId){
-     const created=await db.from('nd_pro_beta_orders').insert({
-       customer_id:c.id,appointment_id:a.id,branch:a.branch,
-       order_status:'draft',status:'draft',subtotal:safeMoney(snapshot.subtotal),
-       discount_amount:0,total_amount:safeMoney(snapshot.subtotal),
-       created_by:user.data.user.id
-     }).select('id,updated_at').single();
-     if(created.error){
-       // A second device may have created a draft while we were editing.
-       const lookup=await db.from('nd_pro_beta_orders').select('id,updated_at')
-          .eq('appointment_id',a.id).eq('order_status','draft')
-          .order('created_at',{ascending:false}).limit(1).maybeSingle();
-       if(lookup.error||!lookup.data)throw created.error;
-       throw Error('另一设备已建立此预约的草稿。请重新打开预约，避免覆盖新资料。');
-     }
-     cloudOrderId=created.data.id;cloudUpdatedAt=created.data.updated_at;
-   }else{
-     // Prevent silently overwriting a newer edit from another device.
-     let update=db.from('nd_pro_beta_orders').update({
-       subtotal:safeMoney(snapshot.subtotal),discount_amount:0,
-       total_amount:safeMoney(snapshot.subtotal)
-     }).eq('id',cloudOrderId).eq('order_status','draft');
-     if(cloudUpdatedAt)update=update.eq('updated_at',cloudUpdatedAt);
-     const up=await update.select('id,updated_at').maybeSingle();
-     if(up.error)throw up.error;
-     if(!up.data)throw Error('购物车已在另一设备修改或取消。请重新打开预约加载最新版本。');
-     cloudUpdatedAt=up.data.updated_at;
-   }
-   const old=await db.from('nd_pro_beta_order_items')
-     .select('id,service_id,quantity,unit_price,item_name,discount_amount')
-     .eq('order_id',cloudOrderId);
-   if(old.error)throw old.error;
-   const existing=old.data||[],remaining=[...existing];
-   for(const x of snapshot.items){
-     const idx=remaining.findIndex(v=>String(v.service_id)===String(x.service_id));
-     const row={...x,order_id:cloudOrderId,line_total:safeMoney(x.quantity*x.unit_price)};
-     if(idx>=0){
-       const found=remaining.splice(idx,1)[0];
-       const done=await db.from('nd_pro_beta_order_items').update(row).eq('id',found.id);
-       if(done.error)throw done.error;
-     }else{
-       const done=await db.from('nd_pro_beta_order_items').insert(row);
-       if(done.error)throw done.error;
-     }
-   }
-   if(remaining.length){
-     const del=await db.from('nd_pro_beta_order_items').delete().in('id',remaining.map(x=>x.id));
-     if(del.error)throw del.error;
-   }
- }
- function saveDraft(){
-   if(!loaded)return Promise.resolve(false);
-   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
-   const snapshot=draftSnapshot(),version=cartVersion;
-   const run=async()=>{
-     saving=true;cloudNotice='正在保存到 Supabase…';cloudError=false;render();
-     try{
-       await commitDraft(snapshot);
-       if(cartVersion===version)dirty=false;
-       cloudNotice=dirty?'有新修改，等待同步':'已保存至 Supabase · 其他设备可读取';
-       cloudError=false;
-       return true;
-     }catch(err){
-       cloudNotice='保存失败：'+(err?.message||String(err));
-       cloudError=true;dirty=true;
-       console.error('Pro appointment POS save failed',err);
-       return false;
-     }finally{
-       saving=false;render();
-     }
-   };
-   savePromise=savePromise.catch(()=>{}).then(run);
-   return savePromise;
- }
- async function loadDraft(){
-   try{
-     const q=await db.from('nd_pro_beta_orders')
-       .select('id,updated_at,order_status').eq('appointment_id',a.id)
-       .eq('order_status','draft').order('created_at',{ascending:false})
-       .limit(1).maybeSingle();
-     if(q.error)throw q.error;
-     if(q.data){
-       cloudOrderId=q.data.id;cloudUpdatedAt=q.data.updated_at;
-       const r=await db.from('nd_pro_beta_order_items')
-         .select('service_id,item_name,quantity,unit_price,discount_amount,employee_id')
-         .eq('order_id',cloudOrderId);
-       if(r.error)throw r.error;
-       for(const x of r.data||[]){
-         if(!x.service_id)continue;
-         const id=String(x.service_id);
-         const qty=Number(x.quantity);
-         if(!Number.isFinite(qty)||qty<=0)continue;
-         const matching=menu.find(m=>m.id===id);
-         if(matching){
-           matching.price=Number(x.unit_price);
-           matching.name=String(x.item_name||matching.name);
-         }else menu.push({id,name:String(x.item_name||'已保存项目'),alt:'',category:'all',
-           duration:0,price:Number(x.unit_price||0)});
-         selected.set(id,Math.max(1,qty));
-       }
-       cloudNotice='已读取云端草稿';
-     }else{
-       if(booked)selected.set(booked.id,bookedQty);
-       cloudNotice='新开单 · 尚未保存';
-     }
-     loaded=true;render();
-   }catch(err){
-     loaded=false;cloudError=true;
-     cloudNotice='读取云端草稿失败：'+(err?.message||String(err));
-     console.error('Pro appointment POS draft load failed',err);
-     render();
-   }
- }
+ const close=()=>{modal.hidden=true;modal.replaceChildren();};
  const categoryItems=[['promotion','PROMOTION'],['member','会员卡专享'],['wellness','养生 WELLNESS'],['package','配套'],['product','产品'],['all','全部']];
  const iconFor=x=>x.category==='promotion'?'🌟':x.category==='member'?'💎':x.category==='product'?'🛍️':x.category==='package'?'🎁':'💆';
  let favoriteIds=new Set(); // Per-open preference only; not persisted or used as an account-wide claim.
  let paymentMethod='Cash';
  function render(){
    modal.hidden=false;
-   if(!loaded){
-     modal.innerHTML=`<section class="nd-sale-shell" role="dialog" aria-modal="true"><header class="nd-sale-head"><button type="button" data-sale-close>×</button><strong>预约开单</strong></header><div class="nd-sale-cloud-status ${cloudError?'error':''}">${esc(cloudNotice)}</div><button type="button" class="nd-sale-cloud-retry" data-sale-retry>重新读取</button></section>`;
-     modal.querySelector('[data-sale-close]').onclick=()=>{modal.hidden=true;modal.replaceChildren();};
-     modal.querySelector('[data-sale-retry]').onclick=()=>{cloudNotice='重新读取云端草稿…';cloudError=false;render();void loadDraft();};
-     return;
-   }
    const buttons=categoryItems.map(([v,label])=>`<button type="button" class="${cat===v?'active':''}" data-sale-cat="${v}">${label}${v==='promotion'&&lineItems().some(x=>x.category==='promotion')?` <span class="nd-sale-tab-count">${lineItems().filter(x=>x.category==='promotion').reduce((n,x)=>n+x.qty,0)}</span>`:''}</button>`).join('');
    const durationChoices=['all',120,90,60,45,30,15,5,180,240,300,360];
    const filtered=menu.filter(x=>(cat==='all'||x.category===cat)&&(duration==='all'||x.duration===duration)&&(!query||normalize(x.name+' '+x.alt).includes(normalize(query)))&&(!favoritesOnly||favoriteIds.has(x.id)));
    const cards=filtered.map(x=>`<button type="button" class="nd-sale-product" data-sale-add="${esc(x.id)}" aria-label="添加 ${esc(x.name)}"><span class="nd-sale-pic">${iconFor(x)}</span><span class="nd-sale-product-info"><span class="nd-sale-product-name">${esc(x.name)}</span><span class="nd-sale-price">${money(x.price)}</span></span>${selected.has(x.id)?`<span class="nd-sale-count">${selected.get(x.id)}</span>`:''}</button>`).join('')||'<p class="nd-sale-empty">当前分类没有服务。可切换其他分类或搜索。</p>';
    const detailText=customerProfile?`<span class="nd-sale-tag">${esc(String(customerProfile.membership_level||'Standard'))}</span>${(Array.isArray(customerProfile.tags)?customerProfile.tags:[]).slice(0,5).map(t=>`<span class="nd-sale-tag">${esc(String(t))}</span>`).join('')}`:'<span class="nd-sale-tag">会员资料未加载</span>';
    const checkoutLines=lineItems().map(x=>`<div class="nd-sale-cart-line"><div><strong>${esc(x.name)}</strong><small>${money(x.price)} / 项</small></div><div class="nd-sale-qty"><button type="button" data-sale-minus="${esc(x.id)}" aria-label="减少数量">−</button><b>${x.qty}</b><button type="button" data-sale-add="${esc(x.id)}" aria-label="增加数量">＋</button></div><b>${money(x.price*x.qty)}</b></div>`).join('');
-   modal.innerHTML=`<section class="nd-sale-shell" role="dialog" aria-modal="true" aria-label="预约开单"><header class="nd-sale-head"><button type="button" class="nd-sale-icon" data-sale-back aria-label="返回">‹</button><strong>${stage==='menu'?esc(c?.full_name||'选择服务'):'购物车 · 结账'}</strong><button type="button" class="nd-sale-icon" data-sale-close aria-label="关闭">×</button></header><div class="nd-sale-cloud-status ${cloudError?'error':''}">${esc(cloudNotice)}</div>
+   modal.innerHTML=`<section class="nd-sale-shell" role="dialog" aria-modal="true" aria-label="预约开单"><header class="nd-sale-head"><button type="button" class="nd-sale-icon" data-sale-back aria-label="返回">‹</button><strong>${stage==='menu'?esc(c?.full_name||'选择服务'):'购物车 · 结账'}</strong><button type="button" class="nd-sale-icon" data-sale-close aria-label="关闭">×</button></header>
    <section class="nd-sale-member-top"><div class="nd-sale-member-identity"><span class="nd-sale-avatar">${esc(String(c?.full_name||'顾').slice(0,1).toUpperCase())}</span><div><strong>${esc(c?.full_name||'未选择顾客')}</strong><small>${esc(c?.phone||'')} · ${esc(a.branch||'')}</small></div></div><div class="nd-sale-member-balances"><div><small>储值</small><b>—</b></div><div><small>积分</small><b>—</b></div><div><small>优惠券</small><b>—</b></div><div><small>礼品卡</small><b>—</b></div></div><div class="nd-sale-profile-tags">${detailText}</div></section>
-   ${stage==='menu'?`<div class="nd-sale-toolbar"><button type="button" data-sale-default>✦ 默认⌄</button><button type="button" data-sale-fav class="${favoritesOnly?'active':''}" aria-label="收藏项目">★</button><button type="button" data-sale-search-toggle aria-label="搜索项目">⌕</button></div>${showSearch?`<div class="nd-sale-search"><input data-sale-search type="search" placeholder="搜索服务 / Search" value="${esc(query)}"></div>`:''}<nav class="nd-sale-cat">${buttons}</nav><nav class="nd-sale-durations">${durationChoices.map(d=>`<button type="button" data-sale-duration="${d}" class="${duration===d?'active':''}">${d==='all'?'全部':d+' MIN'}</button>`).join('')}</nav><main class="nd-sale-scroll"><div class="nd-sale-products">${cards}</div></main><footer class="nd-sale-foot"><button type="button" class="nd-sale-save" data-sale-save ${saving?'disabled':''}>☁ ${saving?'正在保存':'保存购物车'}</button><button type="button" data-sale-to-checkout class="nd-sale-checkout" ${quantity()?'':'disabled'}>${quantity()} 项目 | ${money(total())}</button></footer>`:
-   `<main class="nd-sale-scroll nd-sale-cart-scroll"><div class="nd-sale-cart-card"><h3>购物车 / Cart</h3>${checkoutLines||'<p>购物车为空，请先添加服务。</p>'}${missingBooking?`<p class="nd-sale-caution">预约服务「${esc(missingBooking)}」没有匹配到该分行菜单，请核实后手动选择。</p>`:''}<div class="nd-sale-total"><span>合计</span><strong>RM ${money(total())}</strong></div></div><div class="nd-sale-cart-card"><h3>付款方式（预览）</h3><div class="nd-sale-payment-grid">${['Cash','Card','TNG','Bank Transfer'].map(x=>`<label><input type="radio" name="ndSalePay" value="${x}" ${paymentMethod===x?'checked':''}>${x}</label>`).join('')}</div></div><div class="nd-sale-caution">测试开单：尚未连接正式收银，不能扣除 Voucher／Credit／Points，也不能生成正式收据。</div><button type="button" class="nd-sale-save" data-sale-save ${saving?'disabled':''}>☁ ${saving?'正在保存':'保存购物车'}</button><button type="button" class="nd-sale-not-ready" disabled>确认付款（尚未启用）</button></main>`}</section>`;
-   modal.querySelector('[data-sale-close]').onclick=()=>{void close();};
-   modal.querySelector('[data-sale-back]').onclick=()=>{if(stage==='checkout'){stage='menu';render();}else void close();};
+   ${stage==='menu'?`<div class="nd-sale-toolbar"><button type="button" data-sale-default>✦ 默认⌄</button><button type="button" data-sale-fav class="${favoritesOnly?'active':''}" aria-label="收藏项目">★</button><button type="button" data-sale-search-toggle aria-label="搜索项目">⌕</button></div>${showSearch?`<div class="nd-sale-search"><input data-sale-search type="search" placeholder="搜索服务 / Search" value="${esc(query)}"></div>`:''}<nav class="nd-sale-cat">${buttons}</nav><nav class="nd-sale-durations">${durationChoices.map(d=>`<button type="button" data-sale-duration="${d}" class="${duration===d?'active':''}">${d==='all'?'全部':d+' MIN'}</button>`).join('')}</nav><main class="nd-sale-scroll"><div class="nd-sale-products">${cards}</div></main><footer class="nd-sale-foot"><button type="button" data-sale-to-checkout class="nd-sale-checkout" ${quantity()?'':'disabled'}>${quantity()} 项目 | ${money(total())}</button></footer>`:
+   `<main class="nd-sale-scroll nd-sale-cart-scroll"><div class="nd-sale-cart-card"><h3>购物车 / Cart</h3>${checkoutLines||'<p>购物车为空，请先添加服务。</p>'}${missingBooking?`<p class="nd-sale-caution">预约服务「${esc(missingBooking)}」没有匹配到该分行菜单，请核实后手动选择。</p>`:''}<div class="nd-sale-total"><span>合计</span><strong>RM ${money(total())}</strong></div></div><div class="nd-sale-cart-card"><h3>付款方式（预览）</h3><div class="nd-sale-payment-grid">${['Cash','Card','TNG','Bank Transfer'].map(x=>`<label><input type="radio" name="ndSalePay" value="${x}" ${paymentMethod===x?'checked':''}>${x}</label>`).join('')}</div></div><div class="nd-sale-caution">测试开单：尚未连接正式收银，不能扣除 Voucher／Credit／Points，也不能生成正式收据。</div><button type="button" class="nd-sale-not-ready" disabled>确认付款（尚未启用）</button></main>`}</section>`;
+   modal.querySelector('[data-sale-close]').onclick=close;
+   modal.querySelector('[data-sale-back]').onclick=()=>{if(stage==='checkout'){stage='menu';render();}else close();};
    modal.querySelectorAll('[data-sale-cat]').forEach(b=>b.onclick=()=>{cat=b.dataset.saleCat;duration='all';render();});
    modal.querySelectorAll('[data-sale-duration]').forEach(b=>b.onclick=()=>{duration=b.dataset.saleDuration==='all'?'all':Number(b.dataset.saleDuration);render();});
-   modal.querySelectorAll('[data-sale-add]').forEach(b=>b.onclick=()=>{const id=b.dataset.saleAdd;selected.set(id,Math.min(99,(selected.get(id)||0)+1));recordChange();render();});
-   modal.querySelectorAll('[data-sale-minus]').forEach(b=>b.onclick=()=>{const id=b.dataset.saleMinus,n=(selected.get(id)||0)-1;if(n>0)selected.set(id,n);else selected.delete(id);recordChange();render();});
-   modal.querySelector('[data-sale-to-checkout]')?.addEventListener('click',async()=>{if(!quantity())return;if(dirty&&!await saveDraft())return;stage='checkout';render();});
-   modal.querySelector('[data-sale-save]')?.addEventListener('click',()=>{void saveDraft();});
+   modal.querySelectorAll('[data-sale-add]').forEach(b=>b.onclick=()=>{const id=b.dataset.saleAdd;selected.set(id,Math.min(99,(selected.get(id)||0)+1));render();});
+   modal.querySelectorAll('[data-sale-minus]').forEach(b=>b.onclick=()=>{const id=b.dataset.saleMinus,n=(selected.get(id)||0)-1;if(n>0)selected.set(id,n);else selected.delete(id);render();});
+   modal.querySelector('[data-sale-to-checkout]')?.addEventListener('click',()=>{if(!quantity())return;stage='checkout';render();});
    modal.querySelector('[data-sale-search-toggle]')?.addEventListener('click',()=>{showSearch=!showSearch;if(!showSearch)query='';render();if(showSearch)modal.querySelector('[data-sale-search]')?.focus();});
    modal.querySelector('[data-sale-search]')?.addEventListener('input',e=>{const caret=e.target.selectionStart;query=e.target.value;render();const next=modal.querySelector('[data-sale-search]');next?.focus();try{next?.setSelectionRange(caret,caret)}catch(_){}});
    modal.querySelector('[data-sale-default]')?.addEventListener('click',()=>{cat='promotion';duration='all';query='';favoritesOnly=false;render();});
@@ -38619,7 +38468,6 @@ function openBookingSale(a){
    modal.querySelectorAll('input[name="ndSalePay"]').forEach(input=>input.onchange=()=>{paymentMethod=input.value;});
  }
  render();
- void loadDraft();
  if(c?.id){void (async()=>{try{const result=await db.from('nd_pro_beta_customer_profiles').select('membership_level,tags').eq('customer_id',c.id).maybeSingle();if(result.error)throw result.error;if(modal.hidden)return;customerProfile=result.data;render();}catch(err){profileError=String(err?.message||err);console.warn('Customer tags not available for order entry:',profileError);}})();}
 }
 
