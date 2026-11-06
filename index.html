@@ -15131,7 +15131,8 @@ function renderFourteenTable(emps){
     const bonus=Number(c.bonus||0);
     const total=Number(c.total_commission||0);
     const wBonus=Number(c.w_bonus||0);
-    const canPayslip=Number(c.commission||0)>0;
+    // A confirmed 14th snapshot must remain viewable even when commission is zero or negative.
+    // The snapshot confirmation, not the amount, controls payslip availability.
     const net=Number(c.net_pay||0);
     const pm=String(e.payment_method||"").trim();
 
@@ -15156,7 +15157,7 @@ function renderFourteenTable(emps){
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-transfer="${e.id}">${pm==="Bank Transfer"?money(net):"—"}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-tng="${e.id}">${pm==="TNG"?money(net):"—"}</td>
       <td>${cs?`<span class="confirmed-pill">Confirmed</span>${String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()==="umo1017@gmail.com"?(cs.payment_done?` <span class="helper" title="Payment DONE: salary locked">Paid · Locked</span>`:` <button type="button" class="btn" data-reopen14="${e.id}">Reopen 14th</button>`):""}`:(String(currentSalaryUserEmail||currentUserEmail||"").trim().toLowerCase()==="umo1017@gmail.com"?`<button class="btn" data-confirm14="${e.id}">Confirm 14th</button> <button type="button" class="btn" data-reset14="${e.id}">Reset</button>`:`<span class="helper">View only</span>`)}</td>
-      <td>${salaryPayslipCell(e.id,14,!!cs && canPayslip)}</td>
+      <td>${salaryPayslipCell(e.id,14,!!cs)}</td>
       <td>${salaryPaymentMethodSelect(e)}</td>
       <td>${cs
         ? (cs.payment_done
