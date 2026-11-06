@@ -36428,7 +36428,7 @@ const safeNum=v=>Math.max(0,Number(v)||0);
 const idString=v=>String(v);
 const getEmail=()=>String(window.currentUserEmail||window.currentUser?.email||'').trim().toLowerCase();
 const fixedBranches=['Eco Botanic','Nusa Bestari'];
-let branch='Eco Botanic',month=monthNow(),staff=[],settlements=[],members=[],managers=new Map(),poolRate=1,poolDeduction=0,loading=false,sync=false;
+let branch='Eco Botanic',month=monthNow(),staff=[],settlements=[],quarterSettlements=[],members=[],managers=new Map(),poolRate=1,poolDeduction=0,loading=false,sync=false;
 const isEco=()=>branch==='Eco Botanic';
 const isSam=()=>getEmail()==='samchin6006@gmail.com';
 const managerCandidates=()=>{
@@ -36441,6 +36441,7 @@ const displayName=r=>r?.nickname||r?.name||String(r?.id||'');
 const managerName=id=>{const r=staff.find(x=>String(x.id)===String(id));return r?displayName(r):String(id)};
 const allowed=b=>['umo1017@gmail.com','samchin6006@gmail.com'].includes(getEmail())||staff.some(s=>s.outlet===b&&String(s.email||'').toLowerCase()===getEmail());
 const sales=()=>settlements.filter(x=>x.branch===branch).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
+const monthPerformance=(b,m)=>quarterSettlements.filter(x=>x.branch===b&&String(x.settlement_date||'').slice(0,7)===m).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
 const storageKey=(b,m)=>'nd_bonus_pool_v5_draft_'+encodeURIComponent(b)+'_'+m;
 const baseKey=b=>'nd_bonus_pool_v5_defaults_'+encodeURIComponent(b);
 function readLocal(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch{return null}}
@@ -36519,9 +36520,16 @@ function savedMonthSummary(b,m){
 function drawQuarterPreview(current){
  const months=quarterMonths(month),monthIndex=months.indexOf(month),payment=monthIndex===2;
  const entries=months.map((m,i)=>{
-  const data=m===month?{...snapshot(),monthlySales:sales()}:readLocal(storageKey(branch,m));
-  const value=m===month?{gross:current.gross,net:current.net,manager:current.manager}:savedMonthSummary(branch,m);
-  return {m,index:i,value,data};
+  const historical=readLocal(storageKey(branch,m));
+  const measuredSales=m===month?sales():monthPerformance(branch,m);
+  // Never rely on obsolete saved sales where actual cloud settlements exist.
+  // A missing monthly rate stays a preview, not a recorded agreement.
+  const data=m===month?{...snapshot(),monthlySales:measuredSales}:
+    historical?{...historical,monthlySales:measuredSales}:null;
+  const rate=data?(branch==='Eco Botanic'?1:Math.min(100,safeNum(data.poolRate??1))):null;
+  const value=m===month?{gross:current.gross,net:current.net,manager:current.manager}:
+    data?{gross:measuredSales*rate/100,net:Math.max(0,measuredSales*rate/100-safeNum(data.poolDeduction)),manager:safeNum(data.monthlyManagerBonus)}:null;
+  return {m,index:i,value,data,measuredSales,hasHistorical:!!historical};
  });
  const host=$('ndbdQuarterMonths');if(!host)return;
  // Each selected manager is presented separately. Preserve saved percentages
@@ -36532,13 +36540,17 @@ function drawQuarterPreview(current){
  const managerCards=list.map(id=>{
   const figures=entries.map(e=>{
    const pair=(e.data?.managers||[]).find(p=>String(p[0])===id);
-   const rate=pair?Math.min(100,safeNum(pair[1])):null;
-   const amt=rate===null?null:safeNum(e.data?.monthlySales)*rate/100;
-   return {...e,rate,amt};
+   // For elapsed months with no saved manager selection, show a clearly
+   // labelled provisional calculation at the CURRENT manager percentage.
+   // Never treat this as a saved monthly approval or payroll release.
+   const provisional=!pair&&e.m<month&&!e.hasHistorical&&managers.has(id);
+   const rate=pair?Math.min(100,safeNum(pair[1])):provisional?managers.get(id):null;
+   const amt=rate===null?null:e.measuredSales*rate/100;
+   return {...e,rate,amt,provisional};
   });
   const total=figures.reduce((sum,e)=>sum+(e.amt||0),0);
   const selectedRate=managers.has(id)?managers.get(id):[...figures].reverse().find(e=>e.rate!==null)?.rate;
-  return `<section class="ndbd-manager-quarter-card"><div class="ndbd-manager-quarter-title"><strong>${esc(managerName(id))}</strong><span>${selectedRate===undefined?'—':esc(selectedRate)+'%'}</span></div><div class="ndbd-manager-months">${figures.map(e=>`<div class="ndbd-manager-month ${e.m===month?'active':''}"><small>Month ${e.index+1}</small><small>${esc(e.m)}${e.rate===null?'':' · '+esc(e.rate)+'%'}</small><strong>${e.amt===null?'—':money(e.amt)}</strong></div>`).join('')}</div><div class="ndbd-manager-quarter-total"><span>Quarter Total</span><strong>${money(total)}</strong></div></section>`;
+  return `<section class="ndbd-manager-quarter-card"><div class="ndbd-manager-quarter-title"><strong>${esc(managerName(id))}</strong><span>${selectedRate===undefined?'—':esc(selectedRate)+'%'}</span></div><div class="ndbd-manager-months">${figures.map(e=>`<div class="ndbd-manager-month ${e.m===month?'active':''}"><small>Month ${e.index+1}</small><small>${esc(e.m)}${e.rate===null?'':' · '+esc(e.rate)+'%'}${e.provisional?' · Estimate':''}</small><strong>${e.amt===null?'—':money(e.amt)}</strong></div>`).join('')}</div><div class="ndbd-manager-quarter-total"><span>Quarter Total</span><strong>${money(total)}</strong></div></section>`;
  });
  // Eco Botanic: preserve each month's own selected staff, MC/target and
  // manager exclusion. Display only therapists selected in at least one month.
@@ -36597,7 +36609,7 @@ else if(eligible.length===0&&gross>0)showStatus('No eligible staff · Pool is no
 function renderBranch(){if($('ndbdChooseBranch'))$('ndbdChooseBranch').textContent=branch||'Select Branch';if($('ndbdManagersDialog'))$('ndbdManagersDialog').hidden=true;if($('ndbdStaffDialog'))$('ndbdStaffDialog').hidden=true;if($('ndbdBranchDialog'))$('ndbdBranchDialog').hidden=true;sync=true;members=staff.filter(x=>x.outlet===branch).map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),selected:true,mc:false,target:true}));applyState();$('ndbdTeamRate').value=poolRate;$('ndbdDeductAmount').value=poolDeduction;$('ndbdEcoBox').hidden=!isEco();$('ndbdTeamBox').hidden=isEco();drawManagers();drawStaff();sync=false;showStatus('')}
 const nextMonth=m=>{const [y,n]=m.split('-').map(Number);return n===12?(y+1)+'-01-01':y+'-'+String(n+1).padStart(2,'0')+'-01'};
 async function load(){mount();if(loading)return;loading=true;showStatus('Loading…');const client=db();if(!client){loading=false;showStatus('Sign in first');return}
-try{const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',month+'-01').lt('settlement_date',nextMonth(month)).limit(5000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);settlements=s.data||[];const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;$('ndbdBranchChoices').innerHTML=bs.map(b=>`<button type="button" data-bonus-branch="${esc(b)}">${esc(b)}</button>`).join('');if(!branch){showStatus('No branch access');return}renderBranch()}
+try{const qMonths=quarterMonths(month),qStart=qMonths[0]+'-01',qEnd=nextMonth(qMonths[2]);const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',qStart).lt('settlement_date',qEnd).limit(20000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);quarterSettlements=s.data||[];settlements=quarterSettlements.filter(x=>String(x.settlement_date||'').slice(0,7)===month);const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;$('ndbdBranchChoices').innerHTML=bs.map(b=>`<button type="button" data-bonus-branch="${esc(b)}">${esc(b)}</button>`).join('');if(!branch){showStatus('No branch access');return}renderBranch()}
 catch(e){showStatus('Unable to load: '+(e?.message||e))}finally{loading=false}}
 window.ndOpenBranchBonusDistribution=async()=>{mount();await load()};
 document.addEventListener('nd-bonus-open',()=>{if(document.body.dataset.ndVisiblePage==='bonus'&&$('bonusPage')?.classList.contains('nd-ledger-mode'))void window.ndOpenBranchBonusDistribution()});
