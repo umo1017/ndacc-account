@@ -12699,16 +12699,17 @@ function ndFourteenUpdateTotals(c,seven){
     ? savedActual : ndSevenAdjustedAllowance(seven||{}));
   c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
   c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
-  // User-defined 14th formula, applied ONLY to draft computations:
-  // Total Commission - 7th Net Pay + 7th Deducted + Allowance
-  // = Commission = Nett Pay.
-  // '7th Deducted' references the stored 7th total_deduction;
-  // 'Allowance' references the actual adjusted 7th allowance.
-  // Confirmed historical snapshots remain immutable.
+  // User-confirmed 14th formula, for draft calculations ONLY:
+  // Nett Pay = Total Commission - 7th Net Pay
+  //          - 7th Deducted Allowance - Allowance.
+  // Deducted Allowance = original 7th Allowance - adjusted 7th Allowance.
+  // Allowance = adjusted 7th Allowance. Neither item adds money back.
+  // Statutory EPF/SOCSO/EIS/PCB deductions are NOT used as deducted allowance.
+  // Confirmed historical snapshots remain unchanged.
   c.seventh_deducted_allowance=c.allowance_difference;
   c.raw_commission=cents(c.total_commission-costs.seventh_net_pay);
-  c.seventh_deduction_refund=cents(costs.seventh_total_deduction);
-  c.commission=cents(c.raw_commission+c.seventh_deduction_refund+c.adjusted_allowance);
+  c.seventh_deduction_refund=0; // Legacy field; not a refund under this formula.
+  c.commission=cents(c.raw_commission-c.seventh_deducted_allowance-c.adjusted_allowance);
   c.total_income=c.total_commission;
   c.net_pay=c.commission;
   c.has_payslip=true;
@@ -15066,7 +15067,7 @@ function renderSevenTable(emps){
   return `<div class="salary-table-wrap"><table class="salary-table">
     <thead>
       <tr>
-        <th rowspan="2">Name</th><th rowspan="2">Off Day</th><th rowspan="2">Basic Pay</th><th rowspan="2">Allowance</th>
+        <th rowspan="2">Name</th><th rowspan="2">Off Day</th><th rowspan="2">Basic Pay</th><th rowspan="2">− Allowance</th>
         <th rowspan="2">Employee EPF</th><th rowspan="2">Employer EPF</th>
         <th rowspan="2" title="Includes Lindung 24 Jam">Employee SOCSO + L24</th><th rowspan="2">Employer SOCSO</th>
         <th rowspan="2">Employee EIS</th><th rowspan="2">Employer EIS</th>
@@ -15167,8 +15168,8 @@ function renderFourteenTable(emps){
       <td>${money(bonus3)}</td>
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
       <td>${money(c.seventh_net_pay||0)}</td>
-      <td>${money(c.seventh_total_deduction||0)}</td>
-      <td title="7th Actual Allowance" data-live-seven-deducted14="${e.id}">${money(c.adjusted_allowance||0)}</td>
+      <td title="Original 7th Allowance minus adjusted 7th Allowance">${money(c.seventh_deducted_allowance||0)}</td>
+      <td title="Allowance deducted from 14th (7th adjusted Allowance)" data-live-seven-deducted14="${e.id}">${money(c.adjusted_allowance||0)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
@@ -15197,8 +15198,8 @@ function renderFourteenTable(emps){
       <th rowspan="2">Target Bonus (Monthly)</th>
       <th rowspan="2">Bonus3 (Quarterly)</th>
       <th rowspan="2">Total Commission</th>
-      <th rowspan="2">7th Net Pay</th>
-      <th rowspan="2">7th Deducted</th>
+      <th rowspan="2">− 7th Net Pay</th>
+      <th rowspan="2">− 7th Deducted Allowance</th>
       <th rowspan="2">Allowance</th>
       <th rowspan="2">Commission</th>
       <th rowspan="2">Nett Pay</th><th colspan="3" class="netpay-group-head">Net Pay by Method</th><th rowspan="2">Confirm</th><th rowspan="2">14th Commission Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
@@ -15941,7 +15942,7 @@ function recalc14thLive(empId){
   const deductedCell=document.querySelector(`[data-live-seven-deducted14="${empId}"]`);
   if(deductedCell){
     deductedCell.textContent=money(calc.adjusted_allowance);
-    deductedCell.title='7th Actual Allowance';
+    deductedCell.title='Allowance deducted from 14th (7th adjusted Allowance)';
   }
 
   const commissionCell=document.querySelector(`[data-live-commission="${empId}"]`);
