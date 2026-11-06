@@ -5241,6 +5241,48 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 #ndbdTeamBox .ndbd-pool-balance>div:last-child strong{color:#187447}
 @media(max-width:380px){#ndbdTeamBox .ndbd-pool-balance{grid-template-columns:1fr}}
 </style>
+<style id="nd-pay-slip-account-visible-20261106">
+/* Override the old 7th-payslip rule that hides .payslip-transfer-details. */
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-received .payslip-transfer-details,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-received .payslip-transfer-details{
+  display:block!important;
+  visibility:visible!important;
+  position:static!important;
+  font-size:10px!important;
+  line-height:1.35!important;
+  margin:7px 0 0!important;
+  padding:5px 0 0!important;
+  border-top:1px solid #b9c0bb!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  height:auto!important;
+  overflow:visible!important;
+  white-space:normal!important;
+  break-inside:avoid!important;
+}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-received .payslip-transfer-details .detail-row,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-received .payslip-transfer-details .detail-row{
+  display:block!important;
+  margin:0 0 5px!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+}
+#salaryPayslipPrint .payslip-sheet .payslip-transfer-details .detail-k{
+  display:block!important;
+  font-weight:800!important;
+}
+#salaryPayslipPrint .payslip-sheet .payslip-transfer-details .detail-v{
+  display:block!important;
+  font-weight:500!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-received{white-space:normal!important;overflow:visible!important}
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-bottom,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-bottom-section,
+#salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-received{overflow:visible!important}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -17649,22 +17691,20 @@ function metaRows(e,type){
 
 
 function payslipTransferDetailsHtml(e){
-  const method=String(e.payment_method||"");
-  if(method!=="Bank Transfer" && method!=="TNG") return "";
-
-  const transferRows = method==="Bank Transfer"
-    ? `
-      <div class="detail-row"><div class="detail-k">Bank Name</div><div>${e.bank_name||"-"}</div></div>
-      <div class="detail-row"><div class="detail-k">Bank Account</div><div>${e.bank_account||"-"}</div></div>`
-    : `
-      <div class="detail-row"><div class="detail-k">TNG Account</div><div>${e.bank_account||e.phone||"-"}</div></div>`;
-
-  return `
-    <div class="payslip-transfer-details">
-      ${transferRows}
-    </div>`;
+  // Independent escaping: this payroll module does not expose esc().
+  const safe=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const method=String(e.payment_method||'').trim().toLowerCase();
+  const isBank=/bank|transfer/.test(method),isTng=/tng|touch.?n.?go/.test(method);
+  if(!isBank&&!isTng)return '';
+  const bank=String(e.bank_name||e.bankName||'').trim();
+  const account=String(e.bank_account||e.bank_account_no||e.bank_account_number||e.bankAccount||'').trim();
+  const number=isTng?(account||String(e.phone||e.contact_number||'').trim()):account;
+  return `<div class="payslip-transfer-details" aria-label="Payment account details">
+    ${isBank?`<div class="detail-row"><span class="detail-k">Bank Name</span><span class="detail-v">${safe(bank||'-')}</span></div>
+    <div class="detail-row"><span class="detail-k">Bank Account</span><span class="detail-v">${safe(account||'-')}</span></div>`:
+    `<div class="detail-row"><span class="detail-k">TNG Account</span><span class="detail-v">${safe(number||'-')}</span></div>`}
+  </div>`;
 }
-
 
 function payslipAmount(value){
   const n=Number(value||0);
@@ -17778,7 +17818,8 @@ async function openPayslip(empId,type){
 
   <div class="ref-received">
     <div>RECEIVED BY</div>
-    <div style="margin-top:18px">PAY BY : ${e.payment_method||""}</div>
+    <div style="margin-top:6px">PAY BY : ${e.payment_method||""}</div>
+    ${payslipTransferDetailsHtml(e)}
   </div>
 </div>
 
@@ -17821,7 +17862,7 @@ async function openPayslip(empId,type){
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
 <div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}<div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
 <div class="payslip-net-grid"><div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div></div>
-<div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
+<div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div>${payslipTransferDetailsHtml(e)}</div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>
 </div>`;
   }
   byId("payslipModal").classList.add("open");
