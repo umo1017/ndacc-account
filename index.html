@@ -12676,10 +12676,17 @@ function ndFourteenUpdateTotals(c,seven){
   const cents=v=>Math.round((Number(v)||0)*100)/100;
   const costs=ndFourteenSevenCosts(seven);
   Object.assign(c,costs);
+  // Six components: Commission A/B, Customer/Staff Referral,
+  // monthly Target Bonus, and quarterly Bonus3 (released in Month 3).
+  // Existing database column `bonus` stores their combined amount for compatibility.
+  c.target_bonus=cents(c.target_bonus!==undefined?c.target_bonus:(Number(c.bonus||0)-Number(c.three_month_bonus||0)));
+  c.bonus3=cents(c.bonus3!==undefined?c.bonus3:Number(c.three_month_bonus||0));
+  c.three_month_bonus=c.bonus3;
+  c.bonus=cents(c.target_bonus+c.bonus3);
   c.total_commission=cents(
     Number(c.commission_a||0)+Number(c.commission_b||0)+
     Number(c.customer_referral||0)+Number(c.staff_referral||0)+
-    Number(c.bonus||0)
+    c.target_bonus+c.bonus3
   );
   c.company_expense=cents(costs.employer_epf+costs.employer_socso+costs.employer_eis);
   // Auto-sync from the SAME MONTH's stored 7th Salary snapshot.
@@ -12692,18 +12699,19 @@ function ndFourteenUpdateTotals(c,seven){
     ? savedActual : ndSevenAdjustedAllowance(seven||{}));
   c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
   c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
-  // 14th Salary: Total Commission is the sum of five editable inputs.
-  // Commission = Total Commission - 7th Net Pay.
-  // Nett Pay = Commission - 7th Total Deduction - 7th Deducted Allowance.
-  // 7th Deducted Allowance = original 7th allowance - adjusted 7th allowance.
-  // Keep confirmed historical snapshots unchanged; only recalculate drafts.
+  // User-defined 14th formula, applied ONLY to draft computations:
+  // Total Commission - 7th Net Pay + 7th Deducted + Allowance
+  // = Commission = Nett Pay.
+  // '7th Deducted' references the stored 7th total_deduction;
+  // 'Allowance' references the actual adjusted 7th allowance.
+  // Confirmed historical snapshots remain immutable.
   c.seventh_deducted_allowance=c.allowance_difference;
   c.raw_commission=cents(c.total_commission-costs.seventh_net_pay);
-  c.commission=c.raw_commission;
-  c.seventh_deduction_refund=0;
+  c.seventh_deduction_refund=cents(costs.seventh_total_deduction);
+  c.commission=cents(c.raw_commission+c.seventh_deduction_refund+c.adjusted_allowance);
   c.total_income=c.total_commission;
-  c.net_pay=cents(c.commission-costs.seventh_total_deduction-c.seventh_deducted_allowance);
-  c.has_payslip=c.net_pay>0;
+  c.net_pay=c.commission;
+  c.has_payslip=true;
   return c;
 }
 function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryManualOverrides){
@@ -12711,7 +12719,7 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
   const c={...base};
   const empId=Number(e?.id||base?.employee_id||0);
   // Only the editable 14th inputs may override the calculated values.
-  for(const field of ["commission_a","commission_b","customer_referral","staff_referral","bonus"]){
+  for(const field of ["commission_a","commission_b","customer_referral","staff_referral"]){
     if(salaryOverrideHas(empId,"14",field,salaryMonth,source)){
       c[field]=salaryOverrideValue(empId,"14",field,c[field],salaryMonth,source);
     }
@@ -12981,13 +12989,17 @@ function calculate14th(m={},snapshot=null,threeBonus=0){
   const staff=Number(m.staff_referral||0);
   // Target Bonus every month; quarterly bonus is added only in the quarter's payout month.
   // The bonus_is_total flag prevents adding quarterly bonus twice to confirmed snapshots.
-  const bonus=m.bonus_is_total===true
-    ? Number(m.reward||0)
-    : Number(m.reward||0)+Number(threeBonus||0);
+  const bonus3=m.bonus_is_total===true
+    ? Number(m.three_month_bonus??threeBonus??0)
+    : Number(threeBonus||0);
+  const targetBonus=m.bonus_is_total===true
+    ? Number(m.reward||0)-bonus3
+    : Number(m.reward||0);
   return ndFourteenUpdateTotals({
     commission_a:commissionA, commission_b:commissionB,
     customer_referral:customer, staff_referral:staff,
-    bonus, three_month_bonus:0, w_bonus:0
+    target_bonus:targetBonus, bonus3,
+    bonus:targetBonus+bonus3, three_month_bonus:bonus3, w_bonus:0
   },snapshot);
 }
 
@@ -15123,12 +15135,17 @@ function renderFourteenTable(emps){
           w_bonus:Number(cs.w_bonus||0)
         },snapshotFor(e.id),threeBonus)
       : calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(e.id),threeBonus);
-    const c=cs ? {...cs,...ndFourteenSevenCosts(snapshotFor(e.id))} : applyFourteenManualOverrides(e,base14);
+    const c=cs
+      ? {...cs,...ndFourteenSevenCosts(snapshotFor(e.id)),
+         target_bonus:Number(cs.bonus||0)-Number(cs.three_month_bonus||0),
+         bonus3:Number(cs.three_month_bonus||0)}
+      : applyFourteenManualOverrides(e,base14);
     const a=Number(c.commission_a||0);
     const b=Number(c.commission_b||0);
     const customer=Number(c.customer_referral||0);
     const staff=Number(c.staff_referral||0);
-    const bonus=Number(c.bonus||0);
+    const bonus=Number(c.target_bonus??(Number(c.bonus||0)-Number(c.three_month_bonus||0)));
+    const bonus3=Number(c.bonus3??c.three_month_bonus??0);
     const total=Number(c.total_commission||0);
     const wBonus=Number(c.w_bonus||0);
     // A confirmed 14th snapshot must remain viewable even when commission is zero or negative.
@@ -15146,11 +15163,12 @@ function renderFourteenTable(emps){
       <td>${cs?money(b):salaryOverrideInput(e.id,"14","commission_b",b)}</td>
       <td>${cs?money(customer):salaryOverrideInput(e.id,"14","customer_referral",customer)}</td>
       <td>${cs?money(staff):salaryOverrideInput(e.id,"14","staff_referral",staff)}</td>
-      <td>${cs?money(bonus):salaryOverrideInput(e.id,"14","bonus",bonus)}</td>
+      <td title="Monthly Target Bonus (automatically calculated)">${money(bonus)}</td>
+      <td>${money(bonus3)}</td>
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
       <td>${money(c.seventh_net_pay||0)}</td>
       <td>${money(c.seventh_total_deduction||0)}</td>
-      <td title="7th Original Allowance: ${money(c.original_allowance ?? snapshotFor(e.id)?.allowance ?? 0)} | 7th Actual Allowance: ${money(c.adjusted_allowance ?? ndSevenAdjustedAllowance(snapshotFor(e.id)||{}))}" data-live-seven-deducted14="${e.id}">${money(c.seventh_deducted_allowance ?? c.allowance_difference ?? 0)}</td>
+      <td title="7th Actual Allowance" data-live-seven-deducted14="${e.id}">${money(c.adjusted_allowance||0)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
@@ -15176,11 +15194,12 @@ function renderFourteenTable(emps){
       <th rowspan="2">Commission B</th>
       <th rowspan="2">Customer Referral</th>
       <th rowspan="2">Staff Referral</th>
-      <th rowspan="2">Bonus</th>
+      <th rowspan="2">Target Bonus (Monthly)</th>
+      <th rowspan="2">Bonus3 (Quarterly)</th>
       <th rowspan="2">Total Commission</th>
       <th rowspan="2">7th Net Pay</th>
-      <th rowspan="2">7th Total Deduction</th>
-      <th rowspan="2">7th Deducted Allowance</th>
+      <th rowspan="2">7th Deducted</th>
+      <th rowspan="2">Allowance</th>
       <th rowspan="2">Commission</th>
       <th rowspan="2">Nett Pay</th><th colspan="3" class="netpay-group-head">Net Pay by Method</th><th rowspan="2">Confirm</th><th rowspan="2">14th Commission Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
     </tr><tr>
@@ -15189,7 +15208,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="12" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="13" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -15921,9 +15940,8 @@ function recalc14thLive(empId){
 
   const deductedCell=document.querySelector(`[data-live-seven-deducted14="${empId}"]`);
   if(deductedCell){
-    deductedCell.textContent=money(calc.seventh_deducted_allowance);
-    deductedCell.title='7th Original Allowance: '+money(calc.original_allowance)
-      +' | 7th Actual Allowance: '+money(calc.adjusted_allowance);
+    deductedCell.textContent=money(calc.adjusted_allowance);
+    deductedCell.title='7th Actual Allowance';
   }
 
   const commissionCell=document.querySelector(`[data-live-commission="${empId}"]`);
@@ -17855,10 +17873,7 @@ async function openPayslip(empId,type){
       c.total_income=Number(c.net_pay??0);
     }
 
-    if(Number(c.net_pay||0)<=0){
-      alert("Commission is RM 0.00. No 14th payslip.");
-      return false;
-    }
+    // A confirmed 14th payslip is viewable even when Nett Pay is zero or negative.
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet payslip-14-reference" data-payslip-type="14th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
 <div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}<div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
