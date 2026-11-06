@@ -36426,6 +36426,25 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 @media(max-width:430px){#ndBonusDistribution .ndbd-manager-month{padding:9px 6px}#ndBonusDistribution .ndbd-manager-month strong{font-size:12px}}
 #ndBonusDistribution .ndbd-sam-rates{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 10px}#ndBonusDistribution .ndbd-sam-rates small{padding:4px 7px;border-radius:8px;background:#f0f5fc;color:#3d638b;font-size:11px;font-weight:700}#ndBonusDistribution .ndbd-sam-line{display:flex;flex-direction:column;border-bottom:1px solid #dce7f5;padding:5px 0;gap:3px;min-width:0}#ndBonusDistribution .ndbd-sam-line small{font-size:10px;color:#61728a;line-height:1.3;overflow-wrap:anywhere}#ndBonusDistribution .ndbd-sam-line small:last-child{font-weight:750;color:#305885}#ndBonusDistribution .ndbd-sam-cross-branch .ndbd-manager-month>strong{margin-top:auto;padding-top:5px}
 </style>
+<style id="nd-staff-bonus-deduction-history-20261106">
+#ndBonusDistribution .ndbd-deduction-panel{padding:16px;border:1px solid #dce5ed;border-radius:17px;background:#fff;margin:12px 0}
+#ndBonusDistribution .ndbd-deduct-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+#ndBonusDistribution .ndbd-deduct-form .ndbd-deduct-wide{grid-column:1/-1}
+#ndBonusDistribution .ndbd-deduct-form label{font-size:13px;color:#536474;margin:0}
+#ndBonusDistribution .ndbd-deduct-form input,#ndBonusDistribution .ndbd-deduct-form select{width:100%;max-width:100%;min-height:43px;margin-top:6px}
+#ndBonusDistribution #ndbdDeductSubmit{grid-column:1/-1;min-height:46px;border:0;border-radius:12px;background:#2b69c9;color:white;font-weight:800;cursor:pointer}
+#ndBonusDistribution #ndbdDeductSubmit:disabled{opacity:.5}
+#ndBonusDistribution .ndbd-deduct-summary{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:16px 0;padding:12px;border-radius:12px;background:#f2f6fb}
+#ndBonusDistribution .ndbd-deduct-summary span{font-size:12px;color:#536474}
+#ndBonusDistribution .ndbd-deduct-summary strong{display:block;color:#224363;font-size:16px;margin-top:5px}
+#ndBonusDistribution .ndbd-deduct-history{display:flex;flex-direction:column;gap:8px}
+#ndBonusDistribution .ndbd-deduct-row{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #e6eaf0}
+#ndBonusDistribution .ndbd-deduct-row>div{min-width:0}
+#ndBonusDistribution .ndbd-deduct-row strong{font-size:13px;color:#244057}
+#ndBonusDistribution .ndbd-deduct-row small{display:block;font-size:11px;color:#728094;margin-top:4px;overflow-wrap:anywhere}
+#ndBonusDistribution #ndbdDeductReload{min-height:34px;font-size:12px}
+#ndBonusDistribution #ndbdDeductStatus{display:block;color:#7a6045;font-size:12px;line-height:1.45;margin-top:10px}
+</style>
 <script id="nd-bonus-distribution-v1-js">
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
@@ -36438,7 +36457,7 @@ const safeNum=v=>Math.max(0,Number(v)||0);
 const idString=v=>String(v);
 const getEmail=()=>String(window.currentUserEmail||window.currentUser?.email||'').trim().toLowerCase();
 const fixedBranches=['Eco Botanic','Nusa Bestari'];
-let branch='Eco Botanic',month=monthNow(),staff=[],settlements=[],quarterSettlements=[],members=[],managers=new Map(),poolRate=1,poolDeduction=0,loading=false,sync=false;
+let branch='Eco Botanic',month=monthNow(),staff=[],settlements=[],quarterSettlements=[],members=[],managers=new Map(),poolRate=1,poolDeduction=0,loading=false,sync=false,deductions=[],deductionReady=false,submitBusy=false;
 const isEco=()=>branch==='Eco Botanic';
 const isSam=()=>getEmail()==='samchin6006@gmail.com';
 const managerCandidates=()=>{
@@ -36458,12 +36477,12 @@ const baseKey=b=>'nd_bonus_pool_v5_defaults_'+encodeURIComponent(b);
 function readLocal(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch{return null}}
 function writeLocal(key,v){try{localStorage.setItem(key,JSON.stringify(v));return true}catch{return false}}
 function showStatus(t){const el=$('ndbdStatus');if(el)el.textContent=t}
-function snapshot(){return {managers:[...managers.entries()],staff:members.map(r=>({id:r.id,selected:r.selected,mc:r.mc,target:r.target})),poolRate,poolDeduction};}
+function snapshot(){return {managers:[...managers.entries()],staff:members.map(r=>({id:r.id,selected:r.selected,mc:r.mc,target:r.target})),poolRate,poolDeduction:0};}
 function saveDraft(){if(sync||!branch)return;const v=snapshot();v.monthlySales=sales();v.monthlyManagerBonus=[...managers.values()].reduce((a,p)=>a+sales()*p/100,0);const good=writeLocal(storageKey(branch,month),v);writeLocal(baseKey(branch),{managers:v.managers,staff:v.staff,poolRate:v.poolRate});showStatus(good?'Saved on this browser only · Not posted to payroll':'Preview only · Browser storage unavailable');}
 function applyState(){const v=readLocal(storageKey(branch,month))||readLocal(baseKey(branch));managers=new Map();poolRate=isEco()?1:1;poolDeduction=0;
 if(v){for(const pair of v.managers||[]){const id=String(pair[0]);if(managerCandidates().some(r=>String(r.id)===id))managers.set(id,Math.min(100,safeNum(pair[1])))}
 for(const x of v.staff||[]){const r=members.find(r=>String(r.id)===String(x.id));if(!r)continue;r.selected=!!x.selected;r.mc=!!x.mc;r.target=x.target!==false}
-poolRate=isEco()?1:Math.min(100,safeNum(v.poolRate??1));poolDeduction=Math.max(0,safeNum(readLocal(storageKey(branch,month))?.poolDeduction??0));}
+poolRate=isEco()?1:Math.min(100,safeNum(v.poolRate??1));poolDeduction=deductions.filter(x=>x.branch===branch&&x.bonus_month===month+'-01').reduce((n,x)=>n+Number(x.amount||0),0);}
 }
 function mount(){if($('ndBonusDistribution'))return;const shell=$('bonusPage')?.querySelector('.bonus-shell');if(!shell)return;
 const el=document.createElement('section');el.id='ndBonusDistribution';el.innerHTML=`
@@ -36476,7 +36495,7 @@ const el=document.createElement('section');el.id='ndBonusDistribution';el.innerH
 <div id="ndbdEcoBox"><div class="ndbd-heading"><h3>Branch Staff · 1%</h3><button type="button" id="ndbdEditStaff">Select Therapists</button></div></div>
 <div id="ndbdTeamBox"><h3>Staff Bonus Pool</h3><label>Staff Total Bonus % <input id="ndbdTeamRate" type="number" min="0" max="100" step="0.01" value="1"></label><div class="ndbd-pool-balance"><div><span>Total Staff Bonus Pool</span><strong id="ndbdPoolQuarterTotal">RM 0.00</strong></div><div><span>Remaining Staff Bonus</span><strong id="ndbdPoolQuarterRemain">RM 0.00</strong></div></div></div>
 <div class="ndbd-scroll ndbd-results"><table><thead><tr id="ndbdHeader"></tr></thead><tbody id="ndbdRows"></tbody></table></div>
-<h3>Staff Bonus Deduction</h3><div class="ndbd-controls"><label>Deduction (RM)<input id="ndbdDeductAmount" type="number" min="0" step="0.01" value="0"></label></div>
+<h3>Staff Bonus Deduction</h3><div class="ndbd-deduction-panel"><div class="ndbd-deduct-form"><label>Item<input id="ndbdDeductItem" type="text" list="ndbdDeductItemOptions" maxlength="120" placeholder="Enter deduction item" autocomplete="off"><datalist id="ndbdDeductItemOptions"><option value="Company Fine"><option value="Staff Pool Adjustment"><option value="Damage / Loss"><option value="Other"></datalist></label><label>Amount (RM)<input id="ndbdDeductAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label><label class="ndbd-deduct-wide">Reason / Description<input id="ndbdDeductReason" type="text" maxlength="500" placeholder="Enter deduction reason"></label><button type="button" id="ndbdDeductSubmit">Submit Deduction</button></div><div class="ndbd-deduct-summary"><span>Monthly Deduction <strong id="ndbdDeductMonthTotal">RM 0.00</strong></span><span>Quarterly Deduction <strong id="ndbdDeductQuarterTotal">RM 0.00</strong></span></div><div class="ndbd-heading"><h4>Deduction History</h4><button type="button" id="ndbdDeductReload">Refresh History</button></div><div id="ndbdDeductHistory" class="ndbd-deduct-history">Loading records…</div><small id="ndbdDeductStatus" role="status"></small></div>
 <div class="ndbd-overview" id="ndbdEcoTotals"><div>Eligible Staff<strong id="ndbdEligible">0</strong></div><div>Bonus Per Person<strong id="ndbdPerPerson">RM 0.00</strong></div></div>
 
 <div id="ndbdBranchDialog" class="ndbd-dialog" hidden><div class="ndbd-dialog-panel"><div class="ndbd-heading"><h3>Select Branch</h3><button type="button" id="ndbdCloseBranch">Done</button></div><div id="ndbdBranchChoices" class="ndbd-choice-list"></div></div></div>
@@ -36486,19 +36505,20 @@ const el=document.createElement('section');el.id='ndBonusDistribution';el.innerH
 shell.append(el);$('ndbdMonth').value=month;
 $('ndbdChooseBranch').addEventListener('click',()=>{$('ndbdBranchDialog').hidden=false});
 $('ndbdCloseBranch').addEventListener('click',()=>{$('ndbdBranchDialog').hidden=true});
-$('ndbdBranchChoices').addEventListener('click',e=>{const btn=e.target.closest('[data-bonus-branch]');if(!btn)return;branch=btn.dataset.bonusBranch;$('ndbdBranch').value=branch;$('ndbdBranchDialog').hidden=true;renderBranch()});
+$('ndbdBranchChoices').addEventListener('click',e=>{const btn=e.target.closest('[data-bonus-branch]');if(!btn)return;branch=btn.dataset.bonusBranch;$('ndbdBranch').value=branch;$('ndbdBranchDialog').hidden=true;renderBranch();void loadDeductionHistory()});
 $('ndbdEditManagers').addEventListener('click',()=>{$('ndbdManagersDialog').hidden=false});
 $('ndbdCloseManagers').addEventListener('click',()=>{$('ndbdManagersDialog').hidden=true;drawManagers();drawStaff()});
 $('ndbdEditStaff').addEventListener('click',()=>{$('ndbdStaffDialog').hidden=false;drawStaff()});
 $('ndbdCloseStaff').addEventListener('click',()=>{$('ndbdStaffDialog').hidden=true;drawStaff()});
 for(const id of ['ndbdBranchDialog','ndbdManagersDialog','ndbdStaffDialog'])$(id).addEventListener('click',e=>{if(e.target===e.currentTarget){e.currentTarget.hidden=true;drawManagers();drawStaff()}});
 $('ndbdMonth').addEventListener('change',e=>{month=e.target.value;void load()});
-$('ndbdBranch').addEventListener('change',e=>{branch=e.target.value;renderBranch()});
+$('ndbdBranch').addEventListener('change',e=>{branch=e.target.value;renderBranch();void loadDeductionHistory()});
 $('ndbdManagers').addEventListener('change',e=>{const row=e.target.closest('[data-manager-id]');if(!row||e.target.dataset.field!=='managerCheck')return;const id=String(row.dataset.managerId);if(e.target.checked)managers.set(id,0);else managers.delete(id);drawManagers();drawStaff();saveDraft()});
 $('ndbdManagers').addEventListener('input',e=>{const row=e.target.closest('[data-manager-id]');if(!row||e.target.dataset.field!=='managerRate')return;const id=String(row.dataset.managerId);if(managers.has(id)){managers.set(id,Math.min(100,safeNum(e.target.value)));calculate();saveDraft()}});
 $('ndbdStaffEditor').addEventListener('change',e=>{const tr=e.target.closest('[data-staff-id]');if(!tr)return;const r=members.find(x=>String(x.id)===tr.dataset.staffId);if(!r)return;const field=e.target.dataset.field;if(field==='selected')r.selected=e.target.checked;else if(field==='mc')r.mc=e.target.checked;else if(field==='target')r.target=e.target.checked;drawStaff();saveDraft()});
 $('ndbdTeamRate').addEventListener('input',e=>{poolRate=Math.min(100,safeNum(e.target.value));calculate();saveDraft()});
-$('ndbdDeductAmount').addEventListener('input',e=>{poolDeduction=safeNum(e.target.value);calculate();saveDraft()});
+$('ndbdDeductSubmit').addEventListener('click',()=>void submitDeduction());
+$('ndbdDeductReload').addEventListener('click',()=>void loadDeductionHistory());
 $('ndbdRefresh').addEventListener('click',()=>void load());
 $('ndbdCopy').addEventListener('click',()=>{const lines=[branch+' · '+month,'Total performance: '+money(sales()),...Array.from(managers,([id,rate])=>{return 'Manager '+managerName(id)+' · '+rate+'%: '+money(sales()*rate/100)}),'Staff pool: '+$('ndbdPoolGross').textContent,'Staff pool deduction: '+money(poolDeduction),'Staff pool after deduction: '+$('ndbdNetStaff').textContent,'Eligible staff: '+$('ndbdEligible').textContent,'Per person: '+$('ndbdPerPerson').textContent];navigator.clipboard?.writeText(lines.join('\n'));showStatus('Summary copied (if clipboard allowed).')});
 }
@@ -36539,7 +36559,7 @@ function drawQuarterPreview(current){
     historical?{...historical,monthlySales:measuredSales}:null;
   const rate=data?(branch==='Eco Botanic'?1:Math.min(100,safeNum(data.poolRate??1))):null;
   const value=m===month?{gross:current.gross,net:current.net,manager:current.manager}:
-    data?{gross:measuredSales*rate/100,net:Math.max(0,measuredSales*rate/100-safeNum(data.poolDeduction)),manager:safeNum(data.monthlyManagerBonus)}:null;
+    data?{gross:measuredSales*rate/100,net:Math.max(0,measuredSales*rate/100-(deductionReady?deductionForMonth(branch,m):safeNum(data.poolDeduction))),manager:safeNum(data.monthlyManagerBonus)}:null;
   return {m,index:i,value,data,measuredSales,hasHistorical:!!historical};
  });
  const host=$('ndbdQuarterMonths');if(!host)return;
@@ -36608,7 +36628,8 @@ function drawQuarterPreview(current){
   const rows=(e.data.staff||[]).filter(r=>r.selected&&!selectedManagers.has(String(r.id)));
   const qualified=rows.filter(r=>!r.mc&&r.target!==false).sort((a,b)=>Number(a.id)-Number(b.id));
   const gross=safeNum(e.data.monthlySales)*0.01;
-  const distributable=Math.max(0,gross-Math.max(0,safeNum(e.data.poolDeduction)));
+  const effectiveDeduction=deductionReady?deductionForMonth(branch,e.m):Math.max(0,safeNum(e.data.poolDeduction));
+  const distributable=Math.max(0,gross-effectiveDeduction);
   const cents=Math.round(distributable*100),base=qualified.length?Math.floor(cents/qualified.length):0;
   const remainder=qualified.length?cents%qualified.length:0;
   const amounts=new Map(qualified.map((r,i)=>[String(r.id),(base+(i<remainder?1:0))/100]));
@@ -36642,6 +36663,45 @@ function drawQuarterPreview(current){
  $('ndbdQuarterRelease').textContent=payment?'Month 3 · '+money(net):'Month 3';
  $('ndbdQuarterStatus').textContent='';
 }
+function deductionForMonth(b,m){return deductions.filter(x=>x.branch===b&&x.bonus_month===m+'-01').reduce((sum,r)=>sum+Number(r.amount||0),0)}
+function renderDeductionHistory(){
+ const host=$('ndbdDeductHistory');if(!host)return;
+ const quarter=quarterMonths(month);
+ const rows=deductions.filter(x=>x.branch===branch&&quarter.includes(String(x.bonus_month||'').slice(0,7)));
+ const total=rows.reduce((n,x)=>n+Number(x.amount||0),0);
+ const current=deductionForMonth(branch,month);
+ if($('ndbdDeductMonthTotal'))$('ndbdDeductMonthTotal').textContent=money(current);
+ if($('ndbdDeductQuarterTotal'))$('ndbdDeductQuarterTotal').textContent=money(total);
+ if(!deductionReady){host.textContent='Run Staff Bonus Deduction SQL, then refresh to enable submissions.';return;}
+ host.innerHTML=rows.length?rows.map(r=>`<div class="ndbd-deduct-row"><div><strong>${esc(r.item)}</strong><small>${esc(r.bonus_month.slice(0,7))} · ${esc(new Date(r.created_at).toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'}))}</small><small>${esc(r.reason)}</small></div><strong>${money(r.amount)}</strong></div>`).join(''):'<p>No deductions submitted this quarter.</p>';
+}
+async function loadDeductionHistory(){
+ const c=db(),label=$('ndbdDeductStatus');if(!c)return;
+ if(label)label.textContent='Loading deduction history…';
+ const q=quarterMonths(month);
+ const r=await c.from('nd_staff_bonus_deductions').select('id,branch,bonus_month,item,reason,amount,created_at,created_by').gte('bonus_month',q[0]+'-01').lte('bonus_month',q[2]+'-01').order('created_at',{ascending:false}).limit(5000);
+ if(r.error){deductionReady=false;deductions=[];if(label)label.textContent='Unable to load deduction history: '+r.error.message;renderDeductionHistory();return}
+ deductions=r.data||[];deductionReady=true;
+ poolDeduction=deductionForMonth(branch,month);renderDeductionHistory();calculate();
+ if(label)label.textContent='';
+}
+async function submitDeduction(){
+ if(submitBusy)return;
+ const c=db(),item=String($('ndbdDeductItem')?.value||'').trim(),amount=Number($('ndbdDeductAmount')?.value),reason=String($('ndbdDeductReason')?.value||'').trim(),label=$('ndbdDeductStatus');
+ if(!c||!deductionReady){if(label)label.textContent='Load deduction history first. SQL setup may be missing.';return}
+ if(!item||item.length>120||!Number.isFinite(amount)||amount<=0||Math.abs(Math.round(amount*100)-amount*100)>0.00001||!reason){if(label)label.textContent='Enter a valid item, amount and reason.';return}
+ if(!confirm(`Submit ${money(amount)} deduction for ${branch} · ${month}?`))return;
+ submitBusy=true;$('ndbdDeductSubmit').disabled=true;if(label)label.textContent='Submitting…';
+ try{
+  const auth=await c.auth.getUser();if(auth.error||!auth.data?.user)throw Error('Please sign in again.');
+  const key=crypto.randomUUID();
+  const {error}=await c.from('nd_staff_bonus_deductions').insert({request_key:key,branch,bonus_month:month+'-01',item,reason,amount:Math.round(amount*100)/100,created_by:auth.data.user.id});
+  if(error)throw error;
+  $('ndbdDeductItem').value='';$('ndbdDeductAmount').value='';$('ndbdDeductReason').value='';
+  await loadDeductionHistory();if(label)label.textContent='Deduction submitted successfully.';
+ }catch(err){if(label)label.textContent='Submit failed: '+(err?.message||err)}
+ finally{submitBusy=false;$('ndbdDeductSubmit').disabled=false}
+}
 function calculate(){const total=sales(),mgr=[...managers.values()].reduce((a,p)=>a+total*p/100,0);const gross=total*(isEco()?1:poolRate)/100;const eligible=members.filter(r=>!managers.has(String(r.id))&&(!isEco()||r.selected)&&!r.mc&&r.target);const distributable=Math.max(0,gross-poolDeduction);
 // Allocate integer cents to prevent rounding drift.
 const cents=Math.round(distributable*100),base=eligible.length?Math.floor(cents/eligible.length):0,rem=eligible.length?cents%eligible.length:0;
@@ -36653,10 +36713,10 @@ drawQuarterPreview({gross,net:distributable,manager:mgr});
 if(poolDeduction>gross)showStatus('Staff pool deduction exceeds pool. Staff payout is RM 0; excess is not deducted from managers or salary.');
 else if(eligible.length===0&&gross>0)showStatus('No eligible staff · Pool is not distributed.');
 }
-function renderBranch(){if($('ndbdChooseBranch'))$('ndbdChooseBranch').textContent=branch||'Select Branch';if($('ndbdManagersDialog'))$('ndbdManagersDialog').hidden=true;if($('ndbdStaffDialog'))$('ndbdStaffDialog').hidden=true;if($('ndbdBranchDialog'))$('ndbdBranchDialog').hidden=true;sync=true;members=staff.filter(x=>x.outlet===branch).map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),selected:true,mc:false,target:true}));applyState();$('ndbdTeamRate').value=poolRate;$('ndbdDeductAmount').value=poolDeduction;$('ndbdEcoBox').hidden=!isEco();$('ndbdTeamBox').hidden=isEco();drawManagers();drawStaff();sync=false;showStatus('')}
+function renderBranch(){poolDeduction=deductionForMonth(branch,month);if($('ndbdChooseBranch'))$('ndbdChooseBranch').textContent=branch||'Select Branch';if($('ndbdManagersDialog'))$('ndbdManagersDialog').hidden=true;if($('ndbdStaffDialog'))$('ndbdStaffDialog').hidden=true;if($('ndbdBranchDialog'))$('ndbdBranchDialog').hidden=true;sync=true;members=staff.filter(x=>x.outlet===branch).map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),selected:true,mc:false,target:true}));applyState();poolDeduction=deductionForMonth(branch,month);$('ndbdTeamRate').value=poolRate;$('ndbdDeductAmount').value='';renderDeductionHistory();$('ndbdEcoBox').hidden=!isEco();$('ndbdTeamBox').hidden=isEco();drawManagers();drawStaff();sync=false;showStatus('')}
 const nextMonth=m=>{const [y,n]=m.split('-').map(Number);return n===12?(y+1)+'-01-01':y+'-'+String(n+1).padStart(2,'0')+'-01'};
 async function load(){mount();if(loading)return;loading=true;showStatus('Loading…');const client=db();if(!client){loading=false;showStatus('Sign in first');return}
-try{const qMonths=quarterMonths(month),qStart=qMonths[0]+'-01',qEnd=nextMonth(qMonths[2]);const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',qStart).lt('settlement_date',qEnd).limit(20000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);quarterSettlements=s.data||[];settlements=quarterSettlements.filter(x=>String(x.settlement_date||'').slice(0,7)===month);const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;$('ndbdBranchChoices').innerHTML=bs.map(b=>`<button type="button" data-bonus-branch="${esc(b)}">${esc(b)}</button>`).join('');if(!branch){showStatus('No branch access');return}renderBranch()}
+try{const qMonths=quarterMonths(month),qStart=qMonths[0]+'-01',qEnd=nextMonth(qMonths[2]);const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',qStart).lt('settlement_date',qEnd).limit(20000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);quarterSettlements=s.data||[];settlements=quarterSettlements.filter(x=>String(x.settlement_date||'').slice(0,7)===month);const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;$('ndbdBranchChoices').innerHTML=bs.map(b=>`<button type="button" data-bonus-branch="${esc(b)}">${esc(b)}</button>`).join('');if(!branch){showStatus('No branch access');return}renderBranch();await loadDeductionHistory()}
 catch(e){showStatus('Unable to load: '+(e?.message||e))}finally{loading=false}}
 window.ndOpenBranchBonusDistribution=async()=>{mount();await load()};
 document.addEventListener('nd-bonus-open',()=>{if(document.body.dataset.ndVisiblePage==='bonus'&&$('bonusPage')?.classList.contains('nd-ledger-mode'))void window.ndOpenBranchBonusDistribution()});
