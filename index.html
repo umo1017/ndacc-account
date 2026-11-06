@@ -29,7 +29,7 @@
 @media(max-width:600px){#ndExpenseRequestHistory{padding:10px}#ndExpenseRequestHistory .nd-exp-history-heading{flex-wrap:nowrap}#ndExpenseRequestHistory .nd-exp-actions button{flex:1 1 auto}}
 </style>
 
-<meta name="nd-app-build" content="ND-20261105-PRO-BETA-DIAGNOSTICS">
+<meta name="nd-app-build" content="ND-20261106-COMPANY-FINE-LEDGER">
 <style id="nd-cash-flow-simple-umo">
 #ndCashFlowAuditHistoryBtn{display:none!important}
 #ndCashFlowAuditDialog{width:min(730px,96vw)!important;max-width:96vw!important;padding:16px!important;max-height:85dvh!important}
@@ -9581,7 +9581,7 @@ return `<div class="history-date-card">
     // Never write it to legacy petty_entries as well (would double-debit).
     if($("addPettyBtn")) $("addPettyBtn").onclick=async()=>{
       const amount=num("pettyAmount"),reason=$("pettyReason").value.trim();
-      if(!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100){alert("Enter a valid amount (2 decimal places).");return;}
+      if(!Number.isFinite(amount)||amount<=0||Math.abs(Math.round(amount*100)-amount*100)>0.0000001){alert("Enter a valid amount (2 decimal places).");return;}
       if(!reason){alert("Enter an expense reason.");return;}
       if(!pendingPettyReceiptFile){alert("Attach a receipt before submitting Cash Expense.");return;}
       const button=$("addPettyBtn"),label=button.textContent;
@@ -36501,7 +36501,7 @@ const el=document.createElement('section');el.id='ndBonusDistribution';el.innerH
 <div id="ndbdBranchDialog" class="ndbd-dialog" hidden><div class="ndbd-dialog-panel"><div class="ndbd-heading"><h3>Select Branch</h3><button type="button" id="ndbdCloseBranch">Done</button></div><div id="ndbdBranchChoices" class="ndbd-choice-list"></div></div></div>
 <div id="ndbdManagersDialog" class="ndbd-dialog" hidden><div class="ndbd-dialog-panel"><div class="ndbd-heading"><h3>Select Managers</h3><button type="button" id="ndbdCloseManagers">Done</button></div><div id="ndbdManagers" class="ndbd-manager-list"></div></div></div>
 <div id="ndbdStaffDialog" class="ndbd-dialog" hidden><div class="ndbd-dialog-panel"><div class="ndbd-heading"><h3>Select Therapists</h3><button type="button" id="ndbdCloseStaff">Done</button></div><div id="ndbdStaffEditor" class="ndbd-scroll"></div></div></div>
-<div class="ndbd-actions"><button type="button" id="ndbdRefresh">Refresh</button><button type="button" id="ndbdCopy">Copy Summary</button></div><p role="status" id="ndbdStatus"></p>`;
+<div class="ndbd-actions"><button type="button" id="ndbdRefresh">Refresh</button></div><p role="status" id="ndbdStatus"></p>`;
 shell.append(el);$('ndbdMonth').value=month;
 $('ndbdChooseBranch').addEventListener('click',()=>{$('ndbdBranchDialog').hidden=false});
 $('ndbdCloseBranch').addEventListener('click',()=>{$('ndbdBranchDialog').hidden=true});
@@ -36520,7 +36520,6 @@ $('ndbdTeamRate').addEventListener('input',e=>{poolRate=Math.min(100,safeNum(e.t
 $('ndbdDeductSubmit').addEventListener('click',()=>void submitDeduction());
 $('ndbdDeductReload').addEventListener('click',()=>void loadDeductionHistory());
 $('ndbdRefresh').addEventListener('click',()=>void load());
-$('ndbdCopy').addEventListener('click',()=>{const lines=[branch+' · '+month,'Total performance: '+money(sales()),...Array.from(managers,([id,rate])=>{return 'Manager '+managerName(id)+' · '+rate+'%: '+money(sales()*rate/100)}),'Staff pool: '+$('ndbdPoolGross').textContent,'Staff pool deduction: '+money(poolDeduction),'Staff pool after deduction: '+$('ndbdNetStaff').textContent,'Eligible staff: '+$('ndbdEligible').textContent,'Per person: '+$('ndbdPerPerson').textContent];navigator.clipboard?.writeText(lines.join('\n'));showStatus('Summary copied (if clipboard allowed).')});
 }
 function drawManagers(){
 const options=managerCandidates();
@@ -37191,7 +37190,7 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
     try{
       if(add){
         const name=$('ndGlobalCustomerName').value.trim(),amount=Number($('ndGlobalCustomerAmount').value);
-        if(!name||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100 && Math.abs(Math.round(amount*100)-amount*100)>1e-6)throw Error('Enter a customer name and a valid amount.');
+        if(!name||!Number.isFinite(amount)||amount<=0||Math.abs(Math.round(amount*100)-amount*100)>0.0000001 && Math.abs(Math.round(amount*100)-amount*100)>1e-6)throw Error('Enter a customer name and a valid amount.');
         const result=await db.from('nd_global_card_customers').insert({card_date:day(),customer_name:name,amount:Math.round(amount*100)/100});
         if(result.error)throw result.error;
         $('ndGlobalCustomerName').value='';$('ndGlobalCustomerAmount').value='';
@@ -39048,69 +39047,102 @@ window.addEventListener('nd-pro-auth-refresh',()=>void updateNav());
 </script>
 
 <style id="nd-company-fine-page-css">
-#ndCompanyFinePage{position:fixed;inset:0;z-index:2147483500;overflow:auto;background:#f5f7fb;color:#172338;padding:22px clamp(14px,4vw,40px);font-family:inherit}#ndCompanyFinePage[hidden]{display:none!important}
-#ndCompanyFinePage .ncf-shell{max-width:1150px;margin:auto}#ndCompanyFinePage .ncf-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}#ndCompanyFinePage .ncf-top h2{font-size:23px;margin:0;font-weight:800;color:#14243e}
-#ndCompanyFinePage button{cursor:pointer;border:1px solid #d8e0ee;background:white;color:#172338;border-radius:12px;padding:10px 16px;font-weight:700}#ndCompanyFinePage .ncf-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;background:white;border-radius:18px;padding:18px;box-shadow:0 5px 22px #1b376013}#ndCompanyFinePage label{display:grid;gap:6px;font-weight:700;font-size:13px;min-width:180px}#ndCompanyFinePage select,#ndCompanyFinePage input{border:1px solid #cdd7e5;border-radius:10px;background:white;color:#182c46;padding:10px;font-size:15px}
-#ndCompanyFinePage .ncf-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:15px 0}#ndCompanyFinePage .ncf-card{padding:18px;border-radius:17px;background:white;box-shadow:0 5px 22px #1b376013}#ndCompanyFinePage .ncf-card small{font-weight:700;color:#63748d}#ndCompanyFinePage .ncf-card strong{display:block;font-size:24px;margin-top:9px;letter-spacing:-.6px}#ndCompanyFinePage .ncf-card:nth-child(1){border-top:5px solid #269e85}#ndCompanyFinePage .ncf-card:nth-child(2){border-top:5px solid #6b60b8}#ndCompanyFinePage .ncf-card:nth-child(3){border-top:5px solid #dc9b37}#ndCompanyFinePage .ncf-card:nth-child(4){border-top:5px solid #2786c9}
-#ndCompanyFinePage .ncf-panel{background:white;border-radius:18px;box-shadow:0 5px 22px #1b376013;margin-top:14px;overflow:hidden}#ndCompanyFinePage .ncf-panel h3{margin:0;padding:16px 18px;color:#142c46;font-size:16px}#ndCompanyFinePage .ncf-scroll{overflow:auto}#ndCompanyFinePage table{width:100%;border-collapse:collapse;min-width:640px;font-size:13px}#ndCompanyFinePage th{background:#eaf0fa;color:#314765;text-align:left}#ndCompanyFinePage th,#ndCompanyFinePage td{padding:12px 15px;border-bottom:1px solid #edf1f7}#ndCompanyFinePage tbody tr:nth-child(even){background:#f9fbfe}#ndCompanyFinePage .ncf-status{margin:12px 0;color:#586a82;font-size:13px;min-height:18px}#ndCompanyFinePage .ncf-tag{background:#e7f7f1;color:#16664c;border-radius:18px;padding:4px 9px;font-size:12px;font-weight:700}#ndCompanyFinePage .ncf-warning{background:#fff0e8;color:#a54b20;padding:9px 14px;border-radius:12px;margin-top:10px;font-size:13px}
-.nd-required-error{outline:2px solid #e33753!important;border-color:#e33753!important;background:#fff0f3!important;box-shadow:0 0 0 3px #e3375325!important}.nd-required-error-label{color:#c42c48!important}#ndCompanyFinePage .ncf-empty{text-align:center;color:#718096;padding:25px}@media(max-width:750px){#ndCompanyFinePage .ncf-stats{grid-template-columns:repeat(2,minmax(0,1fr))}#ndCompanyFinePage .ncf-card{padding:13px}#ndCompanyFinePage .ncf-card strong{font-size:20px}#ndCompanyFinePage .ncf-top h2{font-size:19px}#ndCompanyFinePage .ncf-controls>*{flex:1}}
+#ndCompanyFinePage{position:fixed;inset:0;z-index:2147483500;overflow:auto;background:#f5f7fb;color:#203149;padding:clamp(16px,3vw,30px);font-family:inherit;overscroll-behavior:contain}#ndCompanyFinePage[hidden]{display:none!important}
+#ndCompanyFinePage .ncf-shell{width:min(100%,1060px);margin:auto}#ndCompanyFinePage *{box-sizing:border-box}
+#ndCompanyFinePage .ncf-top{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:15px}#ndCompanyFinePage h2{margin:0;font-size:23px;letter-spacing:-.02em;color:#1a344e}#ndCompanyFinePage .ncf-sub{display:block;margin-top:6px;color:#78879a;font-size:12px}
+#ndCompanyFinePage button{cursor:pointer;border:1px solid #d7e0eb;border-radius:12px;padding:10px 15px;background:white;color:#22374c;font-weight:750;font-size:14px}#ndCompanyFinePage button:disabled{opacity:.6;cursor:not-allowed}
+#ndCompanyFinePage .ncf-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:white;padding:14px;border:1px solid #e2e9f0;border-radius:17px}
+#ndCompanyFinePage .ncf-controls label,#ndCompanyFinePage .ncf-fields label{font-size:12px;font-weight:700;color:#65768a;display:grid;gap:6px;margin:0}#ndCompanyFinePage .ncf-controls select,#ndCompanyFinePage .ncf-fields input,#ndCompanyFinePage .ncf-fields select,#ndCompanyFinePage .ncf-fields textarea{min-height:42px;border:1px solid #d7e0e9;border-radius:11px;padding:9px 12px;background:#fff;color:#1f344a;font-size:15px;width:100%;font-family:inherit}
+#ndCompanyFinePage .ncf-status{min-height:17px;font-size:12px;color:#65768a;margin:11px 3px}#ndCompanyFinePage .ncf-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0 17px}#ndCompanyFinePage .ncf-stat{padding:17px;background:#fff;border:1px solid #e2e9f0;border-radius:18px;min-width:0}
+#ndCompanyFinePage .ncf-stat small{font-weight:700;color:#6d7d90;font-size:12px;display:block;line-height:1.4}#ndCompanyFinePage .ncf-stat strong{display:block;font-size:clamp(20px,3vw,28px);color:#233e59;margin-top:9px;overflow-wrap:anywhere}#ndCompanyFinePage .ncf-stat.ncf-available{background:#eff8f5;border-color:#cce7dc}#ndCompanyFinePage .ncf-available strong{color:#127856}
+#ndCompanyFinePage .ncf-panel{background:white;border:1px solid #e2e9f0;border-radius:18px;margin:14px 0;overflow:hidden}#ndCompanyFinePage .ncf-panel h3{padding:17px 18px 5px;margin:0;font-size:16px;color:#253f58}#ndCompanyFinePage .ncf-hint{font-size:12px;color:#7a8795;margin:0;padding:4px 18px 12px;line-height:1.6}#ndCompanyFinePage .ncf-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 18px 18px}#ndCompanyFinePage .ncf-wide{grid-column:1 / -1}#ndCompanyFinePage .ncf-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;grid-column:1 / -1}#ndCompanyFinePage #ncfWithdraw{background:linear-gradient(100deg,#27828a,#3850a8);color:#fff;border:0;padding:12px 22px}#ndCompanyFinePage .ncf-tabs{display:flex;gap:6px;padding:8px 14px 0;flex-wrap:wrap}#ndCompanyFinePage .ncf-tabs button{border-radius:10px 10px 0 0;border:0;background:transparent;color:#698099}#ndCompanyFinePage .ncf-tabs button.active{background:#edf3fc;color:#235aa2}#ndCompanyFinePage .ncf-history{padding:0 14px 15px;overflow:auto}#ndCompanyFinePage table{width:100%;border-collapse:collapse;min-width:575px}#ndCompanyFinePage th{background:#f3f6fb;color:#60748b;text-align:left;font-size:12px}#ndCompanyFinePage td,#ndCompanyFinePage th{padding:11px 12px;border-bottom:1px solid #ecf0f5;font-size:12px}#ndCompanyFinePage .ncf-empty{text-align:center;padding:25px;color:#77889a}#ndCompanyFinePage .ncf-alert{color:#a34c2a;background:#fff6ec;border:1px solid #ffdfbc;border-radius:12px;padding:10px 13px;margin:10px 0;font-size:12px}#ndCompanyFinePage .ncf-positive{color:#18815e;font-weight:800}#ndCompanyFinePage .ncf-negative{color:#ad4e47;font-weight:800}
+@media(max-width:680px){#ndCompanyFinePage{padding:14px 10px 30px}#ndCompanyFinePage h2{font-size:21px}#ndCompanyFinePage .ncf-stats{gap:7px}#ndCompanyFinePage .ncf-stat{padding:12px 9px;border-radius:13px}#ndCompanyFinePage .ncf-stat small{font-size:10px}#ndCompanyFinePage .ncf-stat strong{font-size:clamp(16px,4.2vw,22px)}#ndCompanyFinePage .ncf-fields{grid-template-columns:1fr}#ndCompanyFinePage .ncf-controls{padding:12px}#ndCompanyFinePage .ncf-controls label{flex:1}}
 </style>
 <script id="nd-company-fine-page-v2">(()=>{'use strict';
-const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
-const monthOf=s=>String(s||'').slice(0,7);
-const addMonths=(m,n)=>{let [y,k]=m.split('-').map(Number);let d=new Date(Date.UTC(y,k-1+n,1));return d.toISOString().slice(0,7)};
-const nextMonth=m=>addMonths(m,1)+'-01';
-const todayMonth=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit'}).format(new Date());
-function getDb(){try{return typeof salaryDb!=='undefined'?salaryDb:null}catch(_){return null}}
-let page=null,btn=null,returnFocus=null,knownManagers=new Set();
-const manager=(e,id)=>knownManagers.has(Number(id))||/manager|supervisor|director|经理|店长|主管/i.test([e?.role,e?.position,e?.job_title,e?.designation,e?.employee_role].filter(Boolean).join(' '));
-const collab=e=>/collaboration|合作|freelance|contractor/i.test([e?.outlet,e?.staff_category,e?.staff_type,e?.employment_type,e?.employee_type].filter(Boolean).join(' '));
-const fulltime=e=>/full[ -]?time|全职|permanent/i.test([e?.staff_type,e?.staff_category,e?.employment_type,e?.employee_type,e?.employment_status].filter(Boolean).join(' '));
-const official=e=>!e?.nd_archived_at;
-async function fetchAll(q){let arr=[];for(let start=0;start<20000;start+=500){let x=await q(start,start+499);if(x.error)throw x.error;arr.push(...(x.data||[]));if((x.data||[]).length<500)break}return arr}
-function ensure(){if(page)return;page=document.createElement('section');page.id='ndCompanyFinePage';page.hidden=true;page.innerHTML=`<div class="ncf-shell"><div class="ncf-top"><h2>Company Fine</h2><button id="ncfClose" type="button">Close</button></div><div class="ncf-controls"><label>Branch<select id="ncfBranch"><option>Eco Botanic</option><option>Nusa Bestari</option></select></label><label>Month<input id="ncfMonth" type="month"></label></div><div id="ncfStatus" class="ncf-status" role="status"></div><div class="ncf-stats"><div class="ncf-card"><small>Branch Total Fine</small><strong id="ncfFine">RM 0.00</strong></div><div class="ncf-card"><small>Monthly 20%</small><strong id="ncfFifth">RM 0.00</strong></div><div class="ncf-card"><small>Eligible Full-time</small><strong id="ncfCount">0</strong></div><div class="ncf-card"><small>Per Staff</small><strong id="ncfShare">RM 0.00</strong></div></div><div class="ncf-panel"><h3>Company Fine Bonus Payout</h3><div class="ncf-payout"><div><label for="ncfPayoutAmount">Cash Expense Amount (RM)<input id="ncfPayoutAmount" type="number" min="0.01" step="0.01" placeholder="0.00"></label></div><button id="ncfPrepareExpense" type="button">Prepare Cash Expense</button><div id="ncfExpenseStatus" role="status"></div></div></div><div class="ncf-panel"><h3>Monthly Staff Fines</h3><div id="ncfFines" class="ncf-scroll"></div></div><div class="ncf-panel"><h3>5-Month Distribution</h3><div id="ncfMonths" class="ncf-scroll"></div></div><div class="ncf-panel"><h3>Eligible Staff</h3><div id="ncfStaff" class="ncf-scroll"></div></div><div id="ncfWarn"></div></div>`;document.body.append(page);$('ncfMonth').value=todayMonth();$('ncfBranch').onchange=load;$('ncfMonth').onchange=load;$('ncfClose').onclick=close;$('ncfPrepareExpense').onclick=prepareExpense;document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!page.hidden)close()});}
-function open(){ensure();returnFocus=document.activeElement;page.hidden=false;document.body.style.setProperty('--ncf-open','1');$('ncfClose').focus();void load()}
-function prepareExpense(){
- const status=$('ncfExpenseStatus'),branch=$('ncfBranch').value,month=$('ncfMonth').value;
- const amount=Number($('ncfPayoutAmount').value);
- status.textContent='';
- if(!Number.isFinite(amount)||amount<=0){status.textContent='Enter the actual paid amount.';$('ncfPayoutAmount').classList.add('nd-required-error');$('ncfPayoutAmount').focus();return}
- $('ncfPayoutAmount').classList.remove('nd-required-error');
- const expense=$('ndExpenseExpand'),reason=$('pettyReason'),moneyField=$('pettyAmount'),daily=$('sidebarDaily');
- if(!expense||!reason||!moneyField||!daily){status.textContent='Cash Expense form is unavailable.';return}
- let current='';try{current=localStorage.getItem('nd_daily_branch_v1')||'Eco Botanic'}catch(_){current='Eco Botanic'}
- if(current!==branch){status.textContent='Choose '+branch+' in Daily Settlement first, then prepare Cash Expense.';return}
- const title='Company Fine Bonus Payout - '+branch+' - '+month;
- // This only fills the EXISTING expense form. Approval and receipt remain mandatory.
- close();daily.click();expense.open=true;reason.value=title;moneyField.value=amount.toFixed(2);
- reason.dispatchEvent(new Event('input',{bubbles:true}));moneyField.dispatchEvent(new Event('input',{bubbles:true}));
- expense.scrollIntoView({block:'center',behavior:'smooth'});reason.focus();
+const CUTOFF='2026-10-26',branches=['Eco Botanic','Nusa Bestari'];
+function db(){try{return typeof salaryDb!=='undefined'?salaryDb:null}catch{return null}}
+let page=null,returnFocus=null,withdrawals=[],fineRecords=[],unknown=[],currentTab='fines',loading=false,loadError=false,requestKey=null;
+function employeeIsManager(e,ids,id){return ids.has(String(id))||/manager|supervisor|director|经理|店长|主管/i.test([e?.role,e?.position,e?.job_title,e?.designation,e?.employee_role].filter(Boolean).join(' '))}
+async function fetchAll(query){const rows=[];for(let off=0;off<20000;off+=500){const res=await query(off,off+499);if(res.error)throw res.error;rows.push(...(res.data||[]));if((res.data||[]).length<500)return rows}throw Error('Too many records. Please contact administrator.')}
+function ensure(){if(page)return;
+ page=document.createElement('section');page.id='ndCompanyFinePage';page.hidden=true;
+ page.innerHTML=`<div class="ncf-shell"><header class="ncf-top"><div><h2>Company Fine</h2><small class="ncf-sub">Approved staff fines from 26 Oct 2026 · Managers excluded</small></div><button id="ncfClose" type="button" aria-label="Close Company Fine">Close</button></header>
+ <div class="ncf-controls"><label>Branch<select id="ncfBranch"><option value="all">All Branches</option><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option></select></label><button id="ncfRefresh" type="button">Refresh</button></div>
+ <div id="ncfStatus" class="ncf-status" role="status"></div>
+ <div class="ncf-stats"><div class="ncf-stat"><small>Total Company Fines</small><strong id="ncfTotal">RM 0.00</strong></div><div class="ncf-stat"><small>Total Withdrawn</small><strong id="ncfTaken">RM 0.00</strong></div><div class="ncf-stat ncf-available"><small>Available to Withdraw</small><strong id="ncfAvailable">RM 0.00</strong></div></div>
+ <section class="ncf-panel"><h3>Withdraw Funds</h3><p class="ncf-hint">Withdrawals are recorded separately from Cash Expense. No automatic cash deduction is made.</p><form id="ncfForm" class="ncf-fields"><label>From Branch<select id="ncfWithdrawBranch" required><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option></select></label><label>Amount (RM)<input id="ncfAmount" type="number" min="0.01" step="0.01" placeholder="0.00" required></label><label class="ncf-wide">Withdrawal Item / Reason<input id="ncfReason" type="text" maxlength="300" placeholder="Purpose of withdrawal" required></label><div class="ncf-actions"><button id="ncfWithdraw" type="submit">Submit Withdrawal</button><span class="ncf-status" id="ncfWithdrawStatus" role="status"></span></div></form></section>
+ <section class="ncf-panel"><h3>History</h3><div class="ncf-tabs"><button type="button" data-tab="fines" class="active">Fine History</button><button type="button" data-tab="withdrawals">Withdrawal History</button></div><div id="ncfHistory" class="ncf-history"></div></section><div id="ncfWarnings"></div></div>`;
+ document.body.append(page);
+ $('ncfClose').onclick=close;
+ $('ncfBranch').onchange=render;
+ $('ncfWithdrawBranch').onchange=render;
+ $('ncfRefresh').onclick=()=>void load();
+ $('ncfForm').onsubmit=e=>{e.preventDefault();void submitWithdrawal()};
+ page.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{currentTab=b.dataset.tab;render()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!page.hidden)close()});
 }
 function close(){if(page)page.hidden=true;returnFocus?.focus?.()}
-function install(){if(btn)return;const target=$('salaryViewTargetBonusBtn');if(!target)return;btn=document.createElement('button');btn.type='button';btn.className='salary-view-btn';btn.id='ndCompanyFineBtn';btn.textContent='Company Fine';target.insertAdjacentElement('afterend',btn);btn.addEventListener('click',open)}
-function rowsTable(headers,rows){return '<table><thead><tr>'+headers.map(s=>'<th>'+esc(s)+'</th>').join('')+'</tr></thead><tbody>'+ (rows.length?rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+headers.length+'" class="ncf-empty">No records</td></tr>')+'</tbody></table>'}
-async function load(){const db=getDb();if(!db){$('ncfStatus').textContent='Database unavailable';return}let m=$('ncfMonth').value,b=$('ncfBranch').value;if(!/^\d{4}-\d{2}$/.test(m))return;$('ncfStatus').textContent='Loading...';$('ncfPayoutAmount').value='';$('ncfExpenseStatus').textContent='';$('ncfWarn').innerHTML='';try{
- const start=addMonths(m,-4)+'-01',end=nextMonth(addMonths(m,5));
- const [incidents,employees,managerRows]=await Promise.all([
- fetchAll((lo,hi)=>db.from('nd_staff_incidents').select('id,employee_id,employee_name,outlet,incident_date,approved_amount,review_status,nd_deleted_at').gte('incident_date',start).lt('incident_date',end).order('incident_date',{ascending:true}).range(lo,hi)),
- fetchAll((lo,hi)=>db.from('employees').select('*').range(lo,hi)),
- fetchAll((lo,hi)=>db.from('nd_bonus_v4_managers').select('employee_id').range(lo,hi)).catch(()=>[])
+function open(){ensure();returnFocus=document.activeElement;page.hidden=false;$('ncfClose').focus();void load()}
+function table(columns,body){return `<table><thead><tr>${columns.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${body.length?body.join(''):`<tr><td class="ncf-empty" colspan="${columns.length}">No records</td></tr>`}</tbody></table>`}
+function render(){if(!page)return;
+ const branch=$('ncfBranch').value, filtered=branch==='all'?fineRecords:fineRecords.filter(x=>x.outlet===branch);
+ const draws=branch==='all'?withdrawals:withdrawals.filter(x=>x.branch===branch);
+ const total=filtered.reduce((t,r)=>t+Number(r.approved_amount||0),0);
+ const withdrawn=draws.reduce((t,r)=>t+Number(r.amount||0),0);
+ const available=total-withdrawn;
+ $('ncfTotal').textContent=money(total);$('ncfTaken').textContent=money(withdrawn);$('ncfAvailable').textContent=money(Math.max(0,available));
+ $('ncfAvailable').style.color=available<0?'#b42318':'';
+ const chosen=$('ncfWithdrawBranch').value;
+ const fineBranch=fineRecords.filter(r=>r.outlet===chosen).reduce((t,r)=>t+Number(r.approved_amount||0),0);
+ const usedBranch=withdrawals.filter(r=>r.branch===chosen).reduce((t,r)=>t+Number(r.amount||0),0);
+ const remaining=fineBranch-usedBranch;
+ const status=$('ncfWithdrawStatus');
+ status.textContent=`${chosen}: ${money(Math.max(0,remaining))} available`;
+ page.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
+ if(currentTab==='fines')$('ncfHistory').innerHTML=table(['Date','Branch','Employee','Approved Fine'],[...filtered].sort((a,b)=>String(b.incident_date).localeCompare(String(a.incident_date))).map(x=>`<tr><td>${esc(String(x.incident_date).slice(0,10))}</td><td>${esc(x.outlet)}</td><td>${esc(x.employee_name||x.person?.nickname||'—')}</td><td class="ncf-positive">${money(x.approved_amount)}</td></tr>`));
+ else $('ncfHistory').innerHTML=table(['Date','Branch','Item / Reason','Withdrawn'],[...draws].sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).map(x=>`<tr><td>${esc(String(x.created_at).replace('T',' ').slice(0,16))}</td><td>${esc(x.branch)}</td><td>${esc(x.reason)}</td><td class="ncf-negative">− ${money(x.amount)}</td></tr>`));
+ const warning=unknown.length?`${unknown.length} fines cannot be verified against an employee record or manager classification and are excluded. Review Staff records.`:'';
+ $('ncfWarnings').innerHTML=warning?`<div class="ncf-alert">${esc(warning)}</div>`:'';
+ $('ncfWithdraw').disabled=loading||loadError||unknown.length>0||remaining<=0;
+}
+async function load(){const d=db();if(!d){$('ncfStatus').textContent='Database not ready';return}loading=true;loadError=false;$('ncfStatus').textContent='Loading...';$('ncfWithdraw').disabled=true;
+ try{
+ const [incidents,employees,managers,draws]=await Promise.all([
+ fetchAll((a,b)=>d.from('nd_staff_incidents').select('id,employee_id,employee_name,outlet,incident_date,approved_amount,review_status,nd_deleted_at').gte('incident_date',CUTOFF).order('incident_date',{ascending:false}).range(a,b)),
+ fetchAll((a,b)=>d.from('employees').select('*').range(a,b)),
+ fetchAll((a,b)=>d.from('nd_bonus_v4_managers').select('employee_id').range(a,b)),
+ fetchAll((a,b)=>d.from('nd_company_fine_withdrawals').select('id,branch,amount,reason,created_at').order('created_at',{ascending:false}).range(a,b))
  ]);
- knownManagers=new Set(managerRows.map(x=>Number(x.employee_id)));
- let staffMap=new Map(employees.map(x=>[Number(x.id),x]));let uncertain=new Set();
- const fines=incidents.filter(r=>r.review_status==='approved'&&!r.nd_deleted_at&&Number(r.approved_amount)>0).map(r=>({...r,person:staffMap.get(Number(r.employee_id))})).filter(r=>{if(!r.person){uncertain.add('Missing employee records');return false}if(manager(r.person,r.employee_id))return false;if(![ 'Eco Botanic','Nusa Bestari'].includes(r.outlet))return false;return true});
- const branchFines=fines.filter(r=>r.outlet===b), monthly=branchFines.filter(r=>monthOf(r.incident_date)===m), total=monthly.reduce((s,x)=>s+Number(x.approved_amount),0);
- $('ncfFine').textContent=money(total);$('ncfFifth').textContent=money(total*.2);
- const eligible=employees.filter(e=>String(e.outlet)===b&&official(e)&&!manager(e,e.id)&&!collab(e)&&fulltime(e)&&!branchFines.some(r=>Number(r.employee_id)===Number(e.id)&&r.incident_date>=addMonths(m,-4)+'-01'&&r.incident_date<nextMonth(m)));
- const unknown=employees.filter(e=>String(e.outlet)===b&&official(e)&&!manager(e,e.id)&&!collab(e)&&!fulltime(e));if(unknown.length)uncertain.add(unknown.length+' staff without confirmed Full-time classification are excluded');
- $('ncfCount').textContent=String(eligible.length);$('ncfShare').textContent=money(eligible.length?total*.2/eligible.length:0);
- $('ncfFines').innerHTML=rowsTable(['Date','Employee','Approved Fine'],monthly.map(r=>[esc(r.incident_date),esc(r.employee_name),money(r.approved_amount)]));
- $('ncfMonths').innerHTML=rowsTable(['Period','Pool (20%)','Status'],Array.from({length:5},(_,i)=>{let date=addMonths(m,i+1);return[esc(date),money(total*.2),date>todayMonth()?'<span class="ncf-tag">Upcoming</span>':'<span class="ncf-tag">Preview</span>']}));
- $('ncfStaff').innerHTML=rowsTable(['Employee','Type','Estimated Share'],eligible.map(e=>[esc(e.nickname||e.name||e.id),'<span class="ncf-tag">Full-time</span>',money(eligible.length?total*.2/eligible.length:0)]));
- $('ncfStatus').textContent=monthly.length+' fines · '+b+' · '+m;
- if(uncertain.size)$('ncfWarn').innerHTML='<div class="ncf-warning">'+[...uncertain].map(esc).join(' · ')+'</div>';
- }catch(e){$('ncfStatus').textContent='Unable to load: '+e.message;['ncfFines','ncfMonths','ncfStaff'].forEach(id=>$(id).innerHTML='')}}
+ const staff=new Map(employees.map(x=>[String(x.id),x])),managerIds=new Set(managers.map(x=>String(x.employee_id)));
+ unknown=[];fineRecords=[];
+ for(const r of incidents){if(r.review_status!=='approved'||r.nd_deleted_at||!(Number(r.approved_amount)>0)||!branches.includes(r.outlet))continue;
+ const p=staff.get(String(r.employee_id));if(!p){unknown.push(r);continue}
+ if(employeeIsManager(p,managerIds,r.employee_id))continue;
+ fineRecords.push({...r,person:p})}
+ withdrawals=draws;$('ncfStatus').textContent=`${fineRecords.length} approved fines · From 26 Oct 2026`;
+ }catch(e){loadError=true;fineRecords=[];withdrawals=[];unknown=[];$('ncfStatus').textContent='Unable to load Company Fine: '+(e.message||e);$('ncfWarnings').innerHTML='<div class="ncf-alert">Check the Company Fine SQL migration and read access.</div>'}
+ finally{loading=false;render()}
+}
+async function submitWithdrawal(){if(loading)return;const d=db();if(!d)return;
+ const b=$('ncfWithdrawBranch').value,amount=Number($('ncfAmount').value),reason=$('ncfReason').value.trim();
+ if(!branches.includes(b)||!Number.isFinite(amount)||amount<=0||Math.abs(Math.round(amount*100)-amount*100)>0.0000001||!reason){$('ncfWithdrawStatus').textContent='Enter a valid branch, amount and reason.';return}
+ if(unknown.length){$('ncfWithdrawStatus').textContent='Verify missing staff before withdrawing.';return}
+ const available=fineRecords.filter(x=>x.outlet===b).reduce((s,x)=>s+Number(x.approved_amount),0)-withdrawals.filter(x=>x.branch===b).reduce((s,x)=>s+Number(x.amount),0);
+ if(amount>available+0.00001){$('ncfWithdrawStatus').textContent='Amount exceeds available funds.';return}
+ if(!confirm(`Submit withdrawal of ${money(amount)} from ${b}? This creates a permanent history entry.`))return;
+ loading=true;$('ncfWithdraw').disabled=true;$('ncfWithdrawStatus').textContent='Submitting...';
+ try{
+   if(!requestKey)requestKey=crypto.randomUUID();
+   const result=await d.rpc('nd_company_fine_submit_withdrawal',{p_branch:b,p_amount:amount,p_reason:reason,p_request_key:requestKey});
+   if(result.error)throw result.error;
+   requestKey=null;$('ncfAmount').value='';$('ncfReason').value='';currentTab='withdrawals';
+   await load();$('ncfWithdrawStatus').textContent='Withdrawal saved.';
+ }catch(e){$('ncfWithdrawStatus').textContent='Withdrawal failed: '+(e.message||e)}finally{loading=false;render()}
+}
+function install(){if($('ndCompanyFineBtn'))return;const target=$('salaryViewTargetBonusBtn');if(!target)return;const btn=document.createElement('button');btn.type='button';btn.className='salary-view-btn';btn.id='ndCompanyFineBtn';btn.textContent='Company Fine';target.insertAdjacentElement('afterend',btn);btn.addEventListener('click',open)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
 window.ndOpenCompanyFine=open;
 })();</script>
