@@ -5232,45 +5232,6 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 #ndProAppointmentSale .nd-sale-checkout:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:380px){#ndProAppointmentSale .nd-sale-member-balances small{font-size:10px}#ndProAppointmentSale .nd-sale-products{gap:6px}#ndProAppointmentSale .nd-sale-product{padding:8px}#ndProAppointmentSale .nd-sale-pic{width:36px;height:36px}}
 </style>
-<style id="nd-payslip-payment-bank-details-20261106">
-/* Payslip payment information: show bank details on both 7th and 14th slips. */
-#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .payslip-transfer-details{display:grid!important}
-#salaryPayslipPrint .payslip-transfer-details{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px;margin-top:9px;padding:7px 2px 0;border-top:1px solid #777;font-size:10px;break-inside:avoid}
-#salaryPayslipPrint .payslip-transfer-details .detail-row{display:grid;grid-template-columns:90px minmax(0,1fr);gap:7px;overflow-wrap:anywhere}
-@media(max-width:580px){#salaryPayslipPrint .payslip-transfer-details{grid-template-columns:1fr}}
-</style>
-<style id="nd-payslip-bank-info-within-received-20261106">
-/* Keep account details inside the existing RECEIVED BY space, not below the page. */
-#salaryPayslipPrint .ref-received .payslip-transfer-details,
-#salaryPayslipPrint .payslip-received .payslip-transfer-details{
-  display:block!important;
-  border-top:1px solid #c8c8c8!important;
-  margin:6px 0 0!important;
-  padding:5px 0 0!important;
-  font-size:9px!important;
-  line-height:1.35!important;
-  min-width:0!important;
-  break-inside:avoid!important;
-  overflow:visible!important;
-}
-#salaryPayslipPrint .ref-received .payslip-transfer-details .detail-row,
-#salaryPayslipPrint .payslip-received .payslip-transfer-details .detail-row{
-  display:block!important;
-  margin:0 0 4px!important;
-  min-width:0!important;
-  white-space:normal!important;
-  overflow-wrap:anywhere!important;
-}
-#salaryPayslipPrint .ref-received .payslip-transfer-details .detail-k,
-#salaryPayslipPrint .payslip-received .payslip-transfer-details .detail-k{
-  font-weight:750!important;
-  font-size:8px!important;
-  color:#444!important;
-  margin:0 0 1px!important;
-}
-#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-received .payslip-transfer-details{display:block!important}
-#salaryPayslipPrint .payslip-sheet[data-payslip-type="7th"] .ref-received{overflow:visible!important}
-</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -16079,8 +16040,8 @@ document.querySelectorAll("[data-confirm7]").forEach(btn=>btn.onclick=()=>ndGuar
   document.querySelectorAll("[data-confirm14]").forEach(btn=>btn.onclick=()=>ndGuardSalaryConfirm(btn,()=>confirm14th(Number(btn.dataset.confirm14))));
   // Reset clicks handled by persistent delegated listener.
   // Payment clicks handled by delegated listener so they continue to work after re-render.
-  // Payslip clicks are handled by a single persistent listener below.
-  // This survives salary table re-rendering and branch/payment switching.
+  document.querySelectorAll("[data-payslip7]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip7),7));
+  document.querySelectorAll("[data-payslip14]").forEach(btn=>btn.onclick=()=>openPayslip(Number(btn.dataset.payslip14),14));
 }
 
 
@@ -17679,16 +17640,15 @@ function metaRows(e,type){
 
 
 function payslipTransferDetailsHtml(e){
-  const escPayValue=value=>String(value??"-").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   const method=String(e.payment_method||"");
   if(method!=="Bank Transfer" && method!=="TNG") return "";
 
   const transferRows = method==="Bank Transfer"
     ? `
-      <div class="detail-row"><div class="detail-k">Bank Name</div><div>${escPayValue(e.bank_name||"-")}</div></div>
-      <div class="detail-row"><div class="detail-k">Bank Account</div><div>${escPayValue(e.bank_account||"-")}</div></div>`
+      <div class="detail-row"><div class="detail-k">Bank Name</div><div>${e.bank_name||"-"}</div></div>
+      <div class="detail-row"><div class="detail-k">Bank Account</div><div>${e.bank_account||"-"}</div></div>`
     : `
-      <div class="detail-row"><div class="detail-k">TNG Account</div><div>${escPayValue(e.bank_account||e.phone||"-")}</div></div>`;
+      <div class="detail-row"><div class="detail-k">TNG Account</div><div>${e.bank_account||e.phone||"-"}</div></div>`;
 
   return `
     <div class="payslip-transfer-details">
@@ -17731,26 +17691,7 @@ async function ndRefreshPayslipSource(empId){
   salaryYtdSnapshots.push(...(ytd.data||[]));
 }
 
-// Persistent Payslip handler: identical behavior for Cash, Bank Transfer and TNG.
-// Do not depend on buttons being in the DOM at initial render.
-document.addEventListener('click',function ndSalaryPayslipDelegatedClick(event){
-  const target=event.target?.closest?.('[data-payslip7],[data-payslip14]');
-  if(!target||target.disabled||target.dataset.ndPayslipBusy==='1')return;
-  const is7=target.hasAttribute('data-payslip7');
-  const id=Number(target.getAttribute(is7?'data-payslip7':'data-payslip14'));
-  if(!Number.isSafeInteger(id)||id<=0){alert('Invalid employee ID for payslip.');return;}
-  event.preventDefault();
-  target.dataset.ndPayslipBusy='1';
-  Promise.resolve().then(()=>openPayslip(id,is7?7:14))
-    .catch(error=>{
-      console.error('Unable to open payslip',error);
-      alert('Unable to open payslip: '+(error?.message||String(error)));
-    })
-    .finally(()=>{delete target.dataset.ndPayslipBusy;});
-});
-
 async function openPayslip(empId,type){
-  try {
   const selectedEmp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   window.currentPayslipStaff=selectedEmp ? {
     id:Number(selectedEmp.id),
@@ -17828,8 +17769,7 @@ async function openPayslip(empId,type){
 
   <div class="ref-received">
     <div>RECEIVED BY</div>
-    <div style="margin-top:9px">PAY BY : ${e.payment_method||""}</div>
-    ${payslipTransferDetailsHtml(e)}
+    <div style="margin-top:18px">PAY BY : ${e.payment_method||""}</div>
   </div>
 </div>
 
@@ -17872,18 +17812,11 @@ async function openPayslip(empId,type){
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Commission</div></div></div>
 <div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Commission",c.commission)}<div class="payslip-col-total"><span>GROSS PAY</span><span class="amt">${payslipAmount(c.total_income)}</span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div><div class="payslip-col-total"><span>TOTAL DEDUCTION</span><span class="amt"></span></div></div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div></div></div>
 <div class="payslip-net-grid"><div class="payslip-net-box"><div class="payslip-net-row"><span>Net Pay</span><span class="amt">${payslipAmount(c.net_pay)}</span></div></div></div>
-<div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div>${payslipTransferDetailsHtml(e)}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>
+<div class="payslip-bottom"><div class="payslip-bottom-section"><div class="payslip-received"><div>RECEIVED BY</div><div>PAY BY : ${e.payment_method||""}</div></div></div></div><div class="payslip-bottom-note"><span>First Half Date :</span><span>To :</span></div>${payslipTransferDetailsHtml(e)}
 </div>`;
   }
-  const slipModal=byId("payslipModal");
-  if(typeof openPayslipModalOverlay==="function")openPayslipModalOverlay(slipModal);
-  else{slipModal.style.removeProperty("display");slipModal.classList.add("open");}
+  byId("payslipModal").classList.add("open");
   return true;
-  } catch(error) {
-    console.error('Payslip rendering error:',error);
-    alert('Unable to open payslip: '+(error?.message||String(error)));
-    return false;
-  }
 }
 
 async function initialize(){
@@ -31456,8 +31389,8 @@ if($('ndConnectTikTokBtn'))$('ndConnectTikTokBtn').onclick=()=>{
   if(closePayslipBtn){
     closePayslipBtn.onclick=()=>{
       const modal=
-        document.getElementById("payslipModal")||
         document.getElementById("salaryPayslipModal")||
+        document.getElementById("payslipModal")||
         document.getElementById("salaryPayslipPreviewModal");
       if(!modal) return;
       modal.classList.remove("open");
@@ -31470,8 +31403,8 @@ if($('ndConnectTikTokBtn'))$('ndConnectTikTokBtn').onclick=()=>{
 
 function openPayslipModalOverlay(modal){
   if(!modal) return;
-  modal.style.removeProperty('display');
   modal.classList.add("open");
+  modal.style.display="";
   document.body.style.overflow="hidden";
   requestAnimationFrame(()=>{
     modal.scrollTop=0;
@@ -36448,6 +36381,22 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 #ndBonusDistribution .ndbd-choice-list button{background:linear-gradient(105deg,#e4f7f5,#ecf2ff)!important;border-color:#c5dfeb!important}
 @media(max-width:600px){#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid>div{padding:12px!important;font-size:11px}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-kpi-grid strong{font-size:17px!important}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results table{font-size:12px}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results td,#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-results th{padding:9px 6px!important}#bonusPage.nd-ledger-mode #ndBonusDistribution .ndbd-heading button{font-size:12px}}
 </style>
+<style id="nd-bonus-quarter-20261106">
+#ndBonusDistribution .ndbd-quarter-panel{background:#fff;border:1px solid #dce5ed;border-radius:16px;padding:14px;margin:14px 0}
+#ndBonusDistribution .ndbd-quarter-panel .ndbd-heading{margin:0 0 10px!important;flex-wrap:wrap}
+#ndBonusDistribution #ndbdQuarterStatus{font-size:12px;color:#9b6d2b}
+#ndBonusDistribution .ndbd-three-months{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#ndBonusDistribution .ndbd-quarter-month{display:flex;flex-direction:column;gap:5px;min-width:0;background:#f5f7fb;border:1px solid #e2e7ef;border-radius:12px;padding:12px 9px}
+#ndBonusDistribution .ndbd-quarter-month.active{background:#eff5ff;border-color:#92b9ff}
+#ndBonusDistribution .ndbd-quarter-month small{font-size:11px;color:#738397}
+#ndBonusDistribution .ndbd-quarter-month strong{font-size:14px;color:#293e5a}
+#ndBonusDistribution .ndbd-quarter-month span{font-size:14px;font-weight:800;overflow-wrap:anywhere}
+#ndBonusDistribution .ndbd-quarter-footer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+#ndBonusDistribution .ndbd-quarter-footer>div{font-size:11px;color:#607287}
+#ndBonusDistribution .ndbd-quarter-footer strong{display:block;font-size:14px;color:#183e60;margin-top:5px;overflow-wrap:anywhere}
+#ndBonusDistribution .ndbd-quarter-note{font-size:12px;line-height:1.5;color:#906e39;margin:12px 0 0}
+@media(max-width:430px){#ndBonusDistribution .ndbd-quarter-month{padding:9px 5px}#ndBonusDistribution .ndbd-quarter-month strong,#ndBonusDistribution .ndbd-quarter-month span{font-size:12px}}
+</style>
 <script id="nd-bonus-distribution-v1-js">
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
@@ -36463,7 +36412,12 @@ const fixedBranches=['Eco Botanic','Nusa Bestari'];
 let branch='Eco Botanic',month=monthNow(),staff=[],settlements=[],members=[],managers=new Map(),poolRate=1,poolDeduction=0,loading=false,sync=false;
 const isEco=()=>branch==='Eco Botanic';
 const isSam=()=>getEmail()==='samchin6006@gmail.com';
-const managerCandidates=()=>isSam()?staff:staff.filter(x=>x.outlet===branch);
+const managerCandidates=()=>{
+ const candidates=staff.filter(x=>x.outlet===branch);
+ const sam=staff.filter(x=>String(x.email||'').trim().toLowerCase()==='samchin6006@gmail.com'||/^(sam|sam chin|chin hen sam)$/i.test(String(x.nickname||x.name||'').trim()));
+ for(const person of sam)if(!candidates.some(x=>String(x.id)===String(person.id)))candidates.push(person);
+ return candidates;
+};
 const displayName=r=>r?.nickname||r?.name||String(r?.id||'');
 const managerName=id=>{const r=staff.find(x=>String(x.id)===String(id));return r?displayName(r):String(id)};
 const allowed=b=>['umo1017@gmail.com','samchin6006@gmail.com'].includes(getEmail())||staff.some(s=>s.outlet===b&&String(s.email||'').toLowerCase()===getEmail());
@@ -36474,7 +36428,7 @@ function readLocal(key){try{return JSON.parse(localStorage.getItem(key)||'null')
 function writeLocal(key,v){try{localStorage.setItem(key,JSON.stringify(v));return true}catch{return false}}
 function showStatus(t){const el=$('ndbdStatus');if(el)el.textContent=t}
 function snapshot(){return {managers:[...managers.entries()],staff:members.map(r=>({id:r.id,selected:r.selected,mc:r.mc,target:r.target})),poolRate,poolDeduction};}
-function saveDraft(){if(sync||!branch)return;const v=snapshot();const good=writeLocal(storageKey(branch,month),v);writeLocal(baseKey(branch),{managers:v.managers,staff:v.staff,poolRate:v.poolRate});showStatus(good?'Saved on this browser only · Not posted to payroll':'Preview only · Browser storage unavailable');}
+function saveDraft(){if(sync||!branch)return;const v=snapshot();v.monthlySales=sales();v.monthlyManagerBonus=[...managers.values()].reduce((a,p)=>a+sales()*p/100,0);const good=writeLocal(storageKey(branch,month),v);writeLocal(baseKey(branch),{managers:v.managers,staff:v.staff,poolRate:v.poolRate});showStatus(good?'Saved on this browser only · Not posted to payroll':'Preview only · Browser storage unavailable');}
 function applyState(){const v=readLocal(storageKey(branch,month))||readLocal(baseKey(branch));managers=new Map();poolRate=isEco()?1:1;poolDeduction=0;
 if(v){for(const pair of v.managers||[]){const id=String(pair[0]);if(managerCandidates().some(r=>String(r.id)===id))managers.set(id,Math.min(100,safeNum(pair[1])))}
 for(const x of v.staff||[]){const r=members.find(r=>String(r.id)===String(x.id));if(!r)continue;r.selected=!!x.selected;r.mc=!!x.mc;r.target=x.target!==false}
@@ -36485,6 +36439,7 @@ const el=document.createElement('section');el.id='ndBonusDistribution';el.innerH
 <h2>Branch Bonus</h2>
 <div class="ndbd-controls"><div><label>Branch</label><button type="button" id="ndbdChooseBranch" class="ndbd-big-button">Select Branch</button><select id="ndbdBranch" aria-label="Select Branch" hidden></select></div><label>Month<input id="ndbdMonth" type="month"></label></div>
 <div class="ndbd-overview ndbd-kpi-grid"><div>Monthly Total Performance<strong id="ndbdSales">RM 0.00</strong></div><div>Manager Bonus<strong id="ndbdManagerBonus">RM 0.00</strong></div><div>Staff Bonus Pool<strong id="ndbdPoolGross">RM 0.00</strong></div><div>Remaining Staff Pool<strong id="ndbdNetStaff">RM 0.00</strong></div></div>
+<section class="ndbd-quarter-panel" aria-label="Three Month Bonus"><div class="ndbd-heading"><h3>3-Month Bonus Pool</h3><span id="ndbdQuarterStatus">Draft preview · Not posted to payroll</span></div><div class="ndbd-three-months" id="ndbdQuarterMonths"></div><div class="ndbd-quarter-footer"><div>Quarterly Staff Pool<strong id="ndbdQuarterGross">RM 0.00</strong></div><div>After Deductions<strong id="ndbdQuarterNet">RM 0.00</strong></div><div>14th Salary Release<strong id="ndbdQuarterRelease">Month 3 only</strong></div></div><p class="ndbd-quarter-note">Month 1 and 2 carry forward. Month 3 is the payout month. These figures are browser drafts until saved into the payroll bonus tables; confirmed salary records are not modified here.</p></section>
 <div class="ndbd-heading"><h3>Branch Managers</h3><button type="button" id="ndbdEditManagers">Select Managers / %</button></div>
 <div id="ndbdManagerSummary" class="ndbd-summary"></div>
 <div id="ndbdEcoBox"><div class="ndbd-heading"><h3>Branch Staff · 1%</h3><button type="button" id="ndbdEditStaff">Select Therapists</button></div></div>
@@ -36518,7 +36473,7 @@ $('ndbdCopy').addEventListener('click',()=>{const lines=[branch+' · '+month,'To
 }
 function drawManagers(){
 const options=managerCandidates();
-$('ndbdManagers').innerHTML=options.map(r=>{const id=String(r.id),selected=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${esc(id)}"><label><input type="checkbox" data-field="managerCheck" ${selected?'checked':''}> ${esc(displayName(r))}${isSam()?' · '+esc(r.outlet):''}</label><label>% <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${selected?managers.get(id):0}" ${selected?'':'disabled'}></label><span data-manager-bonus="${esc(id)}">${selected?money(sales()*managers.get(id)/100):'—'}</span></div>`}).join('')||'No managers available';
+$('ndbdManagers').innerHTML=options.map(r=>{const id=String(r.id),selected=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${esc(id)}"><label><input type="checkbox" data-field="managerCheck" ${selected?'checked':''}> ${esc(displayName(r))}${r.outlet!==branch?' · '+esc(r.outlet):''}</label><label>% <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${selected?managers.get(id):0}" ${selected?'':'disabled'}></label><span data-manager-bonus="${esc(id)}">${selected?money(sales()*managers.get(id)/100):'—'}</span></div>`}).join('')||'No managers available';
 $('ndbdManagerSummary').innerHTML=[...managers].map(([id,pct])=>`<div class="ndbd-summary-row"><span>${esc(managerName(id))} · ${pct}%</span><strong>${money(sales()*pct/100)}</strong></div>`).join('')||'<span>—</span>';
 }
 function drawStaff(){
@@ -36531,6 +36486,30 @@ $('ndbdEcoTotals').hidden=!isEco();
 $('ndbdStaffEditor').closest('.ndbd-dialog')?.toggleAttribute('data-team-branch',!isEco());
 calculate();
 }
+function quarterMonths(anchor){
+ const [y,m]=anchor.split('-').map(Number),first=Math.floor((m-1)/3)*3+1;
+ return [0,1,2].map(i=>y+'-'+String(first+i).padStart(2,'0'));
+}
+function savedMonthSummary(b,m){
+ const data=readLocal(storageKey(b,m));
+ if(!data)return null;
+ const rate=b==='Eco Botanic'?1:Math.min(100,safeNum(data.poolRate??1));
+ const gross=safeNum(data.monthlySales||0)*rate/100;
+ return {gross,net:Math.max(0,gross-safeNum(data.poolDeduction||0)),manager:safeNum(data.monthlyManagerBonus||0),saved:true};
+}
+function drawQuarterPreview(current){
+ const months=quarterMonths(month),monthIndex=months.indexOf(month),payment=monthIndex===2;
+ const entries=months.map((m,i)=>{
+  const v=m===month?{gross:current.gross,net:current.net,manager:current.manager,saved:true}:savedMonthSummary(branch,m);
+  return {m,index:i,value:v};
+ });
+ const host=$('ndbdQuarterMonths');if(!host)return;
+ host.innerHTML=entries.map(e=>`<div class="ndbd-quarter-month ${e.m===month?'active':''}"><small>MONTH ${e.index+1}</small><strong>${esc(e.m)}</strong><span>${e.value?money(e.value.net):'Not recorded'}</span><small>${e.index===2?'Payout month':'Carried forward'}${e.value?' · Draft':''}</small></div>`).join('');
+ const gross=entries.reduce((n,e)=>n+(e.value?.gross||0),0),net=entries.reduce((n,e)=>n+(e.value?.net||0),0);
+ $('ndbdQuarterGross').textContent=money(gross);$('ndbdQuarterNet').textContent=money(net);
+ $('ndbdQuarterRelease').textContent=payment?'Month 3 · '+money(net)+' (preview)':'Month 3 only';
+ $('ndbdQuarterStatus').textContent='Draft preview · Not posted to payroll';
+}
 function calculate(){const total=sales(),mgr=[...managers.values()].reduce((a,p)=>a+total*p/100,0);const gross=total*(isEco()?1:poolRate)/100;const eligible=members.filter(r=>!managers.has(String(r.id))&&(!isEco()||r.selected)&&!r.mc&&r.target);const distributable=Math.max(0,gross-poolDeduction);
 // Allocate integer cents to prevent rounding drift.
 const cents=Math.round(distributable*100),base=eligible.length?Math.floor(cents/eligible.length):0,rem=eligible.length?cents%eligible.length:0;
@@ -36538,6 +36517,7 @@ const sorted=[...eligible].sort((a,b)=>Number(a.id)-Number(b.id));const allocati
 for(const r of members){const node=document.querySelector(`[data-staff-bonus="${CSS.escape(String(r.id))}"]`);if(node)node.textContent=money(allocations.get(String(r.id))||0)}
 for(const [id,p] of managers){const el=document.querySelector(`[data-manager-bonus="${CSS.escape(id)}"]`);if(el)el.textContent=money(total*p/100)}
 $('ndbdSales').textContent=money(total);$('ndbdManagerBonus').textContent=money(mgr);$('ndbdPoolGross').textContent=money(gross);$('ndbdNetStaff').textContent=money(distributable);$('ndbdEligible').textContent=String(eligible.length);$('ndbdPerPerson').textContent=eligible.length?money(distributable/eligible.length):money(0);
+drawQuarterPreview({gross,net:distributable,manager:mgr});
 if(poolDeduction>gross)showStatus('Staff pool deduction exceeds pool. Staff payout is RM 0; excess is not deducted from managers or salary.');
 else if(eligible.length===0&&gross>0)showStatus('No eligible staff · Pool is not distributed.');
 }
