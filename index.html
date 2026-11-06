@@ -12532,9 +12532,27 @@ function ndSevenRecurringValue(empId,field,autoValue,salaryMonth=monthDate(),sou
 
 // Payroll deductions: cloud-backed summary, never fabricate a missing balance.
 // Staff Fine is an incident record, NOT an authorized wage deduction.
-window.ndPayrollDeductionLedger = {month:'',ready:false,error:'',advances:new Map(),fines:new Map()};
+// Effective salary period of a signed advance (MY local calendar date, not device time).
+// 14th through the following 6th => 7th payroll for the month of the 14th.
+// Following 7th through 13th => preceding month's 14th payroll.
+// The 7th itself is assigned to 14th, never retroactively to the paid 7th.
+function ndSalaryAdvancePayrollRoute(date){
+  const d=String(date||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return null;
+  const y=Number(d.slice(0,4)),m=Number(d.slice(5,7)),day=Number(d.slice(8,10));
+  if(m<1||m>12||day<1||day>31)return null;
+  const monthKey=(year,month)=>year+'-'+String(month).padStart(2,'0');
+  if(day>=14)return {payrollType:'7',salaryMonth:monthKey(y,m),payDay:'7th of next month'};
+  const prev=new Date(Date.UTC(y,m-2,1));
+  const previous=monthKey(prev.getUTCFullYear(),prev.getUTCMonth()+1);
+  return day<=6
+    ?{payrollType:'7',salaryMonth:previous,payDay:'7th of this month'}
+    :{payrollType:'14',salaryMonth:previous,payDay:'14th of this month'};
+}
+window.ndSalaryAdvancePayrollRoute=ndSalaryAdvancePayrollRoute;
+window.ndPayrollDeductionLedger = {month:'',ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),fines:new Map()};
 async function ndLoadPayrollDeductionLedger(selectedMonth){
-  const ledger={month:String(selectedMonth||'').slice(0,7),ready:false,error:'',advances:new Map(),fines:new Map()};
+  const ledger={month:String(selectedMonth||'').slice(0,7),ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),fines:new Map()};
   window.ndPayrollDeductionLedger=ledger;
   if(!salaryDb || !/^\d{4}-\d{2}$/.test(ledger.month)){
     ledger.error='Payroll deduction records cannot be loaded.';
@@ -12555,14 +12573,19 @@ async function ndLoadPayrollDeductionLedger(selectedMonth){
       if(page.length<500)break;
     }
     for(const a of advances){
-      const m=String(a.deduction_month||'').slice(0,7);
+      // Read the saved date, not the legacy deduction_month which assumed every
+      // advance belonged to 7th Salary. Do not debit both pay periods.
+      const route=ndSalaryAdvancePayrollRoute(a.advance_date);
       const id=Number(a.employee_id);
       const amount=Number(a.amount);
       const status=String(a.status||'').trim().toLowerCase();
-      if(m!==ledger.month||!Number.isInteger(id)||id<=0||!Number.isFinite(amount)||amount<=0)continue;
       if(a.deleted_at||a.nd_deleted_at||a.is_deleted===true||/deleted|cancelled|canceled|reversed|void/.test(status))continue;
-      const old=ledger.advances.get(id)||0;
-      ledger.advances.set(id,Math.round((old+amount)*100)/100);
+      if(!Number.isInteger(id)||id<=0||!Number.isFinite(amount)||amount<=0)continue;
+      if(!route)throw Error('Salary Advance History is missing an advance_date. Payroll deduction cannot be assigned safely.');
+      if(route.salaryMonth!==ledger.month)continue;
+      const destination=route.payrollType==='14'?ledger.fourteenAdvances:ledger.advances;
+      const old=destination.get(id)||0;
+      destination.set(id,Math.round((old+amount)*100)/100);
     }
     // Fine approval is an internal disciplinary record; approval alone
     // does not authorize deduction from an employee's salary.
@@ -12594,7 +12617,7 @@ async function ndLoadPayrollDeductionLedger(selectedMonth){
 function ndAutoPayrollAmount(e,kind){
   const ledger=window.ndPayrollDeductionLedger;
   if(!ledger?.ready||ledger.month!==monthKey())return 0;
-  return Number((kind==='advance'?ledger.advances:ledger.fines).get(Number(e?.id))||0);
+  return Number((kind==='advance'?ledger.advances:kind==='advance14'?ledger.fourteenAdvances:ledger.fines).get(Number(e?.id))||0);
 }
 
 function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryManualOverrides){
@@ -12699,17 +12722,20 @@ function ndFourteenUpdateTotals(c,seven){
     ? savedActual : ndSevenAdjustedAllowance(seven||{}));
   c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
   c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
-  // User-confirmed 14th formula, for draft calculations ONLY:
-  // Nett Pay = Total Commission - 7th Net Pay
-  //          - 7th Deducted Allowance - Allowance.
-  // Deducted Allowance = original 7th Allowance - adjusted 7th Allowance.
-  // Allowance = adjusted 7th Allowance. Neither item adds money back.
-  // Statutory EPF/SOCSO/EIS/PCB deductions are NOT used as deducted allowance.
+  // User-confirmed 14th draft formula:
+  // Nett Pay = Total Commission - 7th Net Pay - 7th Deducted Allowance
+  //          - Allowance - 7th Salary Advance - 14th Salary Advance.
+  // Both advance amounts come from their respective signed advance payroll routes.
+  // NOTE: 7th Net Pay may already include the 7th advance deduction. The
+  // additional subtraction below is an explicit user-defined payroll rule.
   // Confirmed historical snapshots remain unchanged.
   c.seventh_deducted_allowance=c.allowance_difference;
   c.raw_commission=cents(c.total_commission-costs.seventh_net_pay);
-  c.seventh_deduction_refund=0; // Legacy field; not a refund under this formula.
-  c.commission=cents(c.raw_commission-c.seventh_deducted_allowance-c.adjusted_allowance);
+  c.seventh_deduction_refund=0;
+  c.seventh_salary_advance_deduction=cents(c.seventh_salary_advance_deduction||0);
+  c.salary_advance_deduction=cents(c.salary_advance_deduction||0); // 14th advance, existing column
+  c.commission=cents(c.raw_commission-c.seventh_deducted_allowance-c.adjusted_allowance
+    -c.seventh_salary_advance_deduction-c.salary_advance_deduction);
   c.total_income=c.total_commission;
   c.net_pay=c.commission;
   c.has_payslip=true;
@@ -12725,6 +12751,8 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
       c[field]=salaryOverrideValue(empId,"14",field,c[field],salaryMonth,source);
     }
   }
+  c.seventh_salary_advance_deduction=ndAutoPayrollAmount(e,'advance');
+  c.salary_advance_deduction=ndAutoPayrollAmount(e,'advance14');
   return ndFourteenUpdateTotals(c,snapshotFor(empId));
 }
 
@@ -15152,6 +15180,8 @@ function renderFourteenTable(emps){
     // A confirmed 14th snapshot must remain viewable even when commission is zero or negative.
     // The snapshot confirmation, not the amount, controls payslip availability.
     const net=Number(c.net_pay||0);
+    const advance7=cs?null:Number(c.seventh_salary_advance_deduction||0);
+    const advance14=cs?null:Number(c.salary_advance_deduction||0);
     const pm=String(e.payment_method||"").trim();
 
     if(pm==="Cash") cashTotal+=net;
@@ -15170,6 +15200,8 @@ function renderFourteenTable(emps){
       <td>${money(c.seventh_net_pay||0)}</td>
       <td title="Original 7th Allowance minus adjusted 7th Allowance">${money(c.seventh_deducted_allowance||0)}</td>
       <td title="Allowance deducted from 14th (7th adjusted Allowance)" data-live-seven-deducted14="${e.id}">${money(c.adjusted_allowance||0)}</td>
+      <td title="Salary Advance Repayment automatically routed to 7th Salary" data-live-advance7-in14="${e.id}">${advance7===null?'—':money(advance7)}</td>
+      <td title="Salary Advance Repayment automatically routed to 14th Salary" data-live-advance14="${e.id}">${advance14===null?'—':money(advance14)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
@@ -15200,7 +15232,9 @@ function renderFourteenTable(emps){
       <th rowspan="2">Total Commission</th>
       <th rowspan="2">− 7th Net Pay</th>
       <th rowspan="2">− 7th Deducted Allowance</th>
-      <th rowspan="2">Allowance</th>
+      <th rowspan="2">− Allowance</th>
+      <th rowspan="2">− 7th Salary Advance (Auto)</th>
+      <th rowspan="2">− 14th Salary Advance (Auto)</th>
       <th rowspan="2">Commission</th>
       <th rowspan="2">Nett Pay</th><th colspan="3" class="netpay-group-head">Net Pay by Method</th><th rowspan="2">Confirm</th><th rowspan="2">14th Commission Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
     </tr><tr>
@@ -15209,7 +15243,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="13" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="15" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -15217,7 +15251,7 @@ function renderFourteenTable(emps){
       </tr>
       ${rows}
       <tr class="netpay-summary-row" style="display:none">
-        <td colspan="12" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
+        <td colspan="13" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
@@ -15944,6 +15978,11 @@ function recalc14thLive(empId){
     deductedCell.textContent=money(calc.adjusted_allowance);
     deductedCell.title='Allowance deducted from 14th (7th adjusted Allowance)';
   }
+
+  const advance7Cell=document.querySelector(`[data-live-advance7-in14="${empId}"]`);
+  if(advance7Cell)advance7Cell.textContent=money(calc.seventh_salary_advance_deduction||0);
+  const advanceCell=document.querySelector(`[data-live-advance14="${empId}"]`);
+  if(advanceCell)advanceCell.textContent=money(calc.salary_advance_deduction||0);
 
   const commissionCell=document.querySelector(`[data-live-commission="${empId}"]`);
   if(commissionCell) commissionCell.textContent=money(calc.commission);
@@ -16694,6 +16733,9 @@ async function confirm14th(empId){
       await refreshSalaryStayHere();
       alert("This employee's 14th Salary is already confirmed for this month. Existing confirmed pay was not changed.");
       return;
+    }
+    if(!window.ndPayrollDeductionLedger?.ready || window.ndPayrollDeductionLedger.month!==monthKey()){
+      alert('Salary Advance Repayment is not synced. Refresh Salary before Confirm 14th.');return;
     }
     const m=monthlyFor(id);
     const c=applyFourteenManualOverrides(e,calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(id),salaryQuarter3BonusFor(id)));
@@ -32565,7 +32607,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
 </style>
 <div aria-label="Salary Advance Repayment" aria-modal="true" id="ndAdvanceModal" role="dialog"><div class="nd-dialog">
 <div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><h2>Salary Advance Repayment</h2><button class="btn" id="ndAdvanceClose" type="button">Close</button></div>
-<div class="nd-fields"><div class="nd-advance-branch-field"><label for="ndAdvanceBranch">Select Branch <span style="color:#a22">*</span></label><select id="ndAdvanceBranch"><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option><option value="Global">Global</option></select></div><div class="nd-advance-employee-field"><label for="ndAdvanceEmployee">Employee <span style="color:#a22">*</span></label><select id="ndAdvanceEmployee"></select></div><div><label>Advance Date</label><input id="ndAdvanceDate" type="date"/></div><div><label>Advance Amount (RM)</label><input id="ndAdvanceAmount" min="0.01" step="0.01" type="number"/></div><div><label>7th Salary Deduction Month</label><input id="ndAdvanceDeductMonth" readonly=""/></div></div>
+<div class="nd-fields"><div class="nd-advance-branch-field"><label for="ndAdvanceBranch">Select Branch <span style="color:#a22">*</span></label><select id="ndAdvanceBranch"><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option><option value="Global">Global</option></select></div><div class="nd-advance-employee-field"><label for="ndAdvanceEmployee">Employee <span style="color:#a22">*</span></label><select id="ndAdvanceEmployee"></select></div><div><label>Advance Date</label><input id="ndAdvanceDate" type="date"/></div><div><label>Advance Amount (RM)</label><input id="ndAdvanceAmount" min="0.01" step="0.01" type="number"/></div><div><label>Auto Salary Deduction Period</label><input id="ndAdvanceDeductMonth" readonly=""/></div></div>
 <h3>Employee Written Consent</h3><div class="nd-consent" id="ndAdvanceConsent">I acknowledge receipt of the salary advance specified above. I request that the advance be applied against my salary for the same calendar month as the advance date, subject to applicable Malaysian employment laws and statutory deduction limits. I understand that the deduction will be recorded on my payslip.</div>
 <label style="margin-top:12px">Employee Signature</label><canvas id="ndAdvanceSign"></canvas><div class="nd-actions"><button class="btn" id="ndAdvanceClear" type="button">Clear Signature</button></div>
 <label style="margin-top:12px"><input id="ndAdvanceAgree" style="width:auto;margin-right:8px" type="checkbox"/>I have read and agree to the salary advance repayment terms.</label>
@@ -32580,7 +32622,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function resize(){const c=canvas();if(!c)return;const r=c.getBoundingClientRect(),ratio=window.devicePixelRatio||1;c.width=Math.max(1,Math.round(r.width*ratio));c.height=Math.round(r.height*ratio);const ctx=c.getContext('2d');ctx.scale(ratio,ratio);ctx.lineWidth=2.3;ctx.strokeStyle='#171717';ctx.lineCap='round';hasSignature=false;}
  function dateMY(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
  function monthFor(date){return String(date||'').slice(0,7)+'-01';}
- function dateChanged(){el('ndAdvanceDeductMonth').value=String(el('ndAdvanceDate').value||'').slice(0,7)+' (7th of next month)';}
+ function dateChanged(){const r=window.ndSalaryAdvancePayrollRoute?.(el('ndAdvanceDate').value);el('ndAdvanceDeductMonth').value=r?(r.salaryMonth+' · '+r.payrollType+' Salary · '+r.payDay):'Select date';}
  function point(e){const r=canvas().getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
  function status(s){const a=el('ndAdvanceStatus');if(a)a.textContent=s;}
  function historyStatus(s){const b=el('ndAdvanceHistoryStatus');if(b)b.textContent=s;}
@@ -32609,7 +32651,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
   renderEmployees();if(!allEmployees.length)status('No employees available. '+(err?'Database: '+err:'Check employee access or refresh Salary staff list.'));
  }
 async function open(){el('ndAdvanceModal').classList.add('open');el('ndAdvanceDate').value=dateMY();dateChanged();el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;requestAnimationFrame(resize);await populateEmployees();}
- async function save(){const db=client();if(!db){status('Salary connection is unavailable.');return;}const id=Number(el('ndAdvanceEmployee').value),date=el('ndAdvanceDate').value,amount=Number(el('ndAdvanceAmount').value);if(!id||!date||!Number.isFinite(amount)||amount<=0||!hasSignature||!el('ndAdvanceAgree').checked){alert('Select employee, date, amount, sign and agree before saving.');return;}if(!confirm('Confirm signed salary advance of RM '+amount.toFixed(2)+'? The full amount will be deducted from the next 7th salary.'))return;const btn=el('ndAdvanceSave');btn.disabled=true;status('Saving...');try{const {error}=await db.rpc('nd_salary_advance_create',{p_employee_id:id,p_advance_date:date,p_amount:amount,p_signature_data:canvas().toDataURL('image/png'),p_consent_text:el('ndAdvanceConsent').textContent,p_acknowledged:true});if(error)throw error;status('Signed advance saved. The 7th salary deduction has been updated.');window.dispatchEvent(new Event('nd-cash-advance-changed'));el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;resize();el('ndAdvanceHistoryMonth').value=date.slice(0,7);el('ndAdvanceHistoryFrom').value='';el('ndAdvanceHistoryTo').value='';revealHistory();el('ndAdvanceModal').classList.remove('open');const visible=await load();if(!visible)historyStatus('Advance saved, but history could not be loaded. Do not submit it again. Apply the Salary Advance History SQL update or retry opening history.');try{if(typeof refreshSalaryStayHere==='function')await refreshSalaryStayHere();}catch(refreshError){historyStatus('Advance saved. Payroll refresh failed: '+(refreshError.message||refreshError));}}catch(e){status('Save failed: '+(e.message||e));}finally{btn.disabled=false;}}
+ async function save(){const db=client();if(!db){status('Salary connection is unavailable.');return;}const id=Number(el('ndAdvanceEmployee').value),date=el('ndAdvanceDate').value,amount=Number(el('ndAdvanceAmount').value);if(!id||!date||!Number.isFinite(amount)||amount<=0||!hasSignature||!el('ndAdvanceAgree').checked){alert('Select employee, date, amount, sign and agree before saving.');return;}const route=window.ndSalaryAdvancePayrollRoute?.(date);if(!route){status('Choose a valid advance date.');return;}if(!confirm('Confirm signed salary advance RM '+amount.toFixed(2)+'? Automatic repayment: '+route.salaryMonth+' '+route.payrollType+' Salary.'))return;const btn=el('ndAdvanceSave');btn.disabled=true;status('Saving...');try{const {error}=await db.rpc('nd_salary_advance_create',{p_employee_id:id,p_advance_date:date,p_amount:amount,p_signature_data:canvas().toDataURL('image/png'),p_consent_text:el('ndAdvanceConsent').textContent,p_acknowledged:true});if(error)throw error;status('Signed advance saved. Refresh salary to verify its repayment period and amount.');window.dispatchEvent(new Event('nd-cash-advance-changed'));el('ndAdvanceAmount').value='';el('ndAdvanceAgree').checked=false;resize();el('ndAdvanceHistoryMonth').value=date.slice(0,7);el('ndAdvanceHistoryFrom').value='';el('ndAdvanceHistoryTo').value='';revealHistory();el('ndAdvanceModal').classList.remove('open');const visible=await load();if(!visible)historyStatus('Advance saved, but history could not be loaded. Do not submit it again. Apply the Salary Advance History SQL update or retry opening history.');try{if(typeof refreshSalaryStayHere==='function')await refreshSalaryStayHere();}catch(refreshError){historyStatus('Advance saved. Payroll refresh failed: '+(refreshError.message||refreshError));}}catch(e){status('Save failed: '+(e.message||e));}finally{btn.disabled=false;}}
  window.ndViewPayrollAdvance=report;window.ndDeletePayrollAdvance=deleteAdvance;
  function setup(){
   if(el('ndAdvanceHistoryMonth')){el('ndAdvanceHistoryMonth').value=dateMY().slice(0,7);el('ndAdvanceHistoryMonth').addEventListener('change',renderHistory);}
@@ -37141,7 +37183,7 @@ async function loadEmployees(){
 function setBusy(v){busy=v;for(const id of ['ndSimpleAdvanceClose','ndSimpleAdvanceBranch','ndSimpleAdvanceEmployee','ndSimpleAdvanceAmount','ndSimpleAdvanceHistoryOpen','ndSimpleAdvanceConfirm','ndSimpleAdvanceBack','ndSimpleAdvanceClearSignature','ndSimpleAdvanceSignSave'])$(id).disabled=v;if(!v){$('ndSimpleAdvanceConfirm').disabled=!!loadError||!actor;renderEmployeesPreserve();for(const id of ['ndSimpleAdvanceBack','ndSimpleAdvanceClearSignature'])$(id).disabled=!!pendingPayload;}}
 function renderEmployeesPreserve(){const branch=$('ndSimpleAdvanceBranch').value;const hasEmployees=employees.some(e=>e.outlet===branch);$('ndSimpleAdvanceEmployee').disabled=!branch||!hasEmployees;$('ndSimpleAdvanceConfirm').disabled=!!loadError||!representativeNameReady||!actor||!branch||!hasEmployees;}
 async function open(){mount();const d=$('ndSimpleAdvance');if(d.hasAttribute('open'))return;if(busy)return;if(pendingPayload){showDialog(d);reviewMode(true);$('ndSimpleAdvanceSigningStatus').textContent='Check History before retrying an unconfirmed submission.';return;}draft=null;employeeSigned=false;reviewMode(false);request=null;actor='';employees=[];representativeNameReady=false;loadError='';$('ndSimpleAdvanceAmount').value='';renderAdvanceCashPreview();$('ndSimpleAdvanceEmail').value='';$('ndSimpleAdvanceBranch').innerHTML='<option value="">Loading branches…</option>';$('ndSimpleAdvanceEmployee').innerHTML='<option value="">Select branch first</option>';$('ndSimpleAdvanceEmployee').disabled=true;showDialog(d);void loadEmployees();}
-const advanceConsent='I acknowledge receipt of the salary advance specified above. I request that the advance be applied against my salary for the same calendar month as the advance date, subject to applicable Malaysian employment laws and statutory deduction limits. I understand that the deduction will be recorded on my payslip.';
+const advanceConsent='I acknowledge receipt of the salary advance. The repayment salary period is determined by the advance date: 14th to the following 6th applies to the prior 7th salary cycle; 7th to 13th applies to the preceding month\'s 14th salary cycle. Any wage deduction remains subject to applicable Malaysian employment laws and statutory deduction limits. I understand it will be recorded on my payslip.';
 let draft=null,employeeSigned=false,pen=false,lastPoint=null;
 function reviewMode(on){$('ndSimpleAdvanceForm').hidden=on;$('ndSimpleAdvanceReview').hidden=!on;$('ndSimpleAdvance').classList.toggle('nd-sa-reviewing',on);$('ndSimpleAdvance').scrollTop=0;}
 function resetSignature(){const c=$('ndSimpleAdvanceSignature'),r=c.getBoundingClientRect(),ratio=Math.min(window.devicePixelRatio||1,2);c.width=Math.round((r.width||600)*ratio);c.height=Math.round((r.height||240)*ratio);const ctx=c.getContext('2d');ctx.lineWidth=2.3*ratio;ctx.strokeStyle='#1e4032';ctx.lineCap='round';ctx.lineJoin='round';employeeSigned=false;pen=false;}
@@ -37155,7 +37197,9 @@ function setupSigning(){
 }
 async function savedImage(value){const src=typeof value==='string'?value:value?.data||value?.url||'';if(!src)return '';if(/^data:image\/(png|jpeg|webp);base64,/i.test(src))return src;if(!/^https:\/\//i.test(src))throw Error('A company image could not be loaded. Check Form Templates.');const r=await wait(fetch(src),'Company image');if(!r.ok)throw Error('Unable to load a company image. Check Form Templates.');const blob=await r.blob();if(!['image/png','image/jpeg','image/webp'].includes(blob.type)||blob.size>2500000)throw Error('Update the company image in Form Templates.');return wait(new Promise((resolve,reject)=>{const f=new FileReader();f.onload=()=>resolve(f.result);f.onerror=reject;f.readAsDataURL(blob);}), 'Company image');}
 async function prepare(){if(busy)return;const employee=employees.find(e=>String(e.id)===$('ndSimpleAdvanceEmployee').value&&e.outlet===$('ndSimpleAdvanceBranch').value),amount=Number($('ndSimpleAdvanceAmount').value);if(!actor||!employee||!Number.isFinite(amount)||amount<=0||Math.abs(amount*100-Math.round(amount*100))>.0001){message('Select branch, employee and a positive amount with at most two decimal places.');return;}setBusy(true);message('Preparing document…');try{if(!window.ndGetCompanyDocumentTemplate||!window.ndContractDocumentMarkup)throw Error('Document tools are still loading. Try again in a moment.');const client=db(),auth=await wait(client.auth.getUser(),'Account');if(auth.error||auth.data?.user?.email?.toLowerCase()!==actor)throw Error('Your account changed. Reopen the form.');const [result,brand]=await Promise.all([wait(client.rpc('nd_salary_advance_prepare',{p_branch:employee.outlet,p_employee_id:Number(employee.id),p_amount:amount}),'Advance details'),wait(window.ndGetCompanyDocumentTemplate(),'Company template')]);if(result.error)throw result.error;const p=Array.isArray(result.data)?result.data[0]:result.data;if(!p||p.representative_email!==actor)throw Error('Your account changed. Reopen the form.');const [logo,stamp,president]=await Promise.all([savedImage(window.ndReferenceLogos?.passport||''),savedImage(brand['Company Stamp']),savedImage(brand['President Signature'])]);
- draft={document_template:'salary-advance-v2',template_version:'salary-advance-signed-card-20261023',title:'Salary Advance Repayment',employee_only:true,employee_id:Number(employee.id),employee:{employee_name:p.employee_name,branch:p.outlet,identity:p.identity||''},company:{name:brand['Company Name']||"NATURE'S DAO",registration:brand['Company Registration No']||'',address:brand['Company Address']||''},representative_name:p.representative_name||actor,representative_email:actor,document_logo:logo,company_stamp:stamp,president_signature:president,document_branding_version:'20261023',details:[['Advance Date',p.advance_date],['Advance Amount (RM)',amount],['Cash Paid Out (RM)',Math.round(amount/1.2*100)/100],['20% Added (RM)',Math.round((amount-Math.round(amount/1.2*100)/100)*100)/100],['Deduction Month',p.deduction_month],['Repayment Status','Pending 7th Payroll']],clauses:[['Employee Written Consent',advanceConsent],['Cash Advance Breakdown','Cash paid out: RM '+(Math.round(amount/1.2*100)/100).toFixed(2)+'; 20% added: RM '+(Math.round((amount-Math.round(amount/1.2*100)/100)*100)/100).toFixed(2)+'; amount recorded for payroll deduction: RM '+amount.toFixed(2)+'.']],signed_date:p.advance_date,employee_signature:''};
+ const route=window.ndSalaryAdvancePayrollRoute?.(p.advance_date);
+ if(!route)throw Error('Invalid advance date returned by payroll server.');
+ draft={document_template:'salary-advance-v2',template_version:'salary-advance-signed-card-20261023',title:'Salary Advance Repayment',employee_only:true,employee_id:Number(employee.id),employee:{employee_name:p.employee_name,branch:p.outlet,identity:p.identity||''},company:{name:brand['Company Name']||"NATURE'S DAO",registration:brand['Company Registration No']||'',address:brand['Company Address']||''},representative_name:p.representative_name||actor,representative_email:actor,document_logo:logo,company_stamp:stamp,president_signature:president,document_branding_version:'20261023',details:[['Advance Date',p.advance_date],['Advance Amount (RM)',amount],['Cash Paid Out (RM)',Math.round(amount/1.2*100)/100],['20% Added (RM)',Math.round((amount-Math.round(amount/1.2*100)/100)*100)/100],['Deduction Month',route.salaryMonth],['Payroll Cycle',route.payrollType+' Salary ('+route.payDay+')'],['Repayment Status','Pending '+route.payrollType+' Payroll']],clauses:[['Employee Written Consent',advanceConsent],['Cash Advance Breakdown','Cash paid out: RM '+(Math.round(amount/1.2*100)/100).toFixed(2)+'; 20% added: RM '+(Math.round((amount-Math.round(amount/1.2*100)/100)*100)/100).toFixed(2)+'; amount recorded for payroll deduction: RM '+amount.toFixed(2)+'.']],signed_date:p.advance_date,employee_signature:''};
  $('ndSimpleAdvanceDocument').innerHTML=window.ndContractDocumentMarkup(draft);reviewMode(true);$('ndSimpleAdvanceSigningStatus').textContent='';request=uuid();requestAnimationFrame(resetSignature);message('');
  }catch(error){message('Unable to prepare document: '+error.message+(/schema cache|nd_salary_advance_prepare/i.test(error.message)?' Run the Salary Advance Signature SQL update.':''));}finally{setBusy(false);}}
 async function saveSigned(){if(busy)return;if(!draft||!employeeSigned){$('ndSimpleAdvanceSigningStatus').textContent='Review the document and add the employee signature before saving.';return;}const signed=pendingPayload?.p_document||{...draft,employee_signature:$('ndSimpleAdvanceSignature').toDataURL('image/png')};const payload=pendingPayload||{p_branch:draft.employee.branch,p_employee_id:draft.employee_id,p_amount:Number(draft.details.find(r=>r[0]==='Advance Amount (RM)')[1]),p_request:request||uuid(),p_signature:signed.employee_signature,p_document:signed};pendingPayload=payload;setBusy(true);$('ndSimpleAdvanceSigningStatus').textContent='Saving signed advance…';let saved=false;try{const auth=await wait(db().auth.getUser(),'Account');if(auth.error||auth.data?.user?.email?.toLowerCase()!==actor)throw Error('Your account changed. Reopen the form.');const result=await wait(db().rpc('nd_salary_advance_signed_submit',payload),'Saving signed advance');if(result.error)throw result.error;const row=Array.isArray(result.data)?result.data[0]:result.data;saved=true;pendingPayload=null;request=null;window.dispatchEvent(new Event('nd-cash-advance-changed'));closeDialog($('ndSimpleAdvance'));const refresh=openHistory();view(row?.document_snapshot?row:{record_source:'simple',document_snapshot:signed});const refreshed=await refresh;$('ndSimpleAdvanceHistory').querySelector('[data-sa-status]').textContent='Signed advance saved.'+(refreshed?'':' Reopen History to refresh the saved record.');try{if(typeof refreshSalaryStayHere==='function')void Promise.resolve(refreshSalaryStayHere()).catch(()=>{});}catch(_){}
