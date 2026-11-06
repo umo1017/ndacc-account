@@ -36396,6 +36396,25 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 #ndBonusDistribution .ndbd-quarter-footer strong{display:block;font-size:14px;color:#183e60;margin-top:5px;overflow-wrap:anywhere}
 #ndBonusDistribution .ndbd-quarter-note{font-size:12px;line-height:1.5;color:#906e39;margin:12px 0 0}
 @media(max-width:430px){#ndBonusDistribution .ndbd-quarter-month{padding:9px 5px}#ndBonusDistribution .ndbd-quarter-month strong,#ndBonusDistribution .ndbd-quarter-month span{font-size:12px}}
+
+#ndBonusDistribution .ndbd-three-months{display:flex;flex-direction:column;gap:12px}
+#ndBonusDistribution .ndbd-manager-quarter-card{border:1px solid #dfe7ef;background:#fff;border-radius:14px;padding:12px;min-width:0}
+#ndBonusDistribution .ndbd-manager-quarter-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}
+#ndBonusDistribution .ndbd-manager-quarter-title strong{font-size:16px;color:#203348;overflow-wrap:anywhere}
+#ndBonusDistribution .ndbd-manager-quarter-title span{font-size:14px;font-weight:800;color:#2667c5;background:#eaf1ff;border-radius:9px;padding:5px 10px}
+#ndBonusDistribution .ndbd-manager-months{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#ndBonusDistribution .ndbd-manager-month{background:#f5f7fb;border:1px solid #e3e8ef;border-radius:11px;padding:11px 8px;min-width:0;display:flex;flex-direction:column;gap:5px}
+#ndBonusDistribution .ndbd-manager-month.active{border-color:#95b9f4;background:#edf4ff}
+#ndBonusDistribution .ndbd-manager-month small{font-size:11px;color:#778396;overflow-wrap:anywhere}
+#ndBonusDistribution .ndbd-manager-month strong{font-size:14px;color:#233751;overflow-wrap:anywhere}
+#ndBonusDistribution .ndbd-manager-quarter-total{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:10px;border-top:1px solid #edf0f4;padding-top:10px;font-size:13px}
+#ndBonusDistribution .ndbd-manager-quarter-total strong{font-size:16px;color:#2160b3}
+#ndBonusDistribution .ndbd-manager-empty{font-size:13px;color:#7e8a9a;margin:4px 0}
+#ndBonusDistribution .ndbd-quarter-group-title{font-size:13px;color:#60748d;font-weight:800;letter-spacing:.04em;margin:9px 0 2px;padding:0 2px}
+#ndBonusDistribution .ndbd-staff-quarter-card .ndbd-manager-quarter-title span{color:#16764b;background:#eaf7ed}
+#ndBonusDistribution .ndbd-staff-quarter-card .ndbd-manager-month strong{color:#24553d}
+#ndBonusDistribution .ndbd-staff-quarter-card .ndbd-manager-quarter-total strong{color:#16764b}
+@media(max-width:430px){#ndBonusDistribution .ndbd-manager-month{padding:9px 6px}#ndBonusDistribution .ndbd-manager-month strong{font-size:12px}}
 </style>
 <script id="nd-bonus-distribution-v1-js">
 (()=>{'use strict';
@@ -36439,7 +36458,7 @@ const el=document.createElement('section');el.id='ndBonusDistribution';el.innerH
 <h2>Branch Bonus</h2>
 <div class="ndbd-controls"><div><label>Branch</label><button type="button" id="ndbdChooseBranch" class="ndbd-big-button">Select Branch</button><select id="ndbdBranch" aria-label="Select Branch" hidden></select></div><label>Month<input id="ndbdMonth" type="month"></label></div>
 <div class="ndbd-overview ndbd-kpi-grid"><div>Monthly Total Performance<strong id="ndbdSales">RM 0.00</strong></div><div>Manager Bonus<strong id="ndbdManagerBonus">RM 0.00</strong></div><div>Staff Bonus Pool<strong id="ndbdPoolGross">RM 0.00</strong></div><div>Remaining Staff Pool<strong id="ndbdNetStaff">RM 0.00</strong></div></div>
-<section class="ndbd-quarter-panel" aria-label="Three Month Bonus"><div class="ndbd-heading"><h3>3-Month Bonus Pool</h3><span id="ndbdQuarterStatus">Draft preview · Not posted to payroll</span></div><div class="ndbd-three-months" id="ndbdQuarterMonths"></div><div class="ndbd-quarter-footer"><div>Quarterly Staff Pool<strong id="ndbdQuarterGross">RM 0.00</strong></div><div>After Deductions<strong id="ndbdQuarterNet">RM 0.00</strong></div><div>14th Salary Release<strong id="ndbdQuarterRelease">Month 3 only</strong></div></div><p class="ndbd-quarter-note">Month 1 and 2 carry forward. Month 3 is the payout month. These figures are browser drafts until saved into the payroll bonus tables; confirmed salary records are not modified here.</p></section>
+<section class="ndbd-quarter-panel" aria-label="Three Month Bonus"><div class="ndbd-heading"><h3>3-Month Bonus Pool</h3><span id="ndbdQuarterStatus"></span></div><div class="ndbd-three-months" id="ndbdQuarterMonths"></div><div class="ndbd-quarter-footer"><div>Quarterly Staff Pool<strong id="ndbdQuarterGross">RM 0.00</strong></div><div>After Deductions<strong id="ndbdQuarterNet">RM 0.00</strong></div><div>14th Salary Release<strong id="ndbdQuarterRelease">Month 3 only</strong></div></div></section>
 <div class="ndbd-heading"><h3>Branch Managers</h3><button type="button" id="ndbdEditManagers">Select Managers / %</button></div>
 <div id="ndbdManagerSummary" class="ndbd-summary"></div>
 <div id="ndbdEcoBox"><div class="ndbd-heading"><h3>Branch Staff · 1%</h3><button type="button" id="ndbdEditStaff">Select Therapists</button></div></div>
@@ -36500,15 +36519,69 @@ function savedMonthSummary(b,m){
 function drawQuarterPreview(current){
  const months=quarterMonths(month),monthIndex=months.indexOf(month),payment=monthIndex===2;
  const entries=months.map((m,i)=>{
-  const v=m===month?{gross:current.gross,net:current.net,manager:current.manager,saved:true}:savedMonthSummary(branch,m);
-  return {m,index:i,value:v};
+  const data=m===month?{...snapshot(),monthlySales:sales()}:readLocal(storageKey(branch,m));
+  const value=m===month?{gross:current.gross,net:current.net,manager:current.manager}:savedMonthSummary(branch,m);
+  return {m,index:i,value,data};
  });
  const host=$('ndbdQuarterMonths');if(!host)return;
- host.innerHTML=entries.map(e=>`<div class="ndbd-quarter-month ${e.m===month?'active':''}"><small>MONTH ${e.index+1}</small><strong>${esc(e.m)}</strong><span>${e.value?money(e.value.net):'Not recorded'}</span><small>${e.index===2?'Payout month':'Carried forward'}${e.value?' · Draft':''}</small></div>`).join('');
+ // Each selected manager is presented separately. Preserve saved percentages
+ // for each month: changing a later month never rewrites an earlier month.
+ const managerIds=new Set([...managers.keys()].map(String));
+ for(const e of entries)for(const pair of e.data?.managers||[])managerIds.add(String(pair[0]));
+ const list=[...managerIds].sort((a,b)=>managerName(a).localeCompare(managerName(b),'en'));
+ const managerCards=list.map(id=>{
+  const figures=entries.map(e=>{
+   const pair=(e.data?.managers||[]).find(p=>String(p[0])===id);
+   const rate=pair?Math.min(100,safeNum(pair[1])):null;
+   const amt=rate===null?null:safeNum(e.data?.monthlySales)*rate/100;
+   return {...e,rate,amt};
+  });
+  const total=figures.reduce((sum,e)=>sum+(e.amt||0),0);
+  const selectedRate=managers.has(id)?managers.get(id):[...figures].reverse().find(e=>e.rate!==null)?.rate;
+  return `<section class="ndbd-manager-quarter-card"><div class="ndbd-manager-quarter-title"><strong>${esc(managerName(id))}</strong><span>${selectedRate===undefined?'—':esc(selectedRate)+'%'}</span></div><div class="ndbd-manager-months">${figures.map(e=>`<div class="ndbd-manager-month ${e.m===month?'active':''}"><small>Month ${e.index+1}</small><small>${esc(e.m)}${e.rate===null?'':' · '+esc(e.rate)+'%'}</small><strong>${e.amt===null?'—':money(e.amt)}</strong></div>`).join('')}</div><div class="ndbd-manager-quarter-total"><span>Quarter Total</span><strong>${money(total)}</strong></div></section>`;
+ });
+ // Eco Botanic: preserve each month's own selected staff, MC/target and
+ // manager exclusion. Display only therapists selected in at least one month.
+ // Calculate the same integer-cent distribution as the monthly Bonus table.
+ const monthlyStaff=entries.map(e=>{
+  if(!e.data)return null;
+  const selectedManagers=new Set((e.data.managers||[]).map(([id])=>String(id)));
+  const rows=(e.data.staff||[]).filter(r=>r.selected&&!selectedManagers.has(String(r.id)));
+  const qualified=rows.filter(r=>!r.mc&&r.target!==false).sort((a,b)=>Number(a.id)-Number(b.id));
+  const gross=safeNum(e.data.monthlySales)*0.01;
+  const distributable=Math.max(0,gross-Math.max(0,safeNum(e.data.poolDeduction)));
+  const cents=Math.round(distributable*100),base=qualified.length?Math.floor(cents/qualified.length):0;
+  const remainder=qualified.length?cents%qualified.length:0;
+  const amounts=new Map(qualified.map((r,i)=>[String(r.id),(base+(i<remainder?1:0))/100]));
+  return {selected:new Set(rows.map(r=>String(r.id))),amounts};
+ });
+ let staffCards=[];
+ if(isEco()){
+  const selectedIds=new Set();
+  for(const state of monthlyStaff)if(state)for(const id of state.selected)selectedIds.add(id);
+  const ids=[...selectedIds].sort((a,b)=>{
+   const aName=staff.find(x=>String(x.id)===a)?.nickname||staff.find(x=>String(x.id)===a)?.name||a;
+   const bName=staff.find(x=>String(x.id)===b)?.nickname||staff.find(x=>String(x.id)===b)?.name||b;
+   return String(aName).localeCompare(String(bName),'en');
+  });
+  staffCards=ids.map(id=>{
+   const record=staff.find(x=>String(x.id)===id);
+   const display=record?(record.nickname||record.name||id):id;
+   const figures=entries.map((e,i)=>{
+    const state=monthlyStaff[i];
+    return {month:e.m,index:e.index,selected:!!state?.selected.has(id),amount:state?.amounts.get(id)||0};
+   });
+   const total=figures.reduce((sum,e)=>sum+e.amount,0);
+   return `<section class="ndbd-manager-quarter-card ndbd-staff-quarter-card"><div class="ndbd-manager-quarter-title"><strong>${esc(display)}</strong><span>Staff · 1% Pool</span></div><div class="ndbd-manager-months">${figures.map(e=>`<div class="ndbd-manager-month ${e.month===month?'active':''}"><small>Month ${e.index+1}</small><small>${esc(e.month)}</small><strong>${e.selected?money(e.amount):'—'}</strong></div>`).join('')}</div><div class="ndbd-manager-quarter-total"><span>Quarter Total</span><strong>${money(total)}</strong></div></section>`;
+  });
+ }
+ host.innerHTML=(managerCards.length?'<h4 class="ndbd-quarter-group-title">Managers</h4>'+managerCards.join(''):'')+
+  (isEco()?'<h4 class="ndbd-quarter-group-title">Participating Staff · Eco Botanic</h4>'+(staffCards.length?staffCards.join(''):'<p class="ndbd-manager-empty">No participating staff selected.</p>'):'')+
+  (!managerCards.length&&!isEco()?'<p class="ndbd-manager-empty">Select Managers / % to see their three-month breakdown.</p>':'');
  const gross=entries.reduce((n,e)=>n+(e.value?.gross||0),0),net=entries.reduce((n,e)=>n+(e.value?.net||0),0);
  $('ndbdQuarterGross').textContent=money(gross);$('ndbdQuarterNet').textContent=money(net);
- $('ndbdQuarterRelease').textContent=payment?'Month 3 · '+money(net)+' (preview)':'Month 3 only';
- $('ndbdQuarterStatus').textContent='Draft preview · Not posted to payroll';
+ $('ndbdQuarterRelease').textContent=payment?'Month 3 · '+money(net):'Month 3';
+ $('ndbdQuarterStatus').textContent='';
 }
 function calculate(){const total=sales(),mgr=[...managers.values()].reduce((a,p)=>a+total*p/100,0);const gross=total*(isEco()?1:poolRate)/100;const eligible=members.filter(r=>!managers.has(String(r.id))&&(!isEco()||r.selected)&&!r.mc&&r.target);const distributable=Math.max(0,gross-poolDeduction);
 // Allocate integer cents to prevent rounding drift.
