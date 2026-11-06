@@ -36415,6 +36415,7 @@ byId('settlementDate')?.addEventListener('change',()=>{state.selected.clear();st
 #ndBonusDistribution .ndbd-staff-quarter-card .ndbd-manager-month strong{color:#24553d}
 #ndBonusDistribution .ndbd-staff-quarter-card .ndbd-manager-quarter-total strong{color:#16764b}
 @media(max-width:430px){#ndBonusDistribution .ndbd-manager-month{padding:9px 6px}#ndBonusDistribution .ndbd-manager-month strong{font-size:12px}}
+#ndBonusDistribution .ndbd-sam-rates{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 10px}#ndBonusDistribution .ndbd-sam-rates small{padding:4px 7px;border-radius:8px;background:#f0f5fc;color:#3d638b;font-size:11px;font-weight:700}#ndBonusDistribution .ndbd-sam-line{display:flex;flex-direction:column;border-bottom:1px solid #dce7f5;padding:5px 0;gap:3px;min-width:0}#ndBonusDistribution .ndbd-sam-line small{font-size:10px;color:#61728a;line-height:1.3;overflow-wrap:anywhere}#ndBonusDistribution .ndbd-sam-line small:last-child{font-weight:750;color:#305885}#ndBonusDistribution .ndbd-sam-cross-branch .ndbd-manager-month>strong{margin-top:auto;padding-top:5px}
 </style>
 <script id="nd-bonus-distribution-v1-js">
 (()=>{'use strict';
@@ -36439,6 +36440,7 @@ const managerCandidates=()=>{
 };
 const displayName=r=>r?.nickname||r?.name||String(r?.id||'');
 const managerName=id=>{const r=staff.find(x=>String(x.id)===String(id));return r?displayName(r):String(id)};
+const isSamManager=id=>{const r=staff.find(x=>String(x.id)===String(id));return !!r&&(String(r.email||'').trim().toLowerCase()==='samchin6006@gmail.com'||/^(sam|sam chin|chin hen sam)$/i.test(String(r.nickname||r.name||'').trim()));};
 const allowed=b=>['umo1017@gmail.com','samchin6006@gmail.com'].includes(getEmail())||staff.some(s=>s.outlet===b&&String(s.email||'').toLowerCase()===getEmail());
 const sales=()=>settlements.filter(x=>x.branch===branch).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
 const monthPerformance=(b,m)=>quarterSettlements.filter(x=>x.branch===b&&String(x.settlement_date||'').slice(0,7)===m).reduce((sum,x)=>sum+Number(x.grand_total||0),0);
@@ -36494,7 +36496,7 @@ $('ndbdCopy').addEventListener('click',()=>{const lines=[branch+' · '+month,'To
 function drawManagers(){
 const options=managerCandidates();
 $('ndbdManagers').innerHTML=options.map(r=>{const id=String(r.id),selected=managers.has(id);return `<div class="ndbd-manager-row" data-manager-id="${esc(id)}"><label><input type="checkbox" data-field="managerCheck" ${selected?'checked':''}> ${esc(displayName(r))}${r.outlet!==branch?' · '+esc(r.outlet):''}</label><label>% <input type="number" data-field="managerRate" min="0" max="100" step="0.01" value="${selected?managers.get(id):0}" ${selected?'':'disabled'}></label><span data-manager-bonus="${esc(id)}">${selected?money(sales()*managers.get(id)/100):'—'}</span></div>`}).join('')||'No managers available';
-$('ndbdManagerSummary').innerHTML=[...managers].map(([id,pct])=>`<div class="ndbd-summary-row"><span>${esc(managerName(id))} · ${pct}%</span><strong>${money(sales()*pct/100)}</strong></div>`).join('')||'<span>—</span>';
+$('ndbdManagerSummary').innerHTML=[...managers].filter(([id])=>isEco()||!isSamManager(id)).map(([id,pct])=>`<div class="ndbd-summary-row"><span>${esc(managerName(id))} · ${pct}%</span><strong>${money(sales()*pct/100)}</strong></div>`).join('')||'<span>—</span>';
 }
 function drawStaff(){
 const listed=members.filter(r=>!managers.has(String(r.id)));
@@ -36537,12 +36539,48 @@ function drawQuarterPreview(current){
  const managerIds=new Set([...managers.keys()].map(String));
  for(const e of entries)for(const pair of e.data?.managers||[])managerIds.add(String(pair[0]));
  const list=[...managerIds].sort((a,b)=>managerName(a).localeCompare(managerName(b),'en'));
- const managerCards=list.map(id=>{
+ // SAM has one consolidated display on Eco Botanic only. Other branches
+ // retain their own Sam percentage settings and calculations, but do not
+ // show duplicate Sam bonus cards.
+ const samIds=staff.filter(r=>isSamManager(r.id)).map(r=>String(r.id));
+ if(isEco())for(const id of samIds)if(!managerIds.has(id)){
+  const hasAny=fixedBranches.some(b=>months.some(m=>{
+   const data=readLocal(storageKey(b,m));
+   return (data?.managers||[]).some(pair=>String(pair[0])===id);
+  }));
+  if(hasAny)managerIds.add(id);
+ }
+ const visibleIds=[...managerIds].filter(id=>isEco()||!isSamManager(id))
+    .sort((a,b)=>managerName(a).localeCompare(managerName(b),'en'));
+ const managerCards=visibleIds.map(id=>{
+  if(isEco()&&isSamManager(id)){
+   const figures=months.map((m,i)=>{
+    const branchFigures=fixedBranches.map(b=>{
+     const stored=readLocal(storageKey(b,m));
+     const isCurrent=b===branch&&m===month;
+     const data=isCurrent?{...snapshot(),monthlySales:sales()}:stored;
+     const pair=(data?.managers||[]).find(p=>String(p[0])===id);
+     // For a previous month without a saved record on the displayed
+     // branch, estimate using the presently selected Sam percentage.
+     const provisional=!pair&&b===branch&&m<month&&!stored&&managers.has(id);
+     const rate=pair?Math.min(100,safeNum(pair[1])):provisional?managers.get(id):null;
+     const amount=rate===null?null:monthPerformance(b,m)*rate/100;
+     return {b,rate,amount,provisional};
+    }).filter(x=>x.rate!==null);
+    const amount=branchFigures.reduce((n,x)=>n+(x.amount||0),0);
+    return {m,i,branchFigures,amount};
+   });
+   const total=figures.reduce((n,f)=>n+f.amount,0);
+   const branchRates=fixedBranches.map(b=>{
+    const current=figures[monthIndex]?.branchFigures.find(x=>x.b===b);
+    const latest=[...figures].reverse().flatMap(f=>f.branchFigures).find(x=>x.b===b);
+    const r=current||latest;
+    return r?`${b}: ${r.rate}%`:null;
+   }).filter(Boolean);
+   return `<section class="ndbd-manager-quarter-card ndbd-sam-cross-branch"><div class="ndbd-manager-quarter-title"><strong>${esc(managerName(id))}</strong><span>All Branches</span></div><div class="ndbd-sam-rates">${branchRates.map(x=>`<small>${esc(x)}</small>`).join('')}</div><div class="ndbd-manager-months">${figures.map(f=>`<div class="ndbd-manager-month ${f.m===month?'active':''}"><small>Month ${f.i+1}</small><small>${esc(f.m)}</small>${f.branchFigures.length?f.branchFigures.map(x=>`<div class="ndbd-sam-line"><small>${esc(x.b)} · ${esc(x.rate)}%${x.provisional?' · Estimate':''}</small><small>${money(x.amount)}</small></div>`).join(''):'<strong>—</strong>'}${f.branchFigures.length?`<strong>${money(f.amount)}</strong>`:''}</div>`).join('')}</div><div class="ndbd-manager-quarter-total"><span>Quarter Total</span><strong>${money(total)}</strong></div></section>`;
+  }
   const figures=entries.map(e=>{
    const pair=(e.data?.managers||[]).find(p=>String(p[0])===id);
-   // For elapsed months with no saved manager selection, show a clearly
-   // labelled provisional calculation at the CURRENT manager percentage.
-   // Never treat this as a saved monthly approval or payroll release.
    const provisional=!pair&&e.m<month&&!e.hasHistorical&&managers.has(id);
    const rate=pair?Math.min(100,safeNum(pair[1])):provisional?managers.get(id):null;
    const amt=rate===null?null:e.measuredSales*rate/100;
