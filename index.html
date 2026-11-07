@@ -12692,7 +12692,9 @@ function ndFourteenUpdateTotals(c,seven){
   const savedActual=seven?.adjusted_allowance;
   c.adjusted_allowance=cents(savedActual!==null && savedActual!==undefined && savedActual!==''
     ? savedActual : ndSevenAdjustedAllowance(seven||{}));
-  c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
+  // Deducted 7th Allowance is the withheld portion only. If the adjusted
+  // amount exceeds the original, that is not an extra 14th deduction.
+  c.allowance_difference=cents(Math.max(0,c.original_allowance-c.adjusted_allowance));
   c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
   // 14th Allowance is a NEW deduction amount ONLY when actually deducted.
   // It is NOT the original 7th Allowance or the remaining 7th adjusted allowance.
@@ -15142,8 +15144,20 @@ function renderFourteenTable(emps){
           w_bonus:Number(cs.w_bonus||0)
         },snapshotFor(e.id),threeBonus)
       : calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(e.id),threeBonus);
+    // A confirmed commission snapshot stores final totals but does not have
+    // a seventh_deducted_allowance column. Recover that DISPLAY-ONLY figure
+    // from the corresponding 7th payroll snapshot; do not recalculate or
+    // overwrite any confirmed 14th salary amount.
+    const sevenDisplay=cs ? ndFourteenUpdateTotals({
+      ...cs,
+      target_bonus:Number(cs.bonus||0)-Number(cs.three_month_bonus||0),
+      bonus3:Number(cs.three_month_bonus||0)
+    },snapshotFor(e.id)) : null;
     const c=cs
       ? {...cs,...ndFourteenSevenCosts(snapshotFor(e.id)),
+         seventh_deducted_allowance:sevenDisplay.seventh_deducted_allowance,
+         original_allowance:sevenDisplay.original_allowance,
+         adjusted_allowance:sevenDisplay.adjusted_allowance,
          target_bonus:Number(cs.bonus||0)-Number(cs.three_month_bonus||0),
          bonus3:Number(cs.three_month_bonus||0)}
       : applyFourteenManualOverrides(e,base14);
@@ -15176,7 +15190,7 @@ function renderFourteenTable(emps){
       <td>${money(bonus3)}</td>
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
       <td>${money(c.seventh_net_pay||0)}</td>
-      <td title="Original 7th Allowance minus adjusted 7th Allowance">${money(c.seventh_deducted_allowance||0)}</td>
+      <td title="Automatically calculated from the confirmed 7th Salary: original Allowance minus allowance actually paid. This is distinct from additional 14th Allowance deductions.">${money(c.seventh_deducted_allowance||0)}</td>
       <td title="Only the Allowance amount actually deducted in this 14th payroll; original Allowance is not deducted" data-live-seven-deducted14="${e.id}">${cs?(money(salaryOverrideValue(e.id,'14','allowance_deduction',0))):salaryOverrideInput(e.id,'14','allowance_deduction',c.allowance_deduction||0)}</td>
       <td title="Salary Advance Repayment automatically routed to 7th Salary" data-live-advance7-in14="${e.id}">${advance7===null?'—':money(advance7)}</td>
       <td title="Salary Advance Repayment automatically routed to 14th Salary" data-live-advance14="${e.id}">${advance14===null?'—':money(advance14)}</td>
