@@ -12697,23 +12697,17 @@ function ndFourteenUpdateTotals(c,seven){
   // Allowance (Deducted Only) is ONLY the amount already deducted
   // from the corresponding 7th salary. Never include 14th Extra.
   c.allowance_deduction=0;
-  // Nett Pay = Total Commission - 7th Net Pay - 7th Allowance deducted
-  //          - 7th Total Deduction - 7th/14th salary advances.
-  // CAUTION: 7th Net Pay already reflects 7th deductions and advances;
-  // these additional subtractions are the user's explicit 14th worksheet rule.
-  // Both advance amounts come from their respective signed advance payroll routes.
-  // NOTE: 7th Net Pay may already include the 7th advance deduction. The
-  // additional subtraction below is an explicit user-defined payroll rule.
+  // Nett Pay = Total Commission - 7th Net Pay - deducted 7th Allowance
+  //          - 7th Total Deduction - 14th Salary Advance.
+  // User-requested separate deductions. Review source components before
+  // confirmation to avoid double subtraction if 7th totals overlap.
   // Confirmed historical snapshots remain unchanged.
   c.seventh_deducted_allowance=cents(Math.max(0,c.allowance_difference));
   c.raw_commission=cents(c.total_commission-costs.seventh_net_pay);
   c.seventh_deduction_refund=0;
-  c.seventh_salary_advance_deduction=cents(c.seventh_salary_advance_deduction||0);
   c.salary_advance_deduction=cents(c.salary_advance_deduction||0); // 14th advance, existing column
-  c.seventh_total_deduction=cents(Math.max(0,costs.seventh_total_deduction));
   c.commission=cents(c.raw_commission-c.seventh_deducted_allowance
-    -c.seventh_total_deduction
-    -c.seventh_salary_advance_deduction-c.salary_advance_deduction);
+    -costs.seventh_total_deduction-c.salary_advance_deduction);
   c.total_income=c.total_commission;
   c.net_pay=c.commission;
   c.has_payslip=true;
@@ -12732,7 +12726,6 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
   // 7th deducted allowance is calculated from the actual 7th payslip.
   // Do not load legacy 14th Extra overrides into this deduction.
   c.allowance_deduction=0;
-  c.seventh_salary_advance_deduction=ndAutoPayrollAmount(e,'advance');
   c.salary_advance_deduction=ndAutoPayrollAmount(e,'advance14');
   return ndFourteenUpdateTotals(c,snapshotFor(empId));
 }
@@ -15162,7 +15155,7 @@ function renderFourteenTable(emps){
     // A confirmed 14th snapshot must remain viewable even when commission is zero or negative.
     // The snapshot confirmation, not the amount, controls payslip availability.
     const net=Number(c.net_pay||0);
-    const advance7=cs?null:Number(c.seventh_salary_advance_deduction||0);
+    const deduction7=Number(c.seventh_total_deduction||0);
     const advance14=cs?null:Number(c.salary_advance_deduction||0);
     const pm=String(e.payment_method||"").trim();
 
@@ -15181,8 +15174,7 @@ function renderFourteenTable(emps){
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
       <td>${money(c.seventh_net_pay||0)}</td>
       <td title="Auto: deducted Allowance from this month's 7th Salary only; no 14th Extra." data-live-seven-deducted14="${e.id}">${money(Math.max(0,Number(cs ? ndFourteenUpdateTotals({...cs},snapshotFor(e.id)).seventh_deducted_allowance : c.seventh_deducted_allowance)||0))}</td>
-      <td title="Automatically read the same month's 7th Total Deduction" data-live-seven-total-deduction14="${e.id}">${money(Number(c.seventh_total_deduction ?? ndFourteenSevenCosts(snapshotFor(e.id)).seventh_total_deduction)||0)}</td>
-      <td title="Salary Advance Repayment automatically routed to 7th Salary" data-live-advance7-in14="${e.id}">${advance7===null?'—':money(advance7)}</td>
+      <td title="Automatically read from the same month’s 7th Salary Total Deduction" data-live-seven-total-deduction14="${e.id}">${money(deduction7)}</td>
       <td title="Salary Advance Repayment automatically routed to 14th Salary" data-live-advance14="${e.id}">${advance14===null?'—':money(advance14)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
@@ -15215,7 +15207,6 @@ function renderFourteenTable(emps){
       <th rowspan="2">− 7th Net Pay</th>
       <th rowspan="2">− Allowance</th>
       <th rowspan="2">− 7th Total Deduction (Auto)</th>
-      <th rowspan="2">− 7th Salary Advance (Auto)</th>
       <th rowspan="2">− 14th Salary Advance (Auto)</th>
       <th rowspan="2">Commission</th>
       <th rowspan="2">Nett Pay</th><th colspan="3" class="netpay-group-head">Net Pay by Method</th><th rowspan="2">Confirm</th><th rowspan="2">14th Commission Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
@@ -15225,7 +15216,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="15" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="14" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -15233,7 +15224,7 @@ function renderFourteenTable(emps){
       </tr>
       ${rows}
       <tr class="netpay-summary-row" style="display:none">
-        <td colspan="13" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
+        <td colspan="12" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
@@ -15961,10 +15952,7 @@ function recalc14thLive(empId){
   }
 
   const deduction7Cell=document.querySelector(`[data-live-seven-total-deduction14="${empId}"]`);
-  if(deduction7Cell) deduction7Cell.textContent=money(calc.seventh_total_deduction||0);
-
-  const advance7Cell=document.querySelector(`[data-live-advance7-in14="${empId}"]`);
-  if(advance7Cell)advance7Cell.textContent=money(calc.seventh_salary_advance_deduction||0);
+  if(deduction7Cell)deduction7Cell.textContent=money(calc.seventh_total_deduction||0);
   const advanceCell=document.querySelector(`[data-live-advance14="${empId}"]`);
   if(advanceCell)advanceCell.textContent=money(calc.salary_advance_deduction||0);
 
