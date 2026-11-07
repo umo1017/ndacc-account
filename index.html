@@ -16365,20 +16365,20 @@ async function toggleSalaryPayment(type,empId){
   const outlet=employee?.outlet||'';
   const net=Number(snap.net_pay);
   if(!outlet||!Number.isFinite(net)||net<0){alert('Missing branch or confirmed Net Pay.');return;}
-  // The database is the authority for direct branch grants and dated Salary Duty.
-  const {data:canConfirm,error:permissionError}=await salaryDb.rpc(
-    'nd_can_confirm_salary_payment',
-    {p_outlet:outlet,p_salary_type:Number(type)}
-  );
-  if(permissionError){alert('Unable to verify payment permission: '+permissionError.message);return;}
-  if(canConfirm!==true){alert('Payment DONE is not authorized for this branch and salary date.');return;}
-  const {data:selfPic,error:picError}=await salaryDb.rpc(
-    'nd_salary_duty_my_pic',{p_outlet:outlet}
-  );
-  if(picError){alert('Unable to verify Person in Charge: '+picError.message);return;}
-  const names=[...new Set((selfPic||[])
-    .map(x=>String(x.staff_name||'').trim()).filter(Boolean))];
-  if(!names.length){alert('No authorized Person in Charge for this payment.');return;}
+  // Payment DONE is available to signed-in operators regardless of duty date.
+  // Database RPC remains the authority for final persistence and audit.
+  let operatorName='';
+  try {
+    const {data:sessionData,error:sessionError}=await salaryDb.auth.getUser();
+    if(sessionError)throw sessionError;
+    operatorName=String(sessionData?.user?.user_metadata?.full_name||
+      sessionData?.user?.email||'').trim();
+  }catch(error){
+    alert('Login required to record salary payment: '+String(error.message||error));
+    return;
+  }
+  if(!operatorName){alert('Please sign in to record salary payment.');return;}
+  const names=[operatorName];
   // Non-cash salary payments: one click, no signature dialog or signed receipt.
   const directMethod=String(employee?.payment_method||'').trim().toLowerCase();
   const directNonCash=['transfer','bank','bank transfer','bank_transfer','bank-transfer','tng','touch n go','touch n go ewallet',"touch 'n go",'touch n go e-wallet'];
