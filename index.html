@@ -12692,9 +12692,7 @@ function ndFourteenUpdateTotals(c,seven){
   const savedActual=seven?.adjusted_allowance;
   c.adjusted_allowance=cents(savedActual!==null && savedActual!==undefined && savedActual!==''
     ? savedActual : ndSevenAdjustedAllowance(seven||{}));
-  // Deducted 7th Allowance is the withheld portion only. If the adjusted
-  // amount exceeds the original, that is not an extra 14th deduction.
-  c.allowance_difference=cents(Math.max(0,c.original_allowance-c.adjusted_allowance));
+  c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
   c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
   // 14th Allowance is a NEW deduction amount ONLY when actually deducted.
   // It is NOT the original 7th Allowance or the remaining 7th adjusted allowance.
@@ -12728,7 +12726,7 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
       c[field]=salaryOverrideValue(empId,"14",field,c[field],salaryMonth,source);
     }
   }
-  // Month-specific actual allowance deduction: default zero unless staff explicitly records one.
+  // 7th deducted allowance is auto-populated in the display; this manual field is ONLY additional 14th deduction.
   // Do not carry forward the original 7th Allowance into this deduction.
   c.allowance_deduction=salaryOverrideValue(empId,'14','allowance_deduction',0,salaryMonth,source);
   c.seventh_salary_advance_deduction=ndAutoPayrollAmount(e,'advance');
@@ -14563,7 +14561,8 @@ function validateNewStaffRequiredFields(messageElId){
   if(!name) return fail("Name is required.","empName");
   if(!phone) return fail("Phone is required.","empPhone");
   const payBy=(byId("empPayBy")?.value||"Cash");
-  if(outlet!=="Collaboration" && payBy!=="Cash" && !nric) return fail("NRIC / Passport is required for non-Cash payment.","empNric");
+  // IC / Passport is optional for all payment methods and branches.
+  // If provided, uniqueness is checked before saving.
 
   if(outlet!=="Collaboration" && employmentType==="full_time" && basicRaw==="") return fail("Basic Pay is required for Full Time staff.","empGuaranteed");
 
@@ -15144,20 +15143,8 @@ function renderFourteenTable(emps){
           w_bonus:Number(cs.w_bonus||0)
         },snapshotFor(e.id),threeBonus)
       : calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(e.id),threeBonus);
-    // A confirmed commission snapshot stores final totals but does not have
-    // a seventh_deducted_allowance column. Recover that DISPLAY-ONLY figure
-    // from the corresponding 7th payroll snapshot; do not recalculate or
-    // overwrite any confirmed 14th salary amount.
-    const sevenDisplay=cs ? ndFourteenUpdateTotals({
-      ...cs,
-      target_bonus:Number(cs.bonus||0)-Number(cs.three_month_bonus||0),
-      bonus3:Number(cs.three_month_bonus||0)
-    },snapshotFor(e.id)) : null;
     const c=cs
       ? {...cs,...ndFourteenSevenCosts(snapshotFor(e.id)),
-         seventh_deducted_allowance:sevenDisplay.seventh_deducted_allowance,
-         original_allowance:sevenDisplay.original_allowance,
-         adjusted_allowance:sevenDisplay.adjusted_allowance,
          target_bonus:Number(cs.bonus||0)-Number(cs.three_month_bonus||0),
          bonus3:Number(cs.three_month_bonus||0)}
       : applyFourteenManualOverrides(e,base14);
@@ -15190,8 +15177,9 @@ function renderFourteenTable(emps){
       <td>${money(bonus3)}</td>
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
       <td>${money(c.seventh_net_pay||0)}</td>
-      <td title="Automatically calculated from the confirmed 7th Salary: original Allowance minus allowance actually paid. This is distinct from additional 14th Allowance deductions.">${money(c.seventh_deducted_allowance||0)}</td>
-      <td title="Only the Allowance amount actually deducted in this 14th payroll; original Allowance is not deducted" data-live-seven-deducted14="${e.id}">${cs?(money(salaryOverrideValue(e.id,'14','allowance_deduction',0))):salaryOverrideInput(e.id,'14','allowance_deduction',c.allowance_deduction||0)}</td>
+      <td title="Auto: 7th deducted Allowance plus any separately recorded 14th Allowance deduction. Each component is deducted once." data-live-seven-deducted14="${e.id}">${cs
+        ? money(Math.max(0,Number(c.seventh_deducted_allowance||0))+Math.max(0,Number(salaryOverrideValue(e.id,'14','allowance_deduction',0,salaryMonth))))
+        : `<span data-seven-auto-allowance="${e.id}">${money(Math.max(0,Number(c.seventh_deducted_allowance||0)))}</span><span class="helper" style="display:block;font-size:10px">7th auto + 14th extra:</span>${salaryOverrideInput(e.id,'14','allowance_deduction',c.allowance_deduction||0)}`}</td>
       <td title="Salary Advance Repayment automatically routed to 7th Salary" data-live-advance7-in14="${e.id}">${advance7===null?'—':money(advance7)}</td>
       <td title="Salary Advance Repayment automatically routed to 14th Salary" data-live-advance14="${e.id}">${advance14===null?'—':money(advance14)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
@@ -15223,8 +15211,7 @@ function renderFourteenTable(emps){
       <th rowspan="2">Bonus3 (Quarterly)</th>
       <th rowspan="2">Total Commission</th>
       <th rowspan="2">− 7th Net Pay</th>
-      <th rowspan="2">− 7th Deducted Allowance</th>
-      <th rowspan="2">− Allowance (Deducted Only)</th>
+      <th rowspan="2">− Allowance (Deducted Only · 7th Auto + 14th Extra)</th>
       <th rowspan="2">− 7th Salary Advance (Auto)</th>
       <th rowspan="2">− 14th Salary Advance (Auto)</th>
       <th rowspan="2">Commission</th>
@@ -15235,7 +15222,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="15" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="14" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -15243,7 +15230,7 @@ function renderFourteenTable(emps){
       </tr>
       ${rows}
       <tr class="netpay-summary-row" style="display:none">
-        <td colspan="13" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
+        <td colspan="12" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
@@ -15966,10 +15953,12 @@ function recalc14thLive(empId){
 
   const deductedCell=document.querySelector(`[data-live-seven-deducted14="${empId}"]`);
   if(deductedCell){
-    // Editable input is managed by salary_manual_overrides; do not overwrite it with plain text.
-    const deductionInput=deductedCell.querySelector('input[data-override-field="allowance_deduction"]');
-    if(!deductionInput)deductedCell.textContent=money(calc.allowance_deduction||0);
-    deductedCell.title='Only actual 14th Allowance deductions are subtracted; unchanged Allowance is excluded';
+    // Show the auto-calculated 7th deducted Allowance and the optional extra
+    // 14th deduction in one cell, without adding the 7th amount twice to Net Pay.
+    const autoSeven=deductedCell.querySelector('[data-seven-auto-allowance]');
+    if(autoSeven)autoSeven.textContent=money(Math.max(0,Number(calc.seventh_deducted_allowance||0)));
+    else deductedCell.textContent=money(Math.max(0,Number(calc.seventh_deducted_allowance||0))+Math.max(0,Number(calc.allowance_deduction||0)));
+    deductedCell.title='7th deducted Allowance (auto) plus separate 14th deducted Allowance. Each is deducted once.';
   }
 
   const advance7Cell=document.querySelector(`[data-live-advance7-in14="${empId}"]`);
@@ -17076,6 +17065,9 @@ function normalizeUniqueValue(v){
 }
 
 async function validateUniqueStaffFields(payload,excludeId=null){
+  // Optional identity: skip validation for a truly empty IC / Passport.
+  // Filled identities must remain unique across distinct employees.
+  const suppliedIdentity=normalizeUniqueValue(payload.nric_passport);
   const checks=[
     ["employee_no",payload.employee_no,"Employee No."],
     ["phone",payload.phone,"Phone No."],
@@ -17096,11 +17088,15 @@ async function validateUniqueStaffFields(payload,excludeId=null){
     if(!target) continue;
 
     const duplicate=(data||[]).find(row=>
-      Number(row.id)!==Number(excludeId) &&
+      (excludeId==null || String(row.id)!==String(excludeId)) &&
       normalizeUniqueValue(row[field])===target
     );
 
     if(duplicate){
+      const employeeNumber=String(duplicate.employee_no||'').trim();
+      if(field==="nric_passport"){
+        return {ok:false,message:`IC / Passport is already linked to another employee${employeeNumber?" ("+employeeNumber+")":""}. Leave it blank if unavailable, or correct the conflicting employee record.`};
+      }
       return {ok:false,message:`${label} already exists. Cannot use duplicate information.`};
     }
   }
