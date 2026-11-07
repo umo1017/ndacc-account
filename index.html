@@ -12515,9 +12515,9 @@ function ndSalaryAdvancePayrollRoute(date){
     :{payrollType:'14',salaryMonth:previous,payDay:'14th of this month'};
 }
 window.ndSalaryAdvancePayrollRoute=ndSalaryAdvancePayrollRoute;
-window.ndPayrollDeductionLedger = {month:'',ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),fines:new Map()};
+window.ndPayrollDeductionLedger = {month:'',ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),advanceItems:new Map(),fines:new Map()};
 async function ndLoadPayrollDeductionLedger(selectedMonth){
-  const ledger={month:String(selectedMonth||'').slice(0,7),ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),fines:new Map()};
+  const ledger={month:String(selectedMonth||'').slice(0,7),ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),advanceItems:new Map(),fines:new Map()};
   window.ndPayrollDeductionLedger=ledger;
   if(!salaryDb || !/^\d{4}-\d{2}$/.test(ledger.month)){
     ledger.error='Payroll deduction records cannot be loaded.';
@@ -12551,6 +12551,13 @@ async function ndLoadPayrollDeductionLedger(selectedMonth){
       const destination=route.payrollType==='14'?ledger.fourteenAdvances:ledger.advances;
       const old=destination.get(id)||0;
       destination.set(id,Math.round((old+amount)*100)/100);
+      // Preserve the actual signed loan dates for individual payslip lines.
+      // Only loans routed to this 7th salary month are displayed on a 7th payslip.
+      if(route.payrollType==='7'){
+        const items=ledger.advanceItems.get(id)||[];
+        items.push({date:String(a.advance_date).slice(0,10),amount:Math.round(amount*100)/100});
+        ledger.advanceItems.set(id,items);
+      }
     }
     // Fine approval is an internal disciplinary record; approval alone
     // does not authorize deduction from an employee's salary.
@@ -17800,13 +17807,23 @@ function ndSevenPayslipDeductionDetail(s,employee){
   }
   const itemized=money(labelLines.reduce((sum,x)=>sum+x[1],0));
   const remaining=money(total-itemized);
-  let html=labelLines.map(([name,amt])=>payslipLine(name,amt)).join('');
+  const items=(ledger?.ready && ledger.month===monthKey()
+    ?(ledger.advanceItems?.get(Number(employee.id))||[]):[])
+    .slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const safeDate=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?`${m[3]}/${m[2]}/${m[1]}`:'Date unavailable';};
+  const individualLines=()=>items.map((item,i)=>payslipLine(`Salary Advance ${i+1} — ${safeDate(item.date)}`,item.amount)).join('');
+  // When signed loan details match the confirmed advance deduction, show each
+  // advance by date in DEDUCTION. Otherwise do not change the saved salary.
+  const listedAmount=money(items.reduce((sum,item)=>sum+Number(item.amount||0),0));
+  const canItemize=items.length>0 && advanceConfirmed>0 && Math.abs(listedAmount-advanceConfirmed)<0.011;
+  let html=labelLines.map(([name,amt])=>
+    name==='Salary Advance' && canItemize ? individualLines() : payslipLine(name,amt)
+  ).join('');
   if(remaining>0.009)html+=payslipLine('Other Deduction (verify)',remaining);
   if(remaining< -0.009)html+=`<div class="payslip-line"><span>Deduction details mismatch (verify)</span><span class="amt">${remaining.toFixed(2)}</span></div>`;
-  // If a loan exists but is not in the confirmed 7th pay, show a clearly
-  // separate memo. Do not present it as already deducted or change Net Pay.
-  const memo=routed!==null && routed>advanceConfirmed+0.009
-    ? `<div class="payslip-line"><span>Advance in ledger (not in this confirmed pay)</span><span class="amt">${routed.toFixed(2)}</span></div>` : '';
+  // If advances are not itemized in this confirmed deduction, display the
+  // dated loan records in OTHER only. This must not debit Net Pay again.
+  const memo=items.length && !canItemize ? individualLines() : '';
   return {html,memo};
 }
 
