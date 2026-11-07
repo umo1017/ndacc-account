@@ -12694,22 +12694,21 @@ function ndFourteenUpdateTotals(c,seven){
     ? savedActual : ndSevenAdjustedAllowance(seven||{}));
   c.allowance_difference=cents(c.original_allowance-c.adjusted_allowance);
   c.total_employer_cost=cents(costs.seventh_net_pay+costs.seventh_total_deduction+c.company_expense);
-  // 14th Allowance is a NEW deduction amount ONLY when actually deducted.
-  // It is NOT the original 7th Allowance or the remaining 7th adjusted allowance.
-  // Never silently deduct ordinary, non-deducted Allowance from 14th pay.
-  c.allowance_deduction=cents(Math.max(0,Number(c.allowance_deduction||0)));
+  // Allowance (Deducted Only) is ONLY the amount already deducted
+  // from the corresponding 7th salary. Never include 14th Extra.
+  c.allowance_deduction=0;
   // Nett Pay = Total Commission - 7th Net Pay - 7th Deducted Allowance
-  //          - actual 14th Allowance deduction (if any) - 7th/14th advances.
+  //          - 7th/14th advances.
   // Both advance amounts come from their respective signed advance payroll routes.
   // NOTE: 7th Net Pay may already include the 7th advance deduction. The
   // additional subtraction below is an explicit user-defined payroll rule.
   // Confirmed historical snapshots remain unchanged.
-  c.seventh_deducted_allowance=c.allowance_difference;
+  c.seventh_deducted_allowance=cents(Math.max(0,c.allowance_difference));
   c.raw_commission=cents(c.total_commission-costs.seventh_net_pay);
   c.seventh_deduction_refund=0;
   c.seventh_salary_advance_deduction=cents(c.seventh_salary_advance_deduction||0);
   c.salary_advance_deduction=cents(c.salary_advance_deduction||0); // 14th advance, existing column
-  c.commission=cents(c.raw_commission-c.seventh_deducted_allowance-c.allowance_deduction
+  c.commission=cents(c.raw_commission-c.seventh_deducted_allowance
     -c.seventh_salary_advance_deduction-c.salary_advance_deduction);
   c.total_income=c.total_commission;
   c.net_pay=c.commission;
@@ -12726,9 +12725,9 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
       c[field]=salaryOverrideValue(empId,"14",field,c[field],salaryMonth,source);
     }
   }
-  // 7th deducted allowance is auto-populated in the display; this manual field is ONLY additional 14th deduction.
-  // Do not carry forward the original 7th Allowance into this deduction.
-  c.allowance_deduction=salaryOverrideValue(empId,'14','allowance_deduction',0,salaryMonth,source);
+  // 7th deducted allowance is calculated from the actual 7th payslip.
+  // Do not load legacy 14th Extra overrides into this deduction.
+  c.allowance_deduction=0;
   c.seventh_salary_advance_deduction=ndAutoPayrollAmount(e,'advance');
   c.salary_advance_deduction=ndAutoPayrollAmount(e,'advance14');
   return ndFourteenUpdateTotals(c,snapshotFor(empId));
@@ -15177,9 +15176,7 @@ function renderFourteenTable(emps){
       <td>${money(bonus3)}</td>
       <td data-live-totalcommission14="${e.id}">${cs?money(total):money(total)}</td>
       <td>${money(c.seventh_net_pay||0)}</td>
-      <td title="Auto: 7th deducted Allowance plus any separately recorded 14th Allowance deduction. Each component is deducted once." data-live-seven-deducted14="${e.id}">${cs
-        ? money(Math.max(0,Number(c.seventh_deducted_allowance||0))+Math.max(0,Number(salaryOverrideValue(e.id,'14','allowance_deduction',0,salaryMonth))))
-        : `<span data-seven-auto-allowance="${e.id}">${money(Math.max(0,Number(c.seventh_deducted_allowance||0)))}</span><span class="helper" style="display:block;font-size:10px">7th auto + 14th extra:</span>${salaryOverrideInput(e.id,'14','allowance_deduction',c.allowance_deduction||0)}`}</td>
+      <td title="Auto: deducted Allowance from this month's 7th Salary only; no 14th Extra." data-live-seven-deducted14="${e.id}">${money(Math.max(0,Number(cs ? ndFourteenUpdateTotals({...cs},snapshotFor(e.id)).seventh_deducted_allowance : c.seventh_deducted_allowance)||0))}</td>
       <td title="Salary Advance Repayment automatically routed to 7th Salary" data-live-advance7-in14="${e.id}">${advance7===null?'—':money(advance7)}</td>
       <td title="Salary Advance Repayment automatically routed to 14th Salary" data-live-advance14="${e.id}">${advance14===null?'—':money(advance14)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
@@ -15211,7 +15208,7 @@ function renderFourteenTable(emps){
       <th rowspan="2">Bonus3 (Quarterly)</th>
       <th rowspan="2">Total Commission</th>
       <th rowspan="2">− 7th Net Pay</th>
-      <th rowspan="2">− Allowance (Deducted Only · 7th Auto + 14th Extra)</th>
+      <th rowspan="2">− Allowance (Deducted Only · 7th Auto)</th>
       <th rowspan="2">− 7th Salary Advance (Auto)</th>
       <th rowspan="2">− 14th Salary Advance (Auto)</th>
       <th rowspan="2">Commission</th>
@@ -15953,12 +15950,8 @@ function recalc14thLive(empId){
 
   const deductedCell=document.querySelector(`[data-live-seven-deducted14="${empId}"]`);
   if(deductedCell){
-    // Show the auto-calculated 7th deducted Allowance and the optional extra
-    // 14th deduction in one cell, without adding the 7th amount twice to Net Pay.
-    const autoSeven=deductedCell.querySelector('[data-seven-auto-allowance]');
-    if(autoSeven)autoSeven.textContent=money(Math.max(0,Number(calc.seventh_deducted_allowance||0)));
-    else deductedCell.textContent=money(Math.max(0,Number(calc.seventh_deducted_allowance||0))+Math.max(0,Number(calc.allowance_deduction||0)));
-    deductedCell.title='7th deducted Allowance (auto) plus separate 14th deducted Allowance. Each is deducted once.';
+    deductedCell.textContent=money(Math.max(0,Number(calc.seventh_deducted_allowance||0)));
+    deductedCell.title='Only deducted Allowance from this month’s 7th Salary (automatic).';
   }
 
   const advance7Cell=document.querySelector(`[data-live-advance7-in14="${empId}"]`);
@@ -16696,26 +16689,7 @@ async function confirm14th(empId){
     if(!window.ndPayrollDeductionLedger?.ready || window.ndPayrollDeductionLedger.month!==monthKey()){
       alert('Salary Advance Repayment is not synced. Refresh Salary before Confirm 14th.');return;
     }
-    // Capture a just-entered 14th allowance deduction before confirmation.
-    // The field is zero unless explicitly entered for this employee and month.
-    const allowanceInput=document.querySelector(`[data-salary-override="${id}"][data-payroll-type="14"][data-override-field="allowance_deduction"]`);
-    if(allowanceInput){
-      const amount=Number(allowanceInput.value);
-      if(!Number.isFinite(amount)||amount<0||amount!==Math.round(amount*100)/100){
-        throw Error('14th Allowance deduction must be a valid non-negative RM amount (max 2 decimal places).');
-      }
-      const original=salaryOverrideValue(id,'14','allowance_deduction',0,salaryMonth);
-      if(amount!==original){
-        const overrideRow={employee_id:id,salary_month:salaryMonth,payroll_type:'14',field:'allowance_deduction',
-          value:amount,updated_at:new Date().toISOString(),updated_by:String(currentSalaryUserEmail||currentUserEmail||'').toLowerCase()};
-        const save=await salaryDb.from('salary_manual_overrides')
-          .upsert(overrideRow,{onConflict:'employee_id,salary_month,payroll_type,field'}).select().single();
-        if(save.error)throw Error('Could not save deducted Allowance before Confirm: '+save.error.message);
-        const pos=salaryManualOverrides.findIndex(x=>Number(x.employee_id)===id&&String(x.salary_month||'').slice(0,10)===salaryMonth&&String(x.payroll_type)==='14'&&x.field==='allowance_deduction');
-        if(pos>=0)salaryManualOverrides[pos]=save.data||overrideRow;
-        else salaryManualOverrides.push(save.data||overrideRow);
-      }
-    }
+    // 14th Allowance deduction is based solely on 7th payroll; no extra manual field.
     const m=monthlyFor(id);
     const c=applyFourteenManualOverrides(e,calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(id),salaryQuarter3BonusFor(id)));
     const row={
