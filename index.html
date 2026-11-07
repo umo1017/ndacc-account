@@ -17772,6 +17772,44 @@ function payslipLine(label,value){
   return `<div class="payslip-line"><span>${label}</span><span class="amt">${n.toFixed(2)}</span></div>`;
 }
 
+// 7th payslip: reconcile the *confirmed* deduction total before labelling an
+// unitemized historical amount as a salary advance. Never alter saved wages.
+function ndSevenPayslipDeductionDetail(s,employee){
+  const money=v=>Math.round((Number(v)||0)*100)/100;
+  const labelLines=[
+    ['Employee EPF',money(s.employee_epf)],
+    ['Employee SOCSO',money(employeeSocsoWithLindung(s))],
+    ['Employee EIS',money(s.employee_eis)],
+    ...(String(employee.tax_no||'').trim()?[['Income Tax PCB',money(s.tax)]]:[]),
+    ['Unpaid',money(s.off_day_deduction)],
+    ['Deduction',money(s.manual_deduction)],
+    ['Salary Advance',money(s.salary_advance_deduction)]
+  ];
+  const known=money(labelLines.reduce((sum,x)=>sum+x[1],0));
+  const total=money(s.total_deduction);
+  const unitemized=money(total-known);
+  const ledger=window.ndPayrollDeductionLedger;
+  const routed=ledger?.ready && ledger.month===monthKey()
+    ? money(ledger.advances.get(Number(employee.id))||0) : null;
+  let advanceConfirmed=money(s.salary_advance_deduction);
+  // Earlier snapshots sometimes saved only total_deduction, not an itemized
+  // advance. Only reconcile when the signed ledger exactly matches the gap.
+  if(routed!==null && routed>0 && advanceConfirmed===0 && unitemized>0 && Math.abs(unitemized-routed)<0.011){
+    advanceConfirmed=routed;
+    labelLines[labelLines.length-1][1]=advanceConfirmed;
+  }
+  const itemized=money(labelLines.reduce((sum,x)=>sum+x[1],0));
+  const remaining=money(total-itemized);
+  let html=labelLines.map(([name,amt])=>payslipLine(name,amt)).join('');
+  if(remaining>0.009)html+=payslipLine('Other Deduction (verify)',remaining);
+  if(remaining< -0.009)html+=`<div class="payslip-line"><span>Deduction details mismatch (verify)</span><span class="amt">${remaining.toFixed(2)}</span></div>`;
+  // If a loan exists but is not in the confirmed 7th pay, show a clearly
+  // separate memo. Do not present it as already deducted or change Net Pay.
+  const memo=routed!==null && routed>advanceConfirmed+0.009
+    ? `<div class="payslip-line"><span>Advance in ledger (not in this confirmed pay)</span><span class="amt">${routed.toFixed(2)}</span></div>` : '';
+  return {html,memo};
+}
+
 window.currentPayslipStaff=null;
 
 async function ndRefreshPayslipSource(empId){
@@ -17811,11 +17849,17 @@ async function openPayslip(empId,type){
   try{ await ndRefreshPayslipSource(Number(empId)); }
   catch(err){ alert("Payslip sync failed: "+(err.message||err)); return false; }
   if(type===7){
+    // Refresh signed advance history for the selected salary month when needed.
+    // Snapshot display still wins; a history item alone never mutates wages.
+    if(!window.ndPayrollDeductionLedger?.ready || window.ndPayrollDeductionLedger.month!==monthKey()){
+      try{await ndLoadPayrollDeductionLedger(monthKey());}catch(error){console.warn('Advance history unavailable for payslip',error);}
+    }
     const rawS=snapshotFor(empId); const s=rawS?applySevenManualOverrides(e,normalizedSevenSnapshot(e,rawS)):rawS;
     if(!s){alert("Please confirm 7th payroll first.");return false;}
+    const advanceDeductionDetail=ndSevenPayslipDeductionDetail(s,e);
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Basic Pay",s.guaranteed_pay)}${payslipLine("Allowance",ndSevenAdjustedAllowance(s))}${Number(s.ot||0)>0?payslipLine(payslipOtLabel(s),s.ot):""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div>${payslipLine("Employee EPF",s.employee_epf)}${payslipLine("Employee SOCSO",employeeSocsoWithLindung(s))}${payslipLine("Employee EIS",s.employee_eis)}${String(e.tax_no||"").trim()?payslipLine("Income Tax PCB",s.tax):""}${payslipLine("Unpaid",s.off_day_deduction)}${payslipLine("Deduction",s.manual_deduction)}${payslipLine("Salary Advance",s.salary_advance_deduction)}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}${Number(s.staff_fine_deduction||0)>0?`<div class="payslip-line"><span>Staff Fine (record only; not deducted)</span><span class="amt">${Number(s.staff_fine_deduction).toFixed(2)}</span></div>`:""}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Basic Pay",s.guaranteed_pay)}${payslipLine("Allowance",ndSevenAdjustedAllowance(s))}${Number(s.ot||0)>0?payslipLine(payslipOtLabel(s),s.ot):""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div>${advanceDeductionDetail.html}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}${advanceDeductionDetail.memo}${Number(s.staff_fine_deduction||0)>0?`<div class="payslip-line"><span>Staff Fine (record only; not deducted)</span><span class="amt">${Number(s.staff_fine_deduction).toFixed(2)}</span></div>`:""}</div></div>
 <div class="ref-pay-summary">
   <div class="ref-gross-area">
     <div class="ref-total-line"><span>GROSS PAY</span><span>${Number(s.gross_pay||0).toFixed(2)}</span></div>
