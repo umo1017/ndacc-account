@@ -12235,17 +12235,16 @@ function otHourlyRateFromPay(basicPay,allowancePay){
   const basic=Math.max(0,Number(basicPay||0));
   const daysInMonth=Math.max(1,payrollDaysInSelectedMonth());
 
-  // User-defined OT algorithm:
-  // OT Hourly Rate = Basic Pay ÷ calendar days in selected month ÷ 12.
-  // Allowance is NOT included.
-  return basic>0 ? basic/daysInMonth/12 : 0;
+  // Company OT rule: (Basic Pay + Allowance) x 1.0,
+  // converted using the existing calendar-day / 12-hour basis.
+  const allowance=Math.max(0,Number(allowancePay||0));
+  return (basic+allowance)>0 ? (basic+allowance)/daysInMonth/12 : 0;
 }
 function otHourlyRate(e){
   let basic=Number(e?.guaranteed_pay||0);
   let allowance=Number(e?.allowance||0);
 
-  // Salary is editable before Confirm. OT follows the edited Basic Pay.
-  // Allowance is deliberately excluded from the OT rate.
+  // OT follows the edited Basic Pay and Allowance before Confirm.
   try{
     if(typeof salaryOverrideValue==="function" && e?.id){
       basic=salaryOverrideValue(e.id,"7","guaranteed_pay",basic);
@@ -12314,8 +12313,8 @@ function payslipOvertimeDetailHtml(s){
     rows.push(`<div class="payslip-ot-row">
       <span>Overtime (Days)</span>
       <span>Day</span>
-      <span>${dayAmount.toFixed(2)}</span>
-      <span>1</span>
+      <span>${dayRate.toFixed(4)}</span>
+      <span>${dayQty}</span>
       <span>${dayAmount.toFixed(2)}</span>
     </div>`);
   }
@@ -12325,8 +12324,8 @@ function payslipOvertimeDetailHtml(s){
     rows.push(`<div class="payslip-ot-row">
       <span>Overtime (Hours)</span>
       <span>Hour</span>
-      <span>${hourAmount.toFixed(2)}</span>
-      <span>1</span>
+      <span>${hourRate.toFixed(4)}</span>
+      <span>${hourQty}</span>
       <span>${hourAmount.toFixed(2)}</span>
     </div>`);
   }
@@ -12337,8 +12336,8 @@ function payslipOvertimeDetailHtml(s){
     rows.push(`<div class="payslip-ot-row">
       <span>Overtime (Hours)</span>
       <span>Hour</span>
-      <span>${amount.toFixed(2)}</span>
-      <span>1</span>
+      <span>${(qty>0 ? amount/qty : 0).toFixed(4)}</span>
+      <span>${Number(qty.toFixed(2))}</span>
       <span>${amount.toFixed(2)}</span>
     </div>`);
   }
@@ -12833,7 +12832,7 @@ function calculate7th(e,m={},context=null){
   const otHourQty=Math.max(0,Number(m.ot_hour_qty||0));
   const otDayQty=Math.max(0,Number(m.ot_day_qty||0));
   const otTotalHours=calculateOtTotalHours(m);
-  const otRate=context?.month?guaranteed/settlementPayrollMonthDays(context.month)/12:otHourlyRateFromPay(guaranteed,0);
+  const otRate=context?.month?(guaranteed+allowance)/settlementPayrollMonthDays(context.month)/12:otHourlyRateFromPay(guaranteed,allowance);
   const ot=+(otTotalHours*otRate).toFixed(2);
   const otHours=ot;
   const otDays=+(otDayQty*8*otRate).toFixed(2);
@@ -14945,7 +14944,7 @@ function normalizedSevenSnapshot(e,snap,context=null){
   // never depend on an old stored total.
   const basic=Math.max(0,Number(s.guaranteed_pay ?? e?.guaranteed_pay ?? 0));
   const allowance=Math.max(0,Number(s.allowance ?? e?.allowance ?? 0));
-  const otRate=context?.month?basic/settlementPayrollMonthDays(context.month)/12:otHourlyRateFromPay(basic,allowance);
+  const otRate=context?.month?(basic+allowance)/settlementPayrollMonthDays(context.month)/12:otHourlyRateFromPay(basic,allowance);
 
   // New snapshots store OT quantities. Older snapshots may only have an OT
   // amount, so preserve that amount instead of accidentally turning OT into 0.
@@ -19955,10 +19954,8 @@ function settlementCalculate7thBudget(e,m={},ym,snapshot=null){
 
   const daysInMonth=Math.max(1,settlementPayrollMonthDays(ym));
 
-  // Same OT algorithm as Salary:
-  // Basic Pay ÷ calendar days ÷ 12 × Total Hrs.
-  // Allowance is excluded.
-  const otRate=guaranteed>0 ? guaranteed/daysInMonth/12 : 0;
+  // Same OT algorithm as Salary: (Basic + Allowance) / calendar days / 12 x Total Hrs x 1.0.
+  const otRate=(guaranteed+allowance)>0 ? (guaranteed+allowance)/daysInMonth/12 : 0;
   const ot=+(totalOtHours*otRate).toFixed(2);
 
   const allowedOffDays=Math.max(0,Number(e?.monthly_off_days||0));
