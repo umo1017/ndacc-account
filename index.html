@@ -15364,7 +15364,6 @@ async function submitCommissionChanges(){
     return;
   }
 
-  if(!assertRecordEditable(targetMonth)) return;
 
   const btn=byId("commissionSubmitBtn");
   const state=byId("commissionSubmitState");
@@ -16353,32 +16352,9 @@ async function saveMonthlyField(employee_id,field,value){
 
 
 
-const RECORD_EDIT_LIMIT_DAYS=60;
-
-function isOlderThanEditLimit(dateValue){
-  if(!dateValue) return false;
-  const recordDate=new Date(String(dateValue).slice(0,10)+"T00:00:00");
-  if(Number.isNaN(recordDate.getTime())) return false;
-
-  const today=new Date();
-  today.setHours(0,0,0,0);
-
-  const ageDays=Math.floor((today-recordDate)/86400000);
-  return ageDays>RECORD_EDIT_LIMIT_DAYS;
-}
-
-function assertRecordEditable(dateValue){
-  if(isOlderThanEditLimit(dateValue)){
-    alert("This record is more than 60 days old and cannot be changed.");
-    return false;
-  }
-  return true;
-}
-
 /* Signed salary receipt: backend RPC is the only path to DONE. */
 window.ND_PAYMENT_BUILD='RPC-BRANCH-PIC-20261015';
 async function toggleSalaryPayment(type,empId){
-  if(!assertRecordEditable(monthDate()))return;
   const isSeven=Number(type)===7;
   const snap=isSeven?snapshotFor(empId):commissionSnapshotFor(empId);
   const employee=(typeof salaryEmployees!=='undefined' && Array.isArray(salaryEmployees)?salaryEmployees:[]).find(e=>Number(e.id)===Number(empId));
@@ -33886,14 +33862,14 @@ window.ndLoanMaturityDate=ndLoanMaturityDate;
 function ndRenderContractForm(root){
  root.dispatchEvent(new Event('nd-contract-picker-dispose'));
  const fields=ndContractFields(ndContractType);root.innerHTML=`<h3>Contract</h3><label for="ndContractType">Contract Type</label><select id="ndContractType">${Object.entries(ND_CONTRACT_TYPES).filter(([key])=>key!=='private_loan').map(([key,label])=>`<option value="${key}" ${key===ndContractType?'selected':''}>${label}</option>`).join('')}</select><section class="nd-contract-source"><h4>Select Person &amp; Import Details</h4><div class="nd-form-grid"><div><label for="ndContractSourceKind">Person Source</label><select id="ndContractSourceKind"><option value="interview">Completed Interview Forms</option><option value="employee">Existing Employees</option></select></div><div><label for="ndContractSourceBranch">Branch</label><select id="ndContractSourceBranch"><option value="">Select branch</option></select></div><div><label for="ndContractSourceRecord">Select Person</label><select id="ndContractSourceRecord" disabled><option value="">Select a person</option></select></div></div><p id="ndContractSourceStatus" class="helper" role="status"></p></section><div id="ndContractImportedSummary" class="nd-contract-review-summary"></div><form id="ndContractEntry"><div class="nd-form-grid" hidden>${fields.map(([label,kind],i)=>inputMarkup(label,label==='Branch'?'select:|'+interviewBranchNames.join('|'):kind,'Contract'+i)).join('')}</div>${ndContractType==='onboarding'?'<label style="display:flex;gap:10px;margin:20px 0"><input type="checkbox" id="ndContractPassport" style="width:20px;height:20px;flex:none"/>Include Passport Handling &amp; Return Agreement (optional)</label>':''}<label id="ndContractCashOption" hidden style="display:flex;gap:10px;margin:16px 0"><input type="checkbox" id="ndContractCashRequest" checked disabled style="width:20px;height:20px;flex:none">Include Request to Receive Salary in Cash</label><button class="btn" type="submit" style="margin-top:16px">Generate Document &amp; Review</button></form>`;
- if(ndContractType==='private_loan'){
+ if(ndContractType==='private_loan'||ndContractType==='cash_request'){
  const kind=$('ndContractSourceKind');kind.innerHTML='<option value="employee">Existing Employees</option>';kind.value='employee';kind.closest('div').hidden=true;kind.closest('div').style.setProperty('display','none','important');
  $('ndContractSourceRecord').previousElementSibling.textContent='Employee';
  root.querySelector('h3').textContent='Salary Advance Repayment';
  const history=document.createElement('button');history.type='button';history.className='btn';history.id='ndSalaryAdvanceHistoryOpen';history.textContent='History';history.onclick=()=>window.ndOpenPrivateLoans?.();root.querySelector('h3').after(history);
  const officer=document.createElement('div');officer.className='nd-form-field';officer.innerHTML='<label for="ndAdvanceRepresentative">Person in Charge</label><select id="ndAdvanceRepresentative" required disabled><option value="">Select an employee first</option></select>'; $('ndContractEntry').prepend(officer);
  }
- const form=$('ndContractEntry');fields.forEach(([label,kind],i)=>{const input=form.querySelector('[data-nd-field="Contract'+i+'"]');input.required=['Employee Name','IC / Passport','Branch'].includes(label);input.readOnly=false;input.disabled=true;const remember=()=>{if(!ndContractSource)return;const key=ndContractEditKey(ndContractSource),values=ndContractEdits.get(key)||{};values[label]=ndFormFieldValue(input);ndContractEdits.set(key,values);ndContractDraft[label]=ndFormFieldValue(input);};input.addEventListener('input',remember);input.addEventListener('change',remember);ndSetFormFieldValue(input,ndContractDraft[label]??(label==='Maturity Date'?ndLoanMaturityDate():label==='Disbursement Status'?'Received':label==='Repayment Method'?'Cash':label==='Reason for Cash Request'?'No bank account':label==='Probation (Months)'?'3':label==='Allowance (RM)'?'0':label==='Commission Schedule'?ND_CONTRACT_COMMISSION_DEFAULT:label==='Notice Period'?'One calendar month':['Start Date','Submission Date','Confirmation Date','Request Date','Disbursement Date'].includes(label)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date()):label==='Branch'&&ndContractType==='collaboration'?'Collaboration':''));});
+ const form=$('ndContractEntry');fields.forEach(([label,kind],i)=>{const input=form.querySelector('[data-nd-field="Contract'+i+'"]');input.required=['Employee Name','Branch'].includes(label)||(ndContractType!=='cash_request'&&label==='IC / Passport');input.readOnly=false;input.disabled=true;const remember=()=>{if(!ndContractSource)return;const key=ndContractEditKey(ndContractSource),values=ndContractEdits.get(key)||{};values[label]=ndFormFieldValue(input);ndContractEdits.set(key,values);ndContractDraft[label]=ndFormFieldValue(input);};input.addEventListener('input',remember);input.addEventListener('change',remember);ndSetFormFieldValue(input,ndContractDraft[label]??(label==='Maturity Date'?ndLoanMaturityDate():label==='Disbursement Status'?'Received':label==='Repayment Method'?'Cash':label==='Reason for Cash Request'?'No bank account':label==='Probation (Months)'?'3':label==='Allowance (RM)'?'0':label==='Commission Schedule'?ND_CONTRACT_COMMISSION_DEFAULT:label==='Notice Period'?'One calendar month':['Start Date','Submission Date','Confirmation Date','Request Date','Disbursement Date'].includes(label)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur'}).format(new Date()):label==='Branch'&&ndContractType==='collaboration'?'Collaboration':''));});
  const disbursement=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Disbursement Date')+'"]'),maturity=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Maturity Date')+'"]');if(disbursement&&maturity){maturity.addEventListener('input',()=>maturity.dataset.manual='1');disbursement.addEventListener('change',()=>{if(!maturity.dataset.manual){maturity.value=ndLoanMaturityDate(disbursement.value);maturity.dispatchEvent(new Event('input'));delete maturity.dataset.manual;}});}
  const position=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Position')+'"]'),notice=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Notice Period')+'"]');
  if(position){position.setAttribute('list','ndContractPositionOptions');const list=document.createElement('datalist');list.id='ndContractPositionOptions';list.innerHTML=['Therapist','Beautician','Manager','Receptionist'].map(value=>'<option value="'+value+'">').join('');position.after(list);position.required=['onboarding','permanent','confirmation'].includes(ndContractType);}
@@ -33901,7 +33877,7 @@ function ndRenderContractForm(root){
  const payment=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Payment Method')+'"]'),authorisation=form.querySelector('[data-nd-field="Contract'+fields.findIndex(f=>f[0]==='Payment Authorisation Reference')+'"]');
  form.ndSyncPayment=()=>{const foreign=ndContractType==='onboarding'&&!!ndContractSource?.foreign,pass=$('ndContractPassport');if(foreign&&payment)payment.value='Cash';if(payment)payment.disabled=foreign;if(pass){if(foreign){pass.checked=true;pass.dataset.foreign='true';}else if(pass.dataset.foreign){pass.checked=false;delete pass.dataset.foreign;}pass.disabled=foreign;const text=pass.parentElement.lastChild;if(text?.nodeType===3)text.textContent='Include Passport Handling & Return Agreement'+(foreign?' (required)':' (optional)');}const cash=$('ndContractCashOption');if(cash){cash.hidden=payment?.value!=='Cash';cash.style.display=payment?.value==='Cash'?'flex':'none';}if(authorisation){const needed=!!payment?.value&&payment.value!=='Bank Transfer';authorisation.required=false;authorisation.closest('.nd-form-field').hidden=!needed;authorisation.placeholder=payment?.value==='Cash'?'Employee written request + JTKSM approval reference':'Approved payment instrument / employee consent reference';}};if(payment)payment.addEventListener('change',form.ndSyncPayment);form.ndSyncPayment();
  if($('ndContractMediaConsent'))$('ndContractMediaConsent').value=ndContractDraft['Media Consent']||'';
- ndContractSourcePicker(root,form,fields);$('ndContractSourceKind').value=ndContractType==='private_loan'?'employee':ndContractSource?.kind||'interview';void $('ndContractSourceKind').onchange();
+ ndContractSourcePicker(root,form,fields);$('ndContractSourceKind').value=['private_loan','cash_request'].includes(ndContractType)?'employee':ndContractSource?.kind||'interview';void $('ndContractSourceKind').onchange();
  $('ndContractType').onchange=()=>{fields.forEach(([label],i)=>ndContractDraft[label]=ndFormFieldValue(form.querySelector('[data-nd-field="Contract'+i+'"]')));if($('ndContractMediaConsent'))ndContractDraft['Media Consent']=$('ndContractMediaConsent').value;ndContractType=$('ndContractType').value;ndRenderContractForm(root);};
  form.onsubmit=async event=>{
  event.preventDefault();if(!ndContractSource){status('Select a person.');$('ndContractSourceRecord').focus();return;}if(!form.reportValidity())return;
@@ -33914,7 +33890,7 @@ function ndRenderContractForm(root){
   if(type==='private_loan'){status('Loading company template…');await ndReferenceTemplateReady;}
   await identity();if(!userEmail)throw Error('Please sign in.');
   if(source.kind==='interview'){const converted=await client().from('employees').select('id').eq('source_interview_id',source.id).maybeSingle();if(converted.error)throw converted.error;if(converted.data)throw Error('This person is already an employee. Select Existing Employees.');}
-  if(!values['Employee Name']||!values['IC / Passport']||!values.Branch)throw Error('Complete Employee Name, IC / Passport and Branch.');
+  if(!values['Employee Name']||!values.Branch||(type!=='cash_request'&&!values['IC / Passport']))throw Error(type==='cash_request'?'Complete Employee Name and Branch.':'Complete Employee Name, IC / Passport and Branch.');
   if(type==='passport'&&values['Expected Return Date']&&values['Submission Date']&&values['Expected Return Date']<values['Submission Date'])throw Error('Expected Return Date cannot be before Submission Date.');
   if(ndContractPersonSigned(await ndContractSignedPeople(type),values['IC / Passport'],source.kind,source.id))throw Error('This person has already signed this contract type.');
   if(passport&&ndContractPersonSigned(await ndContractSignedPeople('passport'),values['IC / Passport'],source.kind,source.id))throw Error('This person has already signed the Passport Agreement.');
