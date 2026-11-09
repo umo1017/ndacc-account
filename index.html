@@ -5385,6 +5385,16 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 #ndProBetaPage .nd-unified-voucher-panel h2{font-size:20px;margin:0 0 8px}
 #ndProBetaPage .nd-unified-voucher-panel button{width:auto;background:#3374f4;color:#fff;border:0;border-radius:10px;padding:11px 17px}
 </style>
+<style id="nd-tunai-beta-20261109">
+.nd-tunai-open{border:1px solid #becfdd;background:#f6faff;border-radius:9px;padding:6px 10px;margin-top:6px;font-size:12px;color:#245b80;cursor:pointer;font-weight:650}
+#ndTunaiSnapshotDialog{width:min(480px,94vw);max-height:82dvh;border:0;border-radius:16px;padding:0;box-shadow:0 18px 60px #0005;color:#182b36;background:#fff}
+#ndTunaiSnapshotDialog::backdrop{background:#0008}
+.nd-tunai-head{padding:14px 16px;border-bottom:1px solid #e7edf0;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.nd-tunai-head button{border:0;background:transparent;font-size:24px;cursor:pointer}
+.nd-tunai-body{padding:16px;overflow:auto;max-height:70dvh;font-size:14px;line-height:1.5}
+.nd-tunai-body h4{margin:12px 0 5px}.nd-tunai-body p{margin:6px 0}.nd-tunai-warning{color:#91621c;font-size:12px}
+.nd-sale-tunai{padding:0 10px 10px}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -39016,7 +39026,7 @@ function openBookingSale(a){
    const detailText=customerProfile?`<span class="nd-sale-tag">${esc(String(customerProfile.membership_level||csvLevel||'Standard'))}</span>${(Array.isArray(customerProfile.tags)?customerProfile.tags:[]).slice(0,5).map(t=>`<span class="nd-sale-tag">${esc(String(t))}</span>`).join('')}`:(matchedMember?`<span class="nd-sale-tag">${esc(csvLevel)} · CSV会员匹配</span>`:'<span class="nd-sale-tag">未匹配 CSV 会员</span>');
    const checkoutLines=lineItems().map(x=>`<div class="nd-sale-cart-line"><div><strong>${esc(x.name)}</strong><small>${money(x.price)} / 项 · ${x.type==='giftcard'?'礼品卡':x.type==='package'?'配套':x.type==='product'?'产品':'服务'} · ${x.source==='csv'?'CSV预览':'线上'}</small></div><div class="nd-sale-qty"><button type="button" data-sale-minus="${esc(x.id)}" aria-label="减少数量">−</button><b>${x.qty}</b><button type="button" data-sale-add="${esc(x.id)}" aria-label="增加数量">＋</button></div><b>${money(x.price*x.qty)}</b></div>`).join('');
    modal.innerHTML=`<section class="nd-sale-shell" role="dialog" aria-modal="true" aria-label="预约开单"><header class="nd-sale-head"><button type="button" class="nd-sale-icon" data-sale-back aria-label="返回">‹</button><strong>${stage==='menu'?esc(c?.full_name||'选择服务'):'购物车 · 结账'}</strong><button type="button" class="nd-sale-icon" data-sale-close aria-label="关闭">×</button></header>
-   <section class="nd-sale-member-top"><div class="nd-sale-member-identity"><span class="nd-sale-avatar">${esc(String(c?.full_name||'顾').slice(0,1).toUpperCase())}</span><div><strong>${esc(c?.full_name||'未选择顾客')}</strong><small>${esc(c?.phone||'')} · ${esc(a.branch||'')}</small></div></div><div class="nd-sale-member-balances"><div><small>储值</small><b>—</b></div><div><small>积分</small><b>—</b></div><div><small>优惠券</small><b>—</b></div><div><small>礼品卡</small><b>—</b></div></div><div class="nd-sale-profile-tags">${detailText}</div></section>
+   <section class="nd-sale-member-top"><div class="nd-sale-member-identity"><span class="nd-sale-avatar">${esc(String(c?.full_name||'顾').slice(0,1).toUpperCase())}</span><div><strong>${esc(c?.full_name||'未选择顾客')}</strong><small>${esc(c?.phone||'')} · ${esc(a.branch||'')}</small></div></div><div class="nd-sale-member-balances"><div><small>储值</small><b>—</b></div><div><small>积分</small><b>—</b></div><div><small>优惠券</small><b>—</b></div><div><small>礼品卡</small><b>—</b></div></div><div class="nd-sale-profile-tags">${detailText}</div><div class="nd-sale-tunai">${ndTunaiButton(c)}</div></section>
    ${stage==='menu'?`<div class="nd-sale-toolbar"><button type="button" data-sale-default>✦ 默认⌄</button><button type="button" data-sale-fav class="${favoritesOnly?'active':''}" aria-label="收藏项目">★</button><button type="button" data-sale-search-toggle aria-label="搜索项目">⌕</button></div>${showSearch?`<div class="nd-sale-search"><input data-sale-search type="search" placeholder="搜索商品或 SKU / Search" value="${esc(query)}"></div>`:''}<nav class="nd-sale-cat">${buttons}</nav><nav class="nd-sale-durations">${durationChoices.map(d=>`<button type="button" data-sale-duration="${d}" class="${duration===d?'active':''}">${d==='all'?'全部':d+' MIN'}</button>`).join('')}</nav><main class="nd-sale-scroll"><div class="nd-sale-products">${cards}</div></main><footer class="nd-sale-foot"><button type="button" data-sale-to-checkout class="nd-sale-checkout" ${quantity()?'':'disabled'}>${quantity()} 项目 | ${money(total())}</button></footer>`:
    `<main class="nd-sale-scroll nd-sale-cart-scroll"><div class="nd-sale-cart-card"><h3>购物车 / Cart</h3>${checkoutLines||'<p>购物车为空，请先添加服务。</p>'}${missingBooking?`<p class="nd-sale-caution">预约服务「${esc(missingBooking)}」没有匹配到该分行菜单，请核实后手动选择。</p>`:''}<div class="nd-sale-total"><span>合计</span><strong>RM ${money(total())}</strong></div></div><div class="nd-sale-cart-card"><h3>付款方式（预览）</h3><div class="nd-sale-payment-grid">${['Cash','Card','TNG','Bank Transfer'].map(x=>`<label><input type="radio" name="ndSalePay" value="${x}" ${paymentMethod===x?'checked':''}>${x}</label>`).join('')}</div></div><div class="nd-sale-caution">此购物车已连接服务、产品、配套及礼品卡目录（CSV 标为预览）。会员按预约顾客电话匹配。当前不写入订单数据库，不扣库存、配套、Credit 或 Points，不生成正式收据。</div><button type="button" class="nd-sale-not-ready" disabled>确认付款（尚未启用）</button></main>`}</section>`;
    modal.querySelector('[data-sale-close]').onclick=close;
@@ -39046,7 +39056,7 @@ function detailOpen(a){
  const profileBlock='<div class="nd-detail-card" data-detail-profile hidden></div>';
  const noteBlock=`<div class="nd-detail-card"><div class="nd-detail-line"><span>📝</span><div><small>备注</small><strong class="nd-detail-notes">${esc(notes||'暂无备注')}</strong></div></div></div>`;
  const requestId=++detailProfileRequest;
- node.innerHTML=`<div class="nd-detail-card"><div class="nd-detail-line"><span>📅</span><div><strong>${esc(toLocalDate(a.starts_at))}</strong><small>${esc(clock12(mins(a.starts_at)))} – ${esc(clock12(mins(a.ends_at)))}</small></div></div><div class="nd-detail-line"><span>👤</span><div><strong>${esc(c?.full_name||'—')}</strong><small>${esc(c?.phone||'')}</small></div></div></div><div class="nd-detail-card"><div class="nd-detail-line"><span>▣</span><div><strong>${esc(a.service_name||'—')}</strong><small>${duration} 分钟</small></div></div><div class="nd-detail-line"><span>◷</span><div><strong>${duration} 分钟</strong><small>${esc(a.branch||'')}</small></div></div></div><div class="nd-detail-card"><div class="nd-detail-line"><span>👤</span><div><strong>${esc(worker||'未分配技师')}</strong><small>${a.room_id?'房间：'+esc(roomLabel(a.room_id)):'未指定房间'}</small></div></div><div class="nd-detail-line"><span>✓</span><div><strong>${esc(a.status||'booked')}</strong><small>预约状态</small></div></div></div>${profileBlock}${noteBlock}${related.length?`<h4>关联预约</h4>${related.map(x=>`<button type="button" class="nd-detail-related" data-related-id="${esc(x.id)}"><strong>${esc(x.service_name||'预约')}</strong><small>${esc(clock12(mins(x.starts_at)))} – ${esc(clock12(mins(x.ends_at)))}</small></button>`).join('')}`:''}<button type="button" class="nd-detail-main-edit" data-detail-edit>编辑预约</button><div class="nd-detail-bottom-bar"><button type="button" class="nd-detail-cart-btn" data-detail-cart aria-label="开单" title="开单"><span aria-hidden="true">🛒</span><small>开单</small></button></div>`;
+ node.innerHTML=`<div class="nd-detail-card"><div class="nd-detail-line"><span>📅</span><div><strong>${esc(toLocalDate(a.starts_at))}</strong><small>${esc(clock12(mins(a.starts_at)))} – ${esc(clock12(mins(a.ends_at)))}</small></div></div><div class="nd-detail-line"><span>👤</span><div><strong>${esc(c?.full_name||'—')}</strong><small>${esc(c?.phone||'')}</small></div></div></div><div class="nd-detail-card"><div class="nd-detail-line"><span>▣</span><div><strong>${esc(a.service_name||'—')}</strong><small>${duration} 分钟</small></div></div><div class="nd-detail-line"><span>◷</span><div><strong>${duration} 分钟</strong><small>${esc(a.branch||'')}</small></div></div></div><div class="nd-detail-card"><div class="nd-detail-line"><span>👤</span><div><strong>${esc(worker||'未分配技师')}</strong><small>${a.room_id?'房间：'+esc(roomLabel(a.room_id)):'未指定房间'}</small></div></div><div class="nd-detail-line"><span>✓</span><div><strong>${esc(a.status||'booked')}</strong><small>预约状态</small></div></div></div>${profileBlock}${c?.phone?`<div class="nd-detail-card">${ndTunaiButton(c)}</div>`:''}${noteBlock}${related.length?`<h4>关联预约</h4>${related.map(x=>`<button type="button" class="nd-detail-related" data-related-id="${esc(x.id)}"><strong>${esc(x.service_name||'预约')}</strong><small>${esc(clock12(mins(x.starts_at)))} – ${esc(clock12(mins(x.ends_at)))}</small></button>`).join('')}`:''}<button type="button" class="nd-detail-main-edit" data-detail-edit>编辑预约</button><div class="nd-detail-bottom-bar"><button type="button" class="nd-detail-cart-btn" data-detail-cart aria-label="开单" title="开单"><span aria-hidden="true">🛒</span><small>开单</small></button></div>`;
  // Membership data is stored separately from the booking and is loaded on demand.
  // Never block opening a booking when a customer has no profile yet.
  if(c?.id){
@@ -39261,6 +39271,66 @@ function renderHours(host){
  for(const id of ['proHoursOpen','proHoursClose'])el(id).oninput=()=>el('proHoursPreview').textContent=clock12(el('proHoursOpen').value)+' – '+clock12(el('proHoursClose').value);
  el('proHoursSave').onclick=()=>{const op=el('proHoursOpen').value,cl=el('proHoursClose').value;if(!op||!cl||minsOf(cl)<=minsOf(op)){stat(tr('Closing time must be after opening time.','结束时间必须晚于开始时间。'),true);return;}hours[b]={open:op,close:cl,enabled:el('proHoursEnabled').checked};localStorage.setItem('ndProBusinessHoursV1',JSON.stringify(hours));active='appointments';render();stat(tr('Hours updated on this browser and calendar.','营业时间已更新到当前浏览器日历。'));};
 }
+/* Tunai history lookup: report snapshot, never a spendable balance. */
+const ndTunaiReportDate='2026-11-09';
+function ndTunaiNormalize(phone){
+ let x=String(phone||'').replace(/\D/g,'');
+ if(x.startsWith('00'))x=x.slice(2);
+ if(x.startsWith('0'))x='60'+x.slice(1);
+ else if(/^1\d{8,9}$/.test(x))x='60'+x;
+ return x;
+}
+function ndTunaiButton(c){
+ if(!c?.phone)return '';
+ return `<button type="button" class="nd-tunai-open" data-tunai-phone="${esc(c.phone)}" title="2026-11-09 Tunai 历史报表">余额 / 介绍记录</button>`;
+}
+function ndTunaiCreateDialog(){
+ let d=document.getElementById('ndTunaiSnapshotDialog');if(d)return d;
+ d=document.createElement('dialog');d.id='ndTunaiSnapshotDialog';
+ d.innerHTML='<div class="nd-tunai-head"><strong>Tunai 会员资料核对</strong><button type="button" data-tunai-close aria-label="Close">×</button></div><div class="nd-tunai-body" role="status">正在查询…</div>';
+ document.body.appendChild(d);
+ d.querySelector('[data-tunai-close]').onclick=()=>d.close();
+ return d;
+}
+async function ndTunaiLookup(phone){
+ const d=ndTunaiCreateDialog(),out=d.querySelector('.nd-tunai-body');
+ const normalized=ndTunaiNormalize(phone);
+ out.replaceChildren();out.textContent='正在读取 2026-11-09 的历史报表…';
+ if(!d.open)d.showModal();
+ if(!db){out.textContent='Beta 尚未连接到 Supabase';return;}
+ if(normalized.length<9){out.textContent='电话号码不足，不能自动匹配';return;}
+ try{
+  const [balances,referrals]=await Promise.all([
+   db.from('nd_tunai_member_balance_snapshots').select('report_date,member_name,member_phone,credit,points,outstanding').eq('report_date',ndTunaiReportDate),
+   db.from('nd_tunai_referral_snapshots').select('report_date,referred_phone,referred_name,referrer_name,referral_date,referral_sequence').eq('report_date',ndTunaiReportDate)
+  ]);
+  if(balances.error||referrals.error)throw balances.error||referrals.error;
+  const matched=(balances.data||[]).filter(x=>ndTunaiNormalize(x.member_phone)===normalized);
+  const introduced=(referrals.data||[]).filter(x=>ndTunaiNormalize(x.referred_phone)===normalized);
+  out.replaceChildren();
+  const write=(tag,text,cls='')=>{const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;out.appendChild(e);return e;};
+  write('p','历史报表日期：09 Nov 2026 · 仅供核对，不是实时可使用余额','nd-tunai-warning');
+  write('p','查询电话：'+phone);
+  if(matched.length!==1){write('p',matched.length?'电话号码匹配到多条资料，请人工核对':'该电话未在余额快照中找到记录');}
+  else{
+   const m=matched[0],fmt=x=>'RM '+Number(x||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+   write('h4',m.member_name||'会员');
+   write('p','Credit（历史快照）：'+fmt(m.credit));
+   write('p','Points（历史快照）：'+fmt(m.points));
+   write('p','Outstanding（历史快照）：'+fmt(m.outstanding));
+  }
+  if(introduced.length>1)write('p','存在多条介绍关系，需人工核对');
+  else if(introduced.length===1){const r=introduced[0];write('h4','介绍关系');write('p','介绍人：'+(r.referrer_name||'—'));write('p','介绍日期：'+(r.referral_date||'—'));}
+  else write('p','未找到此号码的介绍记录');
+  write('p','此页面只读；不进行余额覆盖、积分发放、优惠券核销或工资计算。','nd-tunai-warning');
+ }catch(error){out.replaceChildren();const p=document.createElement('p');p.textContent='无法读取报表：'+(error?.message||error)+ '。请先确认暂存 SQL 已导入且当前账号有读取权限。';out.appendChild(p);}
+}
+document.addEventListener('click',e=>{
+ const b=e.target.closest?.('[data-tunai-phone]');if(!b||!page?.classList.contains('active'))return;
+ e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+ void ndTunaiLookup(b.dataset.tunaiPhone);
+},true);
+
 function renderCustomers(host){
  const title=tr('Customers','会员');
  const items=Array.isArray(customers)?customers:[];
@@ -39281,7 +39351,7 @@ function renderCustomers(host){
   if(tab==='new')cs=cs.slice().reverse();
   if(tab==='birthday'||tab==='inactive')cs=[]; // No verified birthday or visit history in Beta yet.
   if(tab==='recent')cs.sort((x,y)=>Number(pinned.includes(String(y.id)))-Number(pinned.includes(String(x.id))));
-  $('proCustomerList').innerHTML=cs.slice(0,200).map((c,i)=>`<article class="procrm-person" data-profile-customer="${esc(c.id)}" tabindex="0" role="button" aria-label="${esc(c.full_name||'Customer')}"><div class="procrm-person-top"><div class="procrm-avatar" aria-hidden="true">${esc((c.full_name||'C').slice(0,1).toUpperCase())}</div><div class="procrm-person-main"><strong>${esc(c.full_name||tr('Unnamed customer','未命名顾客'))}</strong><div class="procrm-phone">${esc(maskPhone(c.phone))}</div></div><button type="button" class="procrm-pin ${pinned.includes(String(c.id))?'active':''}" data-crm-pin="${esc(c.id)}" aria-label="${tr('Pin member','置顶会员')}">♧</button></div><div class="procrm-tags"><span class="procrm-chip">${tr('Member','会员')}</span></div><div class="procrm-divider"></div><div class="procrm-person-bottom"><span class="procrm-member-status">${tr('Customer profile','会员资料')}</span><button type="button" class="procrm-book" data-crm-book="${esc(c.id)}" aria-label="${tr('Book appointment','预约')}">▦</button></div></article>`).join('')||`<div class="procrm-empty">${(tab==='birthday'||tab==='inactive')?tr('This filter needs birthday or visit history data.','该分类需要生日或到店记录。'):tr('No customers found.','找不到顾客。')}</div>`;
+  $('proCustomerList').innerHTML=cs.slice(0,200).map((c,i)=>`<article class="procrm-person" data-profile-customer="${esc(c.id)}" tabindex="0" role="button" aria-label="${esc(c.full_name||'Customer')}"><div class="procrm-person-top"><div class="procrm-avatar" aria-hidden="true">${esc((c.full_name||'C').slice(0,1).toUpperCase())}</div><div class="procrm-person-main"><strong>${esc(c.full_name||tr('Unnamed customer','未命名顾客'))}</strong><div class="procrm-phone">${esc(maskPhone(c.phone))}</div>${ndTunaiButton(c)}</div><button type="button" class="procrm-pin ${pinned.includes(String(c.id))?'active':''}" data-crm-pin="${esc(c.id)}" aria-label="${tr('Pin member','置顶会员')}">♧</button></div><div class="procrm-tags"><span class="procrm-chip">${tr('Member','会员')}</span></div><div class="procrm-divider"></div><div class="procrm-person-bottom"><span class="procrm-member-status">${tr('Customer profile','会员资料')}</span><button type="button" class="procrm-book" data-crm-book="${esc(c.id)}" aria-label="${tr('Book appointment','预约')}">▦</button></div></article>`).join('')||`<div class="procrm-empty">${(tab==='birthday'||tab==='inactive')?tr('This filter needs birthday or visit history data.','该分类需要生日或到店记录。'):tr('No customers found.','找不到顾客。')}</div>`;
   $('proCustomerList').querySelectorAll('[data-crm-pin]').forEach(b=>b.onclick=e=>{e.stopPropagation();let id=String(b.dataset.crmPin);pinned=pinned.includes(id)?pinned.filter(v=>v!==id):[id,...pinned];localStorage.setItem(pinnedKey,JSON.stringify(pinned));draw();});
   $('proCustomerList').querySelectorAll('[data-crm-book]').forEach(b=>b.onclick=e=>{e.stopPropagation();window.ndProCustomerForBooking=b.dataset.crmBook;active='appointments';render();el('proNewBooking')?.click();const sel=el('proAppointmentForm')?.elements.customer;if(sel){sel.value=b.dataset.crmBook;sel.dispatchEvent(new Event('change',{bubbles:true}));}});
  };
