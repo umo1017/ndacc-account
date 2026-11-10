@@ -32768,7 +32768,9 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function report(r){
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
-   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'</body></html>';
+   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
+
+</body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
  }
@@ -37589,6 +37591,84 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
 #ndProBetaPage .nd-data-line strong{text-align:right;overflow-wrap:anywhere;max-width:66%}
 @media(max-width:600px){#ndProBetaPage .nd-data-page{padding:10px}#ndProBetaPage .nd-data-tools input{flex-basis:100%}#ndProBetaPage .nd-data-tools select{flex:1 1 130px}}
 </style>
+<!-- ND PRO BETA DATA MANAGEMENT V1 — preview only; no writes -->
+<style id="nd-data-management-style">
+#ndDataControlView{position:fixed;inset:0;z-index:1450;background:#f3f3f7;overflow:auto;display:none;color:#20232b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+#ndDataControlView.nd-show{display:block}#ndDataControlView *{box-sizing:border-box}
+#ndDataControlView .nddc-shell{max-width:900px;margin:0 auto;padding:22px 18px 70px}
+#ndDataControlView .nddc-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:23px}
+#ndDataControlView .nddc-top h1{font-size:23px;margin:0;font-weight:780}
+#ndDataControlView button{cursor:pointer;font-family:inherit}
+#ndDataControlView .nddc-back{border:0;background:transparent;color:#2570ee;font-size:15px;padding:10px}
+#ndDataControlView .nddc-section{margin:23px 3px 9px;color:#8b8d95;font-size:14px;font-weight:700}
+#ndDataControlView .nddc-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+#ndDataControlView .nddc-tile{display:flex;align-items:center;gap:12px;min-height:65px;border:1px solid #e7e8ef;border-radius:15px;background:#fff;text-align:left;padding:13px 14px;color:#252731;font-size:14px;font-weight:650}
+#ndDataControlView .nddc-tile.active{outline:2px solid #2f73ec;background:#f0f5ff}
+#ndDataControlView .nddc-ico{border-radius:10px;background:#e5efff;color:#246feb;font-weight:bold;display:grid;place-items:center;width:35px;height:35px;flex:none;font-size:18px}
+#ndDataControlView .nddc-card{background:#fff;border:1px solid #e8e9ee;padding:17px;border-radius:17px;margin:14px 0}
+#ndDataControlView .nddc-hint{font-size:13px;color:#717887;line-height:1.55}
+#ndDataControlView .nddc-field{font-size:14px;font-weight:650;display:block;margin:12px 0 7px}
+#ndDataControlView select,#ndDataControlView input[type=file]{max-width:100%;font-size:14px;width:100%;padding:11px;border:1px solid #d9dde5;border-radius:10px;background:white}
+#ndDataControlView .nddc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+#ndDataControlView .nddc-action{border:0;border-radius:10px;padding:10px 14px;background:#2e70ea;color:#fff;font-size:13px;font-weight:700}
+#ndDataControlView .nddc-action.secondary{color:#355b9c;background:#eaf1fe}
+#ndDataControlView .nddc-action:disabled{opacity:.48;cursor:not-allowed}
+#ndDataControlView .nddc-stats{display:flex;flex-wrap:wrap;gap:8px;margin:13px 0}
+#ndDataControlView .nddc-stat{background:#f2f5f9;padding:8px 11px;border-radius:10px;font-size:12px}
+#ndDataControlView .nddc-table{overflow:auto;max-width:100%;margin-top:12px;border:1px solid #e2e4eb;border-radius:10px}
+#ndDataControlView table{border-collapse:collapse;width:100%;min-width:520px}
+#ndDataControlView th,#ndDataControlView td{white-space:nowrap;border-bottom:1px solid #ecedf1;text-align:left;padding:9px;font-size:12px}
+#ndDataControlView th{background:#f5f6fa;color:#5c6674;position:sticky;top:0}
+#ndDataControlView .nddc-message{white-space:pre-wrap;word-break:break-word;color:#475365;font-size:13px;line-height:1.5}
+#ndDataControlView .nddc-warn{color:#aa5820}
+@media(max-width:550px){#ndDataControlView .nddc-grid{grid-template-columns:1fr}#ndDataControlView .nddc-shell{padding:15px 13px 60px}#ndDataControlView .nddc-top h1{font-size:20px}}
+</style>
+<div id="ndDataControlView" aria-hidden="true" role="dialog" aria-label="Data Management">
+ <div class="nddc-shell">
+  <div class="nddc-top"><button type="button" class="nddc-back" id="nddcClose">‹ Back</button><h1>Data Management / 数据管理</h1><span style="width:45px"></span></div>
+  <div class="nddc-section">Members / 会员</div><div class="nddc-grid" id="nddcMemberTiles"></div>
+  <div class="nddc-section">Menu / 菜单</div><div class="nddc-grid" id="nddcMenuTiles"></div>
+  <div class="nddc-section">Inventory / 库存</div><div class="nddc-grid" id="nddcInventoryTiles"></div>
+  <div class="nddc-section">Other / 其它</div><div class="nddc-grid" id="nddcOtherTiles"></div>
+  <div class="nddc-card" id="nddcPanel" hidden>
+   <strong id="nddcSelectedTitle">CSV Preview</strong>
+   <p class="nddc-hint">本功能只读取文件并进行本机预览和校验。不会写入 Supabase，不会增加 Credit、Points、库存或优惠券。请核对差异后再由 UMO 确认后续导入。</p>
+   <label class="nddc-field" for="nddcFile">选择 CSV 文件</label><input id="nddcFile" type="file" accept=".csv,text/csv,.txt" />
+   <div id="nddcExtra" hidden><label class="nddc-field" for="nddcKey">主键匹配字段 / Matching key</label><select id="nddcKey"></select></div>
+   <div class="nddc-actions"><button type="button" class="nddc-action secondary" id="nddcOnline">与线上商品比对（只读）</button><button type="button" class="nddc-action secondary" id="nddcExport" disabled>导出校验报告 CSV</button></div>
+   <div id="nddcResult" class="nddc-message" role="status">选择分类与 CSV 文件后开始检查。</div>
+   <div id="nddcPreview" class="nddc-table" hidden></div>
+  </div>
+ </div>
+</div>
+<script id="nd-data-management-runtime-v1">
+(function(){'use strict';
+const categories={
+ nddcMemberTiles:[['members','上传会员','会员电话、姓名、等级'],['balance','上传会员储值','历史余额快照'],['points','上传会员积分','积分历史快照'],['outstanding','上传会员欠款','欠款历史快照'],['voucher','上传会员优惠券','优惠券明细'],['birthdays','上传会员生日','生日资料'],['referral','上传介绍关系','介绍人 / 被介绍人'],['member_update','更新会员信息','电话、等级、标签、备注']],
+ nddcMenuTiles:[['service','上传服务菜单','SKU、时长、价格'],['product','上传产品菜单','SKU 与库存匹配'],['package','上传配套菜单','SKU、配套权益'],['giftcard','上传礼品卡菜单','SKU、储值规则'],['package_voucher','上传配套优惠券','SKU 与 Voucher'],['sections','更新分区和文件夹','Section / Folder'],['price','更新菜单价格','含分行价']],
+ nddcInventoryTiles:[['opening','上传开仓库存','仅预览，不累加数量'],['stockout','上传库存出库','出库历史'],['supplier','上传供应商','供应商资料'],['stock_alert','更新库存警报','最低库存阈值']],
+ nddcOtherTiles:[['staff','上传员工','员工资料'],['effort','上传等级 / Effort / HOF','员工佣金级别'],['appointment','上传预约','预约时间、员工'],['notes','上传会员备注','备注记录'],['receipt','导出 / 校验收据','历史收据资料']]
+};
+const keys={members:['Phone Number','phone','phone_number'],balance:['member_phone','Phone Number','phone'],points:['member_phone','Phone Number','phone'],outstanding:['member_phone','Phone Number','phone'],referral:['referred_phone','Phone Number','phone'],service:['skuID','sku','item_sku'],product:['skuID','sku','item_sku'],package:['skuID','sku','item_sku'],giftcard:['skuID','sku','item_sku'],opening:['sku_id','skuID','sku'],stockout:['sku_id','skuID','sku']};
+const catalogTypes={service:'service',product:'product',package:'package',giftcard:'giftcard'};
+let current='members',rows=[],headers=[],exportRows=[],onlineChecked=false;
+const el=x=>document.getElementById(x);
+function parseCSV(text){const result=[];let row=[],field='',inside=false;for(let i=0;i<text.length;i++){const ch=text[i];if(inside){if(ch==='"'&&text[i+1]==='"'){field+='"';i++}else if(ch==='"'){inside=false}else field+=ch;}else if(ch==='"'){inside=true}else if(ch===','){row.push(field);field=''}else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&text[i+1]==='\n')i++;row.push(field);if(row.some(v=>v!==''))result.push(row);row=[];field=''}else{field+=ch}}if(inside)throw Error('CSV 文件包含未关闭的引号');if(field||row.length){row.push(field);result.push(row)}return result}
+function csvEscape(v){const s=String(v??'');return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+function labelText(text){return String(text||'').toLowerCase().replace(/[\s_\-]/g,'')}
+function initTiles(){for(const [group,items] of Object.entries(categories)){const host=el(group);for(const [id,title,descr] of items){const b=document.createElement('button');b.type='button';b.className='nddc-tile';b.dataset.category=id;const ico=document.createElement('span');ico.className='nddc-ico';ico.textContent=group==='nddcMemberTiles'?'♙':group==='nddcInventoryTiles'?'▣':group==='nddcOtherTiles'?'≡':'▤';const txt=document.createElement('span');txt.textContent=title;const sub=document.createElement('small');sub.style.cssText='display:block;color:#89909e;font-weight:400;font-size:11px;margin-top:4px';sub.textContent=descr;txt.append(sub);b.append(ico,txt);host.append(b);b.addEventListener('click',()=>{current=id;host.closest('.nddc-shell').querySelectorAll('.nddc-tile').forEach(x=>x.classList.remove('active'));b.classList.add('active');el('nddcPanel').hidden=false;el('nddcSelectedTitle').textContent=title;el('nddcFile').value='';el('nddcResult').textContent='选择 CSV 文件开始检查；所有金融、库存数字仅作预览，不会自动累加。';el('nddcPreview').hidden=true;el('nddcExtra').hidden=true;rows=[];headers=[];exportRows=[];el('nddcExport').disabled=true;el('nddcOnline').disabled=!catalogTypes[current];el('nddcPanel').scrollIntoView({behavior:'smooth',block:'start'})})}}}
+function close(){el('ndDataControlView').classList.remove('nd-show');el('ndDataControlView').setAttribute('aria-hidden','true');document.body.style.overflow=''}
+function open(){const view=el('ndDataControlView');view.classList.add('nd-show');view.setAttribute('aria-hidden','false');view.scrollTop=0;document.body.style.overflow='hidden';el('mainSidebar')?.classList.remove('open')}
+window.ndOpenDataManagement=open;
+function installNav(){const sidebar=el('mainSidebar');if(!sidebar||el('nddcSidebar'))return;const button=document.createElement('button');button.type='button';button.id='nddcSidebar';button.className='sidebar-btn';button.textContent='Data Management / 数据管理';button.addEventListener('click',e=>{e.preventDefault();open()});sidebar.append(button)}
+async function loadFile(){const file=el('nddcFile').files?.[0];if(!file)return;if(file.size>18*1024*1024){el('nddcResult').textContent='文件超过 18MB，请拆分后再导入预览。';return}try{const parsed=parseCSV((await file.text()).replace(/^\ufeff/,''));if(!parsed.length)throw Error('空 CSV');headers=parsed[0].map(h=>h.trim());if(headers.some(h=>!h))throw Error('CSV 有空白列名');if(new Set(headers.map(labelText)).size!==headers.length)throw Error('CSV 有重复列名');rows=parsed.slice(1).filter(r=>r.some(x=>x.trim()!==''));if(rows.length>100000)throw Error('超过 100,000 行，请拆分');if(rows.some(r=>r.length!==headers.length))throw Error('有行的列数与表头不符');const key=el('nddcKey');key.replaceChildren();for(const h of headers){const o=new Option(h,h);key.add(o)}const guessed=(keys[current]||[]).map(labelText);const found=headers.find(h=>guessed.includes(labelText(h)))||headers.find(h=>/sku|phone|id/i.test(h))||headers[0];key.value=found;el('nddcExtra').hidden=false;onlineChecked=false;inspect();}catch(err){el('nddcResult').textContent='无法解析 CSV：'+err.message;el('nddcPreview').hidden=true;el('nddcExport').disabled=true}}
+function inspect(extra={}){if(!headers.length)return;const key=el('nddcKey').value;const k=headers.indexOf(key);const seen=new Set();let duplicates=0,empty=0;exportRows=rows.map((values,index)=>{const value=String(values[k]||'').trim();let status='LOCAL_NEW';if(!value){status='MISSING_KEY';empty++}else if(seen.has(value)){status='DUPLICATE_IN_FILE';duplicates++}else seen.add(value);return {line:index+2,key:value,status,values}});if(extra.online){for(const item of exportRows){if(item.status!=='LOCAL_NEW')continue;const v=extra.online.get(item.key);if(v){item.status='ONLINE_MATCH';if(catalogTypes[current]&&v.name&&headers.some(h=>labelText(h)==='skuname')){const nm=headers.findIndex(h=>labelText(h)==='skuname');if(nm>=0&&String(item.values[nm]||'').trim()!==v.name.trim())item.status='ONLINE_DIFFERENT_NAME'}}}}let msg='文件记录：'+rows.length+' 条 | 文件内重复：'+duplicates+' 条 | 主键为空：'+empty+' 条。';if(extra.online)msg+='\n线上商品匹配：'+exportRows.filter(x=>x.status==='ONLINE_MATCH').length+' 条；名称不一致：'+exportRows.filter(x=>x.status==='ONLINE_DIFFERENT_NAME').length+' 条。';else msg+='\n线上差异尚未核对。';msg+='\n提示：余额、积分和库存文件不能直接当交易累加。';el('nddcResult').textContent=msg;const area=el('nddcPreview');area.replaceChildren();const table=document.createElement('table');const thead=document.createElement('thead');const hr=document.createElement('tr');for(const name of ['Row','Check',...headers.slice(0,6)]){const th=document.createElement('th');th.textContent=name;hr.append(th)}thead.append(hr);table.append(thead);const tbody=document.createElement('tbody');for(const item of exportRows.slice(0,30)){const tr=document.createElement('tr');for(const v of [item.line,item.status,...item.values.slice(0,6)]){const td=document.createElement('td');td.textContent=String(v??'').slice(0,180);tr.append(td)}tbody.append(tr)}table.append(tbody);area.append(table);area.hidden=false;el('nddcExport').disabled=false}
+async function onlineCompare(){if(!catalogTypes[current]||!rows.length)return;const db=window.salaryDb;if(!db){el('nddcResult').textContent='线上数据库未连接；请先登录有权限的账号。';return}const button=el('nddcOnline');button.disabled=true;try{const all=[];for(let start=0;start<20000;start+=500){const {data,error}=await db.from('nd_pro_beta_catalog_items').select('sku,name,item_type').eq('item_type',catalogTypes[current]).range(start,start+499);if(error)throw error;all.push(...(data||[]));if(!data||data.length<500)break}const online=new Map(all.map(r=>[r.sku,r]));onlineChecked=true;inspect({online})}catch(err){el('nddcResult').textContent='线上比对失败：'+(err.message||err)+'。保留本机检查结果。'}finally{button.disabled=false}}
+function exportReport(){if(!exportRows.length)return;const head=['source_row','matching_key','validation_status',...headers];const lines=[head,...exportRows.map(x=>[x.line,x.key,x.status,...x.values])];const csv='\ufeff'+lines.map(r=>r.map(csvEscape).join(',')).join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ND_Import_Check_'+current+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
+function init(){if(el('nddcMemberTiles').childElementCount)return;initTiles();installNav();el('nddcClose').addEventListener('click',close);el('nddcFile').addEventListener('change',loadFile);el('nddcKey').addEventListener('change',()=>inspect());el('nddcOnline').addEventListener('click',onlineCompare);el('nddcExport').addEventListener('click',exportReport)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
