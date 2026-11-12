@@ -38019,13 +38019,13 @@ function enhance(){
  form.dataset.ndRefReady='yes';primary.style.display='flex';primary.style.flexDirection='column';
  const dt=details.querySelector('.proref-datetime');if(dt)primary.insertBefore(dt,primary.firstChild);
  const name=primary.querySelector('.proref-name-row');if(name)name.style.display='none';
- const customer=document.createElement('div');customer.className='nd-ref-customer';customer.innerHTML='<span class="nd-ref-avatar">👩🏻</span><strong>请选择顾客</strong>';primary.append(customer);
+ const customer=document.createElement('div');customer.className='nd-ref-customer';customer.innerHTML='<span class="nd-ref-avatar">👩🏻</span><strong>请选择顾客</strong>';primary.append(customer);customer.hidden=true;
  const customerSelect=form.elements.customer;
  function syncCustomer(){const v=customerSelect?.selectedOptions?.[0]?.textContent?.trim();customer.querySelector('strong').textContent=v&&!/select customer|选择顾客/i.test(v)?v:'请选择顾客';}
- customerSelect?.addEventListener('change',syncCustomer);customer.addEventListener('click',()=>{const btn=document.getElementById('proRefSearch');if(btn)btn.click();});syncCustomer();
+ customerSelect?.addEventListener('change',syncCustomer);const syncStage=()=>{const selected=!!customerSelect?.value;customer.hidden=!selected;};customerSelect?.addEventListener('change',syncStage);new MutationObserver(syncStage).observe(details,{attributes:true,attributeFilter:['hidden']});syncStage();customer.addEventListener('click',()=>{const btn=document.getElementById('proRefSearch');if(btn)btn.click();});syncCustomer();
  const guestField=document.getElementById('proGuestsCount')?.closest('.pro-field');
- const guests=document.createElement('div');guests.className='nd-ref-guests';if(guestField){guests.append(guestField);details.before(guests);guestField.querySelector('label')?.replaceChildren(document.createTextNode('👥 人数'));}
- const tabsCard=document.createElement('section');tabsCard.className='nd-ref-tabs-card';const tabs=document.createElement('div');tabs.className='nd-ref-tabs';const tabBody=document.createElement('div');tabBody.className='nd-ref-tab-body';tabsCard.append(tabs,tabBody);details.prepend(tabsCard);
+ const guests=document.createElement('div');guests.className='nd-ref-guests';if(guestField){guests.append(guestField);details.prepend(guests);guestField.querySelector('label')?.replaceChildren(document.createTextNode('👥 人数'));}
+ const tabsCard=document.createElement('section');tabsCard.className='nd-ref-tabs-card';const tabs=document.createElement('div');tabs.className='nd-ref-tabs';const tabBody=document.createElement('div');tabBody.className='nd-ref-tab-body';tabsCard.append(tabs,tabBody);details.append(tabsCard);
  const serviceField=details.querySelector('[name="service"]')?.closest('.pro-field');const durationField=details.querySelector('[name="duration"]')?.closest('.pro-field');const employeeField=details.querySelector('[name="employee"]')?.closest('.pro-field');const roomField=details.querySelector('[name="room_id"]')?.closest('.pro-field');
  for(const [el,kind] of [[serviceField,'service'],[durationField,'duration'],[employeeField,'employee'],[roomField,'room']])if(el){el.dataset.refKind=kind;tabBody.append(el)}
  const block=document.createElement('label');block.className='nd-ref-room-block';block.innerHTML='<span>🔒 封锁预约时间段</span><input type="checkbox" disabled title="暂未连接封锁时段数据库">';tabBody.append(block);
@@ -41065,4 +41065,17 @@ body > #ndProHamburger.nd-pro-portal-menu {
   #ndStaffFinancePage .nd-hub-option,
   #ndAnnouncementsPage .nd-hub-option {min-height:44px!important;}
 }
+</style>
+<style id="nd-appointment-two-step-final-20261112">
+/* Stage 1: date/time + phone/search only. Stage 2 appears after customer selection. */
+#ndProBookingModal .proref-primary .nd-ref-customer[hidden],
+#ndProBookingModal .proref-details[hidden],
+#ndProBookingModal .proref-selection[hidden]{display:none!important}
+#ndProBookingModal .nd-ref-guests{margin-top:12px!important}
+#ndProBookingModal .proref-primary{overflow:hidden}
+#ndProBookingModal .proref-primary .proref-datetime{display:grid!important;grid-template-columns:1fr 1fr}
+#ndProBookingModal .proref-details:not([hidden]){display:flex!important;flex-direction:column;gap:12px!important;margin-top:12px!important}
+#ndProBookingModal .proref-primary .nd-ref-customer:not([hidden]){display:flex!important}
+#ndProBookingModal .proref-selection{display:none!important}
+#ndProBookingModal .proref-name-row{display:none!important}
 </style>
