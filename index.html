@@ -37641,6 +37641,11 @@ window.ndOpenSalaryAdvance=open;window.ndOpenSalaryAdvanceHistory=openHistory;
   </div>
  </div>
 </div>
+<style id="nd-data-management-umo-only-css">
+#nddcSidebar{display:none!important}
+body.nd-dm-umo-authorized #nddcSidebar{display:block!important}
+#ndDataControlView:not(.nd-show){display:none!important}
+</style>
 <script id="nd-data-management-runtime-v1">
 (function(){'use strict';
 const categories={
@@ -37657,15 +37662,64 @@ function parseCSV(text){const result=[];let row=[],field='',inside=false;for(let
 function csvEscape(v){const s=String(v??'');return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
 function labelText(text){return String(text||'').toLowerCase().replace(/[\s_\-]/g,'')}
 function initTiles(){for(const [group,items] of Object.entries(categories)){const host=el(group);for(const [id,title,descr] of items){const b=document.createElement('button');b.type='button';b.className='nddc-tile';b.dataset.category=id;const ico=document.createElement('span');ico.className='nddc-ico';ico.textContent=group==='nddcMemberTiles'?'♙':group==='nddcInventoryTiles'?'▣':group==='nddcOtherTiles'?'≡':'▤';const txt=document.createElement('span');txt.textContent=title;const sub=document.createElement('small');sub.style.cssText='display:block;color:#89909e;font-weight:400;font-size:11px;margin-top:4px';sub.textContent=descr;txt.append(sub);b.append(ico,txt);host.append(b);b.addEventListener('click',()=>{current=id;host.closest('.nddc-shell').querySelectorAll('.nddc-tile').forEach(x=>x.classList.remove('active'));b.classList.add('active');el('nddcPanel').hidden=false;el('nddcSelectedTitle').textContent=title;el('nddcFile').value='';el('nddcResult').textContent='选择 CSV 文件开始检查；所有金融、库存数字仅作预览，不会自动累加。';el('nddcPreview').hidden=true;el('nddcExtra').hidden=true;rows=[];headers=[];exportRows=[];el('nddcExport').disabled=true;el('nddcOnline').disabled=!catalogTypes[current];el('nddcPanel').scrollIntoView({behavior:'smooth',block:'start'})})}}}
-function close(){el('ndDataControlView').classList.remove('nd-show');el('ndDataControlView').setAttribute('aria-hidden','true');document.body.style.overflow=''}
-function open(){const view=el('ndDataControlView');view.classList.add('nd-show');view.setAttribute('aria-hidden','false');view.scrollTop=0;document.body.style.overflow='hidden';el('mainSidebar')?.classList.remove('open')}
+// Data Management is a private UMO page, not a general manager page.
+// Fail closed until both the authenticated user and the dedicated server RPC agree.
+const DM_OWNER='umo1017@gmail.com';
+let dmAuthorized=false,dmAuthSequence=0,dmBoundClient=null,dmSubscription=null;
+function close(){const view=el('ndDataControlView');if(view){view.classList.remove('nd-show');view.setAttribute('aria-hidden','true')}document.body.style.overflow=''}
+function dmReset(){document.body.classList.remove('nd-dm-umo-authorized');dmAuthorized=false;el('nddcSidebar')?.remove();close();rows=[];headers=[];exportRows=[];onlineChecked=false;const input=el('nddcFile');if(input)input.value='';const preview=el('nddcPreview');if(preview){preview.replaceChildren();preview.hidden=true}const panel=el('nddcPanel');if(panel)panel.hidden=true;}
+async function dmCheckAccess(){
+ const client=window.salaryDb;
+ if(!client?.auth?.getUser){dmReset();return false}
+ try{
+   const result=await client.auth.getUser();
+   if(result.error||!result.data?.user||String(result.data.user.email||'').trim().toLowerCase()!==DM_OWNER){dmReset();return false}
+   // This RPC must exist in Supabase and must check auth.uid() against auth.users.
+   const verification=await client.rpc('nd_data_management_is_umo');
+   if(verification.error||verification.data!==true){dmReset();return false}
+   return true;
+ }catch(error){dmReset();return false}
+}
+async function dmRefresh(){
+ const version=++dmAuthSequence;
+ const allowed=await dmCheckAccess();
+ if(version!==dmAuthSequence)return false;
+ dmAuthorized=allowed;
+ if(allowed){document.body.classList.add('nd-dm-umo-authorized');installNav()}else dmReset();
+ return allowed;
+}
+async function dmRequire(){
+ const allowed=await dmRefresh();
+ if(!allowed){close();throw Error('Data Management is restricted to UMO only.');}
+ return true;
+}
+async function open(){
+ try{await dmRequire()}catch(error){console.warn('[Data Management]',error.message);return false}
+ const view=el('ndDataControlView');if(!view)return false;
+ view.classList.add('nd-show');view.setAttribute('aria-hidden','false');view.scrollTop=0;document.body.style.overflow='hidden';el('mainSidebar')?.classList.remove('open');return true;
+}
 window.ndOpenDataManagement=open;
-function installNav(){const sidebar=el('mainSidebar');if(!sidebar||el('nddcSidebar'))return;const button=document.createElement('button');button.type='button';button.id='nddcSidebar';button.className='sidebar-btn';button.textContent='Data Management / 数据管理';button.addEventListener('click',e=>{e.preventDefault();open()});sidebar.append(button)}
-async function loadFile(){const file=el('nddcFile').files?.[0];if(!file)return;if(file.size>18*1024*1024){el('nddcResult').textContent='文件超过 18MB，请拆分后再导入预览。';return}try{const parsed=parseCSV((await file.text()).replace(/^\ufeff/,''));if(!parsed.length)throw Error('空 CSV');headers=parsed[0].map(h=>h.trim());if(headers.some(h=>!h))throw Error('CSV 有空白列名');if(new Set(headers.map(labelText)).size!==headers.length)throw Error('CSV 有重复列名');rows=parsed.slice(1).filter(r=>r.some(x=>x.trim()!==''));if(rows.length>100000)throw Error('超过 100,000 行，请拆分');if(rows.some(r=>r.length!==headers.length))throw Error('有行的列数与表头不符');const key=el('nddcKey');key.replaceChildren();for(const h of headers){const o=new Option(h,h);key.add(o)}const guessed=(keys[current]||[]).map(labelText);const found=headers.find(h=>guessed.includes(labelText(h)))||headers.find(h=>/sku|phone|id/i.test(h))||headers[0];key.value=found;el('nddcExtra').hidden=false;onlineChecked=false;inspect();}catch(err){el('nddcResult').textContent='无法解析 CSV：'+err.message;el('nddcPreview').hidden=true;el('nddcExport').disabled=true}}
+function installNav(){
+ if(!dmAuthorized)return;
+ const sidebar=el('mainSidebar');if(!sidebar||el('nddcSidebar'))return;
+ const button=document.createElement('button');button.type='button';button.id='nddcSidebar';button.className='sidebar-btn';button.textContent='Data Management / 数据管理';
+ button.addEventListener('click',e=>{e.preventDefault();void open()});sidebar.append(button);
+}
+function dmBindAuth(){
+ const client=window.salaryDb;
+ if(!client?.auth||client===dmBoundClient)return;
+ try{dmSubscription?.unsubscribe?.()}catch(_){}
+ dmBoundClient=client;
+ const subscription=client.auth.onAuthStateChange(()=>{dmAuthorized=false;el('nddcSidebar')?.remove();close();setTimeout(()=>{void dmRefresh()},0)});
+ dmSubscription=subscription?.data?.subscription;
+ void dmRefresh();
+}
+
+async function loadFile(){try{await dmRequire()}catch(_){return}const file=el('nddcFile').files?.[0];if(!file)return;if(file.size>18*1024*1024){el('nddcResult').textContent='文件超过 18MB，请拆分后再导入预览。';return}try{const parsed=parseCSV((await file.text()).replace(/^\ufeff/,''));if(!parsed.length)throw Error('空 CSV');headers=parsed[0].map(h=>h.trim());if(headers.some(h=>!h))throw Error('CSV 有空白列名');if(new Set(headers.map(labelText)).size!==headers.length)throw Error('CSV 有重复列名');rows=parsed.slice(1).filter(r=>r.some(x=>x.trim()!==''));if(rows.length>100000)throw Error('超过 100,000 行，请拆分');if(rows.some(r=>r.length!==headers.length))throw Error('有行的列数与表头不符');const key=el('nddcKey');key.replaceChildren();for(const h of headers){const o=new Option(h,h);key.add(o)}const guessed=(keys[current]||[]).map(labelText);const found=headers.find(h=>guessed.includes(labelText(h)))||headers.find(h=>/sku|phone|id/i.test(h))||headers[0];key.value=found;el('nddcExtra').hidden=false;onlineChecked=false;inspect();}catch(err){el('nddcResult').textContent='无法解析 CSV：'+err.message;el('nddcPreview').hidden=true;el('nddcExport').disabled=true}}
 function inspect(extra={}){if(!headers.length)return;const key=el('nddcKey').value;const k=headers.indexOf(key);const seen=new Set();let duplicates=0,empty=0;exportRows=rows.map((values,index)=>{const value=String(values[k]||'').trim();let status='LOCAL_NEW';if(!value){status='MISSING_KEY';empty++}else if(seen.has(value)){status='DUPLICATE_IN_FILE';duplicates++}else seen.add(value);return {line:index+2,key:value,status,values}});if(extra.online){for(const item of exportRows){if(item.status!=='LOCAL_NEW')continue;const v=extra.online.get(item.key);if(v){item.status='ONLINE_MATCH';if(catalogTypes[current]&&v.name&&headers.some(h=>labelText(h)==='skuname')){const nm=headers.findIndex(h=>labelText(h)==='skuname');if(nm>=0&&String(item.values[nm]||'').trim()!==v.name.trim())item.status='ONLINE_DIFFERENT_NAME'}}}}let msg='文件记录：'+rows.length+' 条 | 文件内重复：'+duplicates+' 条 | 主键为空：'+empty+' 条。';if(extra.online)msg+='\n线上商品匹配：'+exportRows.filter(x=>x.status==='ONLINE_MATCH').length+' 条；名称不一致：'+exportRows.filter(x=>x.status==='ONLINE_DIFFERENT_NAME').length+' 条。';else msg+='\n线上差异尚未核对。';msg+='\n提示：余额、积分和库存文件不能直接当交易累加。';el('nddcResult').textContent=msg;const area=el('nddcPreview');area.replaceChildren();const table=document.createElement('table');const thead=document.createElement('thead');const hr=document.createElement('tr');for(const name of ['Row','Check',...headers.slice(0,6)]){const th=document.createElement('th');th.textContent=name;hr.append(th)}thead.append(hr);table.append(thead);const tbody=document.createElement('tbody');for(const item of exportRows.slice(0,30)){const tr=document.createElement('tr');for(const v of [item.line,item.status,...item.values.slice(0,6)]){const td=document.createElement('td');td.textContent=String(v??'').slice(0,180);tr.append(td)}tbody.append(tr)}table.append(tbody);area.append(table);area.hidden=false;el('nddcExport').disabled=false}
-async function onlineCompare(){if(!catalogTypes[current]||!rows.length)return;const db=window.salaryDb;if(!db){el('nddcResult').textContent='线上数据库未连接；请先登录有权限的账号。';return}const button=el('nddcOnline');button.disabled=true;try{const all=[];for(let start=0;start<20000;start+=500){const {data,error}=await db.from('nd_pro_beta_catalog_items').select('sku,name,item_type').eq('item_type',catalogTypes[current]).range(start,start+499);if(error)throw error;all.push(...(data||[]));if(!data||data.length<500)break}const online=new Map(all.map(r=>[r.sku,r]));onlineChecked=true;inspect({online})}catch(err){el('nddcResult').textContent='线上比对失败：'+(err.message||err)+'。保留本机检查结果。'}finally{button.disabled=false}}
-function exportReport(){if(!exportRows.length)return;const head=['source_row','matching_key','validation_status',...headers];const lines=[head,...exportRows.map(x=>[x.line,x.key,x.status,...x.values])];const csv='\ufeff'+lines.map(r=>r.map(csvEscape).join(',')).join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ND_Import_Check_'+current+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
-function init(){if(el('nddcMemberTiles').childElementCount)return;initTiles();installNav();el('nddcClose').addEventListener('click',close);el('nddcFile').addEventListener('change',loadFile);el('nddcKey').addEventListener('change',()=>inspect());el('nddcOnline').addEventListener('click',onlineCompare);el('nddcExport').addEventListener('click',exportReport)}
+async function onlineCompare(){try{await dmRequire()}catch(_){return}if(!catalogTypes[current]||!rows.length)return;const db=window.salaryDb;if(!db){el('nddcResult').textContent='线上数据库未连接；请先登录有权限的账号。';return}const button=el('nddcOnline');button.disabled=true;try{const all=[];for(let start=0;start<20000;start+=500){const {data,error}=await db.from('nd_pro_beta_catalog_items').select('sku,name,item_type').eq('item_type',catalogTypes[current]).range(start,start+499);if(error)throw error;all.push(...(data||[]));if(!data||data.length<500)break}const online=new Map(all.map(r=>[r.sku,r]));onlineChecked=true;inspect({online})}catch(err){el('nddcResult').textContent='线上比对失败：'+(err.message||err)+'。保留本机检查结果。'}finally{button.disabled=false}}
+async function exportReport(){try{await dmRequire()}catch(_){return}if(!exportRows.length)return;const head=['source_row','matching_key','validation_status',...headers];const lines=[head,...exportRows.map(x=>[x.line,x.key,x.status,...x.values])];const csv='\ufeff'+lines.map(r=>r.map(csvEscape).join(',')).join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ND_Import_Check_'+current+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
+function init(){if(el('nddcMemberTiles').childElementCount)return;initTiles();dmReset();dmBindAuth();const authWait=setInterval(()=>{dmBindAuth();if(dmBoundClient)clearInterval(authWait)},1000);window.addEventListener('focus',()=>{dmBindAuth();void dmRefresh()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){dmBindAuth();void dmRefresh()}});el('nddcClose').addEventListener('click',close);el('nddcFile').addEventListener('change',loadFile);el('nddcKey').addEventListener('change',()=>inspect());el('nddcOnline').addEventListener('click',onlineCompare);el('nddcExport').addEventListener('click',exportReport)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
