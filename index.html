@@ -5395,6 +5395,16 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 .nd-tunai-body h4{margin:12px 0 5px}.nd-tunai-body p{margin:6px 0}.nd-tunai-warning{color:#91621c;font-size:12px}
 .nd-sale-tunai{padding:0 10px 10px}
 </style>
+<style id="nd-onboard-edit-anytime-20261112">
+#staffModal .nd-onboard-edit-actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 2px}
+#staffModal .nd-onboard-edit-actions .btn{min-height:42px;font-size:14px}
+#staffModal #ndEditOnboardDetails{background:#f0f6f2;color:#2a503e;border-color:#c8d9ce}
+#staffModal #ndRestoreSignedDetails{background:#fff;color:#805b29}
+#staffModal .nd-signed-edit-note{background:#f6f9f6;border:1px solid #dbe7dc;border-radius:10px;padding:10px 12px;color:#3b5948;font-size:13px;line-height:1.5;margin-top:12px}
+#staffModal .nd-signed-edit-note.nd-signed-edit-warning{background:#fff8ec;border-color:#eed6a4;color:#805314}
+#staffModal .nd-signed-edit-note[hidden],#staffModal #ndRestoreSignedDetails[hidden]{display:none!important}
+@media(max-width:600px){#staffModal .nd-onboard-edit-actions .btn{flex:1 1 100%;width:100%}}
+</style>
 </head>
 <body>
 <aside class="main-sidebar hidden" id="mainSidebar">
@@ -11949,6 +11959,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 </div>
 <section id="ndOnboardItems" class="nd-items-panel"></section>
 <section class="nd-items-panel"><h4>Employment Notice Agreement *</h4><p id="ndOnboardAgreementStatus" class="helper"></p><button class="btn" id="ndOpenOnboardAgreement" type="button">Review &amp; Sign Agreement</button></section>
+<div id="ndSignedDetailsNotice" class="nd-signed-edit-note" role="status" hidden></div>
+<div class="nd-onboard-edit-actions"><button class="btn" id="ndEditOnboardDetails" type="button">✎ Edit Details / 修改填写</button><button class="btn" id="ndRestoreSignedDetails" type="button" hidden>Restore Signed Details</button></div>
 <button class="btn" id="reviewStaffBtn" style="width:100%;margin-top:14px" type="button">Review</button>
 <div class="helper" id="staffSaveMsg" style="margin-top:8px"></div>
 </div>
@@ -14303,6 +14315,29 @@ function ndNoticeDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/K
 function ndNoticeDetails(e){return {employee_name:e?e.name:byId('empName').value.trim(),identity:e?e.nric_passport:byId('empNric').value.trim(),branch:e?e.outlet:byId('empOutlet').value,start_date:e?e.join_date:byId('empJoinDate').value,employment_type:e?e.employment_type:byId('empEmploymentType').value,position:e?e.position||e.interview_profile?.Department||e.interview_profile?.Position||'':byId('empPosition')?.value||''};}
 function ndReadNotice(notes){try{return JSON.parse(notes||'').employment_notice_agreement||null;}catch(_){return null;}}
 function ndNoticeIsSigned(a){const valid=x=>typeof x==='string'?/^(data:image\/|https:\/\/)/.test(x):!!(x?.bucket&&x?.path);return !!a&&valid(a.employee_signature)&&valid(a.company_signature);}
+function ndSignedChanges(){
+ const a=window.ndSignedOnboardingDraft&&ndOnboardAgreement;
+ if(!a)return [];
+ const get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||'';
+ const expected={empName:a.employee?.employee_name||'',empNric:a.employee?.identity||'',empOutlet:a.employee?.branch||'',empJoinDate:get('Start Date'),empGuaranteed:get('Basic Salary (RM)'),empPayBy:get('Payment Method')};
+ return Object.entries(expected).filter(([id,value])=>{
+   const field=byId(id);if(!field)return false;
+   return id==='empGuaranteed'?Number(field.value)!==Number(value):String(field.value).trim()!==String(value).trim();
+ }).map(([id])=>id);
+}
+function ndUpdateSignedEditNotice(){
+ const note=byId('ndSignedDetailsNotice'),restore=byId('ndRestoreSignedDetails');
+ const signed=!!window.ndSignedOnboardingDraft,changed=ndSignedChanges();
+ if(note){note.hidden=!signed;note.textContent=!signed?'':changed.length?'Signed contract details have changed. Please update and re-sign the contract before completing onboarding. Your edits will remain in the form until you leave or reset it.':'Signed contract: details can be edited here. If you change signed terms, you must update and re-sign the contract before onboarding can be completed.';note.classList.toggle('nd-signed-edit-warning',changed.length>0);}
+ if(restore)restore.hidden=!signed||changed.length===0;
+}
+function ndRestoreSignedFormDetails(){
+ const a=ndOnboardAgreement;if(!window.ndSignedOnboardingDraft||!a)return;
+ const get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||'';
+ const values={empName:a.employee?.employee_name||'',empNric:a.employee?.identity||'',empOutlet:a.employee?.branch||'',empJoinDate:get('Start Date'),empGuaranteed:get('Basic Salary (RM)'),empPayBy:get('Payment Method')};
+ for(const [id,value] of Object.entries(values)){const el=byId(id);if(el){el.value=value;el.readOnly=false;el.disabled=false;}}
+ updateSubmitStaffPaymentFields();ndUpdateSignedEditNotice();
+}
 function ndNoticeValidDraft(){if(window.ndSignedOnboardingDraft){const a=ndOnboardAgreement,d=ndNoticeDetails(),get=k=>(a?.details||[]).find(r=>r[0]===k)?.[1]||'';if(!a?.employee_signature||!a?.company_signature)throw Error('Sign the onboarding contract first.');if(a.employee.employee_name!==d.employee_name||a.employee.identity!==d.identity||a.employee.branch!==d.branch||get('Start Date')!==d.start_date||Number(get('Basic Salary (RM)'))!==Number(byId('empGuaranteed').value)||get('Payment Method')!==byId('empPayBy').value)throw Error('Signed employment details changed. Update and sign the contract before continuing.');return a;}if(!ndOnboardAgreement?.employee_signature||!ndOnboardAgreement?.company_signature)throw Error('Review and sign the Employment Notice Agreement before onboarding.');if(JSON.stringify(ndOnboardAgreement.employee)!==JSON.stringify(ndNoticeDetails()))throw Error('Employee details changed. Review and sign the updated agreement.');return ndOnboardAgreement;}
 function ndUpdateNoticeStatus(){const node=byId('ndOnboardAgreementStatus');if(node)node.textContent=ndOnboardAgreement?'Signed by employee and company representative.':'';}
 function ndSignaturePad(canvas){const ctx=canvas.getContext('2d');ctx.lineWidth=2.4;ctx.lineCap='round';ctx.strokeStyle='#182c25';let active=false;const point=e=>{const r=canvas.getBoundingClientRect();return [(e.clientX-r.left)*canvas.width/(r.width||canvas.width),(e.clientY-r.top)*canvas.height/(r.height||canvas.height)];};canvas.onpointerdown=e=>{active=true;canvas.setPointerCapture?.(e.pointerId);const [x,y]=point(e);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+.1,y+.1);ctx.stroke();canvas.dataset.ink='1';e.preventDefault();};canvas.onpointermove=e=>{if(!active)return;ctx.lineTo(...point(e));ctx.stroke();e.preventDefault();};canvas.onpointerup=canvas.onpointercancel=()=>active=false;}
@@ -14556,6 +14591,7 @@ function resetSubmitStaffForm(){
   ndRenderOnboardItems();
   window.ndInterviewEmployeeDraft=null;
   window.ndSignedOnboardingDraft=null;
+  ndUpdateSignedEditNotice();
   for(const id of ['empName','empNric','empOutlet','empJoinDate','empGuaranteed','empPayBy']){const field=byId(id);if(field){field.disabled=false;field.readOnly=false;}}if(byId('ndOpenOnboardAgreement'))byId('ndOpenOnboardAgreement').hidden=false;
   const ids=[
     "empNo","empJoinDate","empLastDate","empName","empNickname","empNric","empPhone",
@@ -17285,7 +17321,7 @@ window.ndStartInterviewEmployee=async function(row,contractRow=null){
  const a=contractRow.form_data.__nd_signed_contract,get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||'';
  for(const [id,value]of Object.entries({empName:a.employee.employee_name,empNric:a.employee.identity,empOutlet:a.employee.branch,empJoinDate:get('Start Date'),empGuaranteed:get('Basic Salary (RM)'),empPayBy:get('Payment Method'),empNickname:v.Nickname||v['Nick Name']||'',empPhone:v['Contact Number']||'',empCategory:contractRow.form_data.__nd_contract_source.foreign?'non_local':'local'})){const field=byId(id);if(field)field.value=String(value??'');}
  const rest=String(get('Rest Day')).split(/[,;|]/).map(v=>v.trim()),days=[...new Set(rest.map(value=>['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(value)).filter(n=>n>=0))];if(days.length){ndSetFixedRestDays('empFixedRestWeekday',{fixed_rest_weekdays:days});const start=new Date(get('Start Date')+'T12:00:00');let count=0;for(let n=1;n<=new Date(start.getFullYear(),start.getMonth()+1,0).getDate();n++)if(days.includes(new Date(start.getFullYear(),start.getMonth(),n).getDay()))count++;byId('empOffDays').value=String(count);}
- ndOnboardAgreement=a;window.ndSignedOnboardingDraft={id:String(contractRow.id),request:crypto.randomUUID()};updateSubmitEmploymentType();ndUpdateNoticeStatus();updateSubmitStaffPaymentFields();for(const id of ['empName','empNric','empOutlet','empJoinDate','empGuaranteed','empPayBy']){const field=byId(id);if(field){if(field.tagName==='SELECT')field.disabled=true;else field.readOnly=true;}}if(byId('ndOpenOnboardAgreement'))byId('ndOpenOnboardAgreement').hidden=true;await ndRefreshOnboardStock();byId('ndOnboardItems').scrollIntoView({block:'start'});
+ ndOnboardAgreement=a;window.ndSignedOnboardingDraft={id:String(contractRow.id),request:crypto.randomUUID()};updateSubmitEmploymentType();ndUpdateNoticeStatus();updateSubmitStaffPaymentFields();for(const id of ['empName','empNric','empOutlet','empJoinDate','empGuaranteed','empPayBy']){const field=byId(id);if(field){field.disabled=false;field.readOnly=false;}}if(byId('ndOpenOnboardAgreement'))byId('ndOpenOnboardAgreement').hidden=true;ndUpdateSignedEditNotice();await ndRefreshOnboardStock();byId('ndOnboardItems').scrollIntoView({block:'start'});
  byId('staffSaveMsg').textContent='Contract signed. Confirm Employee Items, then Review and Save.';
 };
 
@@ -18128,6 +18164,15 @@ async function initialize(){
     byId("staffModal").classList.add("open");
   };
   byId("reviewStaffBtn").onclick=reviewStaffBeforeSubmit;
+  byId("ndEditOnboardDetails").onclick=()=>{
+    const form=byId('staffModal');
+    const missing=['empGuaranteed','empJoinDate','empName','empPhone'].map(id=>byId(id)).find(el=>el&&!el.value&&!el.disabled);
+    const target=missing||byId('empGuaranteed')||byId('empName');
+    if(target){target.scrollIntoView({behavior:'smooth',block:'center'});try{target.focus({preventScroll:true});}catch(_){target.focus();}}
+  };
+  byId("ndRestoreSignedDetails").onclick=ndRestoreSignedFormDetails;
+  byId('staffModal').addEventListener('input',event=>{if(event.target?.matches?.('#empName,#empNric,#empOutlet,#empJoinDate,#empGuaranteed,#empPayBy'))ndUpdateSignedEditNotice();});
+  byId('staffModal').addEventListener('change',event=>{if(event.target?.matches?.('#empName,#empNric,#empOutlet,#empJoinDate,#empGuaranteed,#empPayBy'))ndUpdateSignedEditNotice();});
   byId("closeStaffReviewModal").onclick=()=>{ byId("staffReviewModal").classList.remove("open"); byId("staffModal").classList.add("open"); };
   byId("confirmSubmitStaffBtn").onclick=saveStaff;
   byId("closeStaffModal").onclick=()=>byId("staffModal").classList.remove("open");
