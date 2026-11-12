@@ -32862,8 +32862,8 @@ function hide(){root.hidden=true;document.body.style.overflow=previousOverflow;}
 function metric(label,value){return `<div class="nmh-metric"><small>${label}</small><b>${esc(value)}</b></div>`}
 function draw(c,profile,balances,error){const tags=Array.isArray(profile?.tags)?profile.tags:[];const level=profile?.membership_level;
 const val=k=>balances&&Object.hasOwn(balances,k)?balances[k]:'—';
-body.innerHTML=`<section class="nmh-card"><button type="button" class="nmh-person" id="nmhOpenDetails"><span class="nmh-avatar">${esc((c.full_name||'会').slice(0,1).toUpperCase())}</span><span class="nmh-identity"><strong>${esc(c.full_name||'未命名会员')}</strong><small>${esc(c.phone||'未登记电话号码')} · 点击查看详细资料</small></span><span class="nmh-arrow">›</span></button><div class="nmh-tags">${level?`<span class="nmh-tag">${esc(level)}</span>`:''}${tags.map(t=>`<span class="nmh-tag">${esc(t)}</span>`).join('')||'<span class="nmh-small">暂无会员标签</span>'}</div><div class="nmh-money">${metric('储值 RM',val('credit'))}${metric('积分',val('points'))}${metric('优惠券',val('vouchers'))}${metric('礼品卡 RM',val('gift'))}${metric('欠款 RM',val('outstanding'))}${metric('押金 RM',val('deposit'))}</div></section><section class="nmh-card"><button class="nmh-link" data-nmh-view="recent"><span>▢</span>近期<em>›</em></button><button class="nmh-link" data-nmh-view="sales"><span>🛒</span>销售记录<em>›</em></button><button class="nmh-link" data-nmh-view="appointments"><span>▦</span>预约记录<em>›</em></button><button class="nmh-link" data-nmh-view="referral"><span>☆</span>介绍记录<em>›</em></button></section><p class="nmh-info">余额仅显示已从云端核实的数据。— 表示尚未连接或无法核实，不代表余额为零。</p>${error?`<p class="nmh-error">${esc(error)}</p>`:''}`;
-body.querySelector('#nmhOpenDetails').onclick=()=>{if(typeof window.ndProOpenCustomerProfile!=='function'){alert('完整会员资料模块尚未就绪');return;}hide();window.ndProMemberHomeReturn=()=>{window.ndProMemberHomeReturn=null;root.hidden=false;document.body.style.overflow='hidden'};window.ndProOpenCustomerProfile(c.id)};
+body.innerHTML=`<section class="nmh-card"><button type="button" class="nmh-person" id="nmhOpenDetails"><span class="nmh-avatar">${esc((c.full_name||'会').slice(0,1).toUpperCase())}</span><span class="nmh-identity"><strong>${esc(c.full_name||'未命名会员')}</strong><small>${esc(c.phone||'未登记电话号码')} · 点击查看详细资料</small></span><span class="nmh-arrow">›</span></button><div class="nmh-tags">${level?`<span class="nmh-tag">${esc(level)}</span>`:''}${tags.map(t=>`<span class="nmh-tag">${esc(t)}</span>`).join('')||'<span class="nmh-small">暂无会员标签</span>'}</div><div class="nmh-money">${metric('储值 RM',val('credit'))}${metric('积分',val('points'))}${metric('优惠券',val('vouchers'))}${metric('礼品卡 RM',val('gift'))}${metric('欠款 RM',val('outstanding'))}${metric('押金 RM',val('deposit'))}</div></section><section class="nmh-card"><button class="nmh-link" data-nmh-view="recent"><span>▢</span>近期<em>›</em></button><button class="nmh-link" data-nmh-view="sales"><span>🛒</span>销售记录<em>›</em></button><button class="nmh-link" data-nmh-view="appointments"><span>▦</span>预约记录<em>›</em></button><button class="nmh-link" data-nmh-view="referral"><span>☆</span>介绍记录<em>›</em></button></section><button type="button" id="nmhCustomLayoutBtn" class="nmh-link" style="background:white;border-radius:15px;padding:13px;margin-bottom:12px">⚙ 自定义布局 <em>›</em></button><div id="nmhCustomWidgets"></div><p class="nmh-info">余额仅显示已从云端核实的数据。— 表示尚未连接或无法核实，不代表余额为零。</p>${error?`<p class="nmh-error">${esc(error)}</p>`:''}`;
+body.querySelector('#nmhCustomLayoutBtn').onclick=()=>window.ndMemberLayoutOpen?.(c.id);window.ndMemberLayoutRender?.(c.id);\nbody.querySelector('#nmhOpenDetails').onclick=()=>{if(typeof window.ndProOpenCustomerProfile!=='function'){alert('完整会员资料模块尚未就绪');return;}hide();window.ndProMemberHomeReturn=()=>{window.ndProMemberHomeReturn=null;root.hidden=false;document.body.style.overflow='hidden'};window.ndProOpenCustomerProfile(c.id)};
 body.querySelectorAll('[data-nmh-view]').forEach(b=>b.onclick=()=>{const kind=b.dataset.nmhView;if(kind==='appointments'){showHistory(c,'appointments');return;}showHistory(c,kind)});
 }
 async function showHistory(c,kind){const label={recent:'近期',sales:'销售记录',appointments:'预约记录',referral:'介绍记录'}[kind];body.innerHTML=`<section class="nmh-card"><button class="nmh-link" id="nmhHistoryBack">‹ 返回会员首页</button><h3>${label}</h3><div id="nmhHistoryData" class="nmh-small">正在读取云端数据…</div></section>`;document.getElementById('nmhHistoryBack').onclick=()=>window.ndProOpenMemberHome(c.id);
@@ -37875,6 +37875,100 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
    Customer details remain available through the customer lookup and member profile. */
 #ndProBookingModal .proref-name-row { display: none !important; }
 </style>
+
+<style id="nd-member-layout-style">
+#ndMemberLayout{position:fixed;inset:0;z-index:2147483300;background:#f3f2f7;color:#252c39;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-y:auto;padding:env(safe-area-inset-top) 15px calc(95px + env(safe-area-inset-bottom));box-sizing:border-box}
+#ndMemberLayout[hidden]{display:none!important}
+#ndMemberLayout *{box-sizing:border-box}
+#ndMemberLayout header{position:sticky;top:0;z-index:3;background:#f3f2f7;display:flex;align-items:center;justify-content:space-between;padding:14px 2px;margin-bottom:12px}
+#ndMemberLayout header strong{font-size:19px}
+#ndMemberLayout button{cursor:pointer}
+#ndMemberLayout .nml-blue{border:0;background:none;color:#3478f5;font-weight:650;font-size:15px}
+#ndMemberLayout .nml-card{background:white;border-radius:22px;padding:17px;margin:12px 0}
+#ndMemberLayout .nml-cardhead{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:700;margin-bottom:15px}
+#ndMemberLayout .nml-remove{background:#f05247;color:white;border:0;border-radius:50%;width:24px;height:24px}
+#ndMemberLayout .nml-drag{margin-left:auto;color:#888;font-size:19px}
+#ndMemberLayout .nml-stat{background:#f4f4f4;border-radius:15px;padding:16px;margin:8px 0}
+#ndMemberLayout .nml-stat b{font-size:21px;color:#3679ed}
+#ndMemberLayout .nml-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px 7px;background:#e2e2e2;border-radius:22px;padding:20px 8px}
+#ndMemberLayout .nml-tile{border:0;background:none;display:flex;align-items:center;flex-direction:column;gap:8px;font-size:12px;color:#495161;text-align:center}
+#ndMemberLayout .nml-tile span{width:51px;height:51px;border-radius:50%;display:grid;place-items:center;background:var(--tile);color:white;font-size:23px}
+#ndMemberLayout .nml-add{width:100%;background:white;border:0;border-radius:18px;padding:18px;color:#3679ed;font-weight:700;font-size:16px}
+#ndMemberLayout .nml-field{width:100%;border:1px solid #d9dde5;border-radius:12px;padding:11px;font:inherit;margin:8px 0;background:#fff}
+#ndMemberLayout .nml-foot{position:fixed;bottom:0;left:0;right:0;background:#fff;padding:12px 18px calc(12px + env(safe-area-inset-bottom));display:flex;justify-content:space-between;box-shadow:0 -2px 10px #0001}
+#ndMemberLayout .nml-mini{border:1px solid #e3e4e9;background:#fff;border-radius:9px;padding:7px}
+#ndMemberLayout .nml-muted{color:#828b99;font-size:12px;line-height:1.6}
+</style>
+<div id="ndMemberLayout" hidden>
+<header><button class="nml-blue" id="nmlClose">✕</button><strong id="nmlTitle">自定义布局</strong><button class="nml-blue" id="nmlSave">保存</button></header>
+<div id="nmlStatus" class="nml-muted"></div><div id="nmlContent"></div>
+<div class="nml-foot"><button class="nml-blue" id="nmlCancel">取消</button><button class="nml-blue" id="nmlAdd">⊞ 添加小组件</button></div>
+</div>
+<script id="nd-member-layout-script">
+(()=>{'use strict';
+const root=document.getElementById('ndMemberLayout'),content=document.getElementById('nmlContent'),status=document.getElementById('nmlStatus');
+const db=()=>window.salaryDb;
+const safe=v=>String(v??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
+const names={activity:'活动',photos:'相片',notes:'备注',checklist:'检查清单',referral:'用户推荐',information:'信息',forms:'表单',documents:'文档',broadcast:'广播',beauty:'美容记录',preferences:'个人意向书',tickets:'工单受理',family:'亲属',memo:'笔记'};
+const icons={notes:'☷',checklist:'☑',referral:'♧',information:'▤',forms:'▣',documents:'▤',broadcast:'◀',beauty:'▧',preferences:'❝',tickets:'♧',family:'♧',memo:'✎'};
+const colors=['#daa13b','#55acc8','#7d6757','#d35572','#4c86df','#5279d4','#b94e4e','#cf5773','#55b0c5','#7464d3','#d7bd48','#d99c3c'];
+let member=null,layout=['activity','photos'],record={},dirty=false,editing=false,backToHome=false;
+function message(t){status.textContent=t||''}
+function toggle(open){root.hidden=!open;if(open){root.scrollTop=0;document.body.style.overflow='hidden'}else{document.body.style.overflow='hidden';}}
+function viewHome(){toggle(false);document.getElementById('ndProMemberHome')?.removeAttribute('hidden')}
+async function load(){
+if(!db())throw Error('Supabase 未连接');
+const r=await db().from('nd_pro_beta_member_widgets').select('layout,content').eq('customer_id',member).maybeSingle();
+if(r.error)throw Error('布局读取失败，请先运行配套 SQL：'+r.error.message);
+layout=Array.isArray(r.data?.layout)?r.data.layout.filter(k=>names[k]):['activity','photos'];
+record=r.data?.content&&typeof r.data.content==='object'?r.data.content:{};
+}
+async function save(){
+const b=document.getElementById('nmlSave');b.disabled=true;message('正在保存到云端…');
+try{
+const auth=await db().auth.getUser();if(auth.error||!auth.data?.user)throw Error('请先登录');
+const r=await db().from('nd_pro_beta_member_widgets').upsert({customer_id:member,layout,content:record,updated_by:auth.data.user.id,updated_at:new Date().toISOString()},{onConflict:'customer_id'});
+if(r.error)throw r.error;dirty=false;message('已保存并同步到云端');window.ndMemberLayoutRender?.(member);viewHome();
+}catch(e){message('保存失败：'+e.message)}finally{b.disabled=false}
+}
+function tile(k,i){return `<button class="nml-tile" data-open="${k}"><span style="--tile:${colors[i%colors.length]}">${icons[k]||'▦'}</span>${names[k]}</button>`}
+function render(){
+document.getElementById('nmlTitle').textContent=editing?'自定义布局':'会员组件';
+content.innerHTML=layout.map((k,i)=>`<section class="nml-card" data-index="${i}"><div class="nml-cardhead">${editing?`<button class="nml-remove" data-remove="${i}">−</button>`:''}<span>${k==='activity'?'◴':k==='photos'?'▧':'▤'}　${names[k]}</span>${editing?`<span class="nml-drag"><button class="nml-mini" data-up="${i}">↑</button> <button class="nml-mini" data-down="${i}">↓</button></span>`:''}</div>${k==='activity'?'<div class="nml-stat">销售<br><b id="nmlSales">—</b><div class="nml-muted">仅显示可核实的订单金额</div></div><div class="nml-stat">预约<br><b id="nmlAppointments">—</b><div class="nml-muted">仅显示可核实的预约数量</div></div>':k==='photos'?`<div class="nml-stat"><div class="nml-muted">相片网址（云端储存链接；不会自动上传本地照片）</div><input class="nml-field" data-field="photos" placeholder="https://..." value="${safe(record.photos||'')}">${record.photos&&/^https:\/\//.test(record.photos)?`<img src="${safe(record.photos)}" alt="会员相片" style="max-width:100%;max-height:220px;border-radius:12px">`:''}</div>`:`<div class="nml-muted">点击编辑${names[k]}内容</div><button class="nml-add" data-open="${k}">打开${names[k]}</button>`}</section>`).join('')+`<button class="nml-add" id="nmlAddInline">⊞ 添加小组件</button><div class="nml-grid" style="margin-top:14px">${Object.keys(names).filter(k=>!['activity','photos'].includes(k)).map((k,i)=>tile(k,i)).join('')}</div>`;
+content.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{layout.splice(+b.dataset.remove,1);dirty=true;render()});
+for(const d of ['up','down'])content.querySelectorAll('[data-'+d+']').forEach(b=>b.onclick=()=>{let i=+b.dataset[d],j=i+(d==='up'?-1:1);if(j<0||j>=layout.length)return;[layout[i],layout[j]]=[layout[j],layout[i]];dirty=true;render()});
+content.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openWidget(b.dataset.open));
+content.querySelectorAll('[data-field]').forEach(b=>b.oninput=()=>{record[b.dataset.field]=b.value;dirty=true});
+document.getElementById('nmlAddInline').onclick=add;
+loadActivity();
+}
+async function loadActivity(){
+try{const a=await db().from('nd_pro_beta_orders').select('total_amount,order_status').eq('customer_id',member).limit(1000);const b=await db().from('nd_pro_beta_appointments').select('id').eq('customer_id',member).limit(1000);
+const sales=document.getElementById('nmlSales'),appointments=document.getElementById('nmlAppointments');
+if(sales&&!a.error)sales.textContent='RM '+a.data.filter(x=>['paid','completed'].includes(x.order_status)).reduce((s,x)=>s+Number(x.total_amount||0),0).toFixed(2);
+if(appointments&&!b.error)appointments.textContent=b.data.length+(b.data.length===1000?'+':'');
+}catch(e){}
+}
+function add(){editing=true;const choices=Object.keys(names).filter(k=>!layout.includes(k));if(!choices.length){message('全部组件已添加');return}content.innerHTML=`<section class="nml-card"><h3>添加小组件</h3><div class="nml-grid">${choices.map((k,i)=>tile(k,i)).join('')}</div><button class="nml-add" id="nmlAddBack">返回布局</button></section>`;content.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{layout.push(b.dataset.open);dirty=true;render()});document.getElementById('nmlAddBack').onclick=render}
+function openWidget(k){if(!layout.includes(k)){layout.push(k);dirty=true;}if(k==='activity'||k==='photos'){render();return}
+const existing=record[k]||'';
+content.innerHTML=`<section class="nml-card"><h3>${names[k]}</h3><p class="nml-muted">此处保存会员专属的${names[k]}备注。与其他专用业务模块的正式记录不同，不会自动生成销售、推荐奖励或工单。</p><textarea class="nml-field" id="nmlEdit" rows="9" placeholder="填写${names[k]}内容">${safe(existing)}</textarea><button class="nml-add" id="nmlApply">完成</button></section>`;
+document.getElementById('nmlApply').onclick=()=>{record[k]=document.getElementById('nmlEdit').value;dirty=true;render()}
+}
+window.ndMemberLayoutOpen=async id=>{member=id;editing=true;toggle(true);message('正在读取云端布局…');try{await load();message('使用上方 ↑ ↓ 调整顺序，点击保存同步所有设备');render()}catch(e){message(e.message);content.innerHTML='<p class="nml-card">请先执行配套 SQL，再重新打开。</p>'}};
+window.ndMemberLayoutRender=async id=>{
+const host=document.getElementById('nmhCustomWidgets');if(!host||!db())return;
+try{const r=await db().from('nd_pro_beta_member_widgets').select('layout').eq('customer_id',id).maybeSingle();if(r.error)return;
+const l=Array.isArray(r.data?.layout)?r.data.layout:['activity','photos'];
+host.innerHTML=l.length?`<section class="nmh-card"><strong>自定义组件</strong><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">${l.map(k=>`<button class="nml-mini" data-widget="${safe(k)}">${safe(names[k]||k)}</button>`).join('')}</div></section>`:'';
+host.querySelectorAll('[data-widget]').forEach(b=>b.onclick=async()=>{await window.ndMemberLayoutOpen(id);openWidget(b.dataset.widget)});
+}catch(e){}
+};
+document.getElementById('nmlSave').onclick=save;
+document.getElementById('nmlAdd').onclick=add;
+document.getElementById('nmlClose').onclick=document.getElementById('nmlCancel').onclick=()=>{if(dirty&&!confirm('尚未保存修改，确定退出？'))return;viewHome()};
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
