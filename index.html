@@ -39354,16 +39354,26 @@ const rows=list.slice().sort((a,b)=>a.starts_at.localeCompare(b.starts_at)).map(
 // Do not use CSV fallback for booking: CSV is a preview until imported to cloud.
 // Disabled/non-service entries must not be selectable for new bookings.
 const ndBookingName=s=>String((lang==='zh'&&s.name_zh?s.name_zh:s.name_en||s.name_zh||s.name)||'').trim();
-const ndBookingServices=()=>services.filter(s=>
-  String(s.item_type||'service').toLowerCase()==='service' &&
-  s.available_for_booking!==false && s.is_active!==false &&
-  ndBookingName(s) && !/^\d+$/.test(ndBookingName(s))
-);
+// Same combined service list displayed in Services & Service Menu.
+// Catalog-only entries are selectable by name; they do not imply a cloud service ID.
+const ndBookingServices=()=>{
+  const cloud=services.filter(s=>String(s.item_type||'service').toLowerCase()==='service' && s.available_for_booking!==false && s.is_active!==false && ndBookingName(s) && !/^\d+$/.test(ndBookingName(s)));
+  const known=new Set(cloud.flatMap(s=>[s.name_en,s.name_zh].filter(Boolean).map(n=>String(n).trim().toLowerCase())));
+  const catalog=typeof ndSectionData==='function'?ndSectionData():[];
+  const extra=[];
+  for(const item of catalog){
+    const name=String(item.name||'').trim();
+    if(!name||known.has(name.toLowerCase()))continue;
+    known.add(name.toLowerCase());
+    extra.push({name_en:name,name,source:'csv',duration_minutes:Number(item.duration_minutes||item.duration||0),catalog_price:item.price});
+  }
+  return [...cloud,...extra];
+};
 const ndBookingPrice=(s,b)=>prices.find(p=>
   String(p.service_id)===String(s.id) && String(p.branch)===String(b)
 ) || null;
 const serviceOptions=ndBookingServices().map(s=>[ndBookingName(s),ndBookingName(s)]);
-host.innerHTML=`<section class="proref-schedule"><div class="proref-calendar-top"><button type="button" id="proWeekPrev" aria-label="Previous week">‹</button><label class="proref-current-date">🗓 <input id="proWeekDate" type="date" value="${esc(date)}"></label><button type="button" id="proWeekNext" aria-label="Next week">›</button><span class="proref-cal-count">${list.filter(a=>a.status!=='cancelled').length} ${tr('Bookings','预约')}</span></div><div class="proref-weekstrip">${weekButtons}</div><div class="proref-calendar-toolbar"><div class="proref-branch-choice">${field(tr('Branch','分行'),chooseBranch(false))}</div><button type="button" id="proNewBooking" hidden style="display:none!important" aria-hidden="true" tabindex="-1">${tr('New Appointment','新增预约')}</button></div><div class="proref-scroll-x" id="proCalendarScroller"><div class="proref-scroll-y"><div class="pro-calendar">${grid}</div></div></div></section><div class="pro-card proref-appointment-list"><h3>${tr('Appointments','预约记录')}</h3>${rows||'<p class="pro-muted">No appointments on this day.</p>'}</div><div class="pro-card" id="proAppointmentCard" hidden><h3 id="proAppointmentHeading">${tr('New Appointment','新增预约')}</h3><form id="proAppointmentForm"><input type="hidden" name="appointment_id"><div class="pro-grid">${field(tr('Branch','分行'),`<select name="branch" required>${opt(valid.map(v=>[v,v]),branch==='all'?'Eco Botanic':branch)}</select>`)}${field(tr('Phone number / Customer search','电话号码 / 搜索顾客'),`<input id="proCustomerFind" type="tel" inputmode="tel" placeholder="${tr('Search phone or name','输入电话或姓名')}"><select name="customer" required><option value="">${tr('Select customer','选择顾客')}</option>${opt(customers.map(c=>[c.id,c.full_name]),'')}</select><button type="button" class="pro-tab" id="proAddCustomer">+ ${tr('Add Customer','新增顾客')}</button>`)}${field(tr('Guests','人数'),`<div class="probooking-counter"><button type="button" id="proGuestsMinus">−</button><output id="proGuestsCount">1</output><button type="button" id="proGuestsPlus">＋</button></div>`)}${field(tr('Room','房间'),`<select name="room_id"><option value="">${tr('No room','不指定房间')}</option>${opt(roomsFor(branch).map(r=>[r.id,r.room_name+' · '+r.branch]),'')}</select>`)}${field(tr('Date','日期'),`<input name="date" type="date" value="${esc(date)}" required>`)}${field(tr('Start time','开始时间'),`<input name="time" type="time" value="10:00" required step="900">`)}${field(tr('Duration (minutes)','服务时长'),`<select name="duration">${opt([[30,'30'],[60,'60'],[90,'90'],[120,'120']],60)}</select>`)}${field(tr('Service','服务'),`<select name="service" required><option value="">Select service</option>${opt(serviceOptions,'')}</select>`)}${field(tr('Therapist','技师'),`<select name="employee" required><option value="">Select therapist</option>${opt(staff.map(s=>[s.id,(s.nickname||s.name)+' · '+s.outlet]),'')}</select>`)}</div><div class="probooking-options"><label>🔒 ${tr('Block time slot','封锁预约时间段')} <input type="checkbox" id="proBlockSlot" disabled title="Not yet connected"></label><label>🔔 ${tr('No reminder','不提醒')} <input type="checkbox" id="proNoReminder" disabled title="Not yet connected"></label><label>⭐ ${tr('Returning customer','老顾客')} <input type="checkbox" id="proReturning" disabled title="Not yet connected"></label></div><div id="proQuickCustomer" class="pro-quick-customer" hidden><strong>${tr('New Customer','新增顾客')}</strong><input id="proQuickName" placeholder="${tr('Customer name','顾客姓名')}"><input id="proQuickPhone" type="tel" placeholder="${tr('Phone','电话')}"><button class="pro-action" type="button" id="proQuickSave">${tr('Save & Select','保存并选择')}</button></div><div class="pro-line" style="justify-content:flex-start;margin-top:12px;gap:8px"><button class="pro-action" type="submit" id="proAppointmentSave">${tr('Create Appointment','新增预约')}</button><button class="pro-tab" type="button" id="proAppointmentReset" hidden>${tr('New','新增')}</button><button class="pro-tab" type="button" id="proAppointmentCancel" hidden>${tr('Cancel Appointment','取消预约')}</button></div></form></div>`;
+host.innerHTML=`<section class="proref-schedule"><div class="proref-calendar-top"><button type="button" id="proWeekPrev" aria-label="Previous week">‹</button><label class="proref-current-date">🗓 <input id="proWeekDate" type="date" value="${esc(date)}"></label><button type="button" id="proWeekNext" aria-label="Next week">›</button><span class="proref-cal-count">${list.filter(a=>a.status!=='cancelled').length} ${tr('Bookings','预约')}</span></div><div class="proref-weekstrip">${weekButtons}</div><div class="proref-calendar-toolbar"><div class="proref-branch-choice">${field(tr('Branch','分行'),chooseBranch(false))}</div><button type="button" id="proNewBooking" hidden style="display:none!important" aria-hidden="true" tabindex="-1">${tr('New Appointment','新增预约')}</button></div><div class="proref-scroll-x" id="proCalendarScroller"><div class="proref-scroll-y"><div class="pro-calendar">${grid}</div></div></div></section><div class="pro-card proref-appointment-list"><h3>${tr('Appointments','预约记录')}</h3>${rows||'<p class="pro-muted">No appointments on this day.</p>'}</div><div class="pro-card" id="proAppointmentCard" hidden><h3 id="proAppointmentHeading">${tr('New Appointment','新增预约')}</h3><form id="proAppointmentForm"><input type="hidden" name="appointment_id"><div class="pro-grid">${field(tr('Branch','分行'),`<select name="branch" required>${opt(valid.map(v=>[v,v]),branch==='all'?'Eco Botanic':branch)}</select>`)}${field(tr('Phone number / Member search','电话号码 / 搜索会员'),`<input id="proCustomerFind" type="tel" inputmode="tel" placeholder="${tr('Search member phone or name','搜索会员电话或姓名')}"><select name="customer" required><option value="">${tr('Select customer','选择顾客')}</option>${opt(customers.map(c=>[c.id,c.full_name]),'')}</select><button type="button" class="pro-tab" id="proAddCustomer">+ ${tr('Add Customer','新增顾客')}</button>`)}${field(tr('Guests','人数'),`<div class="probooking-counter"><button type="button" id="proGuestsMinus">−</button><output id="proGuestsCount">1</output><button type="button" id="proGuestsPlus">＋</button></div>`)}${field(tr('Room','房间'),`<select name="room_id"><option value="">${tr('No room','不指定房间')}</option>${opt(roomsFor(branch).map(r=>[r.id,r.room_name+' · '+r.branch]),'')}</select>`)}${field(tr('Date','日期'),`<input name="date" type="date" value="${esc(date)}" required>`)}${field(tr('Start time','开始时间'),`<input name="time" type="time" value="10:00" required step="900">`)}${field(tr('Duration (minutes)','服务时长'),`<select name="duration">${opt([[30,'30'],[60,'60'],[90,'90'],[120,'120']],60)}</select>`)}${field(tr('Service','服务'),`<select name="service" required><option value="">Select service</option>${opt(serviceOptions,'')}</select>`)}${field(tr('Therapist','技师'),`<select name="employee" required><option value="">Select therapist</option>${opt(staff.map(s=>[s.id,(s.nickname||s.name)+' · '+s.outlet]),'')}</select>`)}</div><div class="probooking-options"><label>🔒 ${tr('Block time slot','封锁预约时间段')} <input type="checkbox" id="proBlockSlot" disabled title="Not yet connected"></label><label>🔔 ${tr('No reminder','不提醒')} <input type="checkbox" id="proNoReminder" disabled title="Not yet connected"></label><label>⭐ ${tr('Returning customer','老顾客')} <input type="checkbox" id="proReturning" disabled title="Not yet connected"></label></div><div id="proQuickCustomer" class="pro-quick-customer" hidden><strong>${tr('New Customer','新增顾客')}</strong><input id="proQuickName" placeholder="${tr('Customer name','顾客姓名')}"><input id="proQuickPhone" type="tel" placeholder="${tr('Phone','电话')}"><button class="pro-action" type="button" id="proQuickSave">${tr('Save & Select','保存并选择')}</button></div><div class="pro-line" style="justify-content:flex-start;margin-top:12px;gap:8px"><button class="pro-action" type="submit" id="proAppointmentSave">${tr('Create Appointment','新增预约')}</button><button class="pro-tab" type="button" id="proAppointmentReset" hidden>${tr('New','新增')}</button><button class="pro-tab" type="button" id="proAppointmentCancel" hidden>${tr('Cancel Appointment','取消预约')}</button></div></form></div>`;
 host.querySelectorAll('[data-pro-date]').forEach(b=>b.onclick=async()=>{date=b.dataset.proDate;await refreshRest();render();});
 const shiftWeek=async n=>{const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+n);date=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;await refreshRest();render();};
 el('proWeekPrev').onclick=()=>void shiftWeek(-7);el('proWeekNext').onclick=()=>void shiftWeek(7);el('proWeekDate').onchange=async e=>{date=e.target.value;await refreshRest();render();};
@@ -39376,7 +39386,7 @@ host.querySelectorAll('[data-rest-blocked]').forEach(b=>b.addEventListener('clic
 
 const form=el('proAppointmentForm');
 // Refresh the exact same cloud source as Services when booking opens.
-// No duplicate/local service catalog and no stale CSV choices.
+// Match the combined Services & Service Menu list, including catalog entries.
 let ndBookingRefreshToken=0;
 function ndFillLiveBookingServices(){
   const select=form.elements.service;
@@ -39395,11 +39405,12 @@ function ndFillLiveBookingServices(){
     // The service-price table is the branch-specific price source.
     // When no branch pricing exists, show the service but never invent a price.
     const price=ndBookingPrice(service,bookingBranch);
-    const detail=price&&price.price!=null?' · RM '+Number(price.price).toFixed(2):'';
+    const displayPrice=price?.price??(service.source==='csv'?service.catalog_price:null);
+    const detail=displayPrice!=null&&displayPrice!==''?' · RM '+Number(displayPrice).toFixed(2):'';
     const option=new Option(name+detail,name);
-    option.dataset.serviceId=String(service.id);
+    if(service.id!=null)option.dataset.serviceId=String(service.id);
     option.dataset.duration=String(service.duration_minutes||'');
-    if(price&&price.price!=null)option.dataset.price=String(price.price);
+    if(displayPrice!=null&&displayPrice!=='')option.dataset.price=String(displayPrice);
     fragment.append(option);seen.add(key);
   }
   if(currentName&&!seen.has(currentName.toLocaleLowerCase())){
@@ -39454,10 +39465,10 @@ const details=document.createElement('section');details.className='proref-detail
 const phoneRow=document.createElement('div');phoneRow.className='proref-phone-row';
 const phoneField=bookingFields.customer;const phoneSearch=el('proCustomerFind');
 const nameField=document.createElement('div');nameField.className='proref-name-row';
-nameField.innerHTML='<span class="proref-icon">👤</span><div><small>Customer Name</small><strong id="proRefCustomerName">—</strong></div>';
+nameField.innerHTML='<span class="proref-icon">👤</span><div><small>Member Name</small><strong id="proRefCustomerName">—</strong></div>';
 const phoneSearchWrap=document.createElement('div');phoneSearchWrap.className='proref-phone-input';
 phoneSearchWrap.append(phoneSearch);
-const findBtn=document.createElement('button');findBtn.type='button';findBtn.className='proref-find';findBtn.id='proRefSearch';findBtn.textContent='⌕';findBtn.setAttribute('aria-label','Search customers');
+const findBtn=document.createElement('button');findBtn.type='button';findBtn.className='proref-find';findBtn.id='proRefSearch';findBtn.textContent='⌕';findBtn.setAttribute('aria-label','Search members');findBtn.setAttribute('title','Search Members');
 phoneRow.append(document.createElement('span'),phoneSearchWrap,findBtn);phoneRow.firstElementChild.className='proref-icon';phoneRow.firstElementChild.textContent='☎';
 const selection=document.createElement('div');selection.className='proref-selection';selection.id='proRefSelection';selection.append(phoneField.querySelector('select'));selection.hidden=true; const registerCustomerButton=el('proAddCustomer');phoneRow.append(registerCustomerButton);registerCustomerButton.textContent=tr('Register','注册顾客');
 phoneField.remove();
@@ -39762,7 +39773,7 @@ el('ndProBookingBackdrop').onclick=closeBooking;
 // Customer lookup is explicitly triggered by the magnifying-glass button only.
 const lookupModal=document.createElement('div');
 lookupModal.id='proRefLookupModal';lookupModal.className='proref-lookup-modal';lookupModal.hidden=true;
-lookupModal.innerHTML=`<section class="proref-lookup-sheet" role="dialog" aria-modal="true" aria-label="会员搜索"><header><button type="button" data-lookup-close aria-label="关闭">×</button><strong>会员</strong><button type="button" data-lookup-add aria-label="注册顾客">＋</button></header><div class="proref-lookup-search"><span>⌕</span><input type="search" data-lookup-input autocomplete="off" placeholder="搜索姓名或电话号码"></div><div class="proref-lookup-tabs"><button type="button" data-lookup-tab="recent" class="active">近期</button><button type="button" data-lookup-tab="new">新</button><button type="button" data-lookup-tab="birthday">生日</button><button type="button" data-lookup-tab="name">名字</button><button type="button" data-lookup-tab="credit">Credits+Vouchers</button></div><div class="proref-lookup-list" data-lookup-results></div></section>`;
+lookupModal.innerHTML=`<section class="proref-lookup-sheet" role="dialog" aria-modal="true" aria-label="会员搜索"><header><button type="button" data-lookup-close aria-label="关闭">×</button><strong>会员</strong><button type="button" data-lookup-add aria-label="注册会员">＋</button></header><div class="proref-lookup-search"><span>⌕</span><input type="search" data-lookup-input autocomplete="off" placeholder="搜索姓名或电话号码"></div><div class="proref-lookup-tabs"><button type="button" data-lookup-tab="recent" class="active">近期</button><button type="button" data-lookup-tab="new">新</button><button type="button" data-lookup-tab="birthday">生日</button><button type="button" data-lookup-tab="name">名字</button><button type="button" data-lookup-tab="credit">Credits+Vouchers</button></div><div class="proref-lookup-list" data-lookup-results></div></section>`;
 document.body.append(lookupModal);
 let lookupTab='recent';
 const lookupInput=lookupModal.querySelector('[data-lookup-input]');
@@ -39806,7 +39817,7 @@ function lookupDraw(){
      if(!phone||!String(m.Name||'').trim())continue;
      const card=document.createElement('button');card.type='button';card.className='proref-lookup-card';
      const label=document.createElement('strong');label.textContent=String(m.Name)+' · CSV会员';
-     const subtitle=document.createElement('span');subtitle.textContent='••••'+phone.slice(-4)+' · 点击加入预约顾客';
+     const subtitle=document.createElement('span');subtitle.textContent='••••'+phone.slice(-4)+' · 点击选择会员预约';
      card.append(label,subtitle);
      card.onclick=async()=>{card.disabled=true;try{
        const saved=await proSaveCustomerSafe(String(m.Name),phone,String(m.Email||''));
@@ -39818,7 +39829,7 @@ function lookupDraw(){
      lookupResults.append(card);
    }
  }
- if(!lookupResults.children.length){const empty=document.createElement('p');empty.className='proref-lookup-empty';empty.textContent='没有找到顾客';lookupResults.append(empty);}
+ if(!lookupResults.children.length){const empty=document.createElement('p');empty.className='proref-lookup-empty';empty.textContent='没有找到会员';lookupResults.append(empty);}
 }
 lookupModal.querySelector('[data-lookup-close]').onclick=lookupClose;
 lookupModal.querySelector('[data-lookup-add]').onclick=()=>{lookupClose();showCustomerModal();};
@@ -39982,20 +39993,9 @@ document.addEventListener('click',e=>{
 },true);
 
 /* Combined CRM: existing customer records and legacy member directory in one page. */
-let ndCombinedCustomerTab='customers';
+/* Unified customer/member directory: show members directly, without Customers tab. */
 function renderCustomers(host){
-  const shell=document.createElement('div');
-  shell.className='nd-combined-directory';
-  shell.innerHTML='<div class="nd-merge-switch" role="tablist" aria-label="Customers and Members"><button type="button" data-nd-merge="customers">Customers</button><button type="button" data-nd-merge="members">Members</button></div><div class="nd-merge-content"></div>';
-  host.replaceChildren(shell);
-  const body=shell.querySelector('.nd-merge-content');
-  const show=()=>{
-    shell.querySelectorAll('[data-nd-merge]').forEach(b=>{const on=b.dataset.ndMerge===ndCombinedCustomerTab;b.classList.toggle('selected',on);b.setAttribute('aria-selected',String(on));});
-    if(ndCombinedCustomerTab==='members')ndDrawMembersCsv(body);
-    else ndRenderCustomersBase(body);
-  };
-  shell.querySelectorAll('[data-nd-merge]').forEach(b=>b.addEventListener('click',()=>{ndCombinedCustomerTab=b.dataset.ndMerge;show();}));
-  show();
+  ndDrawMembersCsv(host);
 }
 /* One service screen: existing cloud services and CSV service-menu records. */
 function renderCatalog(host){ndRenderCatalogBase(host);}
