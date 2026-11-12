@@ -5460,7 +5460,7 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 <button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
 <button class="sidebar-btn" id="sidebarSocial" style="display:none" type="button">Social Media</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Settings</button>
-<button class="sidebar-btn" id="ndProBetaNav" type="button" hidden style="display:none">Nature’s Dao Pro (Beta)</button>
+<button class="sidebar-btn" id="ndProBetaNav" type="button" style="display:block">Nature’s Dao Pro (Beta)</button>
 </aside>
 <button class="mobile-sidebar-btn" id="mobileSidebarBtn" type="button">☰</button>
 <div class="auth-shell" id="authView">
@@ -39008,8 +39008,10 @@ async function authorize(){
 }
 let lastScreen='';let betaOpenBusy=false;
 async function updateNav(){
-  try{await authorize();nav.hidden=false;nav.style.setProperty('display','block');return true;}
-  catch(e){nav.hidden=true;nav.style.setProperty('display','none');return false;}
+  // Keep navigation discoverable. Access is still enforced by authorize() when opening.
+  nav.hidden=false;nav.style.setProperty('display','block');
+  try{await authorize();return true;}
+  catch(e){return false;}
 }
 function switchPage(){
   if(!page)return;
@@ -40449,7 +40451,7 @@ function ndOpenServiceEditor(serviceId,host){
 }
 function renderPos(host){const filtered=services.filter(s=>prices.some(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch)));host.innerHTML=`<div class="pro-card pro-line"><div>${field(tr('Branch','分行'),chooseBranch())}</div><strong>${tr('POS Demo — Not a real payment','POS 测试 — 不进行真实付款')}</strong></div><div class="pro-grid">${filtered.map(s=>{const p=prices.find(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch));return `<div class="pro-card"><strong>${esc(lang==='zh'&&s.name_zh?s.name_zh:s.name_en)}</strong><p class="pro-muted">${esc(p?.branch||'')}</p><p>RM ${Number(p?.price||0).toFixed(2)}</p><button type="button" class="pro-tab" data-add="${s.id}" data-price="${p?.id||''}">+ Add</button></div>`;}).join('')}</div><div class="pro-card"><h3>${tr('Demo Cart','测试购物车')}</h3><div id="proCart"></div><button class="pro-action" type="button" id="proClearCart">${tr('Clear Cart','清空购物车')}</button><p class="pro-muted">Checkout, cash settlement, wallet deductions, commissions and WhatsApp sending are intentionally disabled.</p></div>`;
 el('proBranch').value=branch;el('proBranch').onchange=e=>{branch=e.target.value;cart=[];render();};host.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const s=services.find(x=>x.id===b.dataset.add),p=prices.find(x=>x.id===b.dataset.price);if(s&&p){cart.push({name:s.name_en,price:Number(p.price),branch:p.branch});drawCart();}});el('proClearCart').onclick=()=>{cart=[];drawCart();};function drawCart(){el('proCart').innerHTML=cart.map((x,i)=>`<div class="pro-row"><span>${esc(x.name)} (${esc(x.branch)})</span><strong>RM ${x.price.toFixed(2)}</strong></div>`).join('')+`<div class="pro-row"><strong>Total</strong><strong>RM ${cart.reduce((n,x)=>n+x.price,0).toFixed(2)}</strong></div>`;}drawCart();}
-function init(){if(!nav||!page)return;nav.hidden=true;nav.style.display='none';void updateNav();
+function init(){if(!nav||!page)return;nav.hidden=false;nav.style.display='block';void updateNav();
   try{getDb()?.auth?.onAuthStateChange?.(()=>setTimeout(()=>void updateNav(),0));}catch(_e){}
   // Fallback for login initialization in the legacy application.
   setInterval(()=>{if(!ready&&nav.hidden)void updateNav();},15000);
