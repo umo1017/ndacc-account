@@ -39132,59 +39132,71 @@ function ndProCartQuickAccess(){
 // Cloud catalog synchronization is explicit: never silently overwrite existing records.
 async function ndRefreshCloudCatalog(){
  if(!db)return;
- try{
-  const rows=[];
-  for(let start=0;start<50000;start+=500){
-   const r=await db.from('nd_pro_beta_catalog_items')
-    .select('item_type,sku,name,section_name,folder_name,price,duration_minutes,is_active,attributes')
-    .order('id',{ascending:true}).range(start,start+499);
-   if(r.error)throw r.error;
-   rows.push(...(r.data||[]));
-   if(!r.data||r.data.length<500)break;
-  }
-  ndCloudCatalog=rows;ndCatalogCloudStatus='connected';
- }catch(error){ndCloudCatalog=[];ndCatalogCloudStatus='unavailable: '+error.message;}
+ const r=await db.from('nd_pro_beta_catalog_items').select('item_type,sku,name,section_name,folder_name,price,duration_minutes,is_active,attributes').order('item_type').order('sku').limit(2000);
+ if(r.error){ndCloudCatalog=[];ndCatalogCloudStatus='unavailable: '+r.error.message;return;}
+ ndCloudCatalog=r.data||[];ndCatalogCloudStatus='connected';
+}
+// Frontend-only synchronization preview. No writes, migration or checkout RPC calls.
+async function ndSyncReadCount(table){
+ const result=await db.from(table).select('*',{count:'exact',head:true});
+ if(result.error)throw new Error(result.error.message);
+ return result.count??0;
+}
+async function ndSyncInspect(){
+ const tables=[
+  ['Customers','nd_pro_beta_customers'],
+  ['Members','nd_pro_beta_member_master'],
+  ['Member Links','nd_pro_beta_member_links'],
+  ['Purchased Packages','nd_pro_beta_member_entitlements'],
+  ['Wallet Transactions','nd_pro_beta_wallet_ledger'],
+  ['Orders','nd_pro_beta_orders'],
+  ['Order Items','nd_pro_beta_order_items'],
+  ['Order Member Links','nd_pro_beta_order_member_links']
+ ];
+ return await Promise.all(tables.map(async ([name,table])=>{
+  try{return {name,table,count:await ndSyncReadCount(table),error:null};}
+  catch(e){return {name,table,count:null,error:String(e?.message||e)};}
+ }));
 }
 function renderSyncCenter(host){
  const buckets=[['Services',ndServiceCsvCatalog.length,'service'],['Products',ndProProductCsv.length,'product'],['Packages',ndProPackagesCsv.length,'package'],['Gift Cards',ndProGiftCardsCsv.length,'giftcard']];
  const counts=Object.fromEntries(buckets.map(x=>[x[2],ndCloudCatalog.filter(y=>y.item_type===x[2]).length]));
- host.innerHTML=`<div class="pro-card" style="max-width:940px;margin:auto"><h2>Sync Center / 同步管理</h2><p>统一商品目录：Supabase 是线上主数据。CSV 只用于初次导入与核对，所有设备读取同一张商品表。</p><p><strong>云端状态：</strong><span id="ndSyncStatus">${esc(ndCatalogCloudStatus)}</span></p><div class="table-wrap"><table><thead><tr><th>分类</th><th>CSV</th><th>云端</th></tr></thead><tbody>${buckets.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${counts[x[2]]}</td></tr>`).join('')}</tbody></table></div><div class="actions" style="margin-top:18px"><button class="btn" id="ndSyncRefresh">刷新云端资料</button><button class="btn" id="ndSyncAudit">检查会员与服务数据</button><button class="btn" id="ndSyncImport">确认导入商品 CSV 到云端</button></div><p id="ndSyncMessage" role="status"></p><pre id="ndSyncAuditResult" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65;background:#f8faf8;padding:12px;border-radius:10px" hidden></pre><p style="color:#9a4a17">会员、预约、订单、库存、积分、配套权益、佣金与工资仍必须建立统一业务关联和服务端交易函数。本页不会执行扣款、扣库存、修改会员余额或工资。</p></div>`;
- host.querySelector('#ndSyncAudit').onclick=async()=>{
-  const button=host.querySelector('#ndSyncAudit'),output=host.querySelector('#ndSyncAuditResult');
-  button.disabled=true;output.hidden=false;output.textContent='Checking cloud records (read only)...';
+ const cloudConnected=ndCatalogCloudStatus==='connected';
+ host.innerHTML=`<div class="pro-card" style="max-width:980px;margin:auto">
+ <h2>Sync Center</h2>
+ <p>Read-only preview. No SQL changes, CSV imports, wallet deductions, package redemptions or stock updates.</p>
+ <p><strong>Catalog connection:</strong> <span id="ndSyncStatus">${esc(ndCatalogCloudStatus)}</span></p>
+ <div class="table-wrap"><table><thead><tr><th>Category</th><th>Local CSV</th><th>Cloud</th><th>Result</th></tr></thead><tbody>${buckets.map(x=>`<tr><td>${esc(x[0])}</td><td>${x[1]}</td><td>${cloudConnected?counts[x[2]]:'—'}</td><td>${!cloudConnected?'Unavailable':counts[x[2]]===0?'Not imported':counts[x[2]]===x[1]?'Count matches':'Review differences'}</td></tr>`).join('')}</tbody></table></div>
+ <div class="actions" style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px"><button type="button" class="btn" id="ndSyncRefresh">Refresh Catalog</button><button type="button" class="btn" id="ndSyncInspect">Check Member &amp; Order Data</button><button type="button" class="btn" id="ndSyncCopy">Copy Report</button></div>
+ <p id="ndSyncMessage" role="status" aria-live="polite">Nothing has been changed.</p>
+ <div id="ndSyncAudit" class="table-wrap" style="margin-top:12px"></div>
+ <p style="color:#9a4a17">Cloud counts are a diagnostic only. A matching count does not verify matching SKUs, wallet balances, purchases or linked customers. Legacy CSV member data is not an active cloud wallet.</p>
+ </div>`;
+ let report='';
+ host.querySelector('#ndSyncRefresh').onclick=async()=>{
+  const button=host.querySelector('#ndSyncRefresh');button.disabled=true;
+  try{await ndRefreshCloudCatalog();renderSyncCenter(host);}finally{button.disabled=false;}
+ };
+ host.querySelector('#ndSyncInspect').onclick=async()=>{
+  const button=host.querySelector('#ndSyncInspect');button.disabled=true;
+  host.querySelector('#ndSyncMessage').textContent='Reading cloud records…';
   try{
-   const tables=['nd_pro_beta_member_master','nd_pro_beta_customers','nd_pro_beta_member_links','nd_pro_beta_services','nd_pro_beta_service_prices','nd_pro_beta_catalog_items','order_product_catalog'];
-   const lines=[];
-   for(const table of tables){
-    const r=await db.from(table).select('*',{count:'exact',head:true});
-    lines.push(table+': '+(r.error?'NOT ACCESSIBLE — '+r.error.message:r.count));
-   }
-   lines.push('');
-   lines.push('Embedded CSV members: '+ndCsvMembers.length);
-   lines.push('Embedded CSV services: '+ndServiceCsvCatalog.length);
-   lines.push('Embedded CSV products: '+ndProProductCsv.length);
-   lines.push('Embedded CSV packages: '+ndProPackagesCsv.length);
-   lines.push('Embedded CSV gift cards: '+ndProGiftCardsCsv.length);
-   lines.push('');
-   lines.push('Read-only audit: no balances, stock, orders or membership records changed.');
-   output.textContent=lines.join('\n');
-  }catch(error){output.textContent='Audit failed: '+(error.message||error);}
+   const data=await ndSyncInspect();
+   const rows=data.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.count===null?'—':x.count}</td><td>${esc(x.error|| (x.count===0?'No cloud records':'Available'))}</td></tr>`).join('');
+   host.querySelector('#ndSyncAudit').innerHTML=`<table><thead><tr><th>Module</th><th>Cloud Records</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+   report=['Nature’s Dao Pro Beta — Read-only Cloud Audit',...buckets.map(x=>`${x[0]}: local=${x[1]}, cloud=${cloudConnected?counts[x[2]]:'unavailable'}`),...data.map(x=>`${x.name}: ${x.error?'ERROR '+x.error:x.count}`)].join('\n');
+   host.querySelector('#ndSyncMessage').textContent='Read-only check complete. No records were modified.';
+  }catch(e){host.querySelector('#ndSyncMessage').textContent='Check failed: '+String(e?.message||e);}
   finally{button.disabled=false;}
  };
- host.querySelector('#ndSyncRefresh').onclick=async()=>{const b=host.querySelector('#ndSyncRefresh');b.disabled=true;await ndRefreshCloudCatalog();renderSyncCenter(host);};
- host.querySelector('#ndSyncImport').onclick=async()=>{
-  const btn=host.querySelector('#ndSyncImport'),message=host.querySelector('#ndSyncMessage');
-  if(ndCatalogCloudStatus!=='connected'){message.textContent='数据库商品表尚未可用。请先执行配套 SQL。';return;}
-  if(!confirm('将 CSV 的服务、产品、配套及礼品卡导入 Supabase？相同 SKU 会更新商品资料；不会修改库存、会员余额或历史订单。'))return;
-  btn.disabled=true;
-  try{
-   const values=[...ndServiceCsvCatalog.map(x=>[x,'service']),...ndProProductCsv.map(x=>[x,'product']),...ndProPackagesCsv.map(x=>[x,'package']),...ndProGiftCardsCsv.map(x=>[x,'giftcard'])];
-   const payload=values.filter(([x])=>x.sku&&x.name&&Number.isFinite(Number(x.price))&&Number(x.price)>=0).map(([x,type])=>({item_type:type,sku:String(x.sku),name:String(x.name),section_name:String(x.section||''),folder_name:String(x.folder||''),price:Number(x.price),duration_minutes:Number.isFinite(Number(x.duration))?Number(x.duration):null,is_active:!['disabled','inactive'].includes(String(x.status||'').toLowerCase()),attributes:x,source:'csv',updated_at:new Date().toISOString()}));
-   let n=0;for(let i=0;i<payload.length;i+=100){const part=payload.slice(i,i+100);const r=await db.from('nd_pro_beta_catalog_items').upsert(part,{onConflict:'item_type,sku'});if(r.error)throw new Error('Imported '+n+' / '+payload.length+' — '+r.error.message);n+=part.length;message.textContent='已写入 '+n+' / '+payload.length;}
-   await ndRefreshCloudCatalog();renderSyncCenter(host);
-  }catch(e){message.textContent='同步未全部完成：'+(e.message||e)+'。已完成的批次不会自动回滚，请核对云端数量后重试。';btn.disabled=false;}
+ host.querySelector('#ndSyncCopy').onclick=async()=>{
+  const message=host.querySelector('#ndSyncMessage');
+  if(!report){message.textContent='Run Check Member & Order Data first.';return;}
+  try{await navigator.clipboard.writeText(report);message.textContent='Report copied.';}
+  catch(e){message.textContent='Copy unavailable on this device. Select the report table to copy.';}
  };
 }
+
 function render(){ndProCartQuickAccess();el('ndProTabs').querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('selected',b.dataset.tab===active));const host=el('ndProContent');if(!host)return;menuLabels();el('ndProHomeButton').hidden=active==='home';if(active==='home')renderHome(host);else if(active==='appointments'||active==='room_calendar')renderAppointments(host);else if(active==='customers')renderCustomers(host);else if(active==='catalog')renderCatalog(host);else if(active==='products')renderProducts(host);else if(active==='packages')ndDrawCommercialCatalog(host,'packages');else if(active==='gift_cards')ndDrawCommercialCatalog(host,'gift_cards');else if(active==='members_csv')ndDrawMembersCsv(host);else if(active==='commission_rules')ndDrawCommissionCsv(host);else if(active==='hours')renderHours(host);else if(active==='settings')renderProSettings(host);else if(active==='imports')renderImportCenter(host);else if(active==='sync_center')renderSyncCenter(host);else if(active==='vouchers')ndUnifiedVoucherInfo(host);else renderPos(host);ndUnifiedCatalogTabs(host);}
 /* Unified product navigation. Read-only catalog pages retain their original data handlers. */
 function ndUnifiedCatalogTabs(host){
