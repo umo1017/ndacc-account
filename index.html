@@ -32846,7 +32846,25 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function report(r){
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
-   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'</body></html>';
+   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
+<style id="nd-booking-sidebar-branch-compact-20261112">
+/* Branch selection belongs exclusively to the sidebar, not the appointment popup. */
+#ndProBookingModal .pro-field:has(select[name="branch"]){display:none!important}
+#ndProBookingModal .proref-primary,#ndProBookingModal .proref-details{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important}
+#ndProBookingModal .proref-primary .proref-datetime{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:8px!important;margin:0 0 10px!important}
+#ndProBookingModal .proref-datetime .pro-field{min-width:0!important;margin:0!important;padding:9px!important;border-radius:13px!important;background:#fff!important}
+#ndProBookingModal .proref-datetime .pro-field label{font-size:12px!important}
+#ndProBookingModal .proref-datetime input{min-width:0!important;width:100%!important;font-size:14px!important;padding:9px 5px!important}
+#ndProBookingModal .proref-phone-row{margin:0!important;border-radius:13px!important;padding:10px!important;background:#fff!important;gap:7px!important}
+#ndProBookingModal .proref-details:not([hidden]){gap:8px!important;margin-top:10px!important}
+#ndProBookingModal .proref-details>.pro-field{padding:9px 12px!important;margin:0!important;border-radius:13px!important;background:#fff!important}
+#ndProBookingModal .proref-details select{font-size:14px!important;min-height:40px!important;padding:8px!important}
+#ndProBookingModal .proref-actions{margin:8px 0 0!important;padding:0!important}
+#ndProBookingModal #proAppointmentSave{font-size:15px!important;min-height:46px!important;padding:11px!important;border-radius:12px!important}
+#ndProBookingModal .proref-details[hidden]{display:none!important}
+@media(max-width:480px){#ndProBookingModal .proref-datetime .pro-field{padding:7px!important}#ndProBookingModal .proref-phone-row #proAddCustomer{font-size:12px!important}}
+</style>
+</body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
  }
@@ -39363,8 +39381,10 @@ const selection=document.createElement('div');selection.className='proref-select
 phoneField.remove();
 const dateTime=document.createElement('div');dateTime.className='proref-datetime';
 for(const key of ['date','time']){const f=bookingFields[key];if(f)dateTime.append(f)}
-primary.append(phoneRow,nameField,selection);details.append(dateTime);
-for(const key of ['branch','service','employee','room_id','duration'])if(bookingFields[key])details.append(bookingFields[key]);
+primary.append(dateTime,phoneRow,nameField,selection);
+// Branch is controlled by the sidebar only; keep its form value for persistence.
+if(bookingFields.branch){bookingFields.branch.hidden=true;bookingFields.branch.style.display='none';primary.append(bookingFields.branch);}
+for(const key of ['service','employee','room_id','duration'])if(bookingFields[key])details.append(bookingFields[key]);
 if(guestsField)details.insertBefore(guestsField,details.firstChild);
 bookingGrid.replaceWith(primary,details);
 const additional=form.querySelector('.probooking-options');if(additional)additional.remove();
@@ -39436,7 +39456,7 @@ let guestCount=1;
  el('proGuestsPlus').onclick=()=>{guestCount=Math.min(20,guestCount+1);updateGuests();};
 
 const appointmentCard=el('proAppointmentCard'), bookingHome=appointmentCard.parentElement,bookingMount=el('ndProBookingMount');
-function showBooking(){if(guestWorkers().length!==guestCount)updateGuests();displayCustomer();appointmentCard.hidden=false;bookingMount.appendChild(appointmentCard);el('ndProBookingModal').hidden=false;el('ndProBookingClose').focus();void ndReloadBookingServices();}
+function showBooking(){if(!form.elements.appointment_id.value && branch!=='all')form.elements.branch.value=branch;if(guestWorkers().length!==guestCount)updateGuests();displayCustomer();appointmentCard.hidden=false;bookingMount.appendChild(appointmentCard);el('ndProBookingModal').hidden=false;el('ndProBookingClose').focus();void ndReloadBookingServices();}
 function closeBooking(){lookupClose();closeCustomer();el('ndProBookingModal').hidden=true;bookingHome.appendChild(appointmentCard);appointmentCard.hidden=true;el('proQuickCustomer').hidden=true;}
 function reset(){form.reset();guestCount=1;updateGuests();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
 function choose(a){form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=mins(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}if(a.service_name&&!Array.from(form.elements.service.options).some(o=>o.value===a.service_name)){
