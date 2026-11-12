@@ -41199,3 +41199,73 @@ body > #ndProHamburger.nd-pro-portal-menu {
 #ndProBookingModal .proref-selection{display:none!important}
 #ndProBookingModal .proref-name-row{display:none!important}
 </style>
+
+<style id="nd-voucher-report-style-20261113">
+#ndVoucherReports{display:none;background:#f2f1f6;border-radius:18px;padding:18px;min-height:65vh;color:#22252b;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#ndVoucherReports.nd-vr-visible{display:block}#ndVoucherReports *{box-sizing:border-box}
+#ndVoucherReports .vr-head{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+#ndVoucherReports h2{font-size:21px;margin:0;font-weight:750}#ndVoucherReports .vr-back{border:0;background:#fff;border-radius:12px;padding:10px 13px;color:#2874ef;font-weight:700;cursor:pointer}
+#ndVoucherReports .vr-switch{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 15px}
+#ndVoucherReports .vr-switch button{border:1px solid #e3e4e9;border-radius:12px;background:white;padding:11px 14px;font-weight:700;cursor:pointer;color:#606571}
+#ndVoucherReports .vr-switch button[aria-selected=true]{background:#2879f5;color:white;border-color:#2879f5}
+#ndVoucherReports .vr-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+#ndVoucherReports input,#ndVoucherReports select{border:0;border-radius:12px;background:white;min-height:43px;padding:10px 12px;font-size:14px;width:auto;max-width:100%}
+#ndVoucherReports .vr-tools input[type=search]{flex:1;min-width:160px}
+#ndVoucherReports .vr-tools button,#ndVoucherReports .vr-pager button{border:0;border-radius:12px;background:white;color:#2879f5;min-height:42px;padding:8px 14px;font-weight:750;cursor:pointer}
+#ndVoucherReports .vr-status{color:#69717c;font-size:13px;margin:8px 0 12px;overflow-wrap:anywhere}
+#ndVoucherReports .vr-card{background:#fff;border-radius:19px;padding:5px 18px;overflow:hidden}
+#ndVoucherReports .vr-item{display:grid;grid-template-columns:56px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid #e9e9ed}
+#ndVoucherReports .vr-item:last-child{border-bottom:0}
+#ndVoucherReports .vr-icon{width:54px;height:54px;border-radius:12px;background:#f5f5f7;color:#87919d;display:flex;align-items:center;justify-content:center;font-size:25px;font-weight:800}
+#ndVoucherReports .vr-name{font-size:15px;line-height:1.35;font-weight:780;overflow-wrap:anywhere}
+#ndVoucherReports .vr-meta{font-size:13px;color:#85878e;margin-top:6px;overflow-wrap:anywhere}
+#ndVoucherReports .vr-amount{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+#ndVoucherReports .vr-member-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px;text-align:center;font-weight:750;font-size:15px}
+#ndVoucherReports .vr-member-cols span:first-child{text-align:left}
+#ndVoucherReports .vr-member-cols span:last-child{text-align:right}
+#ndVoucherReports .vr-pager{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;font-weight:750}
+#ndVoucherReports .vr-empty{padding:28px 8px;color:#7c828a;text-align:center}
+@media(max-width:600px){#ndVoucherReports{padding:14px 10px}#ndVoucherReports .vr-card{padding:3px 12px}#ndVoucherReports .vr-name{font-size:14px}#ndVoucherReports .vr-item{grid-template-columns:44px minmax(0,1fr) auto;gap:9px}#ndVoucherReports .vr-icon{width:42px;height:42px;font-size:21px}#ndVoucherReports .vr-amount{font-size:16px}}
+</style>
+<script id="nd-voucher-reports-20261113">
+(()=>{'use strict';
+const byId=id=>document.getElementById(id);
+let mode='remaining',page=0,rows=[],search='',pageSize=10,loaded=false;
+const safe=(v)=>String(v??'');
+const number=v=>Number.isFinite(Number(v))?Number(v):0;
+const money=v=>number(v).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+function node(tag,cls,content){const e=document.createElement(tag);if(cls)e.className=cls;if(content!==undefined)e.textContent=safe(content);return e;}
+function client(){return window.salaryDb||window.supabaseClient||window.supabaseDb||null;}
+async function fetchAll(db,table,columns){let out=[];for(let start=0;start<100000;start+=500){const r=await db.from(table).select(columns).range(start,start+499);if(r.error)throw Error(table+': '+r.error.message);out.push(...(r.data||[]));if(!r.data||r.data.length<500)return out;}throw Error(table+' exceeds 100,000 rows; narrow the report.');}
+function setup(){const pro=byId('ndProBetaPage'),nav=byId('ndProSideNav');if(!pro||!nav||byId('ndVoucherReports'))return;
+ const b=node('button','', 'Voucher Reports');b.type='button';b.dataset.ndVoucherReportOpen='1';b.textContent='📋 Voucher Reports';const anchor=nav.querySelector('[data-pro-page="vouchers"]');(anchor||nav.lastElementChild)?.insertAdjacentElement('afterend',b);
+ const panel=node('section');panel.id='ndVoucherReports';panel.innerHTML='<div class="vr-head"><button type="button" class="vr-back" data-vr-back>← Back</button><h2 id="ndVrTitle">Remaining Vouchers</h2><span></span></div><div class="vr-switch"><button type="button" data-vr-mode="remaining" aria-selected="true">Remaining Vouchers</button><button type="button" data-vr-mode="members" aria-selected="false">Member Vouchers</button></div><div class="vr-tools"><input type="search" id="ndVrSearch" placeholder="Search name or service" aria-label="Search"><select id="ndVrFilter" aria-label="Filter"><option value="all">All</option><option value="positive">Remaining only</option><option value="zero">Zero remaining</option></select><button type="button" data-vr-refresh>Refresh</button></div><p class="vr-status" id="ndVrStatus" role="status"></p><div class="vr-card" id="ndVrList"></div><div class="vr-pager"><button type="button" data-vr-prev>‹ Previous</button><span id="ndVrPage">1 / 1</span><button type="button" data-vr-next>Next ›</button></div>';
+ pro.appendChild(panel);
+ panel.addEventListener('click',e=>{const target=e.target.closest('button');if(!target)return;if(target.hasAttribute('data-vr-back')){hide();return;}if(target.hasAttribute('data-vr-mode')){mode=target.dataset.vrMode;page=0;load();return;}if(target.hasAttribute('data-vr-refresh')){load();return;}if(target.hasAttribute('data-vr-prev')){page=Math.max(0,page-1);render();return;}if(target.hasAttribute('data-vr-next')){page++;render();return;}});
+ byId('ndVrSearch').addEventListener('input',e=>{search=e.target.value.toLowerCase().trim();page=0;render();});byId('ndVrFilter').addEventListener('change',()=>{page=0;render();});
+ b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();show();});
+ nav.addEventListener('click',e=>{if(e.target.closest('[data-nd-voucher-report-open]'))return;if(e.target.closest('button'))hide();});
+ }
+function show(){const pro=byId('ndProBetaPage'),panel=byId('ndVoucherReports');if(!pro||!panel)return;pro.querySelectorAll(':scope > .pro-head,:scope > .pro-tabs,:scope > #ndProStatus,:scope > #ndProContent,:scope > #ndProHomeButton').forEach(el=>{if(!el.hasAttribute('data-vr-old-display'))el.setAttribute('data-vr-old-display',el.style.display||'');el.style.display='none';});panel.classList.add('nd-vr-visible');byId('ndProDrawer')?.setAttribute('hidden','');byId('ndProShade')?.setAttribute('hidden','');load();}
+function hide(){const pro=byId('ndProBetaPage'),panel=byId('ndVoucherReports');if(!pro||!panel)return;panel.classList.remove('nd-vr-visible');pro.querySelectorAll('[data-vr-old-display]').forEach(el=>{el.style.display=el.getAttribute('data-vr-old-display');el.removeAttribute('data-vr-old-display');});}
+async function load(){const status=byId('ndVrStatus');if(!status)return;status.textContent='Loading cloud records…';rows=[];render();try{const db=client();if(!db)throw Error('Sign in to Supabase first.');const [ents,members,links,catalog]=await Promise.all([
+ fetchAll(db,'nd_pro_beta_member_entitlements','id,member_id,catalog_item_id,entitlement_type,name,granted_quantity,remaining_quantity,is_active,valid_until'),
+ fetchAll(db,'nd_pro_beta_member_master','id,member_code,full_name,phone'),
+ fetchAll(db,'nd_pro_beta_member_links','member_id,beta_customer_id'),
+ fetchAll(db,'nd_pro_beta_catalog_items','id,item_type,sku,name,price')]);
+ const memberMap=new Map(members.map(x=>[String(x.id),x]));const catalogMap=new Map(catalog.map(x=>[String(x.id),x]));const relevant=ents.filter(x=>{const type=safe(x.entitlement_type).toLowerCase();const cat=catalogMap.get(String(x.catalog_item_id));return /voucher|coupon|service|package|gift/.test(type)||/voucher|coupon|package|gift/.test(safe(cat?.item_type).toLowerCase());});
+ if(mode==='remaining'){
+ const groups=new Map();for(const e of relevant){const c=catalogMap.get(String(e.catalog_item_id));const label=e.name||c?.name||'Unnamed voucher';const key=safe(e.catalog_item_id||label);const r=groups.get(key)||{name:label,price:c?.price??null,count:0};r.count+=Math.max(0,number(e.remaining_quantity));groups.set(key,r);}rows=[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name));
+ }else{
+ const groups=new Map();for(const m of members)groups.set(String(m.id),{name:m.full_name||m.member_code||'Unnamed member',code:m.member_code||'',phone:m.phone||'',packages:0,vouchers:0,value:0});for(const e of relevant){const m=groups.get(String(e.member_id));if(!m)continue;const c=catalogMap.get(String(e.catalog_item_id));const qty=Math.max(0,number(e.remaining_quantity));if(/package/.test(safe(e.entitlement_type+' '+c?.item_type).toLowerCase()))m.packages+=qty;else m.vouchers+=qty;if(c&&c.price!=null)m.value+=qty*number(c.price);}rows=[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name));
+ }
+ status.textContent='Cloud records loaded · '+relevant.length+' matching entitlements · '+members.length+' members · '+links.length+' member links. Values are estimates from catalog prices, not wallet balances.';
+ }catch(err){status.textContent='Unable to load cloud report: '+(err?.message||err)+'. No changes were made.';}page=0;render();}
+function render(){const panel=byId('ndVoucherReports');if(!panel)return;byId('ndVrTitle').textContent=mode==='remaining'?'Remaining Vouchers':'Member Vouchers';panel.querySelectorAll('[data-vr-mode]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.vrMode===mode)));
+ const filter=byId('ndVrFilter').value;const matches=rows.filter(r=>{const qty=mode==='remaining'?r.count:r.vouchers;if(filter==='positive'&&qty<=0)return false;if(filter==='zero'&&qty!==0)return false;return (r.name+' '+(r.code||'')+' '+(r.phone||'')).toLowerCase().includes(search);});const pages=Math.max(1,Math.ceil(matches.length/pageSize));page=Math.max(0,Math.min(page,pages-1));byId('ndVrPage').textContent=(page+1)+' / '+pages;const root=byId('ndVrList');root.replaceChildren();const slice=matches.slice(page*pageSize,(page+1)*pageSize);if(!slice.length){root.appendChild(node('div','vr-empty','No records found.'));return;}
+ for(const r of slice){const item=node('div','vr-item');const icon=node('div','vr-icon',mode==='remaining'?'▧':'◉');const main=node('div');main.appendChild(node('div','vr-name',r.name));main.appendChild(node('div','vr-meta',mode==='remaining'?(r.price==null?'Catalog price unavailable':'RM '+money(r.price)):(r.code?r.code+' · ':'')+(r.phone?'••••'+safe(r.phone).slice(-4):'')));
+ if(mode==='members'){const cols=node('div','vr-member-cols');for(const val of [r.packages,r.vouchers,'RM '+money(r.value)])cols.appendChild(node('span','',val));main.appendChild(cols);item.append(icon,main);}else{item.append(icon,main,node('div','vr-amount',r.count));}root.appendChild(item);}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
