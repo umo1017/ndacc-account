@@ -39132,14 +39132,45 @@ function ndProCartQuickAccess(){
 // Cloud catalog synchronization is explicit: never silently overwrite existing records.
 async function ndRefreshCloudCatalog(){
  if(!db)return;
- const r=await db.from('nd_pro_beta_catalog_items').select('item_type,sku,name,section_name,folder_name,price,duration_minutes,is_active,attributes').order('item_type').order('sku').limit(2000);
- if(r.error){ndCloudCatalog=[];ndCatalogCloudStatus='unavailable: '+r.error.message;return;}
- ndCloudCatalog=r.data||[];ndCatalogCloudStatus='connected';
+ try{
+  const rows=[];
+  for(let start=0;start<50000;start+=500){
+   const r=await db.from('nd_pro_beta_catalog_items')
+    .select('item_type,sku,name,section_name,folder_name,price,duration_minutes,is_active,attributes')
+    .order('id',{ascending:true}).range(start,start+499);
+   if(r.error)throw r.error;
+   rows.push(...(r.data||[]));
+   if(!r.data||r.data.length<500)break;
+  }
+  ndCloudCatalog=rows;ndCatalogCloudStatus='connected';
+ }catch(error){ndCloudCatalog=[];ndCatalogCloudStatus='unavailable: '+error.message;}
 }
 function renderSyncCenter(host){
  const buckets=[['Services',ndServiceCsvCatalog.length,'service'],['Products',ndProProductCsv.length,'product'],['Packages',ndProPackagesCsv.length,'package'],['Gift Cards',ndProGiftCardsCsv.length,'giftcard']];
  const counts=Object.fromEntries(buckets.map(x=>[x[2],ndCloudCatalog.filter(y=>y.item_type===x[2]).length]));
- host.innerHTML=`<div class="pro-card" style="max-width:940px;margin:auto"><h2>Sync Center / 同步管理</h2><p>统一商品目录：Supabase 是线上主数据。CSV 只用于初次导入与核对，所有设备读取同一张商品表。</p><p><strong>云端状态：</strong><span id="ndSyncStatus">${esc(ndCatalogCloudStatus)}</span></p><div class="table-wrap"><table><thead><tr><th>分类</th><th>CSV</th><th>云端</th></tr></thead><tbody>${buckets.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${counts[x[2]]}</td></tr>`).join('')}</tbody></table></div><div class="actions" style="margin-top:18px"><button class="btn" id="ndSyncRefresh">刷新云端资料</button><button class="btn" id="ndSyncImport">确认导入商品 CSV 到云端</button></div><p id="ndSyncMessage" role="status"></p><p style="color:#9a4a17">会员、预约、订单、库存、积分、配套权益、佣金与工资仍必须建立统一业务关联和服务端交易函数。本页不会执行扣款、扣库存、修改会员余额或工资。</p></div>`;
+ host.innerHTML=`<div class="pro-card" style="max-width:940px;margin:auto"><h2>Sync Center / 同步管理</h2><p>统一商品目录：Supabase 是线上主数据。CSV 只用于初次导入与核对，所有设备读取同一张商品表。</p><p><strong>云端状态：</strong><span id="ndSyncStatus">${esc(ndCatalogCloudStatus)}</span></p><div class="table-wrap"><table><thead><tr><th>分类</th><th>CSV</th><th>云端</th></tr></thead><tbody>${buckets.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${counts[x[2]]}</td></tr>`).join('')}</tbody></table></div><div class="actions" style="margin-top:18px"><button class="btn" id="ndSyncRefresh">刷新云端资料</button><button class="btn" id="ndSyncAudit">检查会员与服务数据</button><button class="btn" id="ndSyncImport">确认导入商品 CSV 到云端</button></div><p id="ndSyncMessage" role="status"></p><pre id="ndSyncAuditResult" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65;background:#f8faf8;padding:12px;border-radius:10px" hidden></pre><p style="color:#9a4a17">会员、预约、订单、库存、积分、配套权益、佣金与工资仍必须建立统一业务关联和服务端交易函数。本页不会执行扣款、扣库存、修改会员余额或工资。</p></div>`;
+ host.querySelector('#ndSyncAudit').onclick=async()=>{
+  const button=host.querySelector('#ndSyncAudit'),output=host.querySelector('#ndSyncAuditResult');
+  button.disabled=true;output.hidden=false;output.textContent='Checking cloud records (read only)...';
+  try{
+   const tables=['nd_pro_beta_member_master','nd_pro_beta_customers','nd_pro_beta_member_links','nd_pro_beta_services','nd_pro_beta_service_prices','nd_pro_beta_catalog_items','order_product_catalog'];
+   const lines=[];
+   for(const table of tables){
+    const r=await db.from(table).select('*',{count:'exact',head:true});
+    lines.push(table+': '+(r.error?'NOT ACCESSIBLE — '+r.error.message:r.count));
+   }
+   lines.push('');
+   lines.push('Embedded CSV members: '+ndCsvMembers.length);
+   lines.push('Embedded CSV services: '+ndServiceCsvCatalog.length);
+   lines.push('Embedded CSV products: '+ndProProductCsv.length);
+   lines.push('Embedded CSV packages: '+ndProPackagesCsv.length);
+   lines.push('Embedded CSV gift cards: '+ndProGiftCardsCsv.length);
+   lines.push('');
+   lines.push('Read-only audit: no balances, stock, orders or membership records changed.');
+   output.textContent=lines.join('\n');
+  }catch(error){output.textContent='Audit failed: '+(error.message||error);}
+  finally{button.disabled=false;}
+ };
  host.querySelector('#ndSyncRefresh').onclick=async()=>{const b=host.querySelector('#ndSyncRefresh');b.disabled=true;await ndRefreshCloudCatalog();renderSyncCenter(host);};
  host.querySelector('#ndSyncImport').onclick=async()=>{
   const btn=host.querySelector('#ndSyncImport'),message=host.querySelector('#ndSyncMessage');
