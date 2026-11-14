@@ -5705,6 +5705,11 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 <details class="nd-action-expand" id="ndTransferExpand"><summary><span><strong>Cash Transfer to Bank</strong><div class="nd-transfer-cash-balance"><span>Total Cash</span><input id="cashBalance" aria-label="Total Cash" readonly="" type="text"/></div></span><span class="nd-action-plus" aria-hidden="true">›</span></summary>
 <div class="cash-remittance-entry">
 <div class="nd-company-bank-info-launch"><button id="ndCompanyBankInfoOpen" class="btn" type="button" aria-haspopup="dialog" aria-controls="ndCompanyBankInfoDialog">🏦 Company Bank Info</button></div>
+<div class="nd-cash-bank-choices" role="radiogroup" aria-label="Transfer destination bank">
+  <label class="nd-transfer-bank-card nd-transfer-bank-affin"><input type="radio" name="ndCashTransferBank" value="AFFIN"/><span><strong>AFFIN BANK</strong><small>NATURES DAO SDN BHD</small><b>102170008063</b></span></label>
+  <label class="nd-transfer-bank-card nd-transfer-bank-hlb"><input type="radio" name="ndCashTransferBank" value="HLB"/><span><strong>Hong Leong Bank</strong><small>NATURE’S DAO SDN. BHD.</small><b>28000067973</b></span></label>
+</div>
+<div class="helper" id="ndCashTransferBankHint">Select the receiving bank before submitting.</div>
 
 <div class="money-line">
 <label for="cashRemittanceAmount">Amount</label>
@@ -6211,7 +6216,7 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
       alert("Unable to open receipt: "+(error?.message||"Unknown error"));
       return;
     }
-    window.ndReceiptPreview(data.signedUrl,{amount:item.amount,status:item.status||"pending",verify:isSystemAdmin&&String(item.status||"pending")==="pending"?async value=>{await setCashRemittanceStatus(item.id,value==="accepted"?"verified":"rejected");return (cashRemittances||[]).find(r=>Number(r.id)===Number(item.id))?.status===(value==="accepted"?"verified":"rejected");}:null});
+    window.ndReceiptPreview(data.signedUrl,{amount:item.amount,status:(item.bank_code==='AFFIN'?'AFFIN BANK':item.bank_code==='HLB'?'Hong Leong Bank':'Bank not recorded')+' · '+(item.status||'pending'),verify:isSystemAdmin&&String(item.status||"pending")==="pending"?async value=>{await setCashRemittanceStatus(item.id,value==="accepted"?"verified":"rejected");return (cashRemittances||[]).find(r=>Number(r.id)===Number(item.id))?.status===(value==="accepted"?"verified":"rejected");}:null});
   }
 
   window.ndReviewCashTransfer=async function(id){
@@ -6227,6 +6232,12 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
     const date=$("settlementDate")?.value||today();
     const branch=String(currentBranch||"").trim();
     const staffName=String($("staff")?.value||"").trim();
+    const bankCode=document.querySelector('input[name="ndCashTransferBank"]:checked')?.value||'';
+    if(!['AFFIN','HLB'].includes(bankCode)){
+      alert('Please select AFFIN BANK or Hong Leong Bank before submitting.');
+      document.querySelector('.nd-cash-bank-choices')?.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
 
     if(!amount){
       alert("Please enter Cash Transfer to Bank amount.");
@@ -6249,6 +6260,7 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
         branch,
         staff_name:staffName||currentUserEmail||"",
         amount:+amount.toFixed(2),
+        bank_code:bankCode,
         receipt_path:uploaded.path,
         receipt_name:uploaded.name,
         receipt_type:uploaded.type,
@@ -6263,6 +6275,7 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
       renderMyCashRemittanceHistory();
 
       $("cashRemittanceAmount").value="";
+      document.querySelectorAll('input[name="ndCashTransferBank"]').forEach(input=>{input.checked=false;});
       pendingCashRemittanceFile=null;
       refreshCashRemittanceFileUI();
       if(state){state.textContent="Submitted · Pending Verification";state.className="helper ok";}
@@ -6323,9 +6336,9 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
     const rows=(cashRemittances||[]).filter(x=>ndIsTodaysRemittance(x,currentBranch,businessToday))
       .sort((a,b)=>String(b.submitted_at||b.remittance_date||"").localeCompare(String(a.submitted_at||a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
     if(!rows.length){root.innerHTML=`<div class="helper" style="padding:10px">No submissions.</div>`;return;}
-    root.innerHTML=`<table class="nd-simple-submissions"><thead><tr><th>Amount</th><th>Receipt</th><th>Status</th></tr></thead><tbody>${rows.map(x=>{
+    root.innerHTML=`<table class="nd-simple-submissions"><thead><tr><th>Bank</th><th>Amount</th><th>Receipt</th><th>Status</th></tr></thead><tbody>${rows.map(x=>{
       const status=String(x.status||"pending").toLowerCase();
-      return `<tr><td><strong>${money(x.amount)}</strong></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Pending"}</span></td></tr>`;
+      return `<tr><td><strong>${escHtml(x.bank_code==='AFFIN'?'AFFIN BANK':x.bank_code==='HLB'?'Hong Leong Bank':'Not selected')}</strong></td><td><strong>${money(x.amount)}</strong></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Pending"}</span></td></tr>`;
     }).join("")}</tbody></table>`;
     root.querySelectorAll("[data-my-remittance-receipt]").forEach(btn=>btn.onclick=()=>{
       const item=rows.find(x=>Number(x.id)===Number(btn.dataset.myRemittanceReceipt));
@@ -6386,6 +6399,7 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
     });
   }
 
+  let ndCashHistorySelectedBank='ALL';
   function renderCashRemittanceHistory(){
     const root=$("cashRemittanceHistoryRoot");
     if(!root) return;
@@ -6396,12 +6410,11 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
     const ym=$("cashRemittanceHistoryMonth")?.value||today().slice(0,7);
     renderCashRemittanceHistoryBranchButtons();
 
-    const rows=(cashRemittances||[])
-      .filter(x=>
-        String(x.remittance_date||"").slice(0,7)===ym &&
-        String(x.branch||"")===String(cashRemittanceHistoryBranch||"")
-      )
-      .sort((a,b)=>String(b.remittance_date||"").localeCompare(String(a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
+    const monthRows=(cashRemittances||[])
+      .filter(x=>String(x.remittance_date||'').slice(0,7)===ym && String(x.branch||'')===String(cashRemittanceHistoryBranch||''));
+    const rows=monthRows.filter(x=>ndCashHistorySelectedBank==='ALL' ||
+      (ndCashHistorySelectedBank==='UNKNOWN'?!['AFFIN','HLB'].includes(x.bank_code):x.bank_code===ndCashHistorySelectedBank))
+      .sort((a,b)=>String(b.remittance_date||'').localeCompare(String(a.remittance_date||'')) || Number(b.id||0)-Number(a.id||0));
 
     const pending=rows.filter(x=>String(x.status||"")==="pending").reduce((s,x)=>s+Number(x.amount||0),0);
     const verified=rows.filter(x=>String(x.status||"")==="verified").reduce((s,x)=>s+Number(x.amount||0),0);
@@ -6413,13 +6426,18 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
         ` &nbsp; Verified / Deducted <strong>${money(verified)}</strong>`;
     }
 
+    const bankFilters=[['ALL','All Banks'],['AFFIN','AFFIN BANK'],['HLB','Hong Leong Bank'],['UNKNOWN','Unassigned']];
+    const bankTabs=`<div class="nd-bank-history-filter">${bankFilters.map(([code,label])=>
+      `<button type="button" class="mini ${ndCashHistorySelectedBank===code?'nd-bank-filter-active':''}" data-bank-history-filter="${code}">${label} (${monthRows.filter(x=>code==='ALL'||(code==='UNKNOWN'?!['AFFIN','HLB'].includes(x.bank_code):x.bank_code===code)).length})</button>`
+    ).join('')}</div>`;
     if(!rows.length){
-      root.innerHTML='<div class="helper" style="padding:16px">No Cash Transfer to Bank records for this month.</div>';
+      root.innerHTML=bankTabs+'<div class="helper" style="padding:16px">No Cash Transfer to Bank records for this bank.</div>';
+      root.querySelectorAll('[data-bank-history-filter]').forEach(btn=>btn.onclick=()=>{ndCashHistorySelectedBank=btn.dataset.bankHistoryFilter;renderCashRemittanceHistory();});
       return;
     }
 
-    root.innerHTML=`<div class="history-two-row"><table>
-      <thead><tr><th>Date</th><th>Branch</th><th>Staff</th><th>Amount</th><th>Receipt</th><th>Status</th><th>Verification</th></tr></thead>
+    root.innerHTML=bankTabs+`<div class="history-two-row"><table>
+      <thead><tr><th>Date</th><th>Branch</th><th>Staff</th><th>Bank</th><th>Amount</th><th>Receipt</th><th>Status</th><th>Verification</th></tr></thead>
       <tbody>${rows.map(x=>{
         const status=String(x.status||"pending");
         const receipt=x.receipt_path
@@ -6435,6 +6453,7 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
           <td>${escHtml(x.remittance_date||"")}</td>
           <td><strong>${escHtml(x.branch||"")}</strong></td>
           <td>${escHtml(x.staff_name||x.submitted_by||"-")}</td>
+          <td><strong>${escHtml(x.bank_code==='AFFIN'?'AFFIN BANK':x.bank_code==='HLB'?'Hong Leong Bank':'Not recorded')}</strong></td>
           <td><strong>${money(x.amount)}</strong></td>
           <td>${receipt}</td>
           <td>${statusHtml}</td>
@@ -6443,6 +6462,10 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
       }).join("")}</tbody>
     </table></div>`;
 
+    root.querySelectorAll('[data-bank-history-filter]').forEach(btn=>btn.onclick=()=>{
+      ndCashHistorySelectedBank=btn.dataset.bankHistoryFilter;
+      renderCashRemittanceHistory();
+    });
     root.querySelectorAll("[data-remittance-receipt]").forEach(btn=>{
       btn.onclick=()=>{
         const item=(cashRemittances||[]).find(x=>Number(x.id)===Number(btn.dataset.remittanceReceipt));
@@ -6457,6 +6480,7 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
     });
   }
 
+  function ndBankName(code){return code==='AFFIN'?'AFFIN BANK':code==='HLB'?'Hong Leong Bank':'Bank not recorded';}
   async function setCashRemittanceStatus(id,status){
     if(!isSystemAdmin){
       alert("Management verification only.");
@@ -6465,10 +6489,18 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
     const item=(cashRemittances||[]).find(x=>Number(x.id)===Number(id));
     if(!item) return;
     const next=status==="verified"?"verified":"rejected";
+    let bankCode=String(item.bank_code||'').toUpperCase();
+    if(next==='verified' && !['AFFIN','HLB'].includes(bankCode)){
+      const chosen=prompt('This older transfer has no bank recorded. Enter 1 for AFFIN BANK or 2 for Hong Leong Bank.');
+      if(chosen===null)return;
+      bankCode=chosen.trim()==='1'?'AFFIN':chosen.trim()==='2'?'HLB':'';
+      if(!bankCode){alert('Select a valid bank before verification.');return;}
+    }
     const label=next==="verified"?"verify and deduct this amount from Total Cash":"reject this Cash Transfer to Bank";
-    if(!confirm(`Confirm to ${label}?`)) return;
+    if(!confirm(`Bank: ${ndBankName(bankCode)}\nAccount: ${bankCode==='AFFIN'?'102170008063':bankCode==='HLB'?'28000067973':'Not recorded'}\nAmount: ${money(item.amount)}\nConfirm to ${label}?`)) return;
 
     const patch={
+      ...(next==='verified'?{bank_code:bankCode}:{}),
       status:next,
       verified_by:currentUserEmail||"",
       verified_at:new Date().toISOString()
@@ -38371,6 +38403,20 @@ function enhance(){
 })();
 </script>
 
+<style id="nd-cash-transfer-bank-verify-style">
+.nd-bank-history-filter{display:flex;gap:7px;flex-wrap:wrap;margin:4px 0 12px}
+.nd-bank-history-filter button{font-size:12px!important;min-height:34px;border-radius:9px}
+.nd-bank-history-filter .nd-bank-filter-active{background:#234d37!important;color:#fff!important;border-color:#234d37!important}
+
+.nd-cash-bank-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0}
+.nd-transfer-bank-card{display:flex;gap:10px;align-items:start;cursor:pointer;padding:13px;border-radius:13px;border:2px solid transparent;min-width:0}
+.nd-transfer-bank-card input{width:18px;height:18px;min-width:18px;margin:3px 0;accent-color:#265d41}
+.nd-transfer-bank-card span{display:grid;gap:4px;min-width:0}.nd-transfer-bank-card strong{font-size:15px}.nd-transfer-bank-card small{font-size:12px}.nd-transfer-bank-card b{font-size:15px;word-break:break-all}
+.nd-transfer-bank-affin{background:#fff0f1;color:#692735;border-color:#e6b9bf}
+.nd-transfer-bank-hlb{background:#eaf3ff;color:#193d66;border-color:#b9d2ef}
+.nd-transfer-bank-card:has(input:checked){outline:3px solid #286345;outline-offset:1px;box-shadow:0 3px 12px #0002}
+@media(max-width:600px){.nd-cash-bank-choices{grid-template-columns:1fr}}
+</style>
 <style id="nd-company-bank-info-style">
 .nd-company-bank-info-launch{display:flex;justify-content:flex-end;margin:4px 0 14px}
 #ndCompanyBankInfoOpen{font-size:13px;min-height:38px;padding:9px 13px;border:1px solid #bfcfc3;background:#f4faf5;color:#244b35;border-radius:10px}
