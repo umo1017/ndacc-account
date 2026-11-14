@@ -5704,6 +5704,8 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 <div class="card span12" id="cashRemittanceCard" style="background:#fff;border-color:#e1e5e2">
 <details class="nd-action-expand" id="ndTransferExpand"><summary><span><strong>Cash Transfer to Bank</strong><div class="nd-transfer-cash-balance"><span>Total Cash</span><input id="cashBalance" aria-label="Total Cash" readonly="" type="text"/></div></span><span class="nd-action-plus" aria-hidden="true">›</span></summary>
 <div class="cash-remittance-entry">
+<div class="nd-company-bank-info-launch"><button id="ndCompanyBankInfoOpen" class="btn" type="button" aria-haspopup="dialog" aria-controls="ndCompanyBankInfoDialog">🏦 Company Bank Info</button></div>
+
 <div class="money-line">
 <label for="cashRemittanceAmount">Amount</label>
 <div class="money-wrap"><span class="rm-prefix">RM</span><input class="money-field" id="cashRemittanceAmount" min="0" placeholder="0.00" step="0.01" type="number"/></div>
@@ -38366,6 +38368,68 @@ function enhance(){
   function hook(name){const original=window[name];if(typeof original!=='function'||original._ndSignHook)return;const fn=async function(...args){const out=await original.apply(this,args);schedule(true);return out;};fn._ndSignHook=true;window[name]=fn;}
   const hookSigning=()=>{hook('ndSaveStaffWarningSignature');hook('ndSaveStaffFineSignature');};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hookSigning,{once:true});else hookSigning();
+})();
+</script>
+
+<style id="nd-company-bank-info-style">
+.nd-company-bank-info-launch{display:flex;justify-content:flex-end;margin:4px 0 14px}
+#ndCompanyBankInfoOpen{font-size:13px;min-height:38px;padding:9px 13px;border:1px solid #bfcfc3;background:#f4faf5;color:#244b35;border-radius:10px}
+#ndCompanyBankInfoDialog{box-sizing:border-box;width:min(520px,94vw);max-width:94vw;max-height:86dvh;overflow:auto;border:none;border-radius:17px;padding:22px;background:#fff;color:#19352b;box-shadow:0 16px 55px #0005}
+#ndCompanyBankInfoDialog::backdrop{background:#0009}
+#ndCompanyBankInfoDialog .nd-bank-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+#ndCompanyBankInfoDialog .nd-bank-header h3{margin:0;font-size:19px}
+#ndCompanyBankInfoDialog .nd-bank-close{font-size:21px;border:0;background:transparent;cursor:pointer;padding:5px 10px;color:#53695d}
+#ndCompanyBankInfoDialog .nd-bank-card{border:1px solid #dce7df;border-radius:13px;padding:15px;margin:11px 0;background:#fbfdfb}
+#ndCompanyBankInfoDialog .nd-bank-card:nth-of-type(1){background:#fff0f1;border-color:#e6b9bf;color:#692735}
+#ndCompanyBankInfoDialog .nd-bank-card:nth-of-type(2){background:#eaf3ff;border-color:#b9d2ef;color:#193d66}
+#ndCompanyBankInfoDialog .nd-bank-card:nth-of-type(1) .nd-bank-label{color:#925762}
+#ndCompanyBankInfoDialog .nd-bank-card:nth-of-type(2) .nd-bank-label{color:#557ca4}
+#ndCompanyBankInfoDialog .nd-bank-card:nth-of-type(1) .nd-bank-copy{background:#fbe0e3;border-color:#e4a9b1;color:#692735}
+#ndCompanyBankInfoDialog .nd-bank-card:nth-of-type(2) .nd-bank-copy{background:#d9e9fb;border-color:#a6c8ed;color:#193d66}
+#ndCompanyBankInfoDialog .nd-bank-name{font-size:17px;font-weight:800;margin:0 0 11px}
+#ndCompanyBankInfoDialog .nd-bank-label{font-size:11px;color:#6d7e72;margin:9px 0 2px}
+#ndCompanyBankInfoDialog .nd-bank-text{font-size:14px;overflow-wrap:anywhere;font-weight:600}
+#ndCompanyBankInfoDialog .nd-bank-account{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:18px;font-weight:800;letter-spacing:.02em}
+#ndCompanyBankInfoDialog .nd-bank-copy{font-size:12px;cursor:pointer;background:#eaf2ec;border:1px solid #c6d7cc;border-radius:8px;padding:8px 11px;white-space:nowrap;color:#244b35}
+#ndCompanyBankInfoDialog .nd-bank-status{min-height:16px;font-size:12px;color:#236e44}
+</style>
+<dialog id="ndCompanyBankInfoDialog" aria-labelledby="ndCompanyBankInfoTitle">
+  <div class="nd-bank-header"><h3 id="ndCompanyBankInfoTitle">Company Bank Information</h3><button type="button" class="nd-bank-close" id="ndCompanyBankInfoClose" aria-label="Close">×</button></div>
+  <section class="nd-bank-card">
+    <h4 class="nd-bank-name">AFFIN BANK</h4>
+    <div class="nd-bank-label">Company</div><div class="nd-bank-text">NATURES DAO SDN BHD</div>
+    <div class="nd-bank-label">Account Number</div><div class="nd-bank-account"><span>102170008063</span><button type="button" class="nd-bank-copy" data-bank-copy="102170008063">Copy</button></div>
+  </section>
+  <section class="nd-bank-card">
+    <h4 class="nd-bank-name">Hong Leong Bank</h4>
+    <div class="nd-bank-label">Company</div><div class="nd-bank-text">NATURE’S DAO SDN. BHD.</div>
+    <div class="nd-bank-label">Account Number</div><div class="nd-bank-account"><span>28000067973</span><button type="button" class="nd-bank-copy" data-bank-copy="28000067973">Copy</button></div>
+  </section>
+  <div class="nd-bank-status" id="ndCompanyBankCopyStatus" role="status" aria-live="polite"></div>
+</dialog>
+<script id="nd-company-bank-info-logic">
+(function(){
+  'use strict';
+  function init(){
+    const launch=document.getElementById('ndCompanyBankInfoOpen');
+    const dialog=document.getElementById('ndCompanyBankInfoDialog');
+    const close=document.getElementById('ndCompanyBankInfoClose');
+    const status=document.getElementById('ndCompanyBankCopyStatus');
+    if(!launch||!dialog||!close||launch.dataset.ndBankWired)return;
+    launch.dataset.ndBankWired='1';
+    launch.addEventListener('click',function(event){event.preventDefault();event.stopPropagation();status.textContent='';if(!dialog.open)dialog.showModal();});
+    close.addEventListener('click',()=>dialog.close());
+    dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
+    dialog.querySelectorAll('[data-bank-copy]').forEach(btn=>btn.addEventListener('click',async()=>{
+      const value=btn.getAttribute('data-bank-copy');
+      try{
+        if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value);}
+        else {const field=document.createElement('textarea');field.value=value;field.setAttribute('readonly','');field.style.cssText='position:fixed;left:-9999px';document.body.appendChild(field);field.select();const ok=document.execCommand('copy');field.remove();if(!ok)throw Error('Copy unavailable');}
+        status.textContent='Account number copied';
+      }catch(_){status.textContent='Please select and copy the account number manually.';}
+    }));
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
 </body>
