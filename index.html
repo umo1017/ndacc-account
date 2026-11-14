@@ -13979,10 +13979,13 @@ function ndHasFullPaymentAccess(){return ND_FULL_PAYMENT_EMAILS.includes(String(
 /* Salary 14th/15th/16th: live duty branch check, independent of Salary Admin. */
 async function ndCanAccessCommissionBranch(outlet){
   const branch=String(outlet||'').trim();
-  if(!['Eco Botanic','Nusa Bestari'].includes(branch))return false;
   const session=await salaryDb.auth.getUser();
-  if(session.error||!session.data?.user?.email)return false;
-  const email=String(session.data.user.email).trim().toLowerCase();
+  if(session.error||!session.data?.user?.id)return false;
+  // Collaboration payslips are viewable by every signed-in account.
+  // This exemption applies ONLY to Collaboration, not other branches.
+  if(branch.toLowerCase()==='collaboration')return true;
+  if(!['Eco Botanic','Nusa Bestari'].includes(branch))return false;
+  const email=String(session.data.user.email||'').trim().toLowerCase();
   if(ND_FULL_PAYMENT_EMAILS.includes(email)||email===ND_SAM_EMAIL||(email===ND_BILLY_EMAIL&&branch==='Nusa Bestari'))return true;
   const direct=await salaryDb.rpc('nd_my_payroll_access',{p_branch:branch,p_action:'view_salary'});
   if(!direct.error&&direct.data===true)return true;
@@ -13992,7 +13995,7 @@ async function ndCanAccessCommissionBranch(outlet){
 }
 async function ndRequireCommissionBranch(outlet){
   const allowed=await ndCanAccessCommissionBranch(outlet);
-  if(!allowed)alert('Access denied. You must be assigned to Salary Duty for this branch today.');
+  if(!allowed)alert('Access denied. Salary access is not available for this branch.');
   return allowed;
 }
 
@@ -15035,6 +15038,45 @@ async function loadSalaryData(){
     byId("salaryOutletRoot").innerHTML=`<div class="salary-card"><div class="bad">${err.message}</div></div>`;
     return;
   }
+  // Collaboration: read the authoritative directory and the confirmed payroll
+  // for the selected salary month directly from Supabase. Never manufacture
+  // RM0 commission when a confirmed record cannot be read.
+  let ndCollaborationDirectory=null;
+  let ndCollaborationSnapshots=null;
+  let ndCollaborationError='';
+  if(ndCanViewCollaboration()){
+    try{
+      const directory=await salaryDb.from('employees').select('*')
+        .ilike('outlet','collaboration').order('name');
+      if(directory.error)throw new Error('Collaboration employees: '+directory.error.message);
+      ndCollaborationDirectory=directory.data||[];
+      if(ndCollaborationDirectory.length){
+        const ids=ndCollaborationDirectory.map(e=>Number(e.id)).filter(id=>Number.isInteger(id)&&id>0);
+        const confirmed=await salaryDb.from('payroll_commission_snapshot').select('*')
+          .eq('salary_month',month+'-01').in('employee_id',ids);
+        if(confirmed.error)throw new Error('Collaboration confirmed 14th payroll: '+confirmed.error.message);
+        ndCollaborationSnapshots=confirmed.data||[];
+      }else{
+        ndCollaborationSnapshots=[];
+        ndCollaborationError='No Collaboration employees were returned by Supabase for this login. Check employees SELECT RLS.';
+      }
+    }catch(error){
+      ndCollaborationError=String(error?.message||error);
+      console.error('Collaboration salary sync:',error);
+    }
+  }
+  window.ndCollaborationSalaryReadError=ndCollaborationError;
+  // Replace only Collaboration rows, leaving every other branch untouched.
+  // If the dedicated read failed, keep the regular directory and show the error.
+  if(ndCollaborationDirectory!==null){
+    const otherEmployees=(empsRes.data||[]).filter(e=>!ndIsCollaborationOutlet(e.outlet));
+    empsRes={...empsRes,data:[...otherEmployees,...ndCollaborationDirectory]};
+  }
+  if(ndCollaborationSnapshots!==null){
+    const verifiedIds=new Set((ndCollaborationDirectory||[]).map(e=>Number(e.id)));
+    commissionRes={...commissionRes,data:[...(commissionRes.data||[]).filter(r=>!verifiedIds.has(Number(r.employee_id))),...ndCollaborationSnapshots]};
+  }
+
   salaryEmployees=(empsRes.data||[])
     .filter(e=>{
       if(isGlobalAdmin) return true;
@@ -16134,6 +16176,8 @@ function renderSalary(){
             </tbody>
           </table>
         </div>
+        ${ndIsCollaborationOutlet(outlet)&&window.ndCollaborationSalaryReadError?`<div class="bad" role="alert" style="padding:10px 0">Collaboration sync error: ${staffSafe(window.ndCollaborationSalaryReadError)}</div>`:''}
+        ${ndIsCollaborationOutlet(outlet)&&all.length&&!all.some(e=>commissionSnapshotFor(e.id))?`<div class="helper" role="status" style="margin:8px 0">No confirmed 14th commission records were returned for Collaboration in ${staffSafe(selectedMonth)}. Check payroll_commission_snapshot SELECT permissions before trusting RM0 amounts.</div>`:''}
         ${all.length?`<div class="payroll-section-title">14TH — COMMISSION PAYROLL · PAY ${salaryNextMonthPayLabel(14)}</div>${renderFourteenTable(all)}`:`<div class="helper">${ndIsCollaborationOutlet(outlet)?"No Collaboration staff records returned. Check employees data and SELECT RLS permissions.":"No 14th payroll employees."}</div>`}
       </div>`;
     }
