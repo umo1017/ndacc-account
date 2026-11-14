@@ -15432,7 +15432,7 @@ function renderSevenTable(emps){
         ? (snap.payment_done
             ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>${String(e.payment_method||'').trim().toLowerCase()==='cash'?` <button class="btn" type="button" data-view-signed-receipt="7:${e.id}">View Signed Receipt</button>`:''}`
             : `${ndSalaryHoldButton(7,e.id)} <button class="btn payment-done-btn pending" type="button" data-payment7="${e.id}" ${ndSalaryIsHeld(7,e.id)?'disabled title="Release On Hold first"':''}>Payment — DONE</button>`)
-        : `<span class="helper">Confirm first</span>`} <span class="nd-incident-sign-slot" data-nd-incident-employee="${e.id}"></span> <span class="nd-old-payslip-sign-slot" data-nd-old-payslip-employee="${e.id}"></span></td>
+        : `<span class="helper">Confirm first</span>`} <span class="nd-incident-sign-slot" data-nd-incident-employee="${e.id}"></span></td>
     </tr>`;
   };
 
@@ -15547,7 +15547,7 @@ function renderFourteenTable(emps){
     else if(pm==="Bank Transfer") transferTotal+=net;
     else if(pm==="TNG") tngTotal+=net;
 
-    return `<tr class="${cs?.payment_done===true?'nd-paid-row':''}" data-nd-payment-completed="${cs?.payment_done===true}" data-employee-id="${e.id}" data-outlet="${String(e.outlet||'').replace(/"/g,"&quot;')}">
+    return `<tr class="${cs?.payment_done===true?'nd-paid-row':''}" data-nd-payment-completed="${cs?.payment_done===true}">
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e)}</td>
       <td>${cs?money(a):salaryOverrideInput(e.id,"14","commission_a",a)}</td>
       <td>${cs?money(b):salaryOverrideInput(e.id,"14","commission_b",b)}</td>
@@ -15574,7 +15574,7 @@ function renderFourteenTable(emps){
         ? (cs.payment_done
             ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>${String(e.payment_method||'').trim().toLowerCase()==='cash'?` <button class="btn" type="button" data-view-signed-receipt="14:${e.id}">View Signed Receipt</button>`:''}`
             : `${ndSalaryHoldButton(14,e.id)} <button class="btn payment-done-btn pending" type="button" data-payment14="${e.id}" ${ndSalaryIsHeld(14,e.id)?'disabled title="Release On Hold first"':''}>Payment — DONE</button>`)
-        : `<span class="helper">Confirm first</span>`} <span class="nd-incident-sign-slot" data-nd-incident-employee="${e.id}"></span> <span class="nd-old-payslip-sign-slot" data-nd-old-payslip-employee="${e.id}"></span></td>
+        : `<span class="helper">Confirm first</span>`} <span class="nd-incident-sign-slot" data-nd-incident-employee="${e.id}"></span></td>
     </tr>`;
   }).join("");
 
@@ -33143,86 +33143,6 @@ html.nd-content-studio-offline #sidebarSocial {display:none!important}
   });
 })();
 </script>
-<style id="nd-historical-payslip-sign-style">
-.nd-old-payslip-sign-slot{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:6px}
-.nd-old-payslip-sign-btn{background:#a53636!important;color:#fff!important;border:1px solid #a53636!important;border-radius:9px!important;padding:8px 11px!important;font-weight:750!important;white-space:nowrap}
-#ndOldPayslipSignModal{position:fixed;inset:0;background:rgba(12,24,20,.62);display:none;z-index:50000;align-items:center;justify-content:center;padding:16px}
-#ndOldPayslipSignModal.nd-open{display:flex}
-#ndOldPayslipSignModal .nd-old-sign-card{width:min(510px,100%);max-height:90dvh;overflow:auto;background:#fff;border-radius:16px;padding:20px;color:#263d31;box-shadow:0 15px 50px #0004}
-#ndOldPayslipSignModal .nd-old-sign-card h3{margin:0 0 12px}
-#ndOldPayslipSignModal canvas{display:block;width:100%;height:160px;touch-action:none;border:1px solid #b9cec2;border-radius:10px;background:#fff;margin:12px 0}
-#ndOldPayslipSignModal .nd-old-sign-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-#ndOldPayslipSignModal button{cursor:pointer}
-</style>
-<script id="nd-historical-payslip-signatures-20261114">
-(()=>{'use strict';
-// A historical signature is a payslip acknowledgement, never a second salary payment.
-const minMonth='2026-09-01';
-let cache=[],monthLoaded='',busy=false,requestSerial=0,scanTimer=null;
-const db=()=>window.salaryDb;
-const month=()=>String(document.getElementById('salaryMonth')?.value||'').slice(0,7)+'-01';
-const validMonth=v=>/^\d{4}-\d\d-01$/.test(v)&&v>=minMonth;
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function load(){
- const m=month();if(!validMonth(m)||!db()){cache=[];monthLoaded='';paint();return;}
- const serial=++requestSerial;
- const {data,error}=await db().rpc('nd_salary_unsigned_payslips',{p_until_month:m});
- if(serial!==requestSerial)return;
- if(error){console.error('Previous unsigned payslips:',error);cache=[];monthLoaded='';return;}
- cache=Array.isArray(data)?data:[];monthLoaded=m;paint();
-}
-function paint(){
- const m=month();
- document.querySelectorAll('#salaryPage .nd-old-payslip-sign-slot').forEach(slot=>{
-   const id=Number(slot.dataset.ndOldPayslipEmployee);
-   if(!id||m!==monthLoaded)return;
-   const row=slot.closest('tr');if(!row)return;
-   // Show in the 7th or 14th section, with the corresponding outstanding slips.
-   const parentTable=slot.closest('table');
-   const head=parentTable?.querySelector('thead')?.textContent||'';
-   const salaryType=/Commission A|Commission B/i.test(head)?14:7;
-   const relevant=cache.filter(x=>Number(x.employee_id)===id&&Number(x.salary_type)===salaryType);
-   const signature=relevant.map(x=>String(x.salary_month).slice(0,10)).join('|');
-   if(slot.dataset.ndOldSignatureKey===salaryType+':'+signature)return;
-   slot.dataset.ndOldSignatureKey=salaryType+':'+signature;slot.replaceChildren();
-   for(const rec of relevant){
-     const btn=document.createElement('button');btn.type='button';btn.className='btn nd-old-payslip-sign-btn';
-     btn.textContent='Sign '+salaryType+'th · '+String(rec.salary_month).slice(0,7);
-     btn.dataset.ndOldSalaryEmployee=String(id);
-     btn.dataset.ndOldSalaryType=String(salaryType);
-     btn.dataset.ndOldSalaryMonth=String(rec.salary_month).slice(0,10);
-     slot.append(btn);
-   }
- });
-}
-function schedule(){if(scanTimer)clearTimeout(scanTimer);scanTimer=setTimeout(()=>{scanTimer=null;if(document.getElementById('salaryPage')?.classList.contains('active')){if(month()!==monthLoaded)load().catch(console.error);else paint();}},160);}
-const observer=new MutationObserver(changes=>{if(changes.some(c=>c.addedNodes.length||c.removedNodes.length))schedule();});
-function init(){const page=document.getElementById('salaryPage');if(!page)return;observer.observe(page,{childList:true,subtree:true});document.getElementById('salaryMonth')?.addEventListener('change',()=>{monthLoaded='';setTimeout(()=>load().catch(console.error),400)});schedule();}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-async function sign(rec,button){
- if(busy)return;busy=true;
- let modal=document.getElementById('ndOldPayslipSignModal');if(!modal){modal=document.createElement('div');modal.id='ndOldPayslipSignModal';document.body.append(modal);}
- const row=button.closest('tr');const employee=row?.querySelector('td')?.textContent?.trim()||'Employee';
- modal.innerHTML='<div class="nd-old-sign-card" role="dialog" aria-modal="true"><h3>Sign Previous Payslip</h3><p><strong>'+esc(employee)+'</strong> · '+esc(rec.salaryType)+'th Salary · '+esc(rec.salaryMonth.slice(0,7))+'</p><p>This signs the original payslip only. It does not pay salary again or change any amounts.</p><canvas width="800" height="320" aria-label="Employee signature"></canvas><button type="button" class="btn" data-clear>Clear</button><label style="display:flex;align-items:center;gap:9px;margin-top:12px"><input type="checkbox" style="width:auto" data-agree/> The employee has reviewed and signed this payslip.</label><p data-error role="alert" style="color:#ac3030"></p><div class="nd-old-sign-actions"><button type="button" class="btn" data-cancel>Cancel</button><button type="button" class="btn primary" data-save>Save Signature</button></div></div>';
- modal.classList.add('nd-open');
- const c=modal.querySelector('canvas'),ctx=c.getContext('2d');ctx.strokeStyle='#183f2b';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';let drawing=false,ink=false;
- const point=e=>{const r=c.getBoundingClientRect();return {x:(e.clientX-r.left)*c.width/r.width,y:(e.clientY-r.top)*c.height/r.height}};
- c.onpointerdown=e=>{drawing=true;c.setPointerCapture(e.pointerId);const p=point(e);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+.1,p.y+.1);ctx.stroke();ink=true;};
- c.onpointermove=e=>{if(!drawing)return;const p=point(e);ctx.lineTo(p.x,p.y);ctx.stroke();};c.onpointerup=c.onpointercancel=()=>{drawing=false;};
- modal.querySelector('[data-clear]').onclick=()=>{ctx.clearRect(0,0,c.width,c.height);ink=false;};
- const cancel=modal.querySelector('[data-cancel]'),save=modal.querySelector('[data-save]'),error=modal.querySelector('[data-error]');
- let saving=false;const close=()=>{if(saving)return;modal.classList.remove('nd-open');busy=false;};cancel.onclick=close;
- save.onclick=async()=>{if(saving)return;if(!ink||!modal.querySelector('[data-agree]').checked){error.textContent='Employee signature and acknowledgement required.';return;}
- saving=true;save.disabled=true;cancel.disabled=true;error.textContent='Saving...';
- try{const {error:rpcError}=await db().rpc('nd_sign_previous_payslip',{p_employee_id:rec.employeeId,p_salary_type:rec.salaryType,p_salary_month:rec.salaryMonth,p_signature:c.toDataURL('image/png')});if(rpcError)throw rpcError;modal.classList.remove('nd-open');busy=false;await load();}
- catch(ex){error.textContent='Save failed: '+String(ex?.message||ex);}
- finally{saving=false;save.disabled=false;cancel.disabled=false;}
- };
-}
-document.addEventListener('click',e=>{const b=e.target.closest?.('[data-nd-old-salary-employee]');if(!b)return;e.preventDefault();e.stopPropagation();sign({employeeId:Number(b.dataset.ndOldSalaryEmployee),salaryType:Number(b.dataset.ndOldSalaryType),salaryMonth:b.dataset.ndOldSalaryMonth},b).catch(err=>{busy=false;alert(err.message||err);});},true);
-})();
-</script>
-
 </body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
