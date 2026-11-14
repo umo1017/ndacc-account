@@ -38478,6 +38478,82 @@ function enhance(){
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
+<style id="nd-weekly-transfer-reminder-style">
+#ndWeeklyTransferReminder{box-sizing:border-box;border:0;border-radius:22px;padding:0;width:min(490px,calc(100vw - 28px));max-height:85dvh;overflow:auto;background:linear-gradient(155deg,#f0faff 0%,#e3f3ff 52%,#d7edff 100%);color:#18415e;box-shadow:0 22px 75px #163e6755;border:1px solid #b6d9f6}
+#ndWeeklyTransferReminder::backdrop{background:rgba(12,35,60,.58)}
+#ndWeeklyTransferReminder .ndwtr-head{padding:24px 22px 16px;background:linear-gradient(120deg,#c3e8ff,#e3f5ff 70%,#d8ebff);border-bottom:1px solid #b6d9f6}
+#ndWeeklyTransferReminder h2{font-size:20px;line-height:1.35;margin:5px 0 0;font-weight:800}
+#ndWeeklyTransferReminder .ndwtr-body{padding:18px 22px 22px;line-height:1.75;font-size:15px}
+#ndWeeklyTransferReminder .ndwtr-body p{margin:0 0 13px}
+#ndWeeklyTransferReminder .ndwtr-branch{font-size:13px;color:#24577a;padding:9px 12px;background:#cce9ff;border-radius:10px;margin:12px 0}
+#ndWeeklyTransferReminder .ndwtr-warn{color:#a32626;font-weight:750}
+#ndWeeklyTransferReminder .ndwtr-actions{display:flex;gap:9px;margin-top:18px;justify-content:center;flex-wrap:wrap}
+#ndWeeklyTransferReminder button{cursor:pointer;border-radius:10px;border:1px solid #ccdbce;padding:11px 16px;background:#fff;font-size:14px;font-weight:750;color:#24577a}
+#ndWeeklyTransferReminder button.ndwtr-confirm{background:linear-gradient(100deg,#2988dc,#126ab8);color:white;border-color:#1978cb;min-width:170px;box-shadow:0 4px 12px #1978cb33}
+@media(max-width:480px){#ndWeeklyTransferReminder .ndwtr-head{padding:18px 16px 10px}#ndWeeklyTransferReminder .ndwtr-body{padding:15px 16px 19px}}
+</style>
+<script id="nd-weekly-transfer-reminders-20261114">
+(function(){'use strict';
+  const BRANCHES=['Eco Botanic','Nusa Bestari'];
+  const TZ='Asia/Kuala_Lumpur';
+  let busy=false,lastKey='';
+  const el=id=>document.getElementById(id);
+  function nowMY(){
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+    const x=Object.fromEntries(parts.map(p=>[p.type,p.value]));
+    const date=x.year+'-'+x.month+'-'+x.day;
+    const utcDate=new Date(date+'T12:00:00Z');
+    return {date,hour:Number(x.hour),weekday:utcDate.getUTCDay()};
+  }
+  function shift(date,days){const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
+  function client(){return window.salaryDb||null;}
+  function shown(key){try{return sessionStorage.getItem(key)==='1'||localStorage.getItem(key)==='1';}catch(_){return false;}}
+  function mark(key){try{sessionStorage.setItem(key,'1');localStorage.setItem(key,'1');}catch(_){}}
+  function activePopup(){return !!document.querySelector('dialog[open],.salary-modal.open,#ndPettyGlobalAck.nd-show');}
+  function popup(key,mode,branches){
+    if(shown(key)||activePopup())return;
+    let dlg=el('ndWeeklyTransferReminder');if(!dlg){dlg=document.createElement('dialog');dlg.id='ndWeeklyTransferReminder';document.body.appendChild(dlg);}
+    const sunday=mode==='sunday';
+    const title=sunday?'每周现金转账提醒':'星期一 · 最后转账提醒';
+    const detail=sunday?
+      '<p>请大家记得把<strong>这个星期的账款转账给公司</strong>，并在 Cash Transfer to Bank 提交转账记录和收据。</p><p>如果明天不是你的班，请记得把账目、现金和转账事项<strong>交接清楚</strong>。谢谢大家合作！</p>':
+      '<p>今天是本周账款转账的<strong>最后一天</strong>，请记得把款项转账给公司，并在系统提交转账记录及收据。</p><p class="ndwtr-warn">逾期未提交将按公司制度处理（通知罚款 RM200）；实际处罚须符合适用法律。</p><p>如果明天不是你的班，请先完成交接。谢谢大家合作！</p>';
+    const label=(!sunday&&branches.length)?'<div class="ndwtr-branch">尚未发现有效转账提交：'+branches.map(x=>x.replace(/&/g,'&amp;').replace(/</g,'&lt;')).join('、')+'</div>':'';
+    dlg.innerHTML='<div class="ndwtr-head"><small>NATURE’S DAO · CASH TRANSFER</small><h2>'+title+'</h2></div><div class="ndwtr-body">'+detail+label+'<div class="ndwtr-actions"><button type="button" class="ndwtr-confirm" data-ndwtr-ok>我已了解</button></div></div>';
+    dlg.querySelector('[data-ndwtr-ok]').onclick=()=>{mark(key);dlg.close();};
+    dlg.addEventListener('cancel',event=>{event.preventDefault();event.stopImmediatePropagation();},true);
+    try{dlg.showModal();}catch(_){dlg.remove();}
+  }
+  async function check(){
+    if(busy||document.hidden)return;
+    const time=nowMY();
+    // Sunday from 8 PM; Monday from 10 AM. Shown at next app opening if within the window.
+    const mode=time.weekday===0&&time.hour>=20?'sunday':time.weekday===1&&time.hour>=10?'monday':null;
+    if(!mode)return;
+    const db=client();if(!db)return;
+    busy=true;
+    try{
+      const result=await db.auth.getUser();const user=result.data?.user;
+      if(result.error||!user)return;
+      const scope=(user.id||String(user.email||'').toLowerCase());
+      const weekEnd=mode==='sunday'?time.date:shift(time.date,-1);
+      const key='nd_weekly_transfer_v2::'+scope+'::'+mode+'::'+weekEnd;
+      if(shown(key)||lastKey===key||activePopup())return;
+      if(mode==='sunday'){lastKey=key;popup(key,mode,[]);return;}
+      // Server-side query intentionally returns only branch/status, not private salary or account details.
+      const {data,error}=await db.rpc('nd_weekly_transfer_submission_status',{p_sunday:weekEnd});
+      if(error){console.warn('Weekly transfer reminder unavailable:',error.message);return;}
+      if(!Array.isArray(data)){console.warn('Unexpected weekly transfer status response');return;}
+      const missing=BRANCHES.filter(b=>{const row=data.find(x=>x.branch===b);return !row||row.submitted!==true;});
+      if(!missing.length){mark(key);return;}
+      if(nowMY().weekday!==1||nowMY().hour<10)return;
+      lastKey=key;popup(key,mode,missing);
+    }catch(error){console.warn('Weekly transfer check failed:',error?.message||error);}finally{busy=false;}
+  }
+  function start(){setTimeout(()=>void check(),3500);setInterval(()=>void check(),60000);window.addEventListener('focus',()=>void check());document.addEventListener('visibilitychange',()=>{if(!document.hidden)void check();});window.addEventListener('pageshow',()=>void check());document.addEventListener('close',()=>setTimeout(()=>void check(),200),true);}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
