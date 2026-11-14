@@ -5540,7 +5540,7 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
 #salaryPage .salary-table tbody tr.nd-paid-row:has(.nd-incident-sign-slot .nd-incident-red)>td,
 #ndCollaborationSalary .salary-table tbody tr.nd-paid-row:has(.nd-incident-sign-slot .nd-incident-red)>td{background:#fff!important}
 </style>
-</head>
+<style id="nd-members-preview-clarity">#ndIntegratedMemberTop{height:auto!important;min-height:53px!important;gap:10px!important}#ndIntegratedMemberTop strong{font-size:13px!important}#ndIntegratedMemberTop::after{content:"Member list: imported data · Transactions and balances not synced";color:#806a36;font-size:10px;max-width:165px;line-height:1.25}#ndProBetaPage .nd-member-opening{padding:36px 18px;text-align:center;color:#586e64}</style></head>
 <body><style id="nd-integrated-member-ui-css">
 #ndIntegratedMemberOverlay{position:fixed;inset:0;z-index:2147483640;background:#f2f1f7;display:none;flex-direction:column}
 #ndIntegratedMemberOverlay.nd-open{display:flex}
@@ -40638,7 +40638,14 @@ document.addEventListener('click',e=>{
 /* Combined CRM: existing customer records and legacy member directory in one page. */
 /* Unified customer/member directory: show members directly, without Customers tab. */
 function renderCustomers(host){
-  ndDrawMembersCsv(host);
+  // Single Members route.  The legacy CSV list is retained as a safe fallback,
+  // but the modern Member interface is the default for every Beta entry point.
+  if(typeof window.ndOpenIntegratedMembers === 'function'){
+    host.innerHTML='<div class="nd-member-opening" role="status">Opening Members…</div>';
+    window.ndOpenIntegratedMembers();
+  }else{
+    ndDrawMembersCsv(host);
+  }
 }
 /* One service screen: existing cloud services and CSV service-menu records. */
 function renderCatalog(host){ndRenderCatalogBase(host);}
@@ -41853,10 +41860,42 @@ body > #ndProHamburger.nd-pro-portal-menu {
  function showMember(){
    if(!loaded){
      const bytes=Uint8Array.from(atob(memberHTMLBase64),c=>c.charCodeAt(0));
-     const html=new TextDecoder().decode(bytes);
+     let html=new TextDecoder().decode(bytes);
+     // Remove the preview's four example people. Member names and phone numbers
+     // must come from the existing 3,514-row member import, not fabricated examples.
+     html=html.replace(/const people=\[.*?\];let activeTab=/s,
+       'const people=[];let activeTab=');
+     // Sample campaign labels in the prototype must not masquerade as real tags.
+     html=html.replaceAll('<span class="tag">Nusa Bestari</span><span class="tag">ANAN</span><span class="tag purple">DISCOUNT 20%</span>','');
+     // The customer list is real imported data. Financial and transaction tabs
+     // inside the original visual prototype are not synced and are marked accordingly.
+     html=html.replace('</body>', `<script>
+       window.addEventListener('message',function(e){
+         if(e.source!==parent || !e.data || e.data.type!=='nd-members-directory')return;
+         people.splice(0,people.length,...e.data.members);
+         if(people.length)selectedMember=people[0];
+         renderMembers();
+         var count=document.getElementById('memberCount');
+         if(count)count.textContent=people.length.toLocaleString('en-MY')+' members';
+       });
+       <\/script></body>`);
      iframe.srcdoc=html; loaded=true;
    }
    overlay.classList.add('nd-open');overlay.setAttribute('aria-hidden','false');
+   // Send only the customer directory fields; never invent balances or vouchers.
+   const members=ndCsvMembers.map(m=>({
+     name:String(m.Name||''),
+     phone:String(m['Phone Number']||'').slice(-4),
+     fullPhone:String(m['Phone Number']||''),
+     birthday:String(m.Birthdate||''),
+     birthISO:String(m.Birthdate||''),
+     vip:m.VIP==='1'||m.VVIP==='1'||m.VVVIP==='1'?1:0,
+     tier:m.VVVIP==='1'?'VVVIP':m.VVIP==='1'?'VVIP':m.VIP==='1'?'VIP':'Standard',
+     balance:'', vouchers:0, when:'', action:'', branch:''
+   }));
+   const send=()=>iframe.contentWindow?.postMessage({type:'nd-members-directory',members},'*');
+   iframe.addEventListener('load',send,{once:true});
+   if(iframe.contentDocument?.querySelector('#memberlist'))send();
  }
  function closeMember(){overlay.classList.remove('nd-open');overlay.setAttribute('aria-hidden','true')}
  document.getElementById('ndIntegratedMemberBack').addEventListener('click',closeMember);
@@ -41869,7 +41908,7 @@ body > #ndProHamburger.nd-pro-portal-menu {
  },true);
  // Standalone entry from the existing Pro navigation, without changing Daily or other pages.
  const nav=document.getElementById('ndProTabs');
- if(nav){const b=document.createElement('button');b.type='button';b.className='pro-tab';b.textContent='会员新版';b.id='ndMemberNewEntry';b.addEventListener('click',showMember);nav.append(b)}
+ // No duplicate 'New Members' tab: all Members routes open the same interface.
  window.ndOpenIntegratedMembers=showMember;
 })();
 </script>
