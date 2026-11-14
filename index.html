@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <style id="nd-cash-expense-month-single-ui">
 #ndCashPettyTab,#pettyCashHistoryBtn,#ndCashExpenseHistoryOpen{display:none!important}
@@ -5471,6 +5471,25 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 #ndProBookingModal .proref-details[hidden]{display:none!important}
 @media(max-width:480px){#ndProBookingModal .proref-datetime .pro-field{padding:7px!important}#ndProBookingModal .proref-phone-row #proAddCustomer{font-size:12px!important}}
 </style>
+<style id="nd-paid-complete-full-row-20261114">
+/* A completed payment highlights the full staff row, including the sticky name column. */
+body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-row,
+body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-row:hover,
+#ndCollaborationSalary .salary-table tbody tr.nd-paid-row,
+#ndCollaborationSalary .salary-table tbody tr.nd-paid-row:hover {
+  background: #dff3e7 !important;
+}
+body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-row > td,
+#ndCollaborationSalary .salary-table tbody tr.nd-paid-row > td {
+  background: #dff3e7 !important;
+  border-bottom-color: #b2d8bf !important;
+}
+body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-row > td:first-child,
+#ndCollaborationSalary .salary-table tbody tr.nd-paid-row > td:first-child {
+  background: #ccebd8 !important;
+  color: #1e5138 !important;
+}
+</style>
 </head>
 <body><style id="nd-integrated-member-ui-css">
 #ndIntegratedMemberOverlay{position:fixed;inset:0;z-index:2147483640;background:#f2f1f7;display:none;flex-direction:column}
@@ -6765,7 +6784,7 @@ function computedCarryBefore(branch,date,sourceRows=allRows){
     // A reviewed database reconciliation is required before adjusting history.
     console.warn('Historical cash rewrite is disabled pending database reconciliation.');
     if(options.silent===false && $('syncState')){
-      $('syncState').textContent='历史余额批量改写已禁用：请先执行数据库对账。';
+      $('syncState').textContent='Bulk rewriting historical balances is disabled. Reconcile database records first.';
       $('syncState').className='bad';
     }
     return false;
@@ -7729,12 +7748,12 @@ return `<div class="history-date-card">
     if(!state)return;
     state.replaceChildren();
     const note=document.createElement('span');
-    note.textContent='现金余额暂时无法更新';
+    note.textContent='Cash balance temporarily unavailable';
     note.title=String(message||'Cloud ledger unavailable');
     console.warn('[Cash Ledger] Cloud synchronization:',message);
     state.appendChild(note);
     const retry=document.createElement('button');
-    retry.type='button';retry.textContent='重新同步';
+    retry.type='button';retry.textContent='Retry Sync';
     retry.style.cssText='margin-left:8px;padding:5px 9px;border-radius:8px;border:1px solid currentColor;background:white;color:inherit;font:inherit;cursor:pointer';
     retry.onclick=async()=>{retry.disabled=true;try{const ok=await fetchRows({silent:false});if(ok){renderAll();calc();}}finally{retry.disabled=false;}};
     state.appendChild(retry);
@@ -7742,7 +7761,7 @@ return `<div class="history-date-card">
   }
   async function ndCashLoadSnapshot({silent=false}={}){
     // Background cash refresh must not reset Daily Settlement's visible status.
-    if(!silent){$("syncState").textContent="正在同步…";$("syncState").className="";}
+    if(!silent){$("syncState").textContent="Syncing…";$("syncState").className="";}
     const advanceTask=(async()=>{
       const entries=[];
       for(let offset=0;offset<30000;offset+=500){
@@ -7765,7 +7784,7 @@ return `<div class="history-date-card">
       advanceTask.then(data=>({data,error:null}),error=>({data:null,error})),
       (async()=>{try{if(typeof window.ndCashExpenseCloudDebits!=='function')throw Error('Cash Expense reader not initialized');return {data:await window.ndCashExpenseCloudDebits(db,{start:ND_CASH_LEDGER_START}),error:null};}catch(e){return {data:null,error:e};}})()
         ]),
-        new Promise((_,reject)=>{ndFetchTimeoutHandle=setTimeout(()=>reject(new Error('云端读取超过25秒，请检查网络或数据库查询')),ndFetchTimeoutMs);})
+        new Promise((_,reject)=>{ndFetchTimeoutHandle=setTimeout(()=>reject(new Error('Cloud request exceeded 25 seconds. Check network or database.')),ndFetchTimeoutMs);})
       ]);
     }catch(err){
       ndCashCloudSnapshotReady=false;
@@ -7819,7 +7838,7 @@ return `<div class="history-date-card">
     renderDailyBranchButtons();
     const cashProblems=[ndCashAdvanceError&&('Salary Advance: '+ndCashAdvanceError),ndCashRemittanceError&&('Cash Remittance: '+ndCashRemittanceError),ndApprovedCashExpenseError&&('Cash Expense events: '+ndApprovedCashExpenseError)].filter(Boolean);
     if(!silent||cashProblems.length){
-      $("syncState").textContent=cashProblems.length?'部分同步失败，Cash Balance 暂不可用：'+cashProblems.join(' | '):'云端已同步 ✓';
+      $("syncState").textContent=cashProblems.length?'Partial sync failed. Cash Balance unavailable: '+cashProblems.join(' | '):'Cloud Synced ✓';
       $("syncState").className=cashProblems.length?'bad':'ok';
     }
     return true;
@@ -14373,7 +14392,7 @@ function ndOnboardLedger(){if(byId('ndOnboardProducts')?.querySelector('[data-on
 document.addEventListener('change',event=>{if(event.target.id==='empOutlet'){ndOnboardStockSelection=[];if(byId('ndOnboardNoItems'))byId('ndOnboardNoItems').checked=false;ndRenderSelectedStock();void ndRefreshOnboardStock();}if(event.target.id==='ndOnboardNoItems'&&event.target.checked){ndOnboardStockSelection=[];ndRenderSelectedStock();}});
 document.addEventListener('click',event=>{const remove=event.target.closest?.('[data-onboard-remove]');if(remove){ndOnboardStockSelection=ndOnboardStockSelection.filter(i=>i.id!==remove.dataset.onboardRemove);ndRenderSelectedStock();}});
 
-function ndCanViewItems(e){return !!e&&(e.outlet!=='Collaboration'||ndCanViewCollaboration())&&(isGlobalAdmin||(accessibleSalaryOutlets||[]).includes(e.outlet));}
+function ndCanViewItems(e){return !!e&&(e.outlet!=='Collaboration'||ndCanViewCollaboration())&&(e.outlet==="Collaboration" || isGlobalAdmin||(accessibleSalaryOutlets||[]).includes(e.outlet));}
 window.ndBirthdayCanView=(e,email)=>['umo1017@gmail.com','mars83002566@gmail.com'].includes(String(email||'').toLowerCase())||ndCanViewItems(e);
 window.ndRefreshEmployeeItemChoices=()=>ndRefreshOnboardStock();
 async function ndFetchItemsEmployee(id){
@@ -15014,7 +15033,7 @@ async function loadSalaryData(){
       if(isGlobalAdmin) return true;
 
       if(isPayrollManager) return true;
-      return accessibleSalaryOutlets.includes(e.outlet);
+      return (e.outlet === "Collaboration" && ndCanViewCollaboration()) || accessibleSalaryOutlets.includes(e.outlet);
     })
     .sort((a,b)=>{
       const branchCompare=String(a.outlet||"").localeCompare(String(b.outlet||""));
@@ -15323,7 +15342,7 @@ function renderSevenTable(emps){
     const pm=String(e.payment_method||"").trim();
     const net=Number(s.net_pay||0);
 
-    return `<tr data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
+    return `<tr class="${snap?.payment_done===true?'nd-paid-row':''}" data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e)}</td>
       <td>${snap
         ? `<div class="offday-box confirmed-readonly"><span>${Number(s.off_days_taken||0)}</span><span class="days-suffix">Days</span></div>`
@@ -15479,7 +15498,7 @@ function renderFourteenTable(emps){
     else if(pm==="Bank Transfer") transferTotal+=net;
     else if(pm==="TNG") tngTotal+=net;
 
-    return `<tr>
+    return `<tr class="${cs?.payment_done===true?'nd-paid-row':''}">
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e)}</td>
       <td>${cs?money(a):salaryOverrideInput(e.id,"14","commission_a",a)}</td>
       <td>${cs?money(b):salaryOverrideInput(e.id,"14","commission_b",b)}</td>
@@ -16023,7 +16042,7 @@ function renderSalary(){
         ...salaryBranches.map(b=>String(b.name||"")).filter(Boolean),
         ...salaryEmployees.map(e=>String(e.outlet||"")).filter(Boolean)
       ])]
-    : [...accessibleSalaryOutlets];
+    : [...new Set([...accessibleSalaryOutlets,...(ndCanViewCollaboration()?["Collaboration"]:[])])];
   if(!ndCanViewCollaboration()){const i=visibleOutlets.indexOf("Collaboration");if(i>=0)visibleOutlets.splice(i,1);}
 
   const branchNames=visibleOutlets
@@ -17812,7 +17831,8 @@ async function inlineEditEmployeeField(empId,fieldId){
 }
 
 function ndCanViewCollaboration(){
-  return String(currentSalaryUserEmail||'').trim().toLowerCase()==='umo1017@gmail.com';
+  // Read-only availability for authenticated users; server RLS remains authoritative.
+  return !!String(currentSalaryUserEmail||'').trim();
 }
 function canEditStaffRecord(e){
   if(String(e?.outlet||'').trim()==='Collaboration' && !ndCanViewCollaboration()) return false;
@@ -17869,7 +17889,7 @@ window.ndRefreshStaffDirectory=async function(){
   await determineManager();await loadSalaryBranches(false);
   const {data,error}=await salaryDb.from('employees').select('*').order('outlet').order('name');
   if(error)throw Error(error.message||'Unable to load employees.');
-  salaryEmployees=(data||[]).filter(e=>isGlobalAdmin||isPayrollManager||(accessibleSalaryOutlets||[]).includes(e.outlet)).sort(salaryStaffSort);
+  salaryEmployees=(data||[]).filter(e=>isGlobalAdmin||isPayrollManager||(e.outlet==="Collaboration"&&ndCanViewCollaboration())||(accessibleSalaryOutlets||[]).includes(e.outlet)).sort(salaryStaffSort);
   return salaryEmployees;
  })().finally(()=>{ndStaffDirectoryLoading=null});
  return ndStaffDirectoryLoading;
@@ -17976,8 +17996,8 @@ function renderStaffList(){
  if(!isGlobalAdmin)ndStaffArchiveView=false;
   const staffOutlets=[...new Set([
     ...(isGlobalAdmin ? [...salaryBranches.map(b=>b.name),...salaryEmployees.map(e=>e.outlet),"Global"] : (accessibleSalaryOutlets||[]).filter(x=>x && x!=="Global")),
-    ...(isGlobalAdmin || (accessibleSalaryOutlets||[]).includes("Collaboration") ? ["Collaboration"] : [])
-  ])].filter(x=>x && (x!=="Global" || isGlobalAdmin) && (x!=="Collaboration" || ndCanViewCollaboration()) && (isGlobalAdmin || (accessibleSalaryOutlets||[]).includes(x))).sort((a,b)=>
+    ...(ndCanViewCollaboration() ? ["Collaboration"] : [])
+  ])].filter(x=>x && (x!=="Global" || isGlobalAdmin) && (x!=="Collaboration" || ndCanViewCollaboration()) && (x==="Collaboration" && ndCanViewCollaboration() || isGlobalAdmin || (accessibleSalaryOutlets||[]).includes(x))).sort((a,b)=>
     a==="Collaboration"?-1:b==="Collaboration"?1:String(a).localeCompare(String(b))
   );
 
@@ -18997,7 +19017,7 @@ function getVisibleSalaryBranchPaymentRows(){
         ...salaryBranches.map(b=>String(b.name||"")).filter(Boolean),
         ...salaryEmployees.map(e=>String(e.outlet||"")).filter(Boolean)
       ])]
-    : [...accessibleSalaryOutlets];
+    : [...new Set([...accessibleSalaryOutlets,...(ndCanViewCollaboration()?["Collaboration"]:[])])];
   if(!ndCanViewCollaboration()){const i=visibleOutlets.indexOf("Collaboration");if(i>=0)visibleOutlets.splice(i,1);}
 
   return visibleOutlets.map(branch=>{
@@ -38552,6 +38572,20 @@ function enhance(){
   }
   function start(){setTimeout(()=>void check(),3500);setInterval(()=>void check(),60000);window.addEventListener('focus',()=>void check());document.addEventListener('visibilitychange',()=>{if(!document.hidden)void check();});window.addEventListener('pageshow',()=>void check());document.addEventListener('close',()=>setTimeout(()=>void check(),200),true);}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+</script>
+
+<style id="nd-daily-english-date-v1">
+#appView .nd-staff-date-field:has(> #settlementDate){position:relative}
+#appView #settlementDate{position:relative;z-index:2;color:transparent!important;-webkit-text-fill-color:transparent!important;cursor:pointer;opacity:.015}
+#appView .nd-staff-date-field:has(> #settlementDate)::before{content:attr(data-date-en);position:absolute;inset:0;display:flex;align-items:center;padding:0 18px;color:#29362f;font-weight:650;font-size:16px;pointer-events:none;z-index:3;border:1px solid #dadbd5;border-radius:12px;background:#fff;white-space:nowrap}
+#appView .nd-staff-date-field:has(> #settlementDate):focus-within::before{border-color:#6b8a75}
+</style>
+<script id="nd-daily-english-date-v1">
+(()=>{'use strict';
+function paint(){const field=document.getElementById('settlementDate');if(!field)return;const box=field.parentElement;const raw=field.value;let label='Select Date';if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){const date=new Date(raw+'T12:00:00Z');label=new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric'}).format(date)}box.dataset.dateEn=label;field.setAttribute('lang','en-GB');}
+function init(){const input=document.getElementById('settlementDate');if(!input)return;input.addEventListener('input',paint);input.addEventListener('change',paint);paint();const branch=document.getElementById('appView');if(!branch)return;const mo=new MutationObserver(()=>{if(input.parentElement?.dataset.dateEn===undefined||!input.value)return;const d=new Date(input.value+'T12:00:00Z');const want=Number.isNaN(+d)?'Select Date':new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric'}).format(d);if(input.parentElement.dataset.dateEn!==want)paint()});mo.observe(input,{attributes:true,attributeFilter:['value']});document.addEventListener('click',e=>{if(e.target.closest?.('#dailyBranchToggle,.branch-btn'))requestAnimationFrame(paint)},true);setInterval(paint,2500);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
 </body>
