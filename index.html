@@ -12933,8 +12933,10 @@ function ndFourteenUpdateTotals(c,seven){
   c.seventh_deduction_refund=0;
   c.seventh_salary_advance_deduction=0; // no separate 7th advance deduction
   c.salary_advance_deduction=cents(c.salary_advance_deduction||0); // 14th advance
+  // The optional 14th manual deduction is distinct from Pending Company Fine.
+  c.manual_deduction_14=cents(Math.max(0,Number(c.manual_deduction_14||0)));
   c.commission=cents(c.raw_commission-c.seventh_deducted_allowance
-    -costs.seventh_total_deduction-c.salary_advance_deduction);
+    -costs.seventh_total_deduction-c.salary_advance_deduction-c.manual_deduction_14);
   c.total_income=c.total_commission;
   c.net_pay=c.commission;
   c.has_payslip=true;
@@ -12945,7 +12947,7 @@ function applyFourteenManualOverrides(e,base,salaryMonth=monthDate(),source=sala
   const c={...base};
   const empId=Number(e?.id||base?.employee_id||0);
   // Only the editable 14th inputs may override the calculated values.
-  for(const field of ["commission_a","commission_b","customer_referral","staff_referral"]){
+  for(const field of ["commission_a","commission_b","customer_referral","staff_referral","manual_deduction_14"]){
     if(salaryOverrideHas(empId,"14",field,salaryMonth,source)){
       c[field]=salaryOverrideValue(empId,"14",field,c[field],salaryMonth,source);
     }
@@ -15354,7 +15356,7 @@ function renderSevenTable(emps){
         <th rowspan="2">Unpaid</th>
         <th rowspan="2">PCB / Tax</th>
         <th rowspan="2">Clocked Hrs</th><th rowspan="2">Off-Days</th><th rowspan="2">Total Hrs</th><th rowspan="2">Overtime (RM)</th>
-        <th rowspan="2">Deduction</th><th rowspan="2">Salary Advance</th><th rowspan="2" title="Approved incident amount, pending separate lawful wage deduction authorization">Deduction (Pending)</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
+        <th rowspan="2">Deduction</th><th rowspan="2">Salary Advance</th><th rowspan="2" title="Approved incident amount, pending separate lawful wage deduction authorization">Fine Deduction</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
         <th colspan="3" class="netpay-group-head">Net Pay</th>
         <th rowspan="2">Confirm</th><th rowspan="2">7th Monthly Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
       </tr>
@@ -15454,6 +15456,7 @@ function renderFourteenTable(emps){
       <td title="7th Total Deduction minus Unpaid / Off Day Deduction (automatic)." data-live-seven-total-deduction14="${e.id}">${money(seventhTotalDeduction)}</td>
       <td title="Salary Advance Repayment automatically routed to 14th Salary" data-live-advance14="${e.id}">${advance14===null?'—':money(advance14)}</td>
       <td title="Approved incident amount only; not deducted from wages">${money(ndAutoPayrollAmount(e,'fine14'))}<div class="helper" style="font-size:10px">Pending · Not deducted</div></td>
+      <td data-live-manual-deduction14="${e.id}">${cs?money(salaryOverrideValue(e.id,'14','manual_deduction_14',0)):salaryOverrideInput(e.id,'14','manual_deduction_14',c.manual_deduction_14||0)}</td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
@@ -15486,7 +15489,8 @@ function renderFourteenTable(emps){
       <th rowspan="2">− Allowance</th>
       <th rowspan="2">− 7th Total Deduction (Auto)</th>
       <th rowspan="2">− 14th Salary Advance (Auto)</th>
-      <th rowspan="2" title="Approved incident amount, pending separate lawful wage deduction authorization">Deduction (Pending)</th>
+      <th rowspan="2" title="Approved incident amount, pending separate lawful wage deduction authorization">Fine Deduction</th>
+      <th rowspan="2" title="Manually entered, authorized deduction. Not linked to pending Company Fine.">− Deduction</th>
       <th rowspan="2">Commission</th>
       <th rowspan="2">Nett Pay</th><th colspan="3" class="netpay-group-head">Net Pay by Method</th><th rowspan="2">Confirm</th><th rowspan="2">14th Commission Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
     </tr><tr>
@@ -15495,7 +15499,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="15" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="16" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -15503,7 +15507,7 @@ function renderFourteenTable(emps){
       </tr>
       ${rows}
       <tr class="netpay-summary-row" style="display:none">
-        <td colspan="12" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
+        <td colspan="13" style="text-align:right;font-weight:900">PAYMENT TOTAL</td>
         <td class="netpay-method-total">${money(cashTotal)}</td>
         <td class="netpay-method-total">${money(transferTotal)}</td>
         <td class="netpay-method-total">${money(tngTotal)}</td>
@@ -16220,6 +16224,20 @@ function recalc14thLive(empId){
   const calc=applyFourteenManualOverrides(e,calculate14th(
     {...m,reward:Number(m.reward||0)+(e?ndTargetBonusForEmployee(e):0),w_bonus:0},
     snapshotFor(empId),salaryQuarter3BonusFor(empId)));
+  // Show the actual amount being typed, even before the change/blur save fires.
+  // Confirmed 14th Salary is immutable and never uses draft input amounts.
+  if(!commissionSnapshotFor(empId)){
+    let changed=false;
+    for(const field of ['commission_a','commission_b','customer_referral','staff_referral','manual_deduction_14']){
+      const input=Array.from(document.querySelectorAll('[data-salary-override][data-payroll-type="14"]'))
+        .find(node=>Number(node.dataset.salaryOverride)===Number(empId) && node.dataset.overrideField===field);
+      if(input){
+        const num=Number(input.value);
+        if(Number.isFinite(num) && num>=0){calc[field]=num;changed=true;}
+      }
+    }
+    if(changed)ndFourteenUpdateTotals(calc,snapshotFor(empId));
+  }
 
   const totalCell=document.querySelector(`[data-live-totalcommission14="${empId}"]`);
   if(totalCell) totalCell.textContent=money(calc.total_commission);
@@ -16251,14 +16269,24 @@ function recalc14thLive(empId){
 
 function bindSalaryTableActions(){
   document.querySelectorAll("[data-salary-override]").forEach(inp=>{
+    // The four 14th commission fields immediately update the visible totals.
+    if(inp.dataset.payrollType==='14' && ['commission_a','commission_b','customer_referral','staff_referral','manual_deduction_14'].includes(inp.dataset.overrideField)){
+      inp.addEventListener('input',()=>recalc14thLive(Number(inp.dataset.salaryOverride)));
+    }
     inp.addEventListener("change",async()=>{
       const empId=Number(inp.dataset.salaryOverride);
       const payrollType=String(inp.dataset.payrollType||"");
       const field=String(inp.dataset.overrideField||"");
-      const value=Number(inp.value||0);
+      const value=Number(inp.value);
+      if(!Number.isFinite(value)||value<0){alert('Enter a valid non-negative amount.');return;}
       inp.disabled=true;
-      const ok=await saveSalaryManualOverride(empId,payrollType,field,value);
-      if(!ok) inp.disabled=false;
+      try{
+        const ok=await saveSalaryManualOverride(empId,payrollType,field,value);
+        if(!ok) inp.disabled=false;
+      }catch(error){
+        inp.disabled=false;
+        alert('Salary amount was not saved: '+(error?.message||error));
+      }
     });
   });
 
@@ -16965,6 +16993,19 @@ async function confirm14th(empId){
     if(!window.ndPayrollDeductionLedger?.ready || window.ndPayrollDeductionLedger.month!==monthKey()){
       alert('Salary Advance Repayment is not synced. Refresh Salary before Confirm 14th.');return;
     }
+    // Verify manual deductions from database before confirmation (multi-device safe).
+    const manualCloud=await salaryDb.from('salary_manual_overrides')
+      .select('value').eq('employee_id',id).eq('salary_month',salaryMonth)
+      .eq('payroll_type','14').eq('field','manual_deduction_14').maybeSingle();
+    if(manualCloud.error)throw manualCloud.error;
+    const cloudManual=Number(manualCloud.data?.value||0);
+    if(!Number.isFinite(cloudManual)||cloudManual<0)throw Error('Invalid 14th manual deduction.');
+    const localManual=salaryOverrideValue(id,'14','manual_deduction_14',0);
+    if(Math.abs(cloudManual-localManual)>0.001){
+      await refreshSalaryStayHere();
+      alert('Deduction changed on another device. Review the refreshed salary before confirming.');
+      return;
+    }
     // 14th Allowance deduction is based solely on 7th payroll; no extra manual field.
     const m=monthlyFor(id);
     const c=applyFourteenManualOverrides(e,calculate14th({...m,reward:Number(m.reward||0)+ndTargetBonusForEmployee(e),w_bonus:0},snapshotFor(id),salaryQuarter3BonusFor(id)));
@@ -16974,8 +17015,9 @@ async function confirm14th(empId){
       commission_a:Number(c.commission_a||0),
       commission_b:Number(c.commission_b||0),
       total_commission:Number(c.total_commission||0),
-      customer_referral:Number(m.customer_referral||0),
-      staff_referral:Number(m.staff_referral||0),
+      // Persist the same overridden values used for displayed Total Commission.
+      customer_referral:Number(c.customer_referral||0),
+      staff_referral:Number(c.staff_referral||0),
       bonus:Number(c.bonus||0),
       three_month_bonus:Number(c.three_month_bonus||0),
       w_bonus:Number(c.w_bonus||0),
@@ -18196,10 +18238,11 @@ async function openPayslip(empId,type){
     const c={...rawC};
     const ndMoney=v=>Math.round((Number(v)||0)*100)/100;
     const net=ndMoney(c.net_pay);
-    const gross=net;
-    const deduction=0;
+    const manualDeduction=Math.max(0,ndMoney(salaryOverrideValue(empId,'14','manual_deduction_14',0)));
+    const gross=ndMoney(net+manualDeduction);
+    const deduction=manualDeduction;
     const earningHtml=payslipLine("Commission",gross);
-    const deductionHtml="";
+    const deductionHtml=manualDeduction>0?payslipLine("Deduction",manualDeduction):"";
     const ndFmt=v=>ndMoney(v).toFixed(2);
 
     // A confirmed 14th payslip is viewable even when Nett Pay is zero or negative.
@@ -33065,7 +33108,7 @@ async function deleteIncident(row,button){
  const show=message=>{if(status)status.textContent=message;note(message)};
  if(email!=='umo1017@gmail.com'){show('Only UMO can delete deduction records.');return;}
  if(!row){show('Record not found. Refresh the history and try again.');return;}
- if(!confirm('Delete this staff deduction history record?'))return;
+ if(!confirm(row.warning_letter?'Delete this Warning Letter History record? This action cannot be undone.':'Delete this staff deduction history record?'))return;
  button.disabled=true;show('Deleting…');
  try{
   const result=await db().rpc('nd_staff_incident_delete',{p_id:String(row.id),p_expected_status:row.review_status,p_expected_amount:Number(row.approved_amount||0)});
@@ -33077,32 +33120,9 @@ async function deleteIncident(row,button){
  }catch(error){show('Unable to delete: '+(error?.message||String(error)));}
  finally{if(button.isConnected)button.disabled=false;}
 }
-function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3></div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${email?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Fine Letter</button><button class="btn" type="button" id="nddNewWarning">New Warning Letter</button>${isAdmin()?'<button class="btn" type="button" id="nddManage">Manage Reasons</button>':''}</div><div id="nddForm" style="display:none"><h4 id="nddFormTitle">Fine Letter</h4><input type="hidden" id="nddDocumentKind" value="fine"><div class="ndd-grid"><div id="nddWarningLevelWrap" style="display:none"><label for="nddWarningLevel">Warning Level</label><select id="nddWarningLevel"><option value="1">Warning 1</option><option value="2">Warning 2</option><option value="3">Warning 3</option></select></div><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en})),selectedReason)}</select></div><div id="nddFineAmountWrap"><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div></div><div class="ndd-grid" style="margin-top:12px"><div class="ndd-full"><label for="nddIncidentText">Incident Description</label><textarea id="nddIncidentText" rows="6" placeholder="Describe the incident, date, place and confirmed facts."></textarea></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Add Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Pending Approval · All Months</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Document</th><th>Proposed RM</th><th>Action</th></tr></thead><tbody>${records.filter(r=>r.review_status==='pending').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${r.warning_letter?"Warning "+(Number((()=>{try{return JSON.parse(r.details||"{}").warning_level}catch(_){return 1}})())||1):"Fine Letter"}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${isAdmin()?`<button class="mini" data-review="${r.id}">Approve / Reject</button>`:'Awaiting UMO / Mars'}${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}</td></tr>`).join('')||'<tr><td colspan="7">No pending records.</td></tr>'}</tbody></table></div><div class="ndd-actions"><h4>Fine Letter History</h4><label for="nddHistoryMonth">Month <input id="nddHistoryMonth" type="month" value="${esc(historyMonth||mm)}"></label></div><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.some(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm))?records.filter(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${Number(r.approved_amount||0)>0?`<button class="mini" data-fine="${r.id}">Fine Letter</button>`:''}${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="8">No records for this month.</td></tr>'}</tbody></table></div><h4>Warning Letter History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Warning</th><th>Reason</th><th>Document</th></tr></thead><tbody>${records.filter(r=>r.review_status==='approved'&&r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>{let w=1;try{w=Number(JSON.parse(r.details||'{}').warning_level)||1}catch(_){}return `<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>Warning ${w}</td><td>${esc(r.reason_en)}</td><td><button class="mini" data-warning="${r.id}">View / PDF</button></td></tr>`}).join('')||'<tr><td colspan="6">No warning letters for this month.</td></tr>'}</tbody></table></div>`;
+function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3></div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${email?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Fine Letter</button><button class="btn" type="button" id="nddNewWarning">New Warning Letter</button>${isAdmin()?'<button class="btn" type="button" id="nddManage">Manage Reasons</button>':''}</div><div id="nddForm" style="display:none"><h4 id="nddFormTitle">Fine Letter</h4><input type="hidden" id="nddDocumentKind" value="fine"><div class="ndd-grid"><div id="nddWarningLevelWrap" style="display:none"><label for="nddWarningLevel">Warning Level</label><select id="nddWarningLevel"><option value="1">Warning 1</option><option value="2">Warning 2</option><option value="3">Warning 3</option></select></div><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en})),selectedReason)}</select></div><div id="nddFineAmountWrap"><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div></div><div class="ndd-grid" style="margin-top:12px"><div class="ndd-full"><label for="nddIncidentText">Incident Description</label><textarea id="nddIncidentText" rows="6" placeholder="Describe the incident, date, place and confirmed facts."></textarea></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Add Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Pending Approval · All Months</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Document</th><th>Proposed RM</th><th>Action</th></tr></thead><tbody>${records.filter(r=>r.review_status==='pending').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${r.warning_letter?"Warning "+(Number((()=>{try{return JSON.parse(r.details||"{}").warning_level}catch(_){return 1}})())||1):"Fine Letter"}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${isAdmin()?`<button class="mini" data-review="${r.id}">Approve / Reject</button>`:'Awaiting UMO / Mars'}${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}</td></tr>`).join('')||'<tr><td colspan="7">No pending records.</td></tr>'}</tbody></table></div><div class="ndd-actions"><h4>Fine Letter History</h4><label for="nddHistoryMonth">Month <input id="nddHistoryMonth" type="month" value="${esc(historyMonth||mm)}"></label></div><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.some(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm))?records.filter(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${Number(r.approved_amount||0)>0?`<button class="mini" data-fine="${r.id}">Fine Letter</button>`:''}${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="8">No records for this month.</td></tr>'}</tbody></table></div><h4>Warning Letter History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Warning</th><th>Reason</th><th>Document</th></tr></thead><tbody>${records.filter(r=>r.review_status==='approved'&&r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>{let w=1;try{w=Number(JSON.parse(r.details||'{}').warning_level)||1}catch(_){}return `<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>Warning ${w}</td><td>${esc(r.reason_en)}</td><td><button class="mini" data-warning="${r.id}">View / PDF</button>${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="6">No warning letters for this month.</td></tr>'}</tbody></table></div>`;
 const rejected=records.filter(r=>r.review_status==='rejected'&&String(r.incident_date).startsWith(historyMonth||mm));if(rejected.length)m.insertAdjacentHTML('beforeend','<h4>Rejected History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Status</th></tr></thead><tbody>'+rejected.map(r=>'<tr><td>'+esc(r.incident_date)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.employee_name)+'</td><td>'+esc(r.reason_en)+'</td><td>'+Number(r.proposed_amount||0).toFixed(2)+'</td><td>Rejected'+(email==='umo1017@gmail.com'?' <button class="mini" data-incident-delete="'+esc(r.id)+'">Delete</button>':'')+'</td></tr>').join('')+'</tbody></table></div>');
 $('nddHistoryMonth').onchange=async()=>{historyMonth=val('nddHistoryMonth')||month();try{await load()}catch(error){note('Unable to load history: '+error.message)}};
-
-// Payroll window is informational until a legally permitted deduction is separately recorded.
-const formWindow=$('nddForm');
-if(formWindow && !$('nddSalaryWindow')){
-  const windowInfo=document.createElement('div');windowInfo.id='nddSalaryWindow';
-  windowInfo.setAttribute('role','status');
-  windowInfo.style.cssText='margin:8px 0;padding:10px 12px;border:1px solid #dce4ef;border-radius:10px;background:#f6f9ff;font-size:13px;color:#3c5268';
-  const updateWindow=()=>{
-    const date=String(val('nddDate')||'');const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-    if(!match){windowInfo.textContent='Select Incident Date to see the proposed payroll window.';return}
-    const day=Number(match[3]);
-    const incidentMonth=match[1]+'-'+match[2];
-    const priorDate=new Date(Date.UTC(Number(match[1]),Number(match[2])-2,1));
-    const priorMonth=priorDate.getUTCFullYear()+'-'+String(priorDate.getUTCMonth()+1).padStart(2,'0');
-    const payrollMonth=day<=14?priorMonth:incidentMonth;
-    const payrollType=day<=7?'7th':day<=14?'14th':'7th';
-    windowInfo.textContent='Proposed deduction allocation: '+payrollType+' Salary · '+payrollMonth+
-      (day>14?' (incident month).':' (previous salary month).')+
-      ' Subject to authorization and payroll confirmation status.';
-  };
-  const dateInput=$('nddDate');if(dateInput){dateInput.insertAdjacentElement('afterend',windowInfo);dateInput.addEventListener('input',updateWindow);dateInput.addEventListener('change',updateWindow)}
-  updateWindow();
-}
 
 // Staff Deductions is an embedded Salary page; no Close button is rendered.
 // Do not bind nddClose: it was removed from the page layout.
@@ -33185,12 +33205,12 @@ function warningDocumentMarkup(record,number,signed,branding={}){
  const footer=page=>'<footer class="warn-footer"><span>NATURES DAO GROUP - CONFIDENTIAL LEGAL DOCUMENT</span><span>Page '+page+'</span></footer>';
  const running='<div class="warn-running"><strong>NATURES DAO GROUP</strong><span>|</span><span>HUMAN RESOURCES &amp; MANAGEMENT</span></div>';
  const row=(label,value)=>'<tr><th>'+esc(label)+'</th><td>'+esc(value||'')+'</td></tr>';
- const name=esc(record.employee_name||''),decision=details.decision||'Following a review of the incident and the information available, the Company has decided to provide one opportunity to correct the conduct and continue employment. The employee is required to comply with all Company rules and prevent any recurrence.';
+ const identity=String(record.nd_identity_number||'').trim(),name=esc(record.employee_name||''),decision=details.decision||'Following a review of the incident and the information available, the Company has decided to provide one opportunity to correct the conduct and continue employment. The employee is required to comply with all Company rules and prevent any recurrence.';
  const companies=["NATURE'S DAO GLOBAL HOLDINGS SDN BHD","NATURE'S DAO SDN BHD","NATURE'S DAO THE MAZE SDN BHD","MCT BEAUTY PTE LTD","LEINGBOX ENTERPRISE","EMC GLOBAL HOLDINGS SDN BHD","DM INTERNATIONAL TRADING & LOGISTICS SDN BHD","R TRADER MONEY CHANGER (M) SDN BHD"];
  return `<article class="nd-warning-document"><section class="warn-page warn-cover"><img class="warn-cover-logo" src="${ND_WARNING_LOGO}" alt="Nature's Dao Group"><div class="warn-cover-brand">NATURES DAO GROUP</div><div class="warn-cover-sub">GROUP HUMAN RESOURCES &amp; DISCIPLINARY DOCUMENT</div><div class="warn-cover-rule"></div><h1>${title}</h1><div class="warn-cover-employee">EMPLOYEE: ${name}</div><div class="warn-cover-subject">${esc(subject)}</div><div class="warn-gold-label">GROUP COMPANIES</div><div class="warn-companies">${companies.map(company=>'<div>'+esc(company)+'</div>').join('')}</div><div class="warn-gold-label">CONFIDENTIAL LEGAL DOCUMENT</div><div class="warn-cover-sub"><i>For Internal Management &amp; Employee Record Use Only</i></div>${footer(1)}</section>
- <section class="warn-page">${running}<h1>${title}</h1><table class="warn-meta"><tbody>${row('Employee Name',record.employee_name)}${row('Warning Level',level)}${row('Penalty',money)}${row('Subject',subject)}${row('Department / Branch',record.outlet)}${row('Incident Date',record.incident_date)}</tbody></table><h2>1. INCIDENT</h2><p>${esc(details.incident||record.reason_en||'')}</p><p>This conduct constitutes a breach of the Company's internal rules, safety requirements, and expected standards of employee conduct, and could create a risk to employees, Company property, and the workplace.</p><h2>2. MANAGEMENT DECISION</h2><p>${esc(decision)}</p><div class="warn-action">DISCIPLINARY ACTION<strong>${title}${amount>0?' + PENALTY: '+money:''}</strong></div><p>This decision is an opportunity granted by the Company and shall not be interpreted as acceptance, permission, or tolerance of the conduct concerned. If any similar incident occurs again, including any incident involving weapons, threats of violence, disorderly conduct while intoxicated, endangerment of another person, or any other serious breach of Company discipline, the Company reserves the right to take further disciplinary action, including issuance of a Serious Warning or Final Warning, suspension, termination of employment, and, where appropriate, reporting the matter to the relevant authorities.</p>${footer(2)}</section>
- <section class="warn-page">${running}<h1>ADDITIONAL COMPANY RULES</h1><p>With immediate effect, all employees are required to strictly comply with the following rules:</p><h3>A. ALCOHOL ON COMPANY PREMISES</h3><p>All employees are strictly prohibited from consuming alcohol on Company premises or inside the outlet. No employee may consume alcoholic beverages in the outlet during operating hours or after business hours without formal management approval.</p><p><strong>BREACH OF THIS RULE: FIRST WARNING LETTER + PENALTY OF MYR 500.</strong> The Company may impose the warning, the penalty, or both, depending on the circumstances.</p><p>Where alcohol consumption results in intoxication, disorderly conduct, fighting, threats, possession of a dangerous weapon, damage to Company property, or endangerment of any employee, the Company may impose more serious disciplinary action according to the severity of the incident.</p><h3>B. NON-EMPLOYEES / UNAUTHORISED PERSONS</h3><p>After business hours, employees are prohibited from allowing any non-employee, friend, acquaintance, or other unauthorised person to enter or remain overnight on Company premises without prior management approval.</p><p><strong>BREACH OF THIS RULE: SERIOUS WARNING LETTER + PENALTY OF MYR 1,000, or both,</strong> depending on the seriousness of the incident.</p><h3>C. RESPONSIBILITY FOR LOSS OR DAMAGE</h3><p>If an employee brings a friend, acquaintance, or other non-employee onto Company premises, or permits such person to stay overnight without Company approval, and any cash, item, equipment, stock, personal property, or other Company asset is found missing, damaged, or short during the relevant period, the Company will investigate the matter.</p><p>If the investigation confirms that the loss or damage is connected to a non-employee who was brought in or allowed to stay by the employee without authorisation, the employee shall bear the appropriate responsibility and compensation liability in accordance with the investigation findings and applicable law. If the employee refuses to satisfy a confirmed lawful compensation or disciplinary obligation, the Company may make any lawful deduction from wages or other sums payable to the employee only to the extent permitted by applicable Malaysian employment law, the employment contract, and Company payroll policy.</p><h3>D. MANAGEMENT RIGHTS</h3><p>Management reserves the right to add to, amend, revise, or update the above Company rules, disciplinary measures, and internal policies at any time in accordance with operational requirements, safety needs, and applicable law. Employees are responsible for complying with all current Company rules and any rules formally issued in the future.</p>${footer(3)}</section>
- <section class="warn-page">${running}<h1>EMPLOYEE ACKNOWLEDGEMENT</h1><p>I acknowledge that I have read, understood, and received this ${esc(level)} Letter. I understand the seriousness of the incident and agree to comply strictly with all Company disciplinary, safety, and employee conduct requirements. I further understand that any recurrence of similar conduct or any other serious breach may result in further disciplinary action.</p><table class="warn-meta warn-sign-table"><tbody>${row('Employee Name',record.employee_name)}<tr><th>Employee Signature</th><td>${employeeSignature?'<img class="warn-signature" src="'+esc(employeeSignature)+'" alt="Employee signature">':'<div class="warn-sign-space"></div>'}</td></tr>${row('Date',signed?.signed_at?new Date(signed.signed_at).toLocaleDateString('en-GB',{timeZone:'Asia/Kuala_Lumpur'}):'')}${row('Witness',details.witness)}</tbody></table><h2>MANAGEMENT APPROVAL</h2><table class="warn-meta warn-sign-table"><tbody>${row('Management Name',details.management_name)}${row('Position',details.management_position)}<tr><th>Management Signature</th><td>${managementSignature?'<img class="warn-signature" src="'+esc(managementSignature)+'" alt="Management signature">':'<div class="warn-sign-space"></div>'}</td></tr>${row('Date',record.incident_date)}</tbody></table><div class="warn-stamp">COMPANY STAMP${stamp?'<img src="'+esc(stamp)+'" alt="Company stamp">':'<div style="height:105px"></div>'}</div><p class="warn-small">Employee signature acknowledges receipt. This record does not authorize an automatic wage deduction.</p>${footer(4)}</section></article>`;
+ <section class="warn-page">${running}<h1>${title}</h1><table class="warn-meta"><tbody>${row('Employee Name',record.employee_name)}${identity?row('IC / Passport No.',identity):''}${row('Warning Level',level)}${row('Subject',subject)}${row('Department / Branch',record.outlet)}${row('Incident Date',record.incident_date)}</tbody></table><h2>1. INCIDENT</h2><p>${esc(details.incident||record.reason_en||'')}</p><p>This conduct constitutes a breach of the Company's internal rules, safety requirements, and expected standards of employee conduct, and could create a risk to employees, Company property, and the workplace.</p><h2>2. MANAGEMENT DECISION</h2><p>${esc(decision)}</p><div class="warn-action">DISCIPLINARY ACTION<strong>${title}</strong></div><p>This decision is an opportunity granted by the Company and shall not be interpreted as acceptance, permission, or tolerance of the conduct concerned. If any similar incident occurs again, including any incident involving weapons, threats of violence, disorderly conduct while intoxicated, endangerment of another person, or any other serious breach of Company discipline, the Company reserves the right to take further disciplinary action, including issuance of a Serious Warning or Final Warning, suspension, termination of employment, and, where appropriate, reporting the matter to the relevant authorities.</p>${footer(2)}</section>
+ <section class="warn-page">${running}<h1>ADDITIONAL COMPANY RULES</h1><p>With immediate effect, all employees are required to strictly comply with the following rules:</p><h3>A. ALCOHOL ON COMPANY PREMISES</h3><p>All employees are strictly prohibited from consuming alcohol on Company premises or inside the outlet. No employee may consume alcoholic beverages in the outlet during operating hours or after business hours without formal management approval.</p><p><strong>BREACH OF THIS RULE: FIRST WARNING LETTER.</strong> Further disciplinary action may be taken depending on the circumstances.</p><p>Where alcohol consumption results in intoxication, disorderly conduct, fighting, threats, possession of a dangerous weapon, damage to Company property, or endangerment of any employee, the Company may impose more serious disciplinary action according to the severity of the incident.</p><h3>B. NON-EMPLOYEES / UNAUTHORISED PERSONS</h3><p>After business hours, employees are prohibited from allowing any non-employee, friend, acquaintance, or other unauthorised person to enter or remain overnight on Company premises without prior management approval.</p><p><strong>BREACH OF THIS RULE: SERIOUS WARNING LETTER,</strong> depending on the seriousness of the incident.</p><h3>C. RESPONSIBILITY FOR LOSS OR DAMAGE</h3><p>If an employee brings a friend, acquaintance, or other non-employee onto Company premises, or permits such person to stay overnight without Company approval, and any cash, item, equipment, stock, personal property, or other Company asset is found missing, damaged, or short during the relevant period, the Company will investigate the matter.</p><p>If the investigation confirms that the loss or damage is connected to a non-employee who was brought in or allowed to stay by the employee without authorisation, the employee shall bear the appropriate responsibility and compensation liability in accordance with the investigation findings and applicable law. If the employee refuses to satisfy a confirmed lawful compensation or disciplinary obligation, the Company may make any lawful deduction from wages or other sums payable to the employee only to the extent permitted by applicable Malaysian employment law, the employment contract, and Company payroll policy.</p><h3>D. MANAGEMENT RIGHTS</h3><p>Management reserves the right to add to, amend, revise, or update the above Company rules, disciplinary measures, and internal policies at any time in accordance with operational requirements, safety needs, and applicable law. Employees are responsible for complying with all current Company rules and any rules formally issued in the future.</p>${footer(3)}</section>
+ <section class="warn-page">${running}<h1>EMPLOYEE ACKNOWLEDGEMENT</h1><p>I acknowledge that I have read, understood, and received this ${esc(level)} Letter. I understand the seriousness of the incident and agree to comply strictly with all Company disciplinary, safety, and employee conduct requirements. I further understand that any recurrence of similar conduct or any other serious breach may result in further disciplinary action.</p><table class="warn-meta warn-sign-table"><tbody>${row('Employee Name',record.employee_name)}${identity?row('IC / Passport No.',identity):''}<tr><th>Employee Signature</th><td>${employeeSignature?'<img class="warn-signature" src="'+esc(employeeSignature)+'" alt="Employee signature">':'<div class="warn-sign-space"></div>'}</td></tr>${row('Date',signed?.signed_at?new Date(signed.signed_at).toLocaleDateString('en-GB',{timeZone:'Asia/Kuala_Lumpur'}):'')}${row('Witness',details.witness)}</tbody></table><h2>MANAGEMENT APPROVAL</h2><table class="warn-meta warn-sign-table"><tbody>${row('Management Name',details.management_name)}${row('Position',details.management_position)}<tr><th>Management Signature</th><td>${managementSignature?'<img class="warn-signature" src="'+esc(managementSignature)+'" alt="Management signature">':'<div class="warn-sign-space"></div>'}</td></tr>${row('Date',record.incident_date)}</tbody></table><div class="warn-stamp">COMPANY STAMP${stamp?'<img src="'+esc(stamp)+'" alt="Company stamp">':'<div style="height:105px"></div>'}</div><p class="warn-small">Employee signature acknowledges receipt. This record does not authorize an automatic wage deduction.</p>${footer(4)}</section></article>`;
 }
 function fitStaffLetterPreview(root){
  root._ndWarningResize?.disconnect();const documentNode=root.querySelector('.nd-warning-document');if(!documentNode)return;documentNode.dataset.warningFit='';
@@ -33202,6 +33222,12 @@ function warningTableMissing(error,table){return !!error&&String(error.message||
 async function letter(r){
  if(!r||r.nd_deleted_at||r.review_status!=='approved'){alert('Approved record required.');return}if(!r.warning_letter){alert('This record does not require a warning letter.');return}
  try{
+ // Read identity from the employee's current staff record only if available.
+ // Missing identity must never block the warning letter.
+ if(r.employee_id!=null){
+  const identityResult=await db().from('employees').select('nric_passport').eq('id',r.employee_id).maybeSingle();
+  if(!identityResult.error&&identityResult.data?.nric_passport){r={...r,nd_identity_number:String(identityResult.data.nric_passport).trim()};}
+ }
  const {data:all,error:countError}=await db().from('nd_staff_incidents').select('id,incident_date,warning_letter').eq('employee_id',r.employee_id).eq('warning_letter',true).eq('review_status','approved').order('incident_date',{ascending:true}).order('id',{ascending:true});if(countError)throw countError;
  const {data:prior,error:priorError}=await db().from('nd_staff_warning_legacy').select('warning_count').eq('employee_id',r.employee_id).maybeSingle();if(priorError&&!warningTableMissing(priorError,'nd_staff_warning_legacy'))throw priorError;
  let explicitLevel=0;try{explicitLevel=Number(JSON.parse(r.details||'{}').warning_level)||0}catch(_){}const sequence=(Number(prior?.warning_count)||0)+(all||[]).findIndex(row=>String(row.id)===String(r.id))+1;const n=explicitLevel>=1&&explicitLevel<=3?explicitLevel:sequence;if(n<1||n>3)throw Error('Warning level must be 1, 2 or 3.');
