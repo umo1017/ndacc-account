@@ -5454,6 +5454,23 @@ body[data-nd-visible-page="records"] #ndStaffFinancePage,body[data-nd-visible-pa
 #salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-net-row{grid-template-columns:minmax(0,1fr) 75px!important}
 #salaryPayslipPrint .payslip-sheet[data-payslip-type="14th"] .payslip-received{overflow-wrap:anywhere}
 </style>
+<style id="nd-booking-sidebar-branch-compact-20261112">
+/* Branch selection belongs exclusively to the sidebar, not the appointment popup. */
+#ndProBookingModal .pro-field:has(select[name="branch"]){display:none!important}
+#ndProBookingModal .proref-primary,#ndProBookingModal .proref-details{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important}
+#ndProBookingModal .proref-primary .proref-datetime{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:8px!important;margin:0 0 10px!important}
+#ndProBookingModal .proref-datetime .pro-field{min-width:0!important;margin:0!important;padding:9px!important;border-radius:13px!important;background:#fff!important}
+#ndProBookingModal .proref-datetime .pro-field label{font-size:12px!important}
+#ndProBookingModal .proref-datetime input{min-width:0!important;width:100%!important;font-size:14px!important;padding:9px 5px!important}
+#ndProBookingModal .proref-phone-row{margin:0!important;border-radius:13px!important;padding:10px!important;background:#fff!important;gap:7px!important}
+#ndProBookingModal .proref-details:not([hidden]){gap:8px!important;margin-top:10px!important}
+#ndProBookingModal .proref-details>.pro-field{padding:9px 12px!important;margin:0!important;border-radius:13px!important;background:#fff!important}
+#ndProBookingModal .proref-details select{font-size:14px!important;min-height:40px!important;padding:8px!important}
+#ndProBookingModal .proref-actions{margin:8px 0 0!important;padding:0!important}
+#ndProBookingModal #proAppointmentSave{font-size:15px!important;min-height:46px!important;padding:11px!important;border-radius:12px!important}
+#ndProBookingModal .proref-details[hidden]{display:none!important}
+@media(max-width:480px){#ndProBookingModal .proref-datetime .pro-field{padding:7px!important}#ndProBookingModal .proref-phone-row #proAddCustomer{font-size:12px!important}}
+</style>
 </head>
 <body><style id="nd-integrated-member-ui-css">
 #ndIntegratedMemberOverlay{position:fixed;inset:0;z-index:2147483640;background:#f2f1f7;display:none;flex-direction:column}
@@ -14697,10 +14714,20 @@ function prepareAutoEmployeeNo(){
 }
 
 function ndSignedOnboardingBasic(){
+ // The signed contract is an immutable historical document, not the live salary field.
+ // Its amount is only a fallback for an uninitialized form; it never overrides edits.
  if(!window.ndSignedOnboardingDraft)return null;
- const a=ndNoticeValidDraft(),raw=(a.details||[]).find(row=>row[0]==='Basic Salary (RM)')?.[1];
- if(raw==null||String(raw).trim()===''||!Number.isFinite(Number(raw))||Number(raw)<0)throw Error('The signed contract must contain a valid basic salary.');
- return Number(raw);
+ const raw=String(byId("empGuaranteed")?.value??"").trim();
+ if(raw!==""){
+   const n=Number(raw);
+   if(!Number.isFinite(n)||n<0)throw Error('Basic Pay must be a valid non-negative amount.');
+   return n;
+ }
+ const a=ndNoticeValidDraft();
+ const historical=(a.details||[]).find(row=>row[0]==='Basic Salary (RM)')?.[1];
+ if(historical===null||historical===undefined||String(historical).trim()==="")return null;
+ const n=Number(historical);
+ return Number.isFinite(n)&&n>=0?n:null;
 }
 function collectStaffPayload(){
   const signedBasic=ndSignedOnboardingBasic();
@@ -14774,7 +14801,13 @@ function validateNewStaffRequiredFields(messageElId){
   // IC / Passport is optional for all payment methods and branches.
   // If provided, uniqueness is checked before saving.
 
-  if(outlet!=="Collaboration" && employmentType==="full_time" && basicRaw==="") return fail("Basic Pay is required for Full Time staff.","empGuaranteed");
+  if(outlet!=="Collaboration" && employmentType==="full_time" && basicRaw==="") {
+    const signedValue=(window.ndSignedOnboardingDraft && (ndOnboardAgreement?.details||[]).find(row=>row[0]==='Basic Salary (RM)')?.[1]);
+    if(signedValue!==undefined && signedValue!==null && String(signedValue).trim()!=="" && Number.isFinite(Number(signedValue)) && Number(signedValue)>=0){
+      byId("empGuaranteed").value=String(signedValue);
+    }else return fail("Basic Pay is required for Full Time staff.","empGuaranteed");
+  }
+  if(byId("empGuaranteed")?.value!=="" && (!Number.isFinite(Number(byId("empGuaranteed").value)) || Number(byId("empGuaranteed").value)<0))return fail("Basic Pay must be a valid non-negative amount.","empGuaranteed");
 
   try{ndOnboardLedger();}catch(err){return fail(err.message,"ndOnboardItems");}
   try{ndNoticeValidDraft();}catch(err){return fail(err.message,"ndOpenOnboardAgreement");}
@@ -18047,7 +18080,7 @@ async function openPayslip(empId,type){
     const advanceDeductionDetail=ndSevenPayslipDeductionDetail(s,e);
     byId("salaryPayslipPrint").innerHTML=`<div class="payslip-sheet" data-payslip-type="7th">
 <div class="payslip-head"><div><div class="payslip-company">NATURES DAO SDN. BHD.</div><div class="payslip-meta-grid"><div class="meta-left"><div class="meta-row"><div class="k">Name</div><div>: ${ndEmployeeFullName(e)}</div></div><div class="meta-row"><div class="k">NRIC</div><div>: ${e.nric_passport||""}</div></div><div class="meta-row"><div class="k">DEPT</div><div>: DEFAULT - Default Department</div></div><div class="meta-row"><div class="k">EMPLOYEE NO</div><div>: ${e.employee_no||""}</div></div></div><div class="meta-right"><div class="meta-row"><div class="k">SOCSO</div><div>: ${e.socso_no||""}</div></div><div class="meta-row"><div class="k">KWSP / EPF</div><div>: ${e.epf_no||""}</div></div><div class="meta-row"><div class="k">TAX</div><div>: ${e.tax_no||""}</div></div><div class="meta-row"><div class="k">PAY BY</div><div>: ${e.payment_method||""}</div></div></div></div></div><div class="payslip-title-box"><div class="title">PAYSLIP</div><div class="box">${monthShortLabel()}</div><div class="box">Monthly</div></div></div>
-<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Basic Pay",s.guaranteed_pay)}${payslipLine("Allowance",ndSevenAdjustedAllowance(s))}${Number(s.ot||0)>0?payslipLine(payslipOtLabel(s),s.ot):""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div>${advanceDeductionDetail.html}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}${advanceDeductionDetail.memo}${Number(s.staff_fine_deduction||0)>0?`<div class="payslip-line"><span>Staff Fine (record only; not deducted)</span><span class="amt">${Number(s.staff_fine_deduction).toFixed(2)}</span></div>`:""}</div></div>
+<div class="payslip-main-grid"><div class="payslip-col"><div class="payslip-col-head"><span>EARNING</span><span style="text-align:right">RM</span></div>${payslipLine("Basic Pay",s.guaranteed_pay)}${payslipLine("Allowance",ndSevenAdjustedAllowance(s))}${Number(s.ot||0)>0?payslipLine(payslipOtLabel(s),s.ot):""}</div><div class="payslip-col"><div class="payslip-col-head"><span>DEDUCTION</span><span style="text-align:right">RM</span></div>${advanceDeductionDetail.html}</div><div class="payslip-col"><div class="payslip-col-head"><span>OTHER</span><span></span></div>${payslipOvertimeDetailHtml(s)}${advanceDeductionDetail.memo}</div></div>
 <div class="ref-pay-summary">
   <div class="ref-gross-area">
     <div class="ref-total-line"><span>GROSS PAY</span><span>${Number(s.gross_pay||0).toFixed(2)}</span></div>
@@ -32858,26 +32891,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function report(r){
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
-   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
-<style id="nd-booking-sidebar-branch-compact-20261112">
-/* Branch selection belongs exclusively to the sidebar, not the appointment popup. */
-#ndProBookingModal .pro-field:has(select[name="branch"]){display:none!important}
-#ndProBookingModal .proref-primary,#ndProBookingModal .proref-details{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important}
-#ndProBookingModal .proref-primary .proref-datetime{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:8px!important;margin:0 0 10px!important}
-#ndProBookingModal .proref-datetime .pro-field{min-width:0!important;margin:0!important;padding:9px!important;border-radius:13px!important;background:#fff!important}
-#ndProBookingModal .proref-datetime .pro-field label{font-size:12px!important}
-#ndProBookingModal .proref-datetime input{min-width:0!important;width:100%!important;font-size:14px!important;padding:9px 5px!important}
-#ndProBookingModal .proref-phone-row{margin:0!important;border-radius:13px!important;padding:10px!important;background:#fff!important;gap:7px!important}
-#ndProBookingModal .proref-details:not([hidden]){gap:8px!important;margin-top:10px!important}
-#ndProBookingModal .proref-details>.pro-field{padding:9px 12px!important;margin:0!important;border-radius:13px!important;background:#fff!important}
-#ndProBookingModal .proref-details select{font-size:14px!important;min-height:40px!important;padding:8px!important}
-#ndProBookingModal .proref-actions{margin:8px 0 0!important;padding:0!important}
-#ndProBookingModal #proAppointmentSave{font-size:15px!important;min-height:46px!important;padding:11px!important;border-radius:12px!important}
-#ndProBookingModal .proref-details[hidden]{display:none!important}
-@media(max-width:480px){#ndProBookingModal .proref-datetime .pro-field{padding:7px!important}#ndProBookingModal .proref-phone-row #proAddCustomer{font-size:12px!important}}
-</style>
-
-</body></html>';
+   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'</body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
  }
@@ -33026,6 +33040,30 @@ async function deleteIncident(row,button){
 function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3></div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${email?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Record</button>${isAdmin()?'<button class="btn" type="button" id="nddManage">Manage Reasons</button>':''}</div><div id="nddForm" style="display:none"><div class="ndd-grid"><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en})),selectedReason)}</select></div><div><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div></div><div class="ndd-grid" style="margin-top:12px"><div class="ndd-full"><label for="nddIncidentText">Incident Description</label><textarea id="nddIncidentText" rows="6" placeholder="Describe the incident, date, place and confirmed facts."></textarea></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Add Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Pending Approval · All Months</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Action</th></tr></thead><tbody>${records.filter(r=>r.review_status==='pending').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${isAdmin()?`<button class="mini" data-review="${r.id}">Approve / Reject</button>`:'Awaiting UMO / Mars'}${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}</td></tr>`).join('')||'<tr><td colspan="6">No pending deductions.</td></tr>'}</tbody></table></div><div class="ndd-actions"><h4>Approved History</h4><label for="nddHistoryMonth">Month <input id="nddHistoryMonth" type="month" value="${esc(historyMonth||mm)}"></label></div><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.some(r=>r.review_status==='approved'&&String(r.incident_date).startsWith(historyMonth||mm))?records.filter(r=>r.review_status==='approved'&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${Number(r.approved_amount||0)>0?`<button class="mini" data-fine="${r.id}">Fine Letter</button>`:''}${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="8">No records for this month.</td></tr>'}</tbody></table></div>`;
 const rejected=records.filter(r=>r.review_status==='rejected'&&String(r.incident_date).startsWith(historyMonth||mm));if(rejected.length)m.insertAdjacentHTML('beforeend','<h4>Rejected History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Status</th></tr></thead><tbody>'+rejected.map(r=>'<tr><td>'+esc(r.incident_date)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.employee_name)+'</td><td>'+esc(r.reason_en)+'</td><td>'+Number(r.proposed_amount||0).toFixed(2)+'</td><td>Rejected'+(email==='umo1017@gmail.com'?' <button class="mini" data-incident-delete="'+esc(r.id)+'">Delete</button>':'')+'</td></tr>').join('')+'</tbody></table></div>');
 $('nddHistoryMonth').onchange=async()=>{historyMonth=val('nddHistoryMonth')||month();try{await load()}catch(error){note('Unable to load history: '+error.message)}};
+
+// Payroll window is informational until a legally permitted deduction is separately recorded.
+const formWindow=$('nddForm');
+if(formWindow && !$('nddSalaryWindow')){
+  const windowInfo=document.createElement('div');windowInfo.id='nddSalaryWindow';
+  windowInfo.setAttribute('role','status');
+  windowInfo.style.cssText='margin:8px 0;padding:10px 12px;border:1px solid #dce4ef;border-radius:10px;background:#f6f9ff;font-size:13px;color:#3c5268';
+  const updateWindow=()=>{
+    const date=String(val('nddDate')||'');const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if(!match){windowInfo.textContent='Select Incident Date to see the proposed payroll window.';return}
+    const day=Number(match[3]);
+    const incidentMonth=match[1]+'-'+match[2];
+    const priorDate=new Date(Date.UTC(Number(match[1]),Number(match[2])-2,1));
+    const priorMonth=priorDate.getUTCFullYear()+'-'+String(priorDate.getUTCMonth()+1).padStart(2,'0');
+    const payrollMonth=day<=14?priorMonth:incidentMonth;
+    const payrollType=day<=7?'7th':day<=14?'14th':'7th';
+    windowInfo.textContent='Proposed deduction allocation: '+payrollType+' Salary · '+payrollMonth+
+      (day>14?' (incident month).':' (previous salary month).')+
+      ' Subject to authorization and payroll confirmation status.';
+  };
+  const dateInput=$('nddDate');if(dateInput){dateInput.insertAdjacentElement('afterend',windowInfo);dateInput.addEventListener('input',updateWindow);dateInput.addEventListener('change',updateWindow)}
+  updateWindow();
+}
+
 // Staff Deductions is an embedded Salary page; no Close button is rendered.
 // Do not bind nddClose: it was removed from the page layout.
 if(email){$('nddNew').onclick=()=>{$('nddForm').style.display='block';$('nddReasonsPanel').style.display='none';setAmount()};$('nddCancel').onclick=()=>{$('nddForm').style.display='none'};$('nddBranch').onchange=()=>{$('nddEmployee').innerHTML=options(people.filter(p=>p.outlet===val('nddBranch')).map(p=>({value:p.id,label:p.name})))};$('nddReason').onchange=setAmount;$('nddSave').onclick=saveRecord;}
@@ -40516,14 +40554,14 @@ window.addEventListener('nd-pro-auth-refresh',()=>void updateNav());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
-const CUTOFF='2026-10-26',branches=['Eco Botanic','Nusa Bestari'];
+const CUTOFF='2026-11-01',branches=['Eco Botanic','Nusa Bestari'];
 function db(){try{return typeof salaryDb!=='undefined'?salaryDb:null}catch{return null}}
 let page=null,returnFocus=null,withdrawals=[],fineRecords=[],unknown=[],currentTab='fines',loading=false,loadError=false,requestKey=null;
 function employeeIsManager(e,ids,id){return ids.has(String(id))||/manager|supervisor|director|经理|店长|主管/i.test([e?.role,e?.position,e?.job_title,e?.designation,e?.employee_role].filter(Boolean).join(' '))}
 async function fetchAll(query){const rows=[];for(let off=0;off<20000;off+=500){const res=await query(off,off+499);if(res.error)throw res.error;rows.push(...(res.data||[]));if((res.data||[]).length<500)return rows}throw Error('Too many records. Please contact administrator.')}
 function ensure(){if(page)return;
  page=document.createElement('section');page.id='ndCompanyFinePage';page.hidden=true;
- page.innerHTML=`<div class="ncf-shell"><header class="ncf-top"><div><h2>Company Fine</h2><small class="ncf-sub">Approved staff fines from 26 Oct 2026 · Managers excluded</small></div><button id="ncfClose" type="button" aria-label="Close Company Fine">Close</button></header>
+ page.innerHTML=`<div class="ncf-shell"><header class="ncf-top"><div><h2>Company Fine</h2><small class="ncf-sub">Approved records from Nov 2026 · Managers excluded · Maximum RM500 per incident</small></div><button id="ncfClose" type="button" aria-label="Close Company Fine">Close</button></header>
  <div class="ncf-controls"><label>Branch<select id="ncfBranch"><option value="all">All Branches</option><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option></select></label><button id="ncfRefresh" type="button">Refresh</button></div>
  <div id="ncfStatus" class="ncf-status" role="status"></div>
  <div class="ncf-stats"><div class="ncf-stat"><small>Total Company Fines</small><strong id="ncfTotal">RM 0.00</strong></div><div class="ncf-stat"><small>Total Withdrawn</small><strong id="ncfTaken">RM 0.00</strong></div><div class="ncf-stat ncf-available"><small>Available to Withdraw</small><strong id="ncfAvailable">RM 0.00</strong></div></div>
@@ -40572,11 +40610,11 @@ async function load(){const d=db();if(!d){$('ncfStatus').textContent='Database n
  ]);
  const staff=new Map(employees.map(x=>[String(x.id),x])),managerIds=new Set(managers.map(x=>String(x.employee_id)));
  unknown=[];fineRecords=[];
- for(const r of incidents){if(r.review_status!=='approved'||r.nd_deleted_at||!(Number(r.approved_amount)>0)||!branches.includes(r.outlet))continue;
+ for(const r of incidents){if(r.review_status!=='approved'||r.nd_deleted_at||!(Number(r.approved_amount)>0)||Number(r.approved_amount)>500||!branches.includes(r.outlet))continue;
  const p=staff.get(String(r.employee_id));if(!p){unknown.push(r);continue}
  if(employeeIsManager(p,managerIds,r.employee_id))continue;
  fineRecords.push({...r,person:p})}
- withdrawals=draws;$('ncfStatus').textContent=`${fineRecords.length} approved fines · From 26 Oct 2026`;
+ withdrawals=draws;$('ncfStatus').textContent=`${fineRecords.length} eligible approved records · From Nov 2026`;
  }catch(e){loadError=true;fineRecords=[];withdrawals=[];unknown=[];$('ncfStatus').textContent='Unable to load Company Fine: '+(e.message||e);$('ncfWarnings').innerHTML='<div class="ncf-alert">Check the Company Fine SQL migration and read access.</div>'}
  finally{loading=false;render()}
 }
