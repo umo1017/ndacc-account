@@ -12713,9 +12713,25 @@ function ndSalaryAdvancePayrollRoute(date){
     :{payrollType:'14',salaryMonth:previous,payDay:'14th of this month'};
 }
 window.ndSalaryAdvancePayrollRoute=ndSalaryAdvancePayrollRoute;
-window.ndPayrollDeductionLedger = {month:'',ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),advanceItems:new Map(),fines:new Map()};
+// Fine incident routing follows the configured 1-7 / 8-14 / 15-end rule.
+// This is a pending-deduction DISPLAY route only; a disciplinary fine
+// is not itself legal authorization to deduct wages.
+function ndFinePayrollRoute(date){
+  const d=String(date||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return null;
+  const [y,m,day]=d.split('-').map(Number);
+  if(m<1||m>12||day<1||day>31)return null;
+  const prev=new Date(Date.UTC(y,m-2,1));
+  const prevMonth=prev.getUTCFullYear()+'-'+String(prev.getUTCMonth()+1).padStart(2,'0');
+  return day<=7?{payrollType:'7',salaryMonth:prevMonth}:
+    day<=14?{payrollType:'14',salaryMonth:prevMonth}:
+    {payrollType:'7',salaryMonth:d.slice(0,7)};
+}
+window.ndFinePayrollRoute=ndFinePayrollRoute;
+
+window.ndPayrollDeductionLedger = {month:'',ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),advanceItems:new Map(),fines:new Map(),fourteenFines:new Map()};
 async function ndLoadPayrollDeductionLedger(selectedMonth){
-  const ledger={month:String(selectedMonth||'').slice(0,7),ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),advanceItems:new Map(),fines:new Map()};
+  const ledger={month:String(selectedMonth||'').slice(0,7),ready:false,error:'',advances:new Map(),fourteenAdvances:new Map(),advanceItems:new Map(),fines:new Map(),fourteenFines:new Map()};
   window.ndPayrollDeductionLedger=ledger;
   if(!salaryDb || !/^\d{4}-\d{2}$/.test(ledger.month)){
     ledger.error='Payroll deduction records cannot be loaded.';
@@ -12757,13 +12773,15 @@ async function ndLoadPayrollDeductionLedger(selectedMonth){
         ledger.advanceItems.set(id,items);
       }
     }
-    // Fine approval is an internal disciplinary record; approval alone
-    // does not authorize deduction from an employee's salary.
+    // Fetch all incident dates that can route into the selected payroll month:
+    // current month 15-end, following month 1-14.
+    // Approvals are tracked here, never silently deducted from wages.
     const fines=[];
+    const followEnd=new Date(Date.UTC(yy,mm+1,1)).toISOString().slice(0,10);
     for(let offset=0;offset<100000;offset+=500){
       const result=await salaryDb.from('nd_staff_incidents')
         .select('id,employee_id,incident_date,approved_amount,review_status,nd_deleted_at,legal_basis')
-        .gte('incident_date',first).lt('incident_date',next)
+        .gte('incident_date',first).lt('incident_date',followEnd)
         .eq('review_status','approved').order('id',{ascending:true})
         .range(offset,offset+499);
       if(result.error)throw result.error;
@@ -12771,10 +12789,15 @@ async function ndLoadPayrollDeductionLedger(selectedMonth){
       fines.push(...page);
       if(page.length<500)break;
     }
+    const seenFineIds=new Set();
     for(const f of fines){
       const id=Number(f.employee_id),amount=Number(f.approved_amount);
-      if(f.nd_deleted_at||!Number.isInteger(id)||id<=0||!Number.isFinite(amount)||amount<=0)continue;
-      ledger.fines.set(id,Math.round(((ledger.fines.get(id)||0)+amount)*100)/100);
+      if(seenFineIds.has(String(f.id))||f.nd_deleted_at||!Number.isInteger(id)||id<=0||!Number.isFinite(amount)||amount<=0)continue;
+      seenFineIds.add(String(f.id));
+      const route=ndFinePayrollRoute(f.incident_date);
+      if(!route||route.salaryMonth!==ledger.month)continue;
+      const destination=route.payrollType==='14'?ledger.fourteenFines:ledger.fines;
+      destination.set(id,Math.round(((destination.get(id)||0)+amount)*100)/100);
     }
     ledger.ready=true;
   }catch(error){
@@ -12787,7 +12810,7 @@ async function ndLoadPayrollDeductionLedger(selectedMonth){
 function ndAutoPayrollAmount(e,kind){
   const ledger=window.ndPayrollDeductionLedger;
   if(!ledger?.ready||ledger.month!==monthKey())return 0;
-  return Number((kind==='advance'?ledger.advances:kind==='advance14'?ledger.fourteenAdvances:ledger.fines).get(Number(e?.id))||0);
+  return Number((kind==='advance'?ledger.advances:kind==='advance14'?ledger.fourteenAdvances:kind==='fine14'?ledger.fourteenFines:ledger.fines).get(Number(e?.id))||0);
 }
 
 function applySevenManualOverrides(e,base,salaryMonth=monthDate(),source=salaryManualOverrides){
@@ -14771,6 +14794,13 @@ function collectStaffPayload(){
 }
 
 
+document.addEventListener('input',function(event){
+ if(event.target?.id!=='empGuaranteed'||!window.ndSignedOnboardingDraft)return;
+ const raw=String(event.target.value??'').trim();
+ if(!raw||!Number.isFinite(Number(raw))||Number(raw)<0)return;
+ const key=window.ndActiveOnboardingBasicKey;
+ if(key)try{sessionStorage.setItem(key,raw)}catch(_){}
+});
 function validateNewStaffRequiredFields(messageElId){
   const msg=byId(messageElId);
   const fail=(m,focusId)=>{
@@ -14805,7 +14835,7 @@ function validateNewStaffRequiredFields(messageElId){
     const signedValue=(window.ndSignedOnboardingDraft && (ndOnboardAgreement?.details||[]).find(row=>row[0]==='Basic Salary (RM)')?.[1]);
     if(signedValue!==undefined && signedValue!==null && String(signedValue).trim()!=="" && Number.isFinite(Number(signedValue)) && Number(signedValue)>=0){
       byId("empGuaranteed").value=String(signedValue);
-    }else return fail("Basic Pay is required for Full Time staff.","empGuaranteed");
+    }else return fail("Enter Basic Pay in Edit Details before Review. No saved amount was found for this employee.","empGuaranteed");
   }
   if(byId("empGuaranteed")?.value!=="" && (!Number.isFinite(Number(byId("empGuaranteed").value)) || Number(byId("empGuaranteed").value)<0))return fail("Basic Pay must be a valid non-negative amount.","empGuaranteed");
 
@@ -15280,7 +15310,7 @@ function renderSevenTable(emps){
       <td data-live-otamount="${e.id}"><strong>${money(s.ot||0)}</strong></td>
       <td>${snap?money(s.manual_deduction||0):salaryOverrideInput(e.id,"7","manual_deduction",s.manual_deduction||0)}</td>
       <td>${money(s.salary_advance_deduction||0)}<div class="helper" style="font-size:10px">${snap?"Saved":"Auto from Salary Advance"}</div></td>
-      <td>${money(s.staff_fine_deduction||0)}<div class="helper" style="font-size:10px">${snap?"Saved record":"Approved record · not deducted"}</div></td>
+      <td title="Approved incident record only; not deducted from wages">${money(ndAutoPayrollAmount(e,'fine'))}<div class="helper" style="font-size:10px">Pending · Not deducted</div></td>
       <td data-live-gross7="${e.id}">${snap?money(s.gross_pay):salaryOverrideInput(e.id,"7","gross_pay",s.gross_pay)}</td>
       <td data-live-deduction7="${e.id}">${snap?money(s.total_deduction):salaryOverrideInput(e.id,"7","total_deduction",s.total_deduction)}</td>
 
@@ -15324,7 +15354,7 @@ function renderSevenTable(emps){
         <th rowspan="2">Unpaid</th>
         <th rowspan="2">PCB / Tax</th>
         <th rowspan="2">Clocked Hrs</th><th rowspan="2">Off-Days</th><th rowspan="2">Total Hrs</th><th rowspan="2">Overtime (RM)</th>
-        <th rowspan="2">Deduction</th><th rowspan="2">Salary Advance</th><th rowspan="2">Staff Fine</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
+        <th rowspan="2">Deduction</th><th rowspan="2">Salary Advance</th><th rowspan="2" title="Approved incident amount, pending separate lawful wage deduction authorization">Deduction (Pending)</th><th rowspan="2">Gross Pay</th><th rowspan="2">Total Deduction</th>
         <th colspan="3" class="netpay-group-head">Net Pay</th>
         <th rowspan="2">Confirm</th><th rowspan="2">7th Monthly Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
       </tr>
@@ -15423,6 +15453,7 @@ function renderFourteenTable(emps){
       <td title="Deducted Allowance from this month's 7th Salary only." data-live-seven-deducted14="${e.id}">${money(Math.max(0,Number(cs ? ndFourteenUpdateTotals({...cs},snapshotFor(e.id)).seventh_deducted_allowance : c.seventh_deducted_allowance)||0))}</td>
       <td title="7th Total Deduction minus Unpaid / Off Day Deduction (automatic)." data-live-seven-total-deduction14="${e.id}">${money(seventhTotalDeduction)}</td>
       <td title="Salary Advance Repayment automatically routed to 14th Salary" data-live-advance14="${e.id}">${advance14===null?'—':money(advance14)}</td>
+      <td title="Approved incident amount only; not deducted from wages">${money(ndAutoPayrollAmount(e,'fine14'))}<div class="helper" style="font-size:10px">Pending · Not deducted</div></td>
       <td data-live-commission="${e.id}">${money(c.commission||0)}</td>
       <td data-live-netpay14="${e.id}">${money(c.net_pay||0)}</td>
       <td class="netpay-method-cell auto-payby-cell" data-live-netpay14-cash="${e.id}">${pm==="Cash"?money(net):"—"}</td>
@@ -15455,6 +15486,7 @@ function renderFourteenTable(emps){
       <th rowspan="2">− Allowance</th>
       <th rowspan="2">− 7th Total Deduction (Auto)</th>
       <th rowspan="2">− 14th Salary Advance (Auto)</th>
+      <th rowspan="2" title="Approved incident amount, pending separate lawful wage deduction authorization">Deduction (Pending)</th>
       <th rowspan="2">Commission</th>
       <th rowspan="2">Nett Pay</th><th colspan="3" class="netpay-group-head">Net Pay by Method</th><th rowspan="2">Confirm</th><th rowspan="2">14th Commission Payslip</th><th rowspan="2">Pay By</th><th rowspan="2">Payment</th>
     </tr><tr>
@@ -15463,7 +15495,7 @@ function renderFourteenTable(emps){
       <th class="netpay-method-head">TNG</th>
     </tr></thead><tbody>
       <tr class="netpay-summary-row" data-netpay-summary="14">
-        <td colspan="14" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
+        <td colspan="15" style="text-align:right;font-weight:900">TOTAL BY PAYMENT METHOD</td>
         <td class="netpay-method-total" data-netpay-total="14-cash">${money(cashTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-transfer">${money(transferTotal)}</td>
         <td class="netpay-method-total" data-netpay-total="14-tng">${money(tngTotal)}</td>
@@ -17411,6 +17443,14 @@ window.ndStartInterviewEmployee=async function(row,contractRow=null){
  const a=contractRow.form_data.__nd_signed_contract,get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||'';
  for(const [id,value]of Object.entries({empName:a.employee.employee_name,empNric:a.employee.identity,empOutlet:a.employee.branch,empJoinDate:get('Start Date'),empGuaranteed:get('Basic Salary (RM)'),empPayBy:get('Payment Method'),empNickname:v.Nickname||v['Nick Name']||'',empPhone:v['Contact Number']||'',empCategory:contractRow.form_data.__nd_contract_source.foreign?'non_local':'local'})){const field=byId(id);if(field)field.value=String(value??'');}
  const rest=String(get('Rest Day')).split(/[,;|]/).map(v=>v.trim()),days=[...new Set(rest.map(value=>['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(value)).filter(n=>n>=0))];if(days.length){ndSetFixedRestDays('empFixedRestWeekday',{fixed_rest_weekdays:days});const start=new Date(get('Start Date')+'T12:00:00');let count=0;for(let n=1;n<=new Date(start.getFullYear(),start.getMonth()+1,0).getDate();n++)if(days.includes(new Date(start.getFullYear(),start.getMonth(),n).getDay()))count++;byId('empOffDays').value=String(count);}
+ // Restore this contract's edited pay first. Use the signed salary or interview amount only for an empty draft.
+ const basicField=byId('empGuaranteed');
+ const basicKey='nd_onboarding_basic_v2_'+String(contractRow.id);
+ let priorBasic='';
+ try{priorBasic=String(sessionStorage.getItem(basicKey)??'').trim();}catch(_){}
+ const candidateBasic=[priorBasic, get('Basic Salary (RM)'), get('Basic Pay'), v['Basic Salary (RM)'], v['Basic Pay'], v['Basic Salary'], v['Salary']].find(x=>x!==undefined&&x!==null&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0);
+ if(basicField&&candidateBasic!==undefined)basicField.value=String(candidateBasic).trim();
+ window.ndActiveOnboardingBasicKey=basicKey;
  ndOnboardAgreement=a;window.ndSignedOnboardingDraft={id:String(contractRow.id),request:crypto.randomUUID()};updateSubmitEmploymentType();ndUpdateNoticeStatus();updateSubmitStaffPaymentFields();for(const id of ['empName','empNric','empOutlet','empJoinDate','empGuaranteed','empPayBy']){const field=byId(id);if(field){field.disabled=false;field.readOnly=false;}}if(byId('ndOpenOnboardAgreement'))byId('ndOpenOnboardAgreement').hidden=true;ndUpdateSignedEditNotice();await ndRefreshOnboardStock();byId('ndOnboardItems').scrollIntoView({block:'start'});
  byId('staffSaveMsg').textContent='Agreement on file. Edit details or employee items, then Review and Save.';
 };
