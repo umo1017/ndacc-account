@@ -2,6 +2,49 @@
 
 <html lang="en">
 <head>
+<!-- Content Studio: hide editor when browser is offline -->
+<style id="nd-content-studio-offline-css">
+html.nd-content-studio-offline #socialPage,
+html.nd-content-studio-offline #socialPostModal,
+html.nd-content-studio-offline #socialAccountsModal,
+html.nd-content-studio-offline #sidebarSocial {display:none!important}
+</style>
+<script id="nd-content-studio-offline-guard">
+(function(){
+  'use strict';
+  function update(){
+    var offline = navigator.onLine === false;
+    document.documentElement.classList.toggle('nd-content-studio-offline', offline);
+    if(!offline) return;
+    ['socialPostModal','socialAccountsModal'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el){el.classList.remove('open');el.setAttribute('aria-hidden','true');}
+    });
+    var social=document.getElementById('socialPage');
+    if(social && (social.classList.contains('active') || document.body.dataset.ndVisiblePage==='social')) {
+      var daily=document.getElementById('sidebarDaily');
+      if(daily) daily.click();
+    }
+  }
+  window.addEventListener('offline',update);
+  window.addEventListener('online',update);
+  document.addEventListener('DOMContentLoaded',update);
+  update();
+  // Prevent opening the editor from programmatic navigation while offline.
+  document.addEventListener('click',function(e){
+    if(navigator.onLine!==false)return;
+    if(e.target.closest('#sidebarSocial')){e.preventDefault();e.stopImmediatePropagation();}
+  },true);
+  var observer=new MutationObserver(function(){
+    if(navigator.onLine===false)update();
+  });
+  document.addEventListener('DOMContentLoaded',function(){
+    var target=document.getElementById('socialPage');
+    if(target)observer.observe(target,{attributes:true,attributeFilter:['class','style']});
+  });
+})();
+</script>
+
 <style id="nd-cash-expense-month-single-ui">
 #ndCashPettyTab,#pettyCashHistoryBtn,#ndCashExpenseHistoryOpen{display:none!important}
 #ndExpenseRequestHistory[hidden]{display:none!important}
@@ -5522,7 +5565,7 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
 <button class="sidebar-btn" id="sidebarBonus" style="display:none" type="button">Bonus</button>
 <button class="sidebar-btn" id="sidebarSocial" style="display:none" type="button">Social Media</button>
 <button class="sidebar-btn" id="sidebarSettings" style="display:none" type="button">Settings</button>
-<button class="sidebar-btn" id="ndProBetaNav" type="button" style="display:block">Nature’s Dao Pro (Beta)</button>
+<button class="sidebar-btn" id="ndProBetaNav" type="button" hidden style="display:none">Nature’s Dao Pro (Beta)</button>
 </aside>
 <button class="mobile-sidebar-btn" id="mobileSidebarBtn" type="button">☰</button>
 <div class="auth-shell" id="authView">
@@ -38360,30 +38403,15 @@ function enhance(){
 (function(){
   'use strict';
   function init(){
-    var nav=document.getElementById('ndProBetaNav');
-    var page=document.getElementById('ndProBetaPage');
-    if(!nav||!page)return;
-    nav.hidden=false;
-    nav.style.setProperty('display','block');
-    // The original Beta module owns navigation when it has initialized.
-    // This fallback is only used if the module failed to register its entry point.
-    nav.addEventListener('click',function(event){
-      if(typeof window.ndOpenProBeta==='function')return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      page.hidden=false;
-      page.classList.add('nd-pro-shown');
-      page.style.setProperty('display','block','important');
-      page.style.setProperty('visibility','visible','important');
-      page.style.setProperty('z-index','2147483000','important');
-      var status=document.getElementById('ndProStatus');
-      if(status)status.textContent='Pro Beta startup error: the main script did not initialize. Please check the HTML deployment and JavaScript console.';
-      var content=document.getElementById('ndProContent');
-      if(content)content.innerHTML='<div class="pro-card"><strong>Pro Beta startup error</strong><p>The main Pro Beta script has not initialized. No data was changed.</p><button type="button" id="ndBetaFallbackBack">Back</button></div>';
-      document.getElementById('ndBetaFallbackBack')?.addEventListener('click',function(){page.hidden=true;page.classList.remove('nd-pro-shown');page.style.removeProperty('display');});
-    },true);
+    const nav=document.getElementById('ndProBetaNav');
+    if(!nav)return;
+    nav.hidden=true;
+    nav.style.display='none';
+    // The main Beta module verifies the UMO account before displaying the entry.
+    // Never expose a fallback that bypasses the permission check.
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
 })();
 </script>
 
@@ -38639,49 +38667,6 @@ function enhance(){
 function paint(){const field=document.getElementById('settlementDate');if(!field)return;const box=field.parentElement;const raw=field.value;let label='Select Date';if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){const date=new Date(raw+'T12:00:00Z');label=new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric'}).format(date)}box.dataset.dateEn=label;field.setAttribute('lang','en-GB');}
 function init(){const input=document.getElementById('settlementDate');if(!input)return;input.addEventListener('input',paint);input.addEventListener('change',paint);paint();const branch=document.getElementById('appView');if(!branch)return;const mo=new MutationObserver(()=>{if(input.parentElement?.dataset.dateEn===undefined||!input.value)return;const d=new Date(input.value+'T12:00:00Z');const want=Number.isNaN(+d)?'Select Date':new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric'}).format(d);if(input.parentElement.dataset.dateEn!==want)paint()});mo.observe(input,{attributes:true,attributeFilter:['value']});document.addEventListener('click',e=>{if(e.target.closest?.('#dailyBranchToggle,.branch-btn'))requestAnimationFrame(paint)},true);setInterval(paint,2500);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-})();
-</script>
-
-<!-- Content Studio: hide editor when browser is offline -->
-<style id="nd-content-studio-offline-css">
-html.nd-content-studio-offline #socialPage,
-html.nd-content-studio-offline #socialPostModal,
-html.nd-content-studio-offline #socialAccountsModal,
-html.nd-content-studio-offline #sidebarSocial {display:none!important}
-</style>
-<script id="nd-content-studio-offline-guard">
-(function(){
-  'use strict';
-  function update(){
-    var offline = navigator.onLine === false;
-    document.documentElement.classList.toggle('nd-content-studio-offline', offline);
-    if(!offline) return;
-    ['socialPostModal','socialAccountsModal'].forEach(function(id){
-      var el=document.getElementById(id);
-      if(el){el.classList.remove('open');el.setAttribute('aria-hidden','true');}
-    });
-    var social=document.getElementById('socialPage');
-    if(social && (social.classList.contains('active') || document.body.dataset.ndVisiblePage==='social')) {
-      var daily=document.getElementById('sidebarDaily');
-      if(daily) daily.click();
-    }
-  }
-  window.addEventListener('offline',update);
-  window.addEventListener('online',update);
-  document.addEventListener('DOMContentLoaded',update);
-  update();
-  // Prevent opening the editor from programmatic navigation while offline.
-  document.addEventListener('click',function(e){
-    if(navigator.onLine!==false)return;
-    if(e.target.closest('#sidebarSocial')){e.preventDefault();e.stopImmediatePropagation();}
-  },true);
-  var observer=new MutationObserver(function(){
-    if(navigator.onLine===false)update();
-  });
-  document.addEventListener('DOMContentLoaded',function(){
-    var target=document.getElementById('socialPage');
-    if(target)observer.observe(target,{attributes:true,attributeFilter:['class','style']});
-  });
 })();
 </script>
 </body>
@@ -39626,10 +39611,18 @@ async function authorize(){
 }
 let lastScreen='';let betaOpenBusy=false;
 async function updateNav(){
-  // Keep navigation discoverable. Access is still enforced by authorize() when opening.
-  nav.hidden=false;nav.style.setProperty('display','block');
-  try{await authorize();return true;}
-  catch(e){return false;}
+  if(!nav)return false;
+  nav.hidden=true;
+  nav.style.setProperty('display','none');
+  try{
+    await authorize();
+    nav.hidden=false;
+    nav.style.setProperty('display','block');
+    return true;
+  }catch(e){
+    if(page?.classList.contains('nd-pro-shown'))leave();
+    return false;
+  }
 }
 function switchPage(){
   if(!page)return;
@@ -39657,19 +39650,17 @@ function leave(){
 async function open(){
   if(betaOpenBusy)return;
   betaOpenBusy=true;
-  switchPage();
-  stat('Checking UMO access…');
-  const host=el('ndProContent');
-  if(host&&!ready)host.innerHTML='<div class="pro-card">Checking account and database access…</div>';
   try{
     await authorize();
     ready=true;
     nav.hidden=false;nav.style.setProperty('display','block');
+    switchPage();
     await load();
   }catch(error){
     ready=false;
-    stat('Cannot open Nature\'s Dao Pro (Beta): '+(error?.message||error),true);
-    if(host)host.innerHTML='<div class="pro-card"><strong>Access unavailable</strong><p>Check UMO login, database connection, and nd_pro_beta_is_umo() RPC. Existing website functions are unaffected.</p></div>';
+    nav.hidden=true;nav.style.setProperty('display','none');
+    if(page?.classList.contains('nd-pro-shown'))leave();
+    console.warn('Pro Beta access unavailable:',error?.message||error);
   }finally{betaOpenBusy=false;}
 }
 window.ndOpenProBeta=open;
@@ -41069,10 +41060,10 @@ function ndOpenServiceEditor(serviceId,host){
 }
 function renderPos(host){const filtered=services.filter(s=>prices.some(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch)));host.innerHTML=`<div class="pro-card pro-line"><div>${field(tr('Branch','分行'),chooseBranch())}</div><strong>${tr('POS Demo — Not a real payment','POS 测试 — 不进行真实付款')}</strong></div><div class="pro-grid">${filtered.map(s=>{const p=prices.find(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch));return `<div class="pro-card"><strong>${esc(lang==='zh'&&s.name_zh?s.name_zh:s.name_en)}</strong><p class="pro-muted">${esc(p?.branch||'')}</p><p>RM ${Number(p?.price||0).toFixed(2)}</p><button type="button" class="pro-tab" data-add="${s.id}" data-price="${p?.id||''}">+ Add</button></div>`;}).join('')}</div><div class="pro-card"><h3>${tr('Demo Cart','测试购物车')}</h3><div id="proCart"></div><button class="pro-action" type="button" id="proClearCart">${tr('Clear Cart','清空购物车')}</button><p class="pro-muted">Checkout, cash settlement, wallet deductions, commissions and WhatsApp sending are intentionally disabled.</p></div>`;
 el('proBranch').value=branch;el('proBranch').onchange=e=>{branch=e.target.value;cart=[];render();};host.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const s=services.find(x=>x.id===b.dataset.add),p=prices.find(x=>x.id===b.dataset.price);if(s&&p){cart.push({name:s.name_en,price:Number(p.price),branch:p.branch});drawCart();}});el('proClearCart').onclick=()=>{cart=[];drawCart();};function drawCart(){el('proCart').innerHTML=cart.map((x,i)=>`<div class="pro-row"><span>${esc(x.name)} (${esc(x.branch)})</span><strong>RM ${x.price.toFixed(2)}</strong></div>`).join('')+`<div class="pro-row"><strong>Total</strong><strong>RM ${cart.reduce((n,x)=>n+x.price,0).toFixed(2)}</strong></div>`;}drawCart();}
-function init(){if(!nav||!page)return;nav.hidden=false;nav.style.display='block';void updateNav();
+function init(){if(!nav||!page)return;nav.hidden=true;nav.style.display='none';void updateNav();
   try{getDb()?.auth?.onAuthStateChange?.(()=>setTimeout(()=>void updateNav(),0));}catch(_e){}
   // Fallback for login initialization in the legacy application.
-  setInterval(()=>{if(!ready&&nav.hidden)void updateNav();},15000);
+  setInterval(()=>{if(nav.hidden)void updateNav();},15000);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 window.addEventListener('nd-pro-auth-refresh',()=>void updateNav());
