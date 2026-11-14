@@ -41858,44 +41858,45 @@ body > #ndProHamburger.nd-pro-portal-menu {
  const iframe=document.getElementById('ndIntegratedMemberFrame');
  let loaded=false;
  function showMember(){
+   // Build the preview at open time from the real CSV directory already bundled
+   // in this page. Avoid asynchronous postMessage races and demo data.
    if(!loaded){
+     const members=ndCsvMembers.map(m=>({
+       name:String(m.Name||'').trim() || 'Unnamed member',
+       phone:String(m['Phone Number']||'').replace(/^T/i,'').slice(-4),
+       fullPhone:String(m['Phone Number']||'').replace(/^T/i,''),
+       birthday:String(m.Birthdate||'').startsWith('0000')?'':String(m.Birthdate||''),
+       birthISO:String(m.Birthdate||'').startsWith('0000')?'':String(m.Birthdate||''),
+       vip:m.VIP==='1'||m.VVIP==='1'||m.VVVIP==='1'?1:0,
+       tier:m.VVVIP==='1'?'VVVIP':m.VVIP==='1'?'VVIP':m.VIP==='1'?'VIP':'Standard',
+       balance:'',vouchers:0,when:'',action:'',branch:''
+     }));
      const bytes=Uint8Array.from(atob(memberHTMLBase64),c=>c.charCodeAt(0));
      let html=new TextDecoder().decode(bytes);
-     // Remove the preview's four example people. Member names and phone numbers
-     // must come from the existing 3,514-row member import, not fabricated examples.
-     html=html.replace(/const people=\[.*?\];let activeTab=/s,
-       'const people=[];let activeTab=');
-     // Sample campaign labels in the prototype must not masquerade as real tags.
-     html=html.replaceAll('<span class="tag">Nusa Bestari</span><span class="tag">ANAN</span><span class="tag purple">DISCOUNT 20%</span>','');
-     // The customer list is real imported data. Financial and transaction tabs
-     // inside the original visual prototype are not synced and are marked accordingly.
-     html=html.replace('</body>', `<script>
-       window.addEventListener('message',function(e){
-         if(e.source!==parent || !e.data || e.data.type!=='nd-members-directory')return;
-         people.splice(0,people.length,...e.data.members);
-         if(people.length)selectedMember=people[0];
-         renderMembers();
-         var count=document.getElementById('memberCount');
-         if(count)count.textContent=people.length.toLocaleString('en-MY')+' members';
-       });
-       <\/script></body>`);
-     iframe.srcdoc=html; loaded=true;
+     const sample=/const people=\[.*?\];let activeTab=/s;
+     if(!sample.test(html)){
+       console.error('Members template incompatible: directory not injected');
+       alert('Unable to load the member directory. Please use the existing Members page.');
+       return;
+     }
+     // JSON is placed in a script: escape markup-sensitive characters.
+     const directory=JSON.stringify(members).replace(/</g,'\\u003c').replace(/>/g,'\\u003e')
+       .replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+     html=html.replace(sample,()=> 'const people='+directory+';let activeTab=');
+     // The prototype labelled all rows as test records. These are real imported
+     // directory records; wallet/appointment history is still not synchronized.
+     html=html.replace("people.length+'（测试数据）'", "people.length.toLocaleString('en-MY')+' members'");
+     html=html.replace(/<span class="tag">Nusa Bestari<\/span><span class="tag">ANAN<\/span><span class="tag purple">DISCOUNT 20%<\/span>/g,'');
+     // The embedded prototype's 'Recent' tab should show directory rows rather
+     // than claim real transaction ordering.
+     html=html.replace("const labels=['近期','新','生日','名字'", "const labels=['全部','新','生日','名字'");
+     html=html.replace("let activeTab='近期'", "let activeTab='全部'");
+     html=html.replace("let groups=['近期','新','生日','名字'", "let groups=['全部','新','生日','名字'");
+     iframe.srcdoc=html;
+     loaded=true;
    }
-   overlay.classList.add('nd-open');overlay.setAttribute('aria-hidden','false');
-   // Send only the customer directory fields; never invent balances or vouchers.
-   const members=ndCsvMembers.map(m=>({
-     name:String(m.Name||''),
-     phone:String(m['Phone Number']||'').slice(-4),
-     fullPhone:String(m['Phone Number']||''),
-     birthday:String(m.Birthdate||''),
-     birthISO:String(m.Birthdate||''),
-     vip:m.VIP==='1'||m.VVIP==='1'||m.VVVIP==='1'?1:0,
-     tier:m.VVVIP==='1'?'VVVIP':m.VVIP==='1'?'VVIP':m.VIP==='1'?'VIP':'Standard',
-     balance:'', vouchers:0, when:'', action:'', branch:''
-   }));
-   const send=()=>iframe.contentWindow?.postMessage({type:'nd-members-directory',members},'*');
-   iframe.addEventListener('load',send,{once:true});
-   if(iframe.contentDocument?.querySelector('#memberlist'))send();
+   overlay.classList.add('nd-open');
+   overlay.setAttribute('aria-hidden','false');
  }
  function closeMember(){overlay.classList.remove('nd-open');overlay.setAttribute('aria-hidden','true')}
  document.getElementById('ndIntegratedMemberBack').addEventListener('click',closeMember);
