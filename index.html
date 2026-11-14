@@ -18115,61 +18115,18 @@ async function openPayslip(empId,type){
 </div>
 </div>`;
   } else {
-    const sevenSnapshot=snapshotFor(empId);
     const rawC=commissionSnapshotFor(empId);
     if(!rawC){alert("Please confirm 14th payroll first.");return false;}
-    const threeBonus=Number(rawC.three_month_bonus ?? salaryQuarter3BonusFor(empId));
-
-    // Recalculate the 14th figures from the confirmed component fields.
-    // Older snapshots may contain a stale `commission` saved by an earlier formula.
-    const recalculated=calculate14th({
-      commission_a:Number(rawC.commission_a||0),
-      commission_b:Number(rawC.commission_b||0),
-      total_commission:Number(rawC.total_commission||0),
-      customer_referral:Number(rawC.customer_referral||0),
-      staff_referral:Number(rawC.staff_referral||0),
-      reward:Number(rawC.bonus||0),
-      bonus_is_total:true,
-      w_bonus:Number(rawC.w_bonus||0)
-    },sevenSnapshot,threeBonus);
-
-    // 14th payslip must use the confirmed snapshot, never overwrite its net
-    // or infer new payable wages from the present-day recalculation.
+    // The 14th payslip presents the FINAL confirmed commission AFTER all
+    // already-applied deductions. Do not deduct the 7th pay or advances again.
+    // All three displayed figures must match the saved confirmed Nett Pay.
     const c={...rawC};
     const ndMoney=v=>Math.round((Number(v)||0)*100)/100;
     const net=ndMoney(c.net_pay);
-    const savedGross=ndMoney(c.total_commission);
-    const savedIncome=ndMoney(c.total_income);
-    const savedCommission=ndMoney(c.commission);
-    // Prefer the confirmed total commission if it reconciles to payable net.
-    // Historical gross fields can be stale (e.g. 819.76 vs net 4819.76).
-    // Fallback to the confirmed earned commission/net; never show gross below net.
-    const gross=savedGross>=net-0.005 && savedGross!==0 ? savedGross
-      : (savedIncome>=net-0.005 && savedIncome!==0 ? savedIncome
-      : Math.max(savedCommission,net,0));
-    const deduction=ndMoney(gross-net);
-    const deductionItems=[];
-    // Reconcile only saved payroll component amounts, avoiding unverified claims.
-    if(deduction>0){
-      const components=[
-        ["7th Net Pay",c.seventh_net_pay],
-        ["7th Allowance Deducted",c.seventh_deducted_allowance],
-        ["7th Total Deduction (excluding Unpaid)",c.seventh_total_deduction],
-        ["14th Salary Advance",c.salary_advance_deduction]
-      ];
-      let left=deduction;
-      for(const [label,value] of components){
-        const amount=ndMoney(value);
-        if(amount>0 && amount<=left+0.005){
-          deductionItems.push([label,amount]);left=ndMoney(left-amount);
-        }
-      }
-      // If old confirmed columns don't itemize the full delta, label the
-      // remainder as an unitemized difference—not an invented deduction type.
-      if(left>0.005) deductionItems.push(["Unitemized confirmed difference",left]);
-    }
-    const earningHtml=payslipLine("Confirmed Gross Commission",gross);
-    const deductionHtml=deductionItems.map(([label,amount])=>payslipLine(label,amount)).join("");
+    const gross=net;
+    const deduction=0;
+    const earningHtml=payslipLine("Commission",gross);
+    const deductionHtml="";
     const ndFmt=v=>ndMoney(v).toFixed(2);
 
     // A confirmed 14th payslip is viewable even when Nett Pay is zero or negative.
