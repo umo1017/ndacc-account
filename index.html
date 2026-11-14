@@ -5490,6 +5490,13 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
   color: #1e5138 !important;
 }
 </style>
+<style id="nd-paid-row-unsigned-guard">
+/* Unfinished letter signatures prevent the completed-payment row highlight. */
+#salaryPage .salary-table tbody tr.nd-paid-row:has(.nd-incident-sign-slot .nd-incident-red),
+#ndCollaborationSalary .salary-table tbody tr.nd-paid-row:has(.nd-incident-sign-slot .nd-incident-red){background:transparent!important}
+#salaryPage .salary-table tbody tr.nd-paid-row:has(.nd-incident-sign-slot .nd-incident-red)>td,
+#ndCollaborationSalary .salary-table tbody tr.nd-paid-row:has(.nd-incident-sign-slot .nd-incident-red)>td{background:#fff!important}
+</style>
 </head>
 <body><style id="nd-integrated-member-ui-css">
 #ndIntegratedMemberOverlay{position:fixed;inset:0;z-index:2147483640;background:#f2f1f7;display:none;flex-direction:column}
@@ -15342,7 +15349,7 @@ function renderSevenTable(emps){
     const pm=String(e.payment_method||"").trim();
     const net=Number(s.net_pay||0);
 
-    return `<tr class="${snap?.payment_done===true?'nd-paid-row':''}" data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
+    return `<tr class="${snap?.payment_done===true?'nd-paid-row':''}" data-nd-payment-completed="${snap?.payment_done===true}" data-employee-id="${e.id}" data-outlet="${String(e.outlet||"").replace(/"/g,"&quot;")}">
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e)}</td>
       <td>${snap
         ? `<div class="offday-box confirmed-readonly"><span>${Number(s.off_days_taken||0)}</span><span class="days-suffix">Days</span></div>`
@@ -15498,7 +15505,7 @@ function renderFourteenTable(emps){
     else if(pm==="Bank Transfer") transferTotal+=net;
     else if(pm==="TNG") tngTotal+=net;
 
-    return `<tr class="${cs?.payment_done===true?'nd-paid-row':''}">
+    return `<tr class="${cs?.payment_done===true?'nd-paid-row':''}" data-nd-payment-completed="${cs?.payment_done===true}">
       <td title="${String(e.name||"").replace(/"/g,"&quot;")}">${salaryDisplayName(e)}</td>
       <td>${cs?money(a):salaryOverrideInput(e.id,"14","commission_a",a)}</td>
       <td>${cs?money(b):salaryOverrideInput(e.id,"14","commission_b",b)}</td>
@@ -38349,6 +38356,11 @@ function enhance(){
     for(const r of records){const k=String(r.employee_id);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k).push(r);}
     for(const el of slots()){
       const items=grouped.get(el.dataset.ndIncidentEmployee)||[];
+      const row=el.closest('tr');
+      if(row && row.dataset.ndPaymentCompleted === 'true'){
+        row.classList.toggle('nd-paid-row', items.length === 0);
+        row.classList.toggle('nd-awaiting-letter-signature', items.length > 0);
+      }
       const key=items.map(r=>String(r.id)).join('|');
       if(el.dataset.ndPainted===key)continue;
       el.dataset.ndPainted=key;el.replaceChildren();
