@@ -32986,84 +32986,7 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
    const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
-<style id="nd-incident-payment-sign-style">
-.nd-incident-sign-slot{display:inline-flex;gap:5px;align-items:center;margin-left:6px;vertical-align:middle}
-.nd-incident-sign-slot .nd-incident-red{background:#bc2424!important;color:#fff!important;border:1px solid #a51d1d!important;border-radius:8px!important;padding:7px 10px!important;min-height:32px!important;min-width:auto!important;font-size:12px!important;font-weight:750!important;cursor:pointer!important;white-space:nowrap}
-.nd-incident-sign-slot .nd-incident-red:hover{background:#981b1b!important}
-</style>
-<script id="nd-incident-sign-payment-reminder-v1">
-(function(){'use strict';
-  let pending=false,loading=false,records=[],lastRead=0,lastKeys='',loaded=false,token=0;
-  const S='[data-nd-incident-employee]';
-  const isSignature=x=>/^data:image\/(?:png|jpeg|webp);base64,/.test(typeof x==='string'?x:(x?.data||''));
-  const details=r=>{try{return typeof r.details==='string'?JSON.parse(r.details||'{}'):(r.details||{});}catch(_){return {};}};
-  function slots(){return [...document.querySelectorAll(S)].filter(el=>el.isConnected);}
-  function paint(){
-    const grouped=new Map();
-    for(const r of records){const k=String(r.employee_id);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k).push(r);}
-    for(const el of slots()){
-      const items=grouped.get(el.dataset.ndIncidentEmployee)||[];
-      const key=items.map(r=>String(r.id)).join('|');
-      if(el.dataset.ndPainted===key)continue;
-      el.dataset.ndPainted=key;el.replaceChildren();
-      for(const r of items){const b=document.createElement('button');b.type='button';b.className='nd-incident-red';b.textContent=r.warning_letter?'Sign Warning':'Sign Fine';b.title='Employee signature required · '+(r.reason_en||'');b.onclick=async()=>{b.disabled=true;try{if(typeof window.ndOpenStaffDeductionDocument!=='function')throw Error('Staff Deductions document is not ready.');await window.ndOpenStaffDeductionDocument(r.id,r.warning_letter?'warning':'fine');}catch(e){alert('Unable to open letter: '+(e.message||e));}finally{b.disabled=false;}};el.appendChild(b);}
-    }
-  }
-  async function reload(force=false){
-    if(loading)return;
-    const visible=slots();if(!visible.length)return;
-    const keys=[...new Set(visible.map(e=>e.dataset.ndIncidentEmployee))].sort();
-    const signature=keys.join(',');
-    if(!force&&loaded&&signature===lastKeys&&Date.now()-lastRead<30000){paint();return;}
-    const db=window.salaryDb;if(!db)return;
-    lastKeys=signature;loading=true;const request=++token;
-    try{
-      const all=[];
-      for(let start=0;start<keys.length;start+=75){
-        const batch=keys.slice(start,start+75).map(Number).filter(Number.isFinite);
-        if(!batch.length)continue;
-        for(let offset=0;offset<10000;offset+=500){
-          const res=await db.from('nd_staff_incidents').select('id,employee_id,warning_letter,details,reason_en,approved_amount,review_status,nd_deleted_at')
-            .in('employee_id',batch).eq('review_status','approved').order('incident_date',{ascending:false}).range(offset,offset+499);
-          if(res.error)throw res.error;
-          all.push(...(res.data||[]));if((res.data||[]).length<500)break;
-        }
-      }
-      const eligible=all.filter(r=>!r.nd_deleted_at&&(r.warning_letter===true||Number(r.approved_amount)>0));
-      const needsWarning=eligible.filter(r=>r.warning_letter===true&&!isSignature(details(r).employee_acknowledgement?.signature_data));
-      const signed=new Set();
-      for(let start=0;start<needsWarning.length;start+=100){
-        const ids=needsWarning.slice(start,start+100).map(r=>r.id);
-        const sign=await db.from('nd_staff_warning_signatures').select('incident_id,signature_data').in('incident_id',ids);
-        // Installations may use only the acknowledgement stored in incident details.
-        if(sign.error){if(/nd_staff_warning_signatures|42P01|PGRST205|permission/i.test(sign.error.message||''))break;throw sign.error;}
-        for(const r of sign.data||[])if(isSignature(r.signature_data))signed.add(String(r.incident_id));
-      }
-      if(request!==token)return;
-      records=eligible.filter(r=>r.warning_letter===true
-        ?!signed.has(String(r.id))&&!isSignature(details(r).employee_acknowledgement?.signature_data)
-        :!isSignature(details(r).fine_acknowledgement?.signature_data));
-      loaded=true;lastRead=Date.now();
-      document.querySelectorAll(S).forEach(e=>delete e.dataset.ndPainted);
-      paint();
-    }catch(error){
-      // Never show stale/false signed status when incident history is inaccessible.
-      records=[];loaded=false;document.querySelectorAll(S).forEach(e=>{delete e.dataset.ndPainted;e.replaceChildren()});
-      console.warn('Staff letter signature reminders unavailable:',error);
-    }finally{loading=false;}
-  }
-  function schedule(force=false){if(force){loaded=false;lastRead=0;}if(pending)return;pending=true;setTimeout(()=>{pending=false;void reload(force)},120);}
-  const observe=new MutationObserver(mutations=>{if(mutations.some(m=>[...m.addedNodes].some(n=>n.nodeType===1&&(n.matches?.(S)||n.querySelector?.(S)))))schedule();});
-  const start=()=>{observe.observe(document.body,{childList:true,subtree:true});schedule(true);};
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
-  window.addEventListener('nd-staff-incident-reviewed',()=>schedule(true));
-  window.addEventListener('focus',()=>{if(Date.now()-lastRead>30000)schedule(true);});
-  // When either employee signature is successfully saved, update the payroll alert.
-  function hook(name){const original=window[name];if(typeof original!=='function'||original._ndSignHook)return;const fn=async function(...args){const out=await original.apply(this,args);schedule(true);return out;};fn._ndSignHook=true;window[name]=fn;}
-  const hookSigning=()=>{hook('ndSaveStaffWarningSignature');hook('ndSaveStaffFineSignature');};
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hookSigning,{once:true});else hookSigning();
-})();
-</script>
+
 
 </body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
@@ -38301,6 +38224,96 @@ function enhance(){
 })();
 </script>
 
+<style id="nd-incident-payment-sign-style">
+.nd-incident-sign-slot{display:inline-flex;gap:5px;align-items:center;margin-left:6px;vertical-align:middle}
+.nd-incident-sign-slot .nd-incident-red{background:#bc2424!important;color:#fff!important;border:1px solid #a51d1d!important;border-radius:8px!important;padding:7px 10px!important;min-height:32px!important;min-width:auto!important;font-size:12px!important;font-weight:750!important;cursor:pointer!important;white-space:nowrap}
+.nd-incident-sign-slot .nd-incident-red:hover{background:#981b1b!important}
+</style>
+<script id="nd-incident-sign-payment-reminder-v1">
+(function(){'use strict';
+  let pending=false,loading=false,records=[],lastRead=0,lastKeys='',loaded=false,token=0;
+  const S='[data-nd-incident-employee]';
+  const isSignature=x=>/^data:image\/(?:png|jpeg|webp);base64,/.test(typeof x==='string'?x:(x?.data||''));
+  const details=r=>{try{return typeof r.details==='string'?JSON.parse(r.details||'{}'):(r.details||{});}catch(_){return {};}};
+  function slots(){return [...document.querySelectorAll(S)].filter(el=>el.isConnected);}
+  function paint(){
+    const grouped=new Map();
+    for(const r of records){const k=String(r.employee_id);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k).push(r);}
+    for(const el of slots()){
+      const items=grouped.get(el.dataset.ndIncidentEmployee)||[];
+      const key=items.map(r=>String(r.id)).join('|');
+      if(el.dataset.ndPainted===key)continue;
+      el.dataset.ndPainted=key;el.replaceChildren();
+      for(const r of items){const b=document.createElement('button');b.type='button';b.className='nd-incident-red';b.textContent=r.warning_letter?'Sign Warning':'Sign Fine';b.title='Employee signature required · '+(r.reason_en||'');b.onclick=async()=>{b.disabled=true;try{if(typeof window.ndOpenStaffDeductionDocument!=='function')throw Error('Staff Deductions document is not ready.');await window.ndOpenStaffDeductionDocument(r.id,r.warning_letter?'warning':'fine');}catch(e){alert('Unable to open letter: '+(e.message||e));}finally{b.disabled=false;}};el.appendChild(b);}
+    }
+  }
+  async function reload(force=false){
+    if(loading)return;
+    const visible=slots();if(!visible.length)return;
+    const keys=[...new Set(visible.map(e=>e.dataset.ndIncidentEmployee))].sort();
+    const signature=keys.join(',');
+    if(!force&&loaded&&signature===lastKeys&&Date.now()-lastRead<30000){paint();return;}
+    const db=window.salaryDb;if(!db)return;
+    lastKeys=signature;loading=true;const request=++token;
+    try{
+      const all=[];
+      for(let start=0;start<keys.length;start+=75){
+        const batch=keys.slice(start,start+75).map(Number).filter(Number.isFinite);
+        if(!batch.length)continue;
+        for(let offset=0;offset<10000;offset+=500){
+          const res=await db.from('nd_staff_incidents').select('id,employee_id,warning_letter,details,reason_en,approved_amount,review_status,nd_deleted_at')
+            .in('employee_id',batch).eq('review_status','approved').order('incident_date',{ascending:false}).range(offset,offset+499);
+          if(res.error)throw res.error;
+          all.push(...(res.data||[]));if((res.data||[]).length<500)break;
+        }
+      }
+      const eligible=all.filter(r=>!r.nd_deleted_at&&(r.warning_letter===true||Number(r.approved_amount)>0));
+      const needsWarning=eligible.filter(r=>r.warning_letter===true&&!isSignature(details(r).employee_acknowledgement?.signature_data));
+      const signed=new Set();
+      for(let start=0;start<needsWarning.length;start+=100){
+        const ids=needsWarning.slice(start,start+100).map(r=>r.id);
+        const sign=await db.from('nd_staff_warning_signatures').select('incident_id,signature_data').in('incident_id',ids);
+        // Installations may use only the acknowledgement stored in incident details.
+        if(sign.error){if(/nd_staff_warning_signatures|42P01|PGRST205|permission/i.test(sign.error.message||''))break;throw sign.error;}
+        for(const r of sign.data||[])if(isSignature(r.signature_data))signed.add(String(r.incident_id));
+      }
+      const signedFines=new Set();
+      const fineIds=eligible.filter(r=>r.warning_letter!==true).map(r=>r.id);
+      for(let start=0;start<fineIds.length;start+=100){
+        const result=await db.from('nd_staff_fine_signatures')
+          .select('incident_id,signature_data').in('incident_id',fineIds.slice(start,start+100));
+        if(result.error){
+          if(/42P01|PGRST205|permission|does not exist|not found|schema cache/i.test(result.error.message||''))break;
+          throw result.error;
+        }
+        for(const r of result.data||[])if(isSignature(r.signature_data))signedFines.add(String(r.incident_id));
+      }
+      if(request!==token)return;
+      records=eligible.filter(r=>r.warning_letter===true
+        ?!signed.has(String(r.id))&&!isSignature(details(r).employee_acknowledgement?.signature_data)
+        :!signedFines.has(String(r.id))&&!isSignature(details(r).fine_acknowledgement?.signature_data));
+      loaded=true;lastRead=Date.now();
+      document.querySelectorAll(S).forEach(e=>delete e.dataset.ndPainted);
+      paint();
+    }catch(error){
+      // Never show stale/false signed status when incident history is inaccessible.
+      records=[];loaded=false;document.querySelectorAll(S).forEach(e=>{delete e.dataset.ndPainted;e.replaceChildren()});
+      console.warn('Staff letter signature reminders unavailable:',error);
+    }finally{loading=false;}
+  }
+  function schedule(force=false){if(force){loaded=false;lastRead=0;}if(pending)return;pending=true;setTimeout(()=>{pending=false;void reload(force)},120);}
+  const observe=new MutationObserver(mutations=>{if(mutations.some(m=>[...m.addedNodes].some(n=>n.nodeType===1&&(n.matches?.(S)||n.querySelector?.(S)))))schedule();});
+  const start=()=>{observe.observe(document.body,{childList:true,subtree:true});schedule(true);};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+  window.addEventListener('nd-staff-incident-reviewed',()=>schedule(true));
+  window.addEventListener('focus',()=>schedule(true));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)schedule(true);});
+  // When either employee signature is successfully saved, update the payroll alert.
+  function hook(name){const original=window[name];if(typeof original!=='function'||original._ndSignHook)return;const fn=async function(...args){const out=await original.apply(this,args);schedule(true);return out;};fn._ndSignHook=true;window[name]=fn;}
+  const hookSigning=()=>{hook('ndSaveStaffWarningSignature');hook('ndSaveStaffFineSignature');};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hookSigning,{once:true});else hookSigning();
+})();
+</script>
 </body>
 </html>
 <style id="nd-operational-refresh-style">#aiReceiptPage{color:#203c32!important}#aiReceiptPage .salary-title{color:#fff!important}#aiReceiptPage .salary-top .helper{color:#e1eee7!important}#aiReceiptPage .salary-top .btn{background:#fff!important;color:#244f3d!important}#aiReceiptPage .salary-card,#aiReceiptPage .ai-receipt-drop{background:#fff!important;color:#203c32!important}#aiReceiptPage label,#aiReceiptPage summary,#aiReceiptPage .salary-card strong,#aiReceiptPage th{color:#284b3c!important}#aiReceiptPage input,#aiReceiptPage select,#aiReceiptPage textarea{color:#183d2c!important;background:#fff!important;-webkit-text-fill-color:#183d2c!important;opacity:1!important}#aiReceiptPage .helper,#aiReceiptPage small{color:#52685b!important}#aiReceiptPage ::placeholder{color:#6e7f75!important;opacity:1}#aiReceiptPage td{color:#263e32!important}#aiReceiptPage input:disabled{background:#eef3ef!important}#aiReceiptPage .receipt-status-pill{color:#294b38!important;background:#edf4ef!important}
