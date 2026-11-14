@@ -14428,12 +14428,14 @@ function ndUpdateSignedEditNotice(){
  const note=byId('ndSignedDetailsNotice'),restore=byId('ndRestoreSignedDetails');
  const signed=!!window.ndSignedOnboardingDraft,changed=ndSignedChanges();
  if(note){note.hidden=!signed;note.textContent=!signed?'':changed.length?'Employee details have been edited. You may review and save without signing again. The original signed contract and signatures remain unchanged.':'Signed agreement on file. Employee details can be edited and saved without a new signature. The original signed contract remains unchanged.';note.classList.toggle('nd-signed-edit-warning',false);}
- if(restore)restore.hidden=!signed||changed.length===0;
+ if(restore)restore.hidden=!signed||!changed.some(id=>id!=='empGuaranteed');
 }
 function ndRestoreSignedFormDetails(){
  const a=ndOnboardAgreement;if(!window.ndSignedOnboardingDraft||!a)return;
  const get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||'';
- const values={empName:a.employee?.employee_name||'',empNric:a.employee?.identity||'',empOutlet:a.employee?.branch||'',empJoinDate:get('Start Date'),empGuaranteed:get('Basic Salary (RM)'),empPayBy:get('Payment Method')};
+ // Restore identity/contract reference fields only. Basic Pay is an editable live payroll field.
+ // Do not replace the user's entered Basic Pay with the historical signed amount.
+ const values={empName:a.employee?.employee_name||'',empNric:a.employee?.identity||'',empOutlet:a.employee?.branch||'',empJoinDate:get('Start Date'),empPayBy:get('Payment Method')};
  for(const [id,value] of Object.entries(values)){const el=byId(id);if(el){el.value=value;el.readOnly=false;el.disabled=false;}}
  updateSubmitStaffPaymentFields();ndUpdateSignedEditNotice();
 }
@@ -15177,6 +15179,7 @@ function salaryPayslipReleaseLabel(type){
   return `${String(d.getDate()).padStart(2,"0")} ${d.toLocaleString("en-GB",{month:"short"})} ${d.getFullYear()}`;
 }
 function salaryPayslipCell(empId,type,confirmed){
+  if(String(byId("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return "";
   if(!confirmed)return `<span class="helper">Confirm first</span>`;
   if(!salaryPayslipIsReleased(type)){
     return ``;
@@ -15327,7 +15330,7 @@ function renderSevenTable(emps){
         ? (snap.payment_done
             ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>${String(e.payment_method||'').trim().toLowerCase()==='cash'?` <button class="btn" type="button" data-view-signed-receipt="7:${e.id}">View Signed Receipt</button>`:''}`
             : `${ndSalaryHoldButton(7,e.id)} <button class="btn payment-done-btn pending" type="button" data-payment7="${e.id}" ${ndSalaryIsHeld(7,e.id)?'disabled title="Release On Hold first"':''}>Payment — DONE</button>`)
-        : `<span class="helper">Confirm first</span>`}</td>
+        : `<span class="helper">Confirm first</span>`} <span class="nd-incident-sign-slot" data-nd-incident-employee="${e.id}"></span></td>
     </tr>`;
   };
 
@@ -15469,7 +15472,7 @@ function renderFourteenTable(emps){
         ? (cs.payment_done
             ? `<button class="btn payment-done-btn done" type="button" disabled>Payment — DONE ✓</button>${String(e.payment_method||'').trim().toLowerCase()==='cash'?` <button class="btn" type="button" data-view-signed-receipt="14:${e.id}">View Signed Receipt</button>`:''}`
             : `${ndSalaryHoldButton(14,e.id)} <button class="btn payment-done-btn pending" type="button" data-payment14="${e.id}" ${ndSalaryIsHeld(14,e.id)?'disabled title="Release On Hold first"':''}>Payment — DONE</button>`)
-        : `<span class="helper">Confirm first</span>`}</td>
+        : `<span class="helper">Confirm first</span>`} <span class="nd-incident-sign-slot" data-nd-incident-employee="${e.id}"></span></td>
     </tr>`;
   }).join("");
 
@@ -15750,6 +15753,7 @@ let ndBranchPreparedPayslips=null;
 
 
 async function downloadBranchIndividualPayslips(outlet,type,button){
+  if(String(document.getElementById("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return false;
   const email=String(currentSalaryUserEmail||"").trim().toLowerCase();
   if(email!=="umo1017@gmail.com"){
     alert("Only UMO can download branch payslip files.");
@@ -18137,6 +18141,7 @@ async function ndRefreshPayslipSource(empId){
 }
 
 async function openPayslip(empId,type){
+  if(String(byId("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return false;
   const selectedEmp=salaryEmployees.find(x=>Number(x.id)===Number(empId));
   window.currentPayslipStaff=selectedEmp ? {
     id:Number(selectedEmp.id),
@@ -18840,6 +18845,7 @@ async function downloadSalaryPdf(pdf,filename,isIOS=false,previewWindow=null){
 }
 
 async function buildBranchPayslipPdf(branch,type,employees){
+  if(String(document.getElementById("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return false;
   const isSeven=Number(type)===7;
   const {jsPDF}=window.jspdf;
   let pdf=null;
@@ -18872,6 +18878,7 @@ async function buildBranchPayslipPdf(branch,type,employees){
 }
 
 async function exportPayslipsByBranch(type){
+  if(String(document.getElementById("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return false;
   if(!isPayrollManager){alert("Salary manager only.");return;}
   if(!salaryPayslipIsReleased(type)){
     alert(`${Number(type)===7?"7th":"14th"} payslips will be available on ${salaryPayslipReleaseLabel(type)}.`);
@@ -19200,6 +19207,7 @@ Object.assign(window,{showDaily,showSalary,showRoster,showSettings,openTaxRules,
 let payslipPdfCache={key:"",file:null};
 
 async function buildPayslipPdfFile(){
+  if(String(document.getElementById("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return false;
   const slip=document.querySelector("#salaryPayslipPrint .payslip-sheet");
   if(!slip) throw new Error("Payslip not found");
 
@@ -19233,6 +19241,7 @@ function normalizeStaffWhatsAppNumber(raw){
 
 
 async function downloadCurrentPayslipPdf(){
+  if(String(document.getElementById("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return false;
   const btn=document.getElementById("downloadPayslipPdfBtn");
   const oldText=btn?.textContent||"Download PDF";
 
@@ -19255,6 +19264,7 @@ async function downloadCurrentPayslipPdf(){
 }
 
 async function shareCurrentPayslipPdf(){
+  if(String(document.getElementById("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return false;
   const btn=document.getElementById("sharePayslipPdfBtn");
   const original=btn?.textContent||"Share PDF";
   try{
@@ -19289,6 +19299,7 @@ async function shareCurrentPayslipPdf(){
 }
 
 async function sharePayslipWhatsApp(){
+  if(String(document.getElementById("salaryMonth")?.value||monthKey()||"").slice(0,7)<"2026-09")return false;
   const btn=document.getElementById("shareWhatsAppBtn");
   const oldText=btn?.textContent||"Send WhatsApp";
 
@@ -32974,7 +32985,87 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function report(r){
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
-   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'</body></html>';
+   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
+<style id="nd-incident-payment-sign-style">
+.nd-incident-sign-slot{display:inline-flex;gap:5px;align-items:center;margin-left:6px;vertical-align:middle}
+.nd-incident-sign-slot .nd-incident-red{background:#bc2424!important;color:#fff!important;border:1px solid #a51d1d!important;border-radius:8px!important;padding:7px 10px!important;min-height:32px!important;min-width:auto!important;font-size:12px!important;font-weight:750!important;cursor:pointer!important;white-space:nowrap}
+.nd-incident-sign-slot .nd-incident-red:hover{background:#981b1b!important}
+</style>
+<script id="nd-incident-sign-payment-reminder-v1">
+(function(){'use strict';
+  let pending=false,loading=false,records=[],lastRead=0,lastKeys='',loaded=false,token=0;
+  const S='[data-nd-incident-employee]';
+  const isSignature=x=>/^data:image\/(?:png|jpeg|webp);base64,/.test(typeof x==='string'?x:(x?.data||''));
+  const details=r=>{try{return typeof r.details==='string'?JSON.parse(r.details||'{}'):(r.details||{});}catch(_){return {};}};
+  function slots(){return [...document.querySelectorAll(S)].filter(el=>el.isConnected);}
+  function paint(){
+    const grouped=new Map();
+    for(const r of records){const k=String(r.employee_id);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k).push(r);}
+    for(const el of slots()){
+      const items=grouped.get(el.dataset.ndIncidentEmployee)||[];
+      const key=items.map(r=>String(r.id)).join('|');
+      if(el.dataset.ndPainted===key)continue;
+      el.dataset.ndPainted=key;el.replaceChildren();
+      for(const r of items){const b=document.createElement('button');b.type='button';b.className='nd-incident-red';b.textContent=r.warning_letter?'Sign Warning':'Sign Fine';b.title='Employee signature required · '+(r.reason_en||'');b.onclick=async()=>{b.disabled=true;try{if(typeof window.ndOpenStaffDeductionDocument!=='function')throw Error('Staff Deductions document is not ready.');await window.ndOpenStaffDeductionDocument(r.id,r.warning_letter?'warning':'fine');}catch(e){alert('Unable to open letter: '+(e.message||e));}finally{b.disabled=false;}};el.appendChild(b);}
+    }
+  }
+  async function reload(force=false){
+    if(loading)return;
+    const visible=slots();if(!visible.length)return;
+    const keys=[...new Set(visible.map(e=>e.dataset.ndIncidentEmployee))].sort();
+    const signature=keys.join(',');
+    if(!force&&loaded&&signature===lastKeys&&Date.now()-lastRead<30000){paint();return;}
+    const db=window.salaryDb;if(!db)return;
+    lastKeys=signature;loading=true;const request=++token;
+    try{
+      const all=[];
+      for(let start=0;start<keys.length;start+=75){
+        const batch=keys.slice(start,start+75).map(Number).filter(Number.isFinite);
+        if(!batch.length)continue;
+        for(let offset=0;offset<10000;offset+=500){
+          const res=await db.from('nd_staff_incidents').select('id,employee_id,warning_letter,details,reason_en,approved_amount,review_status,nd_deleted_at')
+            .in('employee_id',batch).eq('review_status','approved').order('incident_date',{ascending:false}).range(offset,offset+499);
+          if(res.error)throw res.error;
+          all.push(...(res.data||[]));if((res.data||[]).length<500)break;
+        }
+      }
+      const eligible=all.filter(r=>!r.nd_deleted_at&&(r.warning_letter===true||Number(r.approved_amount)>0));
+      const needsWarning=eligible.filter(r=>r.warning_letter===true&&!isSignature(details(r).employee_acknowledgement?.signature_data));
+      const signed=new Set();
+      for(let start=0;start<needsWarning.length;start+=100){
+        const ids=needsWarning.slice(start,start+100).map(r=>r.id);
+        const sign=await db.from('nd_staff_warning_signatures').select('incident_id,signature_data').in('incident_id',ids);
+        // Installations may use only the acknowledgement stored in incident details.
+        if(sign.error){if(/nd_staff_warning_signatures|42P01|PGRST205|permission/i.test(sign.error.message||''))break;throw sign.error;}
+        for(const r of sign.data||[])if(isSignature(r.signature_data))signed.add(String(r.incident_id));
+      }
+      if(request!==token)return;
+      records=eligible.filter(r=>r.warning_letter===true
+        ?!signed.has(String(r.id))&&!isSignature(details(r).employee_acknowledgement?.signature_data)
+        :!isSignature(details(r).fine_acknowledgement?.signature_data));
+      loaded=true;lastRead=Date.now();
+      document.querySelectorAll(S).forEach(e=>delete e.dataset.ndPainted);
+      paint();
+    }catch(error){
+      // Never show stale/false signed status when incident history is inaccessible.
+      records=[];loaded=false;document.querySelectorAll(S).forEach(e=>{delete e.dataset.ndPainted;e.replaceChildren()});
+      console.warn('Staff letter signature reminders unavailable:',error);
+    }finally{loading=false;}
+  }
+  function schedule(force=false){if(force){loaded=false;lastRead=0;}if(pending)return;pending=true;setTimeout(()=>{pending=false;void reload(force)},120);}
+  const observe=new MutationObserver(mutations=>{if(mutations.some(m=>[...m.addedNodes].some(n=>n.nodeType===1&&(n.matches?.(S)||n.querySelector?.(S)))))schedule();});
+  const start=()=>{observe.observe(document.body,{childList:true,subtree:true});schedule(true);};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+  window.addEventListener('nd-staff-incident-reviewed',()=>schedule(true));
+  window.addEventListener('focus',()=>{if(Date.now()-lastRead>30000)schedule(true);});
+  // When either employee signature is successfully saved, update the payroll alert.
+  function hook(name){const original=window[name];if(typeof original!=='function'||original._ndSignHook)return;const fn=async function(...args){const out=await original.apply(this,args);schedule(true);return out;};fn._ndSignHook=true;window[name]=fn;}
+  const hookSigning=()=>{hook('ndSaveStaffWarningSignature');hook('ndSaveStaffFineSignature');};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hookSigning,{once:true});else hookSigning();
+})();
+</script>
+
+</body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
  }
@@ -33108,6 +33199,7 @@ async function deleteIncident(row,button){
  const show=message=>{if(status)status.textContent=message;note(message)};
  if(email!=='umo1017@gmail.com'){show('Only UMO can delete deduction records.');return;}
  if(!row){show('Record not found. Refresh the history and try again.');return;}
+ if(row.warning_letter!==true){show('Only Warning Letter History records can be deleted here.');return;}
  if(!confirm(row.warning_letter?'Delete this Warning Letter History record? This action cannot be undone.':'Delete this staff deduction history record?'))return;
  button.disabled=true;show('Deleting…');
  try{
@@ -33120,7 +33212,7 @@ async function deleteIncident(row,button){
  }catch(error){show('Unable to delete: '+(error?.message||String(error)));}
  finally{if(button.isConnected)button.disabled=false;}
 }
-function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3></div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${email?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Fine Letter</button><button class="btn" type="button" id="nddNewWarning">New Warning Letter</button>${isAdmin()?'<button class="btn" type="button" id="nddManage">Manage Reasons</button>':''}</div><div id="nddForm" style="display:none"><h4 id="nddFormTitle">Fine Letter</h4><input type="hidden" id="nddDocumentKind" value="fine"><div class="ndd-grid"><div id="nddWarningLevelWrap" style="display:none"><label for="nddWarningLevel">Warning Level</label><select id="nddWarningLevel"><option value="1">Warning 1</option><option value="2">Warning 2</option><option value="3">Warning 3</option></select></div><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en})),selectedReason)}</select></div><div id="nddFineAmountWrap"><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div></div><div class="ndd-grid" style="margin-top:12px"><div class="ndd-full"><label for="nddIncidentText">Incident Description</label><textarea id="nddIncidentText" rows="6" placeholder="Describe the incident, date, place and confirmed facts."></textarea></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Add Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Pending Approval · All Months</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Document</th><th>Proposed RM</th><th>Action</th></tr></thead><tbody>${records.filter(r=>r.review_status==='pending').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${r.warning_letter?"Warning "+(Number((()=>{try{return JSON.parse(r.details||"{}").warning_level}catch(_){return 1}})())||1):"Fine Letter"}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${isAdmin()?`<button class="mini" data-review="${r.id}">Approve / Reject</button>`:'Awaiting UMO / Mars'}${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}</td></tr>`).join('')||'<tr><td colspan="7">No pending records.</td></tr>'}</tbody></table></div><div class="ndd-actions"><h4>Fine Letter History</h4><label for="nddHistoryMonth">Month <input id="nddHistoryMonth" type="month" value="${esc(historyMonth||mm)}"></label></div><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.some(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm))?records.filter(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${Number(r.approved_amount||0)>0?`<button class="mini" data-fine="${r.id}">Fine Letter</button>`:''}${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="8">No records for this month.</td></tr>'}</tbody></table></div><h4>Warning Letter History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Warning</th><th>Reason</th><th>Document</th></tr></thead><tbody>${records.filter(r=>r.review_status==='approved'&&r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>{let w=1;try{w=Number(JSON.parse(r.details||'{}').warning_level)||1}catch(_){}return `<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>Warning ${w}</td><td>${esc(r.reason_en)}</td><td><button class="mini" data-warning="${r.id}">View / PDF</button>${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="6">No warning letters for this month.</td></tr>'}</tbody></table></div>`;
+function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3></div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${email?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Fine Letter</button><button class="btn" type="button" id="nddNewWarning">New Warning Letter</button>${isAdmin()?'<button class="btn" type="button" id="nddManage">Manage Reasons</button>':''}</div><div id="nddForm" style="display:none"><h4 id="nddFormTitle">Fine Letter</h4><input type="hidden" id="nddDocumentKind" value="fine"><div class="ndd-grid"><div id="nddWarningLevelWrap" style="display:none"><label for="nddWarningLevel">Warning Level</label><select id="nddWarningLevel"><option value="1">Warning 1</option><option value="2">Warning 2</option><option value="3">Warning 3</option></select></div><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en})),selectedReason)}</select></div><div id="nddFineAmountWrap"><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div></div><div class="ndd-grid" style="margin-top:12px"><div class="ndd-full"><label for="nddIncidentText">Incident Description</label><textarea id="nddIncidentText" rows="6" placeholder="Describe the incident, date, place and confirmed facts."></textarea></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Add Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Pending Approval · All Months</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Document</th><th>Proposed RM</th><th>Action</th></tr></thead><tbody>${records.filter(r=>r.review_status==='pending').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${r.warning_letter?"Warning "+(Number((()=>{try{return JSON.parse(r.details||"{}").warning_level}catch(_){return 1}})())||1):"Fine Letter"}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${isAdmin()?`<button class="mini" data-review="${r.id}">Approve / Reject</button>`:'Awaiting UMO / Mars'}</td></tr>`).join('')||'<tr><td colspan="7">No pending records.</td></tr>'}</tbody></table></div><div class="ndd-actions"><h4>Fine Letter History</h4><label for="nddHistoryMonth">Month <input id="nddHistoryMonth" type="month" value="${esc(historyMonth||mm)}"></label></div><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.some(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm))?records.filter(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${Number(r.approved_amount||0)>0?`<button class="mini" data-fine="${r.id}">Fine Letter</button>`:''}${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="8">No records for this month.</td></tr>'}</tbody></table></div><h4>Warning Letter History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Warning</th><th>Reason</th><th>Document</th></tr></thead><tbody>${records.filter(r=>r.review_status==='approved'&&r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>{let w=1;try{w=Number(JSON.parse(r.details||'{}').warning_level)||1}catch(_){}return `<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>Warning ${w}</td><td>${esc(r.reason_en)}</td><td><button class="mini" data-warning="${r.id}">View / PDF</button>${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="6">No warning letters for this month.</td></tr>'}</tbody></table></div>`;
 const rejected=records.filter(r=>r.review_status==='rejected'&&String(r.incident_date).startsWith(historyMonth||mm));if(rejected.length)m.insertAdjacentHTML('beforeend','<h4>Rejected History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Status</th></tr></thead><tbody>'+rejected.map(r=>'<tr><td>'+esc(r.incident_date)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.employee_name)+'</td><td>'+esc(r.reason_en)+'</td><td>'+Number(r.proposed_amount||0).toFixed(2)+'</td><td>Rejected'+(email==='umo1017@gmail.com'?' <button class="mini" data-incident-delete="'+esc(r.id)+'">Delete</button>':'')+'</td></tr>').join('')+'</tbody></table></div>');
 $('nddHistoryMonth').onchange=async()=>{historyMonth=val('nddHistoryMonth')||month();try{await load()}catch(error){note('Unable to load history: '+error.message)}};
 
@@ -33176,7 +33268,7 @@ async function fineLetter(r){
  try{const latest=await db().from('nd_staff_incidents').select('*').eq('id',r.id).maybeSingle();if(latest.error)throw latest.error;if(!latest.data)throw Error('This record is unavailable.');r=latest.data;if(r.nd_deleted_at||!(Number(r.approved_amount)>0))throw Error('No fine is payable for this record.');if(r.review_status!=='approved')throw Error('Management approval required.');
  let signed=warningDetails(r).fine_acknowledgement;if(!warningSignatureSource(signed?.signature_data))signed=null;
  let dialog=$('ndFineLetterDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndFineLetterDialog';dialog.style.cssText='width:min(900px,96vw);max-height:92dvh;overflow:auto;padding:16px;border:1px solid #d8c6a5;border-radius:14px';document.body.append(dialog)}
- dialog.innerHTML='<div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn" type="button" data-fine-close>Close</button><button class="btn" type="button" data-fine-download>Download PDF</button></div><p role="status" data-fine-status></p><div data-fine-preview></div>'+(!signed&&isAdmin()?'<fieldset style="padding:14px;margin-top:14px"><legend>Employee Signature</legend><canvas data-fine-signature width="1000" height="600" style="display:block;width:100%;height:280px;border:1px solid #ccc;touch-action:none"></canvas><div style="display:flex;gap:8px;margin-top:10px"><button class="btn" type="button" data-fine-clear>Clear Signature</button><button class="btn" type="button" data-fine-save>Save Employee Signature</button></div></fieldset>':'');
+ dialog.innerHTML='<div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn" type="button" data-fine-close>Close</button><button class="btn" type="button" data-fine-download>Download PDF</button></div><p role="status" data-fine-status></p><div data-fine-preview></div>'+(!signed?'<fieldset style="padding:14px;margin-top:14px"><legend>Employee Signature</legend><canvas data-fine-signature width="1000" height="600" style="display:block;width:100%;height:280px;border:1px solid #ccc;touch-action:none"></canvas><div style="display:flex;gap:8px;margin-top:10px"><button class="btn" type="button" data-fine-clear>Clear Signature</button><button class="btn" type="button" data-fine-save>Save Employee Signature</button></div></fieldset>':'');
  const preview=dialog.querySelector('[data-fine-preview]'),message=dialog.querySelector('[data-fine-status]');const render=()=>{preview.innerHTML='<style>'+ND_WARNING_STYLE+'</style>'+fineDocumentMarkup(r,signed);fitStaffLetterPreview(preview)};render();
  dialog.querySelector('[data-fine-close]').onclick=()=>dialog.close();dialog.querySelector('[data-fine-download]').onclick=async event=>{const button=event.currentTarget;button.disabled=true;try{await downloadStaffLetterPDF(fineDocumentMarkup(r,signed),r.employee_name+' '+r.incident_date+' Fine Letter.pdf',dialog,message)}catch(error){message.textContent='Unable to download letter: '+error.message}finally{button.disabled=false}};
  const canvas=dialog.querySelector('[data-fine-signature]');if(canvas){const context=canvas.getContext('2d');context.lineWidth=2.5;context.lineCap='round';context.strokeStyle='#222';let drawing=false,ink=false;const point=event=>{const rect=canvas.getBoundingClientRect();return [(event.clientX-rect.left)*canvas.width/rect.width,(event.clientY-rect.top)*canvas.height/rect.height]};canvas.onpointerdown=event=>{drawing=true;ink=true;canvas.setPointerCapture(event.pointerId);context.beginPath();const [x,y]=point(event);context.moveTo(x,y);context.lineTo(x+.1,y+.1);context.stroke()};canvas.onpointermove=event=>{if(drawing){context.lineTo(...point(event));context.stroke()}};canvas.onpointerup=canvas.onpointercancel=()=>drawing=false;dialog.querySelector('[data-fine-clear]').onclick=()=>{context.clearRect(0,0,canvas.width,canvas.height);ink=false};dialog.querySelector('[data-fine-save]').onclick=async event=>{if(!ink){message.textContent='Employee signature is required.';return}const button=event.currentTarget;button.disabled=true;try{signed=await window.ndSaveStaffFineSignature(r.id,canvas.toDataURL('image/png'));render();canvas.closest('fieldset').remove();message.textContent='Signature saved. Review or download the signed Fine Letter.'}catch(error){message.textContent='Unable to save signature: '+error.message;button.disabled=false}}}
@@ -33184,7 +33276,7 @@ async function fineLetter(r){
  }catch(error){alert('Unable to open Fine Letter: '+error.message)}
 }
 window.ndSaveStaffFineSignature=async function(id,signature){
- const client=db(),auth=await client.auth.getUser();const userEmail=String(auth.data?.user?.email||'').toLowerCase();if(auth.error||!admins.includes(userEmail))throw Error('Administrator permission required');if(!warningSignatureSource(signature))throw Error('A valid employee signature is required.');
+ const client=db(),auth=await client.auth.getUser();const userEmail=String(auth.data?.user?.email||'').toLowerCase();if(auth.error||!auth.data?.user)throw Error('Please sign in before saving the signature.');if(!warningSignatureSource(signature))throw Error('A valid employee signature is required.');
  const {data:incident,error}=await client.from('nd_staff_incidents').select('*').eq('id',id).single();if(error)throw error;if(!incident||incident.nd_deleted_at||incident.review_status!=='approved'||!(Number(incident.approved_amount)>0))throw Error('Approved Fine Letter with a positive amount required.');const details=warningDetails(incident);if(warningSignatureSource(details.fine_acknowledgement?.signature_data))throw Error('The Fine Letter signature has already been saved. Reopen the letter.');
  const acknowledgement={signature_data:signature,signed_at:new Date().toISOString(),signed_by:userEmail,document_type:'fine_letter',approved_amount:Number(incident.approved_amount||0)};
  const merged={...details,nd_warning_document:1,fine_acknowledgement:acknowledgement};let query=client.from('nd_staff_incidents').update({details:JSON.stringify(merged)}).eq('id',id).eq('review_status','approved');if(incident.updated_at)query=query.eq('updated_at',incident.updated_at);const result=await query.select('id').maybeSingle();if(result.error)throw result.error;if(!result.data)throw Error('Signature could not be saved. Refresh the letter and try again.');return acknowledgement;
@@ -33234,7 +33326,7 @@ async function letter(r){
  const {data:signature,error:signError}=await db().from('nd_staff_warning_signatures').select('*').eq('incident_id',r.id).maybeSingle();if(signError&&!warningTableMissing(signError,'nd_staff_warning_signatures'))throw signError;let signed=signature;if(!signed){const latest=await db().from('nd_staff_incidents').select('details').eq('id',r.id).maybeSingle();if(latest.error)throw latest.error;if(latest.data?.details!=null)r={...r,details:latest.data.details};const acknowledgement=warningDetails(r).employee_acknowledgement;if(warningSignatureSource(acknowledgement?.signature_data))signed=acknowledgement}
  const branding=await window.ndGetCompanyDocumentTemplate?.()||{};
  let dialog=$('ndWarningLetterDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndWarningLetterDialog';dialog.style.cssText='width:min(900px,96vw);max-height:92dvh;border:1px solid #d8c6a5;border-radius:14px;padding:16px;overflow:auto';document.body.append(dialog)}
- dialog.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn" type="button" data-warning-close>Close</button><button class="btn" type="button" data-warning-download>Download PDF</button></div><p role="status" data-warning-status></p><div data-warning-preview></div>'+(!signed&&isAdmin()?'<fieldset style="padding:14px;margin:16px 0"><legend>Employee Signature</legend><canvas data-warning-signature width="1000" height="600" style="display:block;width:100%;height:280px;border:1px solid #ccc;touch-action:none"></canvas><div style="display:flex;gap:8px;margin-top:10px"><button class="btn" type="button" data-warning-clear>Clear Signature</button><button class="btn" type="button" data-warning-save>Save Employee Signature</button></div></fieldset>':'');
+ dialog.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn" type="button" data-warning-close>Close</button><button class="btn" type="button" data-warning-download>Download PDF</button></div><p role="status" data-warning-status></p><div data-warning-preview></div>'+(!signed?'<fieldset style="padding:14px;margin:16px 0"><legend>Employee Signature</legend><canvas data-warning-signature width="1000" height="600" style="display:block;width:100%;height:280px;border:1px solid #ccc;touch-action:none"></canvas><div style="display:flex;gap:8px;margin-top:10px"><button class="btn" type="button" data-warning-clear>Clear Signature</button><button class="btn" type="button" data-warning-save>Save Employee Signature</button></div></fieldset>':'');
  const preview=dialog.querySelector('[data-warning-preview]'),status=dialog.querySelector('[data-warning-status]');const render=()=>{preview.innerHTML='<style>'+ND_WARNING_STYLE+'</style>'+warningDocumentMarkup(r,n,signed,branding);fitStaffLetterPreview(preview)};render();dialog.querySelector('[data-warning-close]').onclick=()=>dialog.close();
  const canvas=dialog.querySelector('[data-warning-signature]');if(canvas){const context=canvas.getContext('2d');context.lineWidth=2.5;context.lineCap='round';context.strokeStyle='#222';let drawing=false,ink=false;const point=event=>{const rect=canvas.getBoundingClientRect();return [(event.clientX-rect.left)*canvas.width/rect.width,(event.clientY-rect.top)*canvas.height/rect.height]};canvas.onpointerdown=event=>{drawing=true;ink=true;canvas.setPointerCapture(event.pointerId);context.beginPath();const [x,y]=point(event);context.moveTo(x,y);context.lineTo(x+.1,y+.1);context.stroke()};canvas.onpointermove=event=>{if(drawing){context.lineTo(...point(event));context.stroke()}};canvas.onpointerup=canvas.onpointercancel=()=>drawing=false;dialog.querySelector('[data-warning-clear]').onclick=()=>{context.clearRect(0,0,canvas.width,canvas.height);ink=false};dialog.querySelector('[data-warning-save]').onclick=async event=>{if(!ink){status.textContent='Employee signature is required.';return}const button=event.currentTarget;button.disabled=true;try{const source=canvas.toDataURL('image/png');signed=await window.ndSaveStaffWarningSignature(r.id,source);render();canvas.closest('fieldset').remove();status.textContent='Signature saved. Review or download the signed letter.'}catch(error){status.textContent='Unable to save signature: '+error.message;button.disabled=false}}}
  dialog.querySelector('[data-warning-download]').onclick=async event=>{const button=event.currentTarget;button.disabled=true;try{await downloadStaffLetterPDF(warningDocumentMarkup(r,n,signed,branding),r.employee_name+' '+r.incident_date+' '+['First','Serious','Final'][n-1]+' Warning Letter.pdf',dialog,status)}catch(error){status.textContent='Unable to download letter: '+error.message}finally{button.disabled=false}};
@@ -33260,7 +33352,7 @@ window.ndOpenStaffDeductionDocument=async function(id,kind){
  const {data:record,error}=await client.from('nd_staff_incidents').select('*').eq('id',id).maybeSingle();if(error)throw error;if(!record||record.nd_deleted_at)throw Error('This deduction record is unavailable.');if(record.review_status!=='approved')throw Error('Documents are available after management approval.');if(kind==='warning'){if(!record.warning_letter)throw Error('This record does not require a warning letter.');await letter(record)}else await fineLetter(record);
 };
 window.ndSaveStaffWarningSignature=async function(incidentId,signature){
- const client=db(),auth=await client.auth.getUser();email=String(auth.data?.user?.email||'').toLowerCase();if(auth.error||!admins.includes(email))throw Error('Administrator permission required');if(!warningSignatureSource(signature))throw Error('A valid employee signature is required.');
+ const client=db(),auth=await client.auth.getUser();email=String(auth.data?.user?.email||'').toLowerCase();if(auth.error||!auth.data?.user)throw Error('Please sign in before saving the signature.');if(!warningSignatureSource(signature))throw Error('A valid employee signature is required.');
  const {data:incident,error:lookupError}=await client.from('nd_staff_incidents').select('*').eq('id',incidentId).single();if(lookupError)throw lookupError;if(!incident||incident.nd_deleted_at||incident.review_status!=='approved'||!incident.warning_letter)throw Error('Approved warning letter required');
  const details=warningDetails(incident);if(warningSignatureSource(details.employee_acknowledgement?.signature_data))throw Error('The employee signature has already been saved. Reopen the letter.');
  const acknowledgement={signature_data:signature,signed_at:new Date().toISOString(),signed_by:email};
