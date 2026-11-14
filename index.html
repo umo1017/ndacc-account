@@ -33115,28 +33115,46 @@ function options(arr,selected=''){return arr.map(o=>`<option value="${esc(o.valu
 function month(){return val('salaryMonth')||new Date().toISOString().slice(0,7)}
 function isAdmin(){return admins.includes(email)}
 async function deleteIncident(row,button){
- if(button.disabled)return;
+ if(!button||button.disabled)return;
  const cell=button.closest('td');
  let status=cell?.querySelector('[data-delete-status]');
  if(!status&&cell){status=document.createElement('div');status.dataset.deleteStatus='';status.setAttribute('role','status');status.style.cssText='margin-top:8px;white-space:normal;min-width:180px;color:#9b2c2c';cell.appendChild(status);}
  const show=message=>{if(status)status.textContent=message;note(message)};
- if(email!=='umo1017@gmail.com'){show('Only UMO can delete deduction records.');return;}
- if(!row){show('Record not found. Refresh the history and try again.');return;}
- if(row.warning_letter!==true){show('Only Warning Letter History records can be deleted here.');return;}
- if(!confirm(row.warning_letter?'Delete this Warning Letter History record? This action cannot be undone.':'Delete this staff deduction history record?'))return;
- button.disabled=true;show('Deleting…');
+ const database=db();
+ if(!database){show('Database connection unavailable.');return;}
+ if(!row?.id){show('Record not found. Refresh history.');return;}
+ button.disabled=true;
  try{
-  const result=await db().rpc('nd_staff_incident_delete',{p_id:String(row.id),p_expected_status:row.review_status,p_expected_amount:Number(row.approved_amount||0)});
+  const auth=await database.auth.getUser();
+  const actingEmail=String(auth.data?.user?.email||'').trim().toLowerCase();
+  if(auth.error||actingEmail!=='umo1017@gmail.com')throw Error('Only UMO can delete Warning Letter History.');
+  // Reload the authoritative incident rather than trusting a rendered history row.
+  const lookup=await database.from('nd_staff_incidents')
+   .select('id,employee_name,warning_letter,review_status,approved_amount,nd_deleted_at')
+   .eq('id',row.id).maybeSingle();
+  if(lookup.error)throw lookup.error;
+  const current=lookup.data;
+  if(!current)throw Error('Warning Letter not found or not accessible.');
+  if(current.warning_letter!==true)throw Error('This is a Fine Letter, not a Warning Letter.');
+  if(current.nd_deleted_at)throw Error('This Warning Letter was already deleted. Refresh history.');
+  if(!confirm('Delete Warning Letter #'+current.id+' ('+String(current.employee_name||'Employee')+')? The database will retain its deletion audit.'))return;
+  show('Deleting…');
+  const result=await database.rpc('nd_staff_incident_delete',{
+   p_id:String(current.id),
+   p_expected_status:current.review_status,
+   p_expected_amount:Number(current.approved_amount||0)
+  });
   if(result.error)throw result.error;
-  if(result.data===false||result.data?.ok===false||result.data?.deleted===false)throw Error(result.data?.message||'The database did not confirm deletion.');
+  if(result.data===false||result.data?.ok===false||result.data?.deleted===false)
+   throw Error(result.data?.message||'The database did not confirm deletion.');
   window.dispatchEvent(new CustomEvent('nd-staff-incident-reviewed'));
-  try{await load();note('History record deleted.');}
-  catch(refreshError){show('Delete request succeeded, but history could not refresh. Reopen the page to check. '+(refreshError.message||''));}
+  try{await load();note('Warning Letter deleted from History.');}
+  catch(refreshError){show('Deleted, but history could not refresh. Reopen History before trying again.');}
  }catch(error){show('Unable to delete: '+(error?.message||String(error)));}
  finally{if(button.isConnected)button.disabled=false;}
 }
 function render(){const m=mount();if(!m)return;const mm=month();const branches=[...new Set(people.map(p=>p.outlet).filter(Boolean))];const selectedBranch=val('nddBranch')||branches[0]||'Eco Botanic';const selectedEmployee=val('nddEmployee');const selectedReason=val('nddReason');m.innerHTML=`<div class="salary-top"><h3>Staff Deductions</h3></div><div id="nddStatus" class="helper" style="margin:8px 0"></div>${email?`<div class="ndd-actions"><button class="btn" type="button" id="nddNew">New Fine Letter</button><button class="btn" type="button" id="nddNewWarning">New Warning Letter</button>${isAdmin()?'<button class="btn" type="button" id="nddManage">Manage Reasons</button>':''}</div><div id="nddForm" style="display:none"><h4 id="nddFormTitle">Fine Letter</h4><input type="hidden" id="nddDocumentKind" value="fine"><div class="ndd-grid"><div id="nddWarningLevelWrap" style="display:none"><label for="nddWarningLevel">Warning Level</label><select id="nddWarningLevel"><option value="1">Warning 1</option><option value="2">Warning 2</option><option value="3">Warning 3</option></select></div><div><label>Branch</label><select id="nddBranch">${options(branches.map(x=>({value:x,label:x})),selectedBranch)}</select></div><div><label>Employee</label><select id="nddEmployee">${options(people.filter(p=>p.outlet===selectedBranch).map(p=>({value:p.id,label:p.name})),selectedEmployee)}</select></div><div><label>Incident Date</label><input id="nddDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Reason</label><select id="nddReason">${options(reasons.filter(r=>r.active).map(r=>({value:r.id,label:r.name_en})),selectedReason)}</select></div><div id="nddFineAmountWrap"><label>Proposed Amount (RM)</label><input id="nddAmount" type="number" min="0" step="0.01"></div></div><div class="ndd-grid" style="margin-top:12px"><div class="ndd-full"><label for="nddIncidentText">Incident Description</label><textarea id="nddIncidentText" rows="6" placeholder="Describe the incident, date, place and confirmed facts."></textarea></div></div><div class="ndd-actions"><button type="button" class="btn" id="nddSave">Save Record</button><button type="button" class="btn" id="nddCancel">Cancel</button></div></div><div id="nddReasonsPanel" style="display:none"><h4>Manage Reasons</h4><div class="ndd-grid"><div><label>English Name</label><input id="nddEnglish"></div><div><label>Suggested Amount (RM)</label><input id="nddSuggested" type="number" min="0" step="0.01"></div></div><div class="ndd-actions"><button class="btn" type="button" id="nddSaveReason">Add Reason</button></div><div id="nddReasonsList"></div></div>`:''}<h4>Pending Approval · All Months</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Document</th><th>Proposed RM</th><th>Action</th></tr></thead><tbody>${records.filter(r=>r.review_status==='pending').map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${r.warning_letter?"Warning "+(Number((()=>{try{return JSON.parse(r.details||"{}").warning_level}catch(_){return 1}})())||1):"Fine Letter"}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${isAdmin()?`<button class="mini" data-review="${r.id}">Approve / Reject</button>`:'Awaiting UMO / Mars'}</td></tr>`).join('')||'<tr><td colspan="7">No pending records.</td></tr>'}</tbody></table></div><div class="ndd-actions"><h4>Fine Letter History</h4><label for="nddHistoryMonth">Month <input id="nddHistoryMonth" type="month" value="${esc(historyMonth||mm)}"></label></div><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Review</th><th>Approved RM</th><th>Actions</th></tr></thead><tbody>${records.some(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm))?records.filter(r=>r.review_status==='approved'&&!r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>`<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>${esc(r.reason_en)}</td><td>${Number(r.proposed_amount||0).toFixed(2)}</td><td>${esc(r.review_status)}</td><td>${Number(r.approved_amount||0).toFixed(2)}</td><td>${Number(r.approved_amount||0)>0?`<button class="mini" data-fine="${r.id}">Fine Letter</button>`:''}${isAdmin()&&r.review_status==='pending'?` <button class="mini" data-review="${r.id}">Review</button>`:''}</td></tr>`).join(''):'<tr><td colspan="8">No records for this month.</td></tr>'}</tbody></table></div><h4>Warning Letter History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Warning</th><th>Reason</th><th>Document</th></tr></thead><tbody>${records.filter(r=>r.review_status==='approved'&&r.warning_letter&&String(r.incident_date).startsWith(historyMonth||mm)).map(r=>{let w=1;try{w=Number(JSON.parse(r.details||'{}').warning_level)||1}catch(_){}return `<tr><td>${esc(r.incident_date)}</td><td>${esc(r.outlet)}</td><td>${esc(r.employee_name)}</td><td>Warning ${w}</td><td>${esc(r.reason_en)}</td><td><button class="mini" data-warning="${r.id}">View / PDF</button>${email==='umo1017@gmail.com'?` <button class="mini" data-incident-delete="${r.id}">Delete</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="6">No warning letters for this month.</td></tr>'}</tbody></table></div>`;
-const rejected=records.filter(r=>r.review_status==='rejected'&&String(r.incident_date).startsWith(historyMonth||mm));if(rejected.length)m.insertAdjacentHTML('beforeend','<h4>Rejected History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Status</th></tr></thead><tbody>'+rejected.map(r=>'<tr><td>'+esc(r.incident_date)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.employee_name)+'</td><td>'+esc(r.reason_en)+'</td><td>'+Number(r.proposed_amount||0).toFixed(2)+'</td><td>Rejected'+(email==='umo1017@gmail.com'?' <button class="mini" data-incident-delete="'+esc(r.id)+'">Delete</button>':'')+'</td></tr>').join('')+'</tbody></table></div>');
+const rejected=records.filter(r=>r.review_status==='rejected'&&String(r.incident_date).startsWith(historyMonth||mm));if(rejected.length)m.insertAdjacentHTML('beforeend','<h4>Rejected History</h4><div class="ndd-table"><table><thead><tr><th>Date</th><th>Branch</th><th>Employee</th><th>Reason</th><th>Proposed RM</th><th>Status</th></tr></thead><tbody>'+rejected.map(r=>'<tr><td>'+esc(r.incident_date)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.employee_name)+'</td><td>'+esc(r.reason_en)+'</td><td>'+Number(r.proposed_amount||0).toFixed(2)+'</td><td>Rejected'+'</td></tr>').join('')+'</tbody></table></div>');
 $('nddHistoryMonth').onchange=async()=>{historyMonth=val('nddHistoryMonth')||month();try{await load()}catch(error){note('Unable to load history: '+error.message)}};
 
 // Staff Deductions is an embedded Salary page; no Close button is rendered.
