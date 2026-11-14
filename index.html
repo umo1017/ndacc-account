@@ -6369,22 +6369,54 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
     const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(value);
     const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day;
   }
-  function ndIsTodaysRemittance(record,branch,day){
-    return String(record.branch||'').trim()===String(branch||'').trim()
-      && String(record.remittance_date||'').slice(0,10)===day;
+  // Submissions can be filed today for a different accounting date.
+  // Keep remittance_date unchanged for the cash ledger; include either date in the list.
+  function ndSubmissionMatchesSelectedDay(record,branch,day){
+    return String(record.branch||'').trim().toLowerCase()===String(branch||'').trim().toLowerCase()
+      && (String(record.remittance_date||'').slice(0,10)===day
+        || ndRemittanceBusinessDate(record.submitted_at)===day);
   }
-  let ndTransferReadSequence=0, ndTransferReadFailure=null;
+  let ndTransferReadSequence=0, ndTransferReadFailure=null,ndTransferSelectedRows=[];
   async function loadSelectedCashTransferHistory(){
     const branch=String(currentBranch||'').trim();
     const day=String($('settlementDate')?.value||ndRemittanceBusinessDate(new Date()));
     const sequence=++ndTransferReadSequence;
-    const {data,error}=await db.from('cash_remittances').select('*')
-      .eq('branch',branch).eq('remittance_date',day).order('id',{ascending:false});
-    if(sequence!==ndTransferReadSequence || branch!==String(currentBranch||'').trim() || day!==String($('settlementDate')?.value||ndRemittanceBusinessDate(new Date())))return;
-    ndTransferReadFailure=error?{branch,day,message:error.message}:null;
-    if(!error){
-      const other=(cashRemittances||[]).filter(r=>!ndIsTodaysRemittance(r,branch,day));
-      cashRemittances=[...other,...(data||[])];
+    // Boundaries are UTC instants for local midnight in Malaysia (UTC+08).
+    const start=new Date(day+'T00:00:00+08:00').toISOString();
+    const end=new Date(new Date(start).getTime()+86400000).toISOString();
+    const collect=async(kind)=>{
+      let output=[];
+      for(let offset=0;offset<10000;offset+=500){
+        let query=db.from('cash_remittances').select('*').eq('branch',branch)
+          .order('id',{ascending:false}).range(offset,offset+499);
+        query=kind==='accounting'?query.eq('remittance_date',day):query.gte('submitted_at',start).lt('submitted_at',end);
+        const {data,error}=await query;
+        if(error)throw error;
+        output.push(...(data||[]));
+        if((data||[]).length<500)return output;
+      }
+      throw Error('More than 10,000 transfer submissions found for this date.');
+    };
+    try{
+      const accounting=await collect('accounting');
+      let submitted=[];
+      try{submitted=await collect('submitted');}
+      catch(error){
+        if(!/submitted_at|42703|PGRST204/i.test(String(error.message||'')))throw error;
+      }
+      if(sequence!==ndTransferReadSequence || branch!==String(currentBranch||'').trim() || day!==String($('settlementDate')?.value||ndRemittanceBusinessDate(new Date())))return;
+      const unique=new Map();
+      for(const r of [...accounting,...submitted])unique.set(String(r.id),r);
+      ndTransferSelectedRows=[...unique.values()];
+      ndTransferReadFailure=null;
+      // Preserve the entire cached remittance ledger: its dates drive cash balances.
+      const byId=new Map((cashRemittances||[]).map(r=>[String(r.id),r]));
+      for(const r of ndTransferSelectedRows)byId.set(String(r.id),r);
+      cashRemittances=[...byId.values()];
+    }catch(error){
+      if(sequence!==ndTransferReadSequence)return;
+      ndTransferReadFailure={branch,day,message:error.message||String(error)};
+      ndTransferSelectedRows=[];
     }
     renderMyCashRemittanceHistory();
   }
@@ -6402,12 +6434,12 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
     const businessToday=String($('settlementDate')?.value||ndRemittanceBusinessDate(new Date()));
     const title=$('cashRemittanceSubmissionTitle');if(title)title.textContent='Submissions';
     if(ndTransferReadFailure?.branch===String(currentBranch||'').trim() && ndTransferReadFailure.day===businessToday){root.innerHTML=`<div class="bad">Unable to load records: ${escHtml(ndTransferReadFailure.message)}</div>`;return;}
-    const rows=(cashRemittances||[]).filter(x=>ndIsTodaysRemittance(x,currentBranch,businessToday))
+    const rows=ndTransferSelectedRows.filter(x=>ndSubmissionMatchesSelectedDay(x,currentBranch,businessToday))
       .sort((a,b)=>String(b.submitted_at||b.remittance_date||"").localeCompare(String(a.submitted_at||a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
     if(!rows.length){root.innerHTML=`<div class="helper" style="padding:10px">No submissions.</div>`;return;}
-    root.innerHTML=`<table class="nd-simple-submissions"><thead><tr><th>Bank</th><th>Amount</th><th>Receipt</th><th>Status</th></tr></thead><tbody>${rows.map(x=>{
+    root.innerHTML=`<table class="nd-simple-submissions"><thead><tr><th>Bank</th><th>Amount</th><th>Date</th><th>Receipt</th><th>Status</th></tr></thead><tbody>${rows.map(x=>{
       const status=String(x.status||"pending").toLowerCase();
-      return `<tr><td><strong>${escHtml(x.bank_code==='AFFIN'?'AFFIN BANK':x.bank_code==='HLB'?'Hong Leong Bank':'Not selected')}</strong></td><td><strong>${money(x.amount)}</strong></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Pending"}</span></td></tr>`;
+      return `<tr><td><strong>${escHtml(x.bank_code==='AFFIN'?'AFFIN BANK':x.bank_code==='HLB'?'Hong Leong Bank':'Not selected')}</strong></td><td><strong>${money(x.amount)}</strong></td><td><small>Record: ${escHtml(String(x.remittance_date||'').slice(0,10))}<br>Submitted: ${escHtml(ndRemittanceBusinessDate(x.submitted_at)||'—')}</small></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Pending"}</span></td></tr>`;
     }).join("")}</tbody></table>`;
     root.querySelectorAll("[data-my-remittance-receipt]").forEach(btn=>btn.onclick=()=>{
       const item=rows.find(x=>Number(x.id)===Number(btn.dataset.myRemittanceReceipt));
@@ -36800,7 +36832,7 @@ function render(){
    const cls=!proof?'nd-sub-no-receipt':verification==='correct'?'nd-sub-ok':verification==='error'?'nd-sub-issue':'nd-sub-pending';
    const statusLabel=status==='approved'?'Approved':status==='rejected'?'Rejected':'Pending approval';
    const more=canDelete?`<details class="nd-sub-more"><summary aria-label="More options for ${esc(r.expense_reason||'expense')}">···</summary><div class="nd-sub-menu"><button type="button" data-exp-delete="${esc(r.id)}">Delete record</button></div></details>`:'';
-   return `<article class="nd-sub-item"><div class="nd-sub-main"><div class="nd-sub-info"><strong class="nd-sub-reason">${esc(r.expense_reason||'Cash Expense')}</strong><span class="nd-sub-meta">${esc(statusLabel)}</span></div><strong class="nd-sub-amount">${amount(value(r))}</strong></div><div class="nd-sub-bottom"><span class="nd-sub-verification ${cls}"><span class="nd-sub-dot"></span>${esc(verificationLabel)}</span><div class="nd-sub-controls">${proof?`<button class="nd-sub-view" type="button" data-exp-receipt="${esc(r.id)}">View receipt <span aria-hidden="true">›</span></button>`:''}${more}</div></div></article>`;
+   return `<article class="nd-sub-item"><div class="nd-sub-main"><div class="nd-sub-info"><strong class="nd-sub-reason">${esc(r.expense_reason||'Cash Expense')}</strong><span class="nd-sub-meta">${esc(statusLabel)} · Record: ${esc(String(r.expense_date||'').slice(0,10))} · Submitted: ${esc(r.submitted_at?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(r.submitted_at)):'—')}</span></div><strong class="nd-sub-amount">${amount(value(r))}</strong></div><div class="nd-sub-bottom"><span class="nd-sub-verification ${cls}"><span class="nd-sub-dot"></span>${esc(verificationLabel)}</span><div class="nd-sub-controls">${proof?`<button class="nd-sub-view" type="button" data-exp-receipt="${esc(r.id)}">View receipt <span aria-hidden="true">›</span></button>`:''}${more}</div></div></article>`;
  }).join('')+'</div>':'<div class="helper" style="padding:12px 0">No submissions for this date.</div>';
 }
 async function load(force=false){const root=mount(),client=db();if(!root)return;if(!client){root.querySelector('[data-exp-message]').textContent='Please sign in to load submissions.';return;}if(root.hidden&&!force)return;
@@ -36809,15 +36841,36 @@ async function load(force=false){const root=mount(),client=db();if(!root)return;
  if(loading){again=true;return;}loading=true;const seq=++token;root.querySelector('[data-exp-message]').textContent='Loading submissions…';
  try{
   const auth=await client.auth.getUser();if(auth.error)throw auth.error;const email=String(auth.data?.user?.email||'').toLowerCase();canVerify=email==='umo1017@gmail.com';canDelete=['umo1017@gmail.com','mars83002566@gmail.com'].includes(email);
-  let all=[],schemaReady=true;
-  for(let offset=0;offset<10000;offset+=500){
-   const build=cols=>{let q=client.from('nd_cash_expense_requests').select(cols).eq('expense_date',day).order('expense_date',{ascending:false}).order('submitted_at',{ascending:false}).range(offset,offset+499);if(br&&br!=='Global'&&br!=='All'&&br!=='all')q=q.eq('branch',br);return q;};
-   const cols='id,branch,expense_date,expense_reason,amount,review_amount,status,receipt_path,submitted_at,receipt_verification';
-   let result=await build(cols);
-   if(result.error&&(/receipt_verification|PGRST204|42703/i).test(String(result.error.message||'')+' '+String(result.error.code||''))){schemaReady=false;result=await build(cols.replace(',receipt_verification',''));}
-   if(result.error)throw result.error;const batch=result.data||[];all.push(...batch);if(batch.length<500)break;
-  }
-  if(seq!==token)return;rows=all;hasVerificationColumn=schemaReady;loadedKey=key;lastLoad=Date.now();
+  const start=new Date(day+'T00:00:00+08:00').toISOString();
+  const end=new Date(new Date(start).getTime()+86400000).toISOString();
+  let schemaReady=true;
+  const collect=async(which)=>{
+   const output=[];
+   for(let offset=0;offset<10000;offset+=500){
+    const build=cols=>{
+     let q=client.from('nd_cash_expense_requests').select(cols).order('submitted_at',{ascending:false}).range(offset,offset+499);
+     q=which==='accounting'?q.eq('expense_date',day):q.gte('submitted_at',start).lt('submitted_at',end);
+     if(br&&br!=='Global'&&br!=='All'&&br!=='all')q=q.eq('branch',br);
+     return q;
+    };
+    const cols='id,branch,expense_date,expense_reason,amount,review_amount,status,receipt_path,submitted_at,receipt_verification';
+    let result=await build(cols);
+    if(result.error&&(/receipt_verification|PGRST204|42703/i).test(String(result.error.message||'')+' '+String(result.error.code||''))){
+      schemaReady=false;result=await build(cols.replace(',receipt_verification',''));
+    }
+    if(result.error)throw result.error;
+    const batch=result.data||[];output.push(...batch);
+    if(batch.length<500)return output;
+   }
+   throw Error('More than 10,000 Cash Expense submissions found for this date.');
+  };
+  const accounting=await collect('accounting');
+  const submitted=await collect('submitted');
+  const unique=new Map();
+  for(const r of [...accounting,...submitted])unique.set(String(r.id),r);
+  if(seq!==token)return;
+  rows=[...unique.values()].sort((a,b)=>String(b.submitted_at||'').localeCompare(String(a.submitted_at||'')));
+  hasVerificationColumn=schemaReady;loadedKey=key;lastLoad=Date.now();
   const debited=rows.filter(x=>window.ndCashExpenseIsDebited?.(x)).reduce((sum,x)=>sum+value(x),0);
   root.querySelector('[data-exp-message]').textContent=schemaReady?'':'Receipt verification requires SQL setup';render();
  }catch(e){root.querySelector('[data-exp-message]').textContent='Unable to load submissions: '+(e?.message||e);root.querySelector('[data-exp-rows]').replaceChildren();}
