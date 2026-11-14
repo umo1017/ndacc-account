@@ -15040,7 +15040,7 @@ async function loadSalaryData(){
       if(isGlobalAdmin) return true;
 
       if(isPayrollManager) return true;
-      return (e.outlet === "Collaboration" && ndCanViewCollaboration()) || accessibleSalaryOutlets.includes(e.outlet);
+      return (ndIsCollaborationOutlet(e.outlet) && ndCanViewCollaboration()) || accessibleSalaryOutlets.includes(e.outlet);
     })
     .sort((a,b)=>{
       const branchCompare=String(a.outlet||"").localeCompare(String(b.outlet||""));
@@ -16042,7 +16042,12 @@ function renderSalary(){
   renderSalaryViewButtons();
 
   const selectedMonth=monthKey();
-  const active=salaryEmployees.filter(e=>salaryEmployeeVisibleInMonth(e,selectedMonth));
+  // Collaboration directory must stay visible to authenticated accounts.
+  // Historical payroll values still come only from the selected month.
+  const active=salaryEmployees.filter(e=>
+    (ndIsCollaborationOutlet(e.outlet) && ndCanViewCollaboration()) ||
+    salaryEmployeeVisibleInMonth(e,selectedMonth)
+  );
 
   const visibleOutlets=isGlobalAdmin
     ? [...new Set([
@@ -16079,7 +16084,7 @@ function renderSalary(){
   }
 
   const branchCards=branchNames.map(outlet=>{
-    const all=active.filter(e=>e.outlet===outlet).sort(salaryStaffSort);
+    const all=active.filter(e=>ndIsCollaborationOutlet(outlet)?ndIsCollaborationOutlet(e.outlet):e.outlet===outlet).sort(salaryStaffSort);
     const sum=summaryForOutlet(all);
     const total7=Object.values(sum.seven).reduce((a,b)=>a+b,0);
     const total14=Object.values(sum.fourteen).reduce((a,b)=>a+b,0);
@@ -16129,7 +16134,7 @@ function renderSalary(){
             </tbody>
           </table>
         </div>
-        ${all.length?`<div class="payroll-section-title">14TH — COMMISSION PAYROLL · PAY ${salaryNextMonthPayLabel(14)}</div>${renderFourteenTable(all)}`:`<div class="helper">No 14th payroll employees.</div>`}
+        ${all.length?`<div class="payroll-section-title">14TH — COMMISSION PAYROLL · PAY ${salaryNextMonthPayLabel(14)}</div>${renderFourteenTable(all)}`:`<div class="helper">${ndIsCollaborationOutlet(outlet)?"No Collaboration staff records returned. Check employees data and SELECT RLS permissions.":"No 14th payroll employees."}</div>`}
       </div>`;
     }
 
@@ -17837,6 +17842,9 @@ async function inlineEditEmployeeField(empId,fieldId){
   }catch(_){}
 }
 
+function ndIsCollaborationOutlet(value){
+  return String(value||'').trim().toLowerCase()==='collaboration';
+}
 function ndCanViewCollaboration(){
   // Read-only availability for authenticated users; server RLS remains authoritative.
   return !!String(currentSalaryUserEmail||'').trim();
@@ -17896,7 +17904,7 @@ window.ndRefreshStaffDirectory=async function(){
   await determineManager();await loadSalaryBranches(false);
   const {data,error}=await salaryDb.from('employees').select('*').order('outlet').order('name');
   if(error)throw Error(error.message||'Unable to load employees.');
-  salaryEmployees=(data||[]).filter(e=>isGlobalAdmin||isPayrollManager||(e.outlet==="Collaboration"&&ndCanViewCollaboration())||(accessibleSalaryOutlets||[]).includes(e.outlet)).sort(salaryStaffSort);
+  salaryEmployees=(data||[]).filter(e=>isGlobalAdmin||isPayrollManager||(ndIsCollaborationOutlet(e.outlet)&&ndCanViewCollaboration())||(accessibleSalaryOutlets||[]).includes(e.outlet)).sort(salaryStaffSort);
   return salaryEmployees;
  })().finally(()=>{ndStaffDirectoryLoading=null});
  return ndStaffDirectoryLoading;
