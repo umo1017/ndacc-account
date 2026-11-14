@@ -16177,7 +16177,6 @@ function renderSalary(){
           </table>
         </div>
         ${ndIsCollaborationOutlet(outlet)&&window.ndCollaborationSalaryReadError?`<div class="bad" role="alert" style="padding:10px 0">Collaboration sync error: ${staffSafe(window.ndCollaborationSalaryReadError)}</div>`:''}
-        ${ndIsCollaborationOutlet(outlet)&&all.length&&!all.some(e=>commissionSnapshotFor(e.id))?`<div class="helper" role="status" style="margin:8px 0">No confirmed 14th commission records were returned for Collaboration in ${staffSafe(selectedMonth)}. Check payroll_commission_snapshot SELECT permissions before trusting RM0 amounts.</div>`:''}
         ${all.length?`<div class="payroll-section-title">14TH — COMMISSION PAYROLL · PAY ${salaryNextMonthPayLabel(14)}</div>${renderFourteenTable(all)}`:`<div class="helper">${ndIsCollaborationOutlet(outlet)?"No Collaboration staff records returned. Check employees data and SELECT RLS permissions.":"No 14th payroll employees."}</div>`}
       </div>`;
     }
@@ -38395,6 +38394,7 @@ function enhance(){
 .nd-incident-sign-slot{display:inline-flex;gap:5px;align-items:center;margin-left:6px;vertical-align:middle}
 .nd-incident-sign-slot .nd-incident-red{background:#bc2424!important;color:#fff!important;border:1px solid #a51d1d!important;border-radius:8px!important;padding:7px 10px!important;min-height:32px!important;min-width:auto!important;font-size:12px!important;font-weight:750!important;cursor:pointer!important;white-space:nowrap}
 .nd-incident-sign-slot .nd-incident-red:hover{background:#981b1b!important}
+.nd-letter-check-error{font-size:11px;color:#9e4b1a;white-space:nowrap}
 </style>
 <script id="nd-incident-sign-payment-reminder-v1">
 (function(){'use strict';
@@ -38422,55 +38422,47 @@ function enhance(){
   async function reload(force=false){
     if(loading)return;
     const visible=slots();if(!visible.length)return;
-    const keys=[...new Set(visible.map(e=>e.dataset.ndIncidentEmployee))].sort();
+    const keys=[...new Set(visible.map(e=>e.dataset.ndIncidentEmployee))].filter(x=>/^\d+$/.test(x)).sort();
     const signature=keys.join(',');
     if(!force&&loaded&&signature===lastKeys&&Date.now()-lastRead<30000){paint();return;}
     const db=window.salaryDb;if(!db)return;
     lastKeys=signature;loading=true;const request=++token;
     try{
+      // SECURITY DEFINER RPC provides only unsigned letter IDs to signed-in users.
+      // Do not query the incident history table, whose SELECT RLS excludes regular accounts.
       const all=[];
-      for(let start=0;start<keys.length;start+=75){
-        const batch=keys.slice(start,start+75).map(Number).filter(Number.isFinite);
-        if(!batch.length)continue;
-        for(let offset=0;offset<10000;offset+=500){
-          const res=await db.from('nd_staff_incidents').select('id,employee_id,warning_letter,details,reason_en,approved_amount,review_status,nd_deleted_at')
-            .in('employee_id',batch).eq('review_status','approved').order('incident_date',{ascending:false}).range(offset,offset+499);
-          if(res.error)throw res.error;
-          all.push(...(res.data||[]));if((res.data||[]).length<500)break;
+      const readOne=async id=>{
+        const result=await db.rpc('nd_unsigned_letter_reminders',{p_employee_id:Number(id)});
+        if(result.error)throw result.error;
+        const data=result.data||{};
+        if(String(data.employee_id)!==id)throw Error('Unexpected reminder employee ID');
+        for(const letterId of (Array.isArray(data.warning_ids)?data.warning_ids:[])){
+          if(Number.isSafeInteger(Number(letterId)))all.push({id:Number(letterId),employee_id:Number(id),warning_letter:true});
         }
-      }
-      const eligible=all.filter(r=>!r.nd_deleted_at&&(r.warning_letter===true||Number(r.approved_amount)>0));
-      const needsWarning=eligible.filter(r=>r.warning_letter===true&&!isSignature(details(r).employee_acknowledgement?.signature_data));
-      const signed=new Set();
-      for(let start=0;start<needsWarning.length;start+=100){
-        const ids=needsWarning.slice(start,start+100).map(r=>r.id);
-        const sign=await db.from('nd_staff_warning_signatures').select('incident_id,signature_data').in('incident_id',ids);
-        // Installations may use only the acknowledgement stored in incident details.
-        if(sign.error){if(/nd_staff_warning_signatures|42P01|PGRST205|permission/i.test(sign.error.message||''))break;throw sign.error;}
-        for(const r of sign.data||[])if(isSignature(r.signature_data))signed.add(String(r.incident_id));
-      }
-      const signedFines=new Set();
-      const fineIds=eligible.filter(r=>r.warning_letter!==true).map(r=>r.id);
-      for(let start=0;start<fineIds.length;start+=100){
-        const result=await db.from('nd_staff_fine_signatures')
-          .select('incident_id,signature_data').in('incident_id',fineIds.slice(start,start+100));
-        if(result.error){
-          if(/42P01|PGRST205|permission|does not exist|not found|schema cache/i.test(result.error.message||''))break;
-          throw result.error;
+        for(const letterId of (Array.isArray(data.fine_ids)?data.fine_ids:[])){
+          if(Number.isSafeInteger(Number(letterId)))all.push({id:Number(letterId),employee_id:Number(id),warning_letter:false});
         }
-        for(const r of result.data||[])if(isSignature(r.signature_data))signedFines.add(String(r.incident_id));
-      }
+      };
+      // Small bounded batches prevent an excessive number of parallel database requests.
+      for(let i=0;i<keys.length;i+=6){await Promise.all(keys.slice(i,i+6).map(readOne));}
       if(request!==token)return;
-      records=eligible.filter(r=>r.warning_letter===true
-        ?!signed.has(String(r.id))&&!isSignature(details(r).employee_acknowledgement?.signature_data)
-        :!signedFines.has(String(r.id))&&!isSignature(details(r).fine_acknowledgement?.signature_data));
+      records=all;
       loaded=true;lastRead=Date.now();
       document.querySelectorAll(S).forEach(e=>delete e.dataset.ndPainted);
       paint();
     }catch(error){
-      // Never show stale/false signed status when incident history is inaccessible.
-      records=[];loaded=false;document.querySelectorAll(S).forEach(e=>{delete e.dataset.ndPainted;e.replaceChildren()});
-      console.warn('Staff letter signature reminders unavailable:',error);
+      loaded=false;
+      // Do not incorrectly mark an unsigned employee as fully signed if the read fails.
+      for(const el of slots()){
+        el.dataset.ndPainted='';el.replaceChildren();
+        const hint=document.createElement('span');hint.className='nd-letter-check-error';
+        hint.textContent='Signature status unavailable';
+        hint.title=error?.message||String(error);
+        el.append(hint);
+        const row=el.closest('tr');row?.classList.remove('nd-paid-row');
+        row?.classList.add('nd-awaiting-letter-signature');
+      }
+      console.warn('Unable to check unsigned staff letters:',error);
     }finally{loading=false;}
   }
   function schedule(force=false){if(force){loaded=false;lastRead=0;}if(pending)return;pending=true;setTimeout(()=>{pending=false;void reload(force)},120);}
