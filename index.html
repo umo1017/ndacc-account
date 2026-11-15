@@ -39133,6 +39133,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #ndCoursePanel .ndcr-panel{padding:12px;border-radius:12px;background:#f7f9f7;margin-top:12px}
 @media(max-width:650px){#ndCoursePanel{padding:12px}#ndCoursePanel .ndcr-grid{grid-template-columns:1fr}#ndCoursePanel .ndcr-row{align-items:flex-start}}
 </style>
+<style id="nd-course-umo-visibility">#ndcrManage[hidden],#ndcrApprovalNote[hidden]{display:none!important}</style>
 <script id="nd-record-course-script">
 (function(){'use strict';
  const $=id=>document.getElementById(id);
@@ -39145,6 +39146,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  function money(n){return 'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});}
  function draw(){
    $('ndcrManage').hidden=!umo;
+   $('ndcrAdd').disabled=!umo;
    $('ndcrApprovalNote').hidden=!umo;
    $('ndcrCourses').innerHTML=courses.filter(x=>x.active).map(x=>'<option value="'+x.id+'">'+esc(x.title)+' · '+money(x.fee_per_person)+'/person</option>').join('');
    const branch=$('ndcrBranch').value;
@@ -39179,7 +39181,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  }
  function init(){
    const nav=$('ndStaffFinanceNav'),host=$('ndStaffFinanceModules');if(!nav||!host||$('ndCoursePanel'))return;
-   const tab=document.createElement('button');tab.type='button';tab.id='ndCourseTab';tab.className='salary-view-btn';tab.textContent='报名课程 · Courses';nav.appendChild(tab);
+   const tab=document.createElement('button');tab.type='button';tab.id='ndCourseTab';tab.className='salary-view-btn';tab.textContent='Courses';nav.appendChild(tab);
    const p=document.createElement('section');p.id='ndCoursePanel';p.innerHTML=`
      <h3>课程报名 · Course Registration</h3>
      <div id="ndcrManage" class="ndcr-panel" hidden><strong>+ New Course · UMO</strong><div class="ndcr-grid"><label>Course Name<input id="ndcrName" maxlength="120" placeholder="Course name"></label><label>Fee / Person (RM)<input id="ndcrFee" type="number" min="0" step="0.01" placeholder="0.00"></label></div><div class="ndcr-line"><button class="primary" type="button" id="ndcrAdd">+ Add Course</button></div></div>
@@ -39194,7 +39196,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
    $('ndcrRefresh').addEventListener('click',()=>void refresh().catch(e=>message(e.message)));
    $('ndcrAdd').addEventListener('click',async()=>{
      try{
-       if(!umo)throw Error('UMO only');
+       const logged=await user();
+       if(String(logged.email||'').trim().toLowerCase()!=='umo1017@gmail.com')throw Error('Only UMO can add courses');
        const title=$('ndcrName').value.trim(),fee=Number($('ndcrFee').value);
        if(!title||!Number.isFinite(fee)||fee<0)throw Error('Enter valid course name and fee');
        const r=await db().from('nd_staff_courses').insert({title,fee_per_person:fee});if(r.error)throw r.error;
