@@ -5627,6 +5627,10 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
 #ndProBookingModal .nd-guest-therapist-row{min-width:0}
 #ndProBookingModal .nd-guest-therapist-row select{width:100%;max-width:100%;min-height:46px}
 </style>
+
+<style id="nd-booking-owner-autofill-style">
+.nd-booking-owner-readonly{display:flex;align-items:center;min-height:42px;padding:10px 14px;border:1px solid #d5deea;border-radius:12px;background:#f4f7fb;color:#2c4059;font-size:14px;font-weight:650;overflow-wrap:anywhere}
+</style>
 </head>
 <body><style id="nd-members-sidebar-overlay-fix">
 /* Members opens at full height. Navigation remains the existing app sidebar. */
@@ -41044,27 +41048,29 @@ let guestCount=1;
    if(status)status.textContent=guestWorkers().some(x=>!x.value)?'当前时间空闲技师不足，请更换日期或时间。':'';
  }
  const guestStatus=document.createElement('small');guestStatus.id='ndGuestTherapistStatus';guestStatus.className='pro-muted';bookingFields.employee?.appendChild(guestStatus);
- const ownerPanel=document.createElement('section');ownerPanel.className='nd-booking-team-panel';ownerPanel.innerHTML='<h4>预约员工 · Booking Staff (multiple)</h4><div class="nd-booking-team-grid" data-booker-choices></div><div class="nd-team-hint">自动选择与登录账号匹配的员工；可多选和修改</div>';
+ const ownerPanel=document.createElement('section');ownerPanel.className='nd-booking-team-panel';
+ ownerPanel.innerHTML='<h4>预约员工 · Booking Staff</h4><div class="nd-booking-owner-readonly" data-booking-owner-display aria-live="polite"></div>';
  bookingFields.employee?.parentNode?.insertBefore(ownerPanel,bookingFields.employee);
  const serviceStaffTitle=document.createElement('h4');serviceStaffTitle.textContent='服务员工 · Service Staff (multiple)';serviceStaffTitle.style.margin='12px 0 4px';guestWorkerWrap.before(serviceStaffTitle);
  function ndDrawBookers(ids){
-   ndBookingOwnerSelect=new Set((ids||[]).map(String));
-   const container=ownerPanel.querySelector('[data-booker-choices]');
-   // Booking Staff is independent of appointment branch; identify the signed-in employee first.
-   const allBookers=staff.slice().sort((a,b)=>{
-     const aMine=String(a.id)===String(ndLoginEmployeeId),bMine=String(b.id)===String(ndLoginEmployeeId);
-     if(aMine!==bMine)return aMine?-1:1;
-     return String(a.nickname||a.name||'').localeCompare(String(b.nickname||b.name||''));
+   ndBookingOwnerSelect=new Set((ids||[]).map(String).filter(Boolean));
+   const display=ownerPanel.querySelector('[data-booking-owner-display]');
+   const names=[...ndBookingOwnerSelect].map(id=>{
+     const member=staff.find(x=>String(x.id)===id);
+     return member?.nickname||member?.name||id;
    });
-   container.innerHTML=allBookers.map(x=>`<label><input type="checkbox" data-booker-id="${esc(x.id)}" ${ndBookingOwnerSelect.has(String(x.id))?'checked':''}>${esc(x.nickname||x.name||x.id)}</label>`).join('');
-   container.querySelectorAll('[data-booker-id]').forEach(input=>input.onchange=()=>{if(input.checked)ndBookingOwnerSelect.add(input.dataset.bookerId);else ndBookingOwnerSelect.delete(input.dataset.bookerId);});
+   display.textContent=names.join('、')||'登录账号未绑定员工 / Account not linked to staff';
  }
- function ndSyncBookersForBooking(bookingId){const existing=ndBookerIdsByAppointment.get(String(bookingId));ndDrawBookers(existing|| (ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]));}
+ function ndSyncBookersForBooking(bookingId){
+   const existing=ndBookerIdsByAppointment.get(String(bookingId));
+   // Existing records retain their original booking staff, never the current editor.
+   ndDrawBookers(existing||[]);
+ }
  const breakBtn=document.createElement('button');breakBtn.type='button';breakBtn.className='nd-break-open';breakBtn.textContent='＋ 中途休息 · Midday Break';primary.append(breakBtn);
  breakBtn.onclick=()=>{form.elements.customer.value='';form.elements.service.value='Midday Break';appointmentModal?.classList.add('nd-break-mode');details.hidden=false;selection.hidden=true;ndDrawBookers(ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]);};
  form.elements.service.addEventListener('change',()=>{appointmentModal?.classList.toggle('nd-break-mode',ndIsBreakName(form.elements.service.value));});
 
- form.elements.branch.addEventListener('change',()=>{refreshGuestWorkers(false);ndDrawBookers([...ndBookingOwnerSelect]);});
+ form.elements.branch.addEventListener('change',()=>{refreshGuestWorkers(false);});
  mainWorker.addEventListener('change',()=>refreshGuestWorkers(false));
  el('proGuestsMinus').onclick=()=>{guestCount=Math.max(1,guestCount-1);updateGuests();};
  el('proGuestsPlus').onclick=()=>{guestCount=Math.min(20,guestCount+1);updateGuests();};
@@ -41487,13 +41493,16 @@ form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries
    if(result.error){stat('Midday Break not saved: '+result.error.message,true);return;}
    closeBooking();await refreshRest();render();stat('Midday Break saved.');return;
  }
- if(!x.appointment_id && f.elements.service?.selectedOptions[0]?.dataset.existingOnly==='true'){stat(tr('Select an active service.','请选择已启用的服务。'),true);return;}if(!x.customer){phoneSearch.focus();phoneSearch.classList.add('proref-invalid');stat(tr('Select or add a customer.','请选择或新增顾客。'),true);return;}if(!x.employee){stat(tr('Select a therapist.','请选择技师。'),true);return;}if(!x.date||!x.time){stat('Date and time are required.',true);return;}const start=localIso(x.date,x.time),end=new Date(new Date(start).getTime()+Number(x.duration)*60000).toISOString();const editing=Boolean(x.appointment_id);const selectedWorkers=guestWorkers().map(sel=>sel.value);if(selectedWorkers.length!==guestCount||selectedWorkers.some(id=>!id)||new Set(selectedWorkers).size!==guestCount){stat('每位顾客必须选择一位不同的空闲技师。',true);return;}const payload={p_branch:x.branch,p_starts_at:start,p_ends_at:end,p_service_name:x.service,p_employee_ids:selectedWorkers.map(Number),p_room_id:x.room_id||null};if(editing)payload.p_appointment_id=x.appointment_id;else payload.p_customer_id=x.customer;const button=el('proAppointmentSave');button.disabled=true;try{const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
+ if(!x.appointment_id && f.elements.service?.selectedOptions[0]?.dataset.existingOnly==='true'){stat(tr('Select an active service.','请选择已启用的服务。'),true);return;}if(!x.customer){phoneSearch.focus();phoneSearch.classList.add('proref-invalid');stat(tr('Select or add a customer.','请选择或新增顾客。'),true);return;}if(!x.employee){stat(tr('Select a therapist.','请选择技师。'),true);return;}if(!x.date||!x.time){stat('Date and time are required.',true);return;}const start=localIso(x.date,x.time),end=new Date(new Date(start).getTime()+Number(x.duration)*60000).toISOString();const editing=Boolean(x.appointment_id);if(!editing&&!ndLoginEmployeeId){stat('登录账号未绑定员工，无法建立预约。请先绑定员工账号。',true);return;}const selectedWorkers=guestWorkers().map(sel=>sel.value);if(selectedWorkers.length!==guestCount||selectedWorkers.some(id=>!id)||new Set(selectedWorkers).size!==guestCount){stat('每位顾客必须选择一位不同的空闲技师。',true);return;}const payload={p_branch:x.branch,p_starts_at:start,p_ends_at:end,p_service_name:x.service,p_employee_ids:selectedWorkers.map(Number),p_room_id:x.room_id||null};if(editing)payload.p_appointment_id=x.appointment_id;else payload.p_customer_id=x.customer;const button=el('proAppointmentSave');button.disabled=true;try{const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
  const createdId=editing?x.appointment_id:(typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data);
- if(createdId){
-   const record={appointment_id:String(createdId),booking_employee_ids:[...ndBookingOwnerSelect].map(Number)};
+ if(createdId&&!editing){
+   // Booking staff is always the signed-in employee and cannot be manually picked.
+   const record={appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]};
    const stored=await db.from('nd_pro_beta_booking_staff_meta').upsert(record,{onConflict:'appointment_id'});
-   if(stored.error)stat('Appointment saved; booking staff not synced: '+stored.error.message,true);
+   if(stored.error)throw Error('预约已建立，但预约员工保存失败：'+stored.error.message);
+   ndBookerIdsByAppointment.set(String(createdId),[String(ndLoginEmployeeId)]);
  }
+ // Never overwrite original booking staff while editing an appointment.
  date=x.date;branch=x.branch;closeBooking();await load();stat(tr(editing?'Appointment updated successfully.':'Appointment created successfully.',editing?'预约已更新。':'预约已新增。'));}catch(err){stat(err.message,true);}finally{button.disabled=false;}};
 }
 function renderProSettings(host){
