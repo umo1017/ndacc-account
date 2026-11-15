@@ -14750,7 +14750,7 @@ function ndSignedChanges(){
  const a=window.ndSignedOnboardingDraft&&ndOnboardAgreement;
  if(!a)return [];
  const get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||'';
- const expected={empName:a.employee?.employee_name||'',empNric:a.employee?.identity||'',empOutlet:a.employee?.branch||'',empJoinDate:get('Start Date'),empGuaranteed:get('Basic Salary (RM)'),empPayBy:get('Payment Method')};
+ const legacy=ndLegacySignedSalary(window.ndSignedOnboardingDraft?.id); const expected={empName:a.employee?.employee_name||'',empNric:a.employee?.identity||'',empOutlet:a.employee?.branch||'',empJoinDate:get('Start Date'),empGuaranteed:legacy?String(legacy.basic):get('Basic Salary (RM)'),empPayBy:get('Payment Method')};
  return Object.entries(expected).filter(([id,value])=>{
    const field=byId(id);if(!field)return false;
    return id==='empGuaranteed'?Number(field.value)!==Number(value):String(field.value).trim()!==String(value).trim();
@@ -14759,7 +14759,7 @@ function ndSignedChanges(){
 function ndUpdateSignedEditNotice(){
  const note=byId('ndSignedDetailsNotice'),restore=byId('ndRestoreSignedDetails');
  const signed=!!window.ndSignedOnboardingDraft,changed=ndSignedChanges();
- if(note){note.hidden=!signed;note.textContent=!signed?'':changed.length?'Employee details have been edited. You may review and save without signing again. The original signed contract and signatures remain unchanged.':'Signed agreement on file. Employee details can be edited and saved without a new signature. The original signed contract remains unchanged.';note.classList.toggle('nd-signed-edit-warning',false);}
+ if(note){const legacy=ndLegacySignedSalary(window.ndSignedOnboardingDraft?.id);note.hidden=!signed;note.textContent=legacy?'Salary supplement: Basic Salary RM1,500 + Allowance RM500 = RM2,000. Original signed contract unchanged; SQL migration required before Save.':!signed?'':changed.length?'Employee details have been edited. You may review and save without signing again. The original signed contract and signatures remain unchanged.':'Signed agreement on file. Employee details can be edited and saved without a new signature. The original signed contract remains unchanged.';note.classList.toggle('nd-signed-edit-warning',false);}
  if(restore)restore.hidden=!signed||!changed.some(id=>id!=='empGuaranteed');
 }
 function ndRestoreSignedFormDetails(){
@@ -15072,6 +15072,23 @@ function prepareAutoEmployeeNo(){
   el.readOnly=false;
 }
 
+// Legacy signed-contract salary supplements are stored separately in Supabase.
+// UI mirror for the two contract IDs explicitly approved by management;
+// the SQL migration must be installed before onboarding will save.
+const ndLegacySalarySupplements=Object.freeze({
+ '7fdc29ce-2cdf-4501-8778-1fdafa55214e':Object.freeze({basic:1500,allowance:500}),
+ '23e045a3-06cb-41dc-b88e-195e58cbf5b8':Object.freeze({basic:1500,allowance:500})
+});
+function ndLegacySignedSalary(contractId){return ndLegacySalarySupplements[String(contractId||'').toLowerCase()]||null;}
+function ndOnboardingApplyLegacySalary(contractId){
+ const supplement=ndLegacySignedSalary(contractId);
+ if(!supplement)return;
+ const basic=byId('empGuaranteed'),allowance=byId('empAllowance');
+ if(basic){basic.value=String(supplement.basic);basic.readOnly=true;}
+ if(allowance){allowance.value=String(supplement.allowance);allowance.readOnly=true;}
+ const notice=byId('ndSignedDetailsNotice');
+ if(notice){notice.hidden=false;notice.textContent='Salary supplement: Basic Salary RM1,500 + Allowance RM500 = RM2,000. Original signed contract is unchanged. The Supabase salary supplement SQL must be applied before Save.';}
+}
 function ndSignedOnboardingBasic(){
  // The signed contract is an immutable historical document, not the live salary field.
  // Its amount is only a fallback for an uninitialized form; it never overrides edits.
@@ -17803,6 +17820,16 @@ async function saveStaff(){
   const unique=await validateUniqueStaffFields(payload,ndPendingOnboardEmployee?.id);if(!unique.ok)throw Error(unique.message);
   if(!ndPendingOnboardEmployee){
    if(ndReadItems(payload.notes)?.issues?.some(i=>i.sku_id))await window.ndEnsureStaffStockReady();
+   if(draft&&window.ndSignedOnboardingDraft){
+     const signedAgreement=window.ndOnboardAgreement;
+     const salaryRow=(Array.isArray(signedAgreement?.details)?signedAgreement.details:[]).find(r=>Array.isArray(r)&&r[0]==='Basic Salary (RM)');
+     const signedSalary=String(salaryRow?.[1]??'').trim();
+     if(!signedSalary||!Number.isFinite(Number(signedSalary))||Number(signedSalary)<0){
+       const supplement=ndLegacySignedSalary(window.ndSignedOnboardingDraft?.id);
+       if(!supplement)throw Error('Signed contract is missing Basic Salary (RM). A recorded salary supplement is required.');
+       payload.guaranteed_pay=supplement.basic;payload.allowance=supplement.allowance;
+     }
+   }
    saveStage='Upload contract signatures';const signedDraft=window.ndSignedOnboardingDraft;const agreement=signedDraft?.uploadedAgreement||await ndUploadNotice(ndNoticeValidDraft());if(signedDraft)signedDraft.uploadedAgreement=agreement;
    payload.notes=JSON.stringify({...JSON.parse(payload.notes),employment_notice_agreement:agreement});
    if(draft&&!window.ndSignedOnboardingDraft)throw Error('Complete the signed onboarding contract before issuing items.');
@@ -17832,7 +17859,9 @@ async function saveStaff(){
   byId('staffReviewModal').classList.remove('open');resetSubmitStaffForm();byId('staffSaveMsg').textContent='Employee onboarded ✓ '+number;await refreshSalaryStayHere();window.dispatchEvent(new CustomEvent('nd-staff-inventory-changed'));renderStaffList();window.ndOpenStaffManagement?.();
  }catch(err){
    const raw=String(err?.message||err);
-   if(saveStage==='Create employee from signed contract'&&/company representative must match the signed-in account/i.test(raw)){
+   if(saveStage==='Create employee from signed contract'&&/Signed contract is missing salary, start date or payment method/i.test(raw)){
+     byId('staffReviewMsg').textContent='Cannot create employee: signed contract fields or a recorded salary supplement are missing. Verify the Supabase salary supplement SQL has been applied for this contract; the original signed agreement remains unchanged.';
+   }else if(saveStage==='Create employee from signed contract'&&/company representative must match the signed-in account/i.test(raw)){
     const signed=window.ndOnboardAgreement||{};
     const signedBy=String(signed.representative_name||signed.representative_email||'the original company representative');
     byId('staffReviewMsg').textContent='Employee creation blocked by database representative validation. The signed contract belongs to '+signedBy+'. The onboarding operator may use a different account. The existing contract and signatures are unchanged. Ask UMO to review nd_complete_signed_onboarding in Supabase; do not re-sign under another person’s name.';
@@ -17864,7 +17893,7 @@ window.ndStartInterviewEmployee=async function(row,contractRow=null){
  updateSubmitStaffPaymentFields();
  await ndRefreshOnboardStock();
  window.ndInterviewEmployeeDraft={id:String(row.id)};
- const a=contractRow.form_data.__nd_signed_contract,get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||'';
+ const a=contractRow.form_data.__nd_signed_contract,get=k=>(a.details||[]).find(r=>r[0]===k)?.[1]||''; if(byId('empGuaranteed'))byId('empGuaranteed').readOnly=false;if(byId('empAllowance'))byId('empAllowance').readOnly=false;
  for(const [id,value]of Object.entries({empName:a.employee.employee_name,empNric:a.employee.identity,empOutlet:a.employee.branch,empJoinDate:get('Start Date'),empGuaranteed:get('Basic Salary (RM)'),empPayBy:get('Payment Method'),empNickname:v.Nickname||v['Nick Name']||'',empPhone:v['Contact Number']||'',empCategory:contractRow.form_data.__nd_contract_source.foreign?'non_local':'local'})){const field=byId(id);if(field)field.value=String(value??'');}
  const rest=String(get('Rest Day')).split(/[,;|]/).map(v=>v.trim()),days=[...new Set(rest.map(value=>['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(value)).filter(n=>n>=0))];if(days.length){ndSetFixedRestDays('empFixedRestWeekday',{fixed_rest_weekdays:days});const start=new Date(get('Start Date')+'T12:00:00');let count=0;for(let n=1;n<=new Date(start.getFullYear(),start.getMonth()+1,0).getDate();n++)if(days.includes(new Date(start.getFullYear(),start.getMonth(),n).getDay()))count++;byId('empOffDays').value=String(count);}
  // Restore this contract's edited pay first. Use the signed salary or interview amount only for an empty draft.
@@ -17873,15 +17902,22 @@ window.ndStartInterviewEmployee=async function(row,contractRow=null){
  let priorBasic='';
  try{priorBasic=String(sessionStorage.getItem(basicKey)??'').trim();}catch(_){}
  const candidateBasic=[priorBasic, get('Basic Salary (RM)'), get('Basic Pay'), v['Basic Salary (RM)'], v['Basic Pay'], v['Basic Salary'], v['Salary']].find(x=>x!==undefined&&x!==null&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0);
- if(basicField&&candidateBasic!==undefined)basicField.value=String(candidateBasic).trim();
+ if(basicField&&candidateBasic!==undefined)basicField.value=String(candidateBasic).trim(); ndOnboardingApplyLegacySalary(contractRow.id);
  window.ndActiveOnboardingBasicKey=basicKey;
- ndOnboardAgreement=a;window.ndSignedOnboardingDraft={id:String(contractRow.id),request:crypto.randomUUID()};updateSubmitEmploymentType();ndUpdateNoticeStatus();updateSubmitStaffPaymentFields();for(const id of ['empName','empNric','empOutlet','empJoinDate','empGuaranteed','empPayBy']){const field=byId(id);if(field){field.disabled=false;field.readOnly=false;}}if(byId('ndOpenOnboardAgreement'))byId('ndOpenOnboardAgreement').hidden=true;ndUpdateSignedEditNotice();await ndRefreshOnboardStock();byId('ndOnboardItems').scrollIntoView({block:'start'});
+ ndOnboardAgreement=a;window.ndSignedOnboardingDraft={id:String(contractRow.id),request:crypto.randomUUID()};updateSubmitEmploymentType();ndUpdateNoticeStatus();updateSubmitStaffPaymentFields();for(const id of ['empName','empNric','empOutlet','empJoinDate','empGuaranteed','empPayBy']){const field=byId(id);if(field){field.disabled=false;field.readOnly=false;}}ndOnboardingApplyLegacySalary(contractRow.id);if(byId('ndOpenOnboardAgreement'))byId('ndOpenOnboardAgreement').hidden=true;ndUpdateSignedEditNotice();await ndRefreshOnboardStock();byId('ndOnboardItems').scrollIntoView({block:'start'});
  byId('staffSaveMsg').textContent='Agreement on file. Edit details or employee items, then Review and Save.';
 };
 
 window.ndContinueSignedOnboarding=async function(row){
  const contract=await salaryDb.from('nd_staff_forms').select('*').eq('id',row.id).single();if(contract.error)throw contract.error;
  const saved=contract.data,a=saved?.form_data?.__nd_signed_contract,source=saved?.form_data?.__nd_contract_source;
+ const signedDetails=Array.isArray(a?.details)?a.details:[];
+ const signedSalaryEntry=signedDetails.find(r=>Array.isArray(r)&&r[0]==='Basic Salary (RM)');
+ const signedSalaryText=String(signedSalaryEntry?.[1]??'').trim();
+ if(!signedSalaryText||!Number.isFinite(Number(signedSalaryText))||Number(signedSalaryText)<0){
+   if(!ndLegacySignedSalary(row.id))throw Error('This signed contract has no Basic Salary (RM). A salary supplement is required. Contract ID: '+String(row.id));
+ }
+
  if(saved?.form_type!=='contract'||a?.contract_type!=='onboarding'||!a.signed_at||!a.employee_signature||!a.company_signature||source?.kind!=='interview')throw Error('A signed onboarding contract linked to an interview is required.');
  const interview=await salaryDb.from('nd_staff_forms').select('*').eq('id',source.id).single();if(interview.error)throw interview.error;
  const v=interview.data.form_data||{},nat=String(v.Nationality||'').toLowerCase(),app=String(v['Applicant Type']||'');saved.form_data.__nd_contract_source.foreign=!(/^Local\b/i.test(app)||['malaysia','malaysian','malaysian citizen'].includes(nat))&&(/foreign|non.local/i.test(app)||!!nat);const existing=await salaryDb.from('employees').select('id').eq('source_interview_id',String(source.id)).maybeSingle();if(existing.error)throw existing.error;if(existing.data){window.ndOpenStaffManagement?.();return;}await window.ndStartInterviewEmployee(interview.data,saved);
@@ -34789,6 +34825,14 @@ function ndRenderContractForm(root){
   await identity();if(!userEmail)throw Error('Please sign in.');
   if(source.kind==='interview'){const converted=await client().from('employees').select('id').eq('source_interview_id',source.id).maybeSingle();if(converted.error)throw converted.error;if(converted.data)throw Error('This person is already an employee. Select Existing Employees.');}
   if(!values['Employee Name']||!values.Branch||(type!=='cash_request'&&!values['IC / Passport']))throw Error(type==='cash_request'?'Complete Employee Name and Branch.':'Complete Employee Name, IC / Passport and Branch.');
+  // Validate payroll terms before any onboarding contract can be prepared for signing.
+  if(type==='onboarding'){
+    const salaryText=String(values['Basic Salary (RM)']??'').trim();
+    const salaryNumber=Number(salaryText);
+    if(!salaryText||!Number.isFinite(salaryNumber)||salaryNumber<0)throw Error('Basic Salary (RM) is required before signing. Enter the agreed amount.');
+    if(!String(values['Start Date']??'').trim())throw Error('Start Date is required before signing.');
+    if(!String(values['Payment Method']??'').trim())throw Error('Payment Method is required before signing.');
+  }
   if(type==='passport'&&values['Expected Return Date']&&values['Submission Date']&&values['Expected Return Date']<values['Submission Date'])throw Error('Expected Return Date cannot be before Submission Date.');
   if(ndContractPersonSigned(await ndContractSignedPeople(type),values['IC / Passport'],source.kind,source.id))throw Error('This person has already signed this contract type.');
   if(passport&&ndContractPersonSigned(await ndContractSignedPeople('passport'),values['IC / Passport'],source.kind,source.id))throw Error('This person has already signed the Passport Agreement.');
