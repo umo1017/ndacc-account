@@ -5621,6 +5621,12 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
 #ndProAppointmentSale .nd-ref-save-item{display:block;width:100%;margin-top:16px;padding:15px;border:0;border-radius:12px;background:#356ef4;color:white;font-weight:750;font-size:16px}
 @media(max-width:440px){#ndProAppointmentSale .nd-ref-cart-qty{gap:3px}#ndProAppointmentSale .nd-ref-cart-qty button{width:28px;height:32px}#ndProAppointmentSale .nd-ref-cart-row{gap:5px}#ndProAppointmentSale .nd-ref-cart-row>strong{font-size:12px}}
 </style>
+
+<style id="nd-service-staff-cross-branch-20261116">
+#ndProBookingModal select[data-guest-worker] optgroup,#ndProBookingModal select[name="employee"] optgroup{font-style:normal;font-weight:700;color:#294f41}
+#ndProBookingModal .nd-guest-therapist-row{min-width:0}
+#ndProBookingModal .nd-guest-therapist-row select{width:100%;max-width:100%;min-height:46px}
+</style>
 </head>
 <body><style id="nd-members-sidebar-overlay-fix">
 /* Members opens at full height. Navigation remains the existing app sidebar. */
@@ -40984,11 +40990,20 @@ let guestCount=1;
  function fillWorkerOptions(sel,index){
    const chosen=sel.value;sel.replaceChildren(new Option('请选择空闲技师',''));
    const chosenByOthers=new Set(guestWorkers().filter(x=>x!==sel).map(x=>x.value).filter(Boolean));
-   for(const member of staff){
-     const id=String(member.id);if(member.outlet!==form.elements.branch.value)continue;
-     const opt=new Option(member.nickname||member.name||id,id);
-     opt.disabled=bookedWorkerIds.has(id)||chosenByOthers.has(id);
-     sel.add(opt);
+   // Service Staff: show appointment branch first, but permit cross-branch transfers.
+   const currentBranch=form.elements.branch.value;
+   const branches=[currentBranch,...['Eco Botanic','Nusa Bestari'].filter(b=>b!==currentBranch)];
+   for(const b of branches){
+     const group=document.createElement('optgroup');
+     group.label=b===currentBranch?b+' · Current Branch':b+' · Transfer Staff';
+     const members=staff.filter(member=>member.outlet===b);
+     for(const member of members){
+       const id=String(member.id);
+       const opt=new Option(member.nickname||member.name||id,id);
+       opt.disabled=bookedWorkerIds.has(id)||chosenByOthers.has(id);
+       group.appendChild(opt);
+     }
+     if(members.length)sel.appendChild(group);
    }
    if(chosen&&Array.from(sel.options).some(o=>o.value===chosen&&!o.disabled))sel.value=chosen;
    else sel.value='';
@@ -41035,7 +41050,13 @@ let guestCount=1;
  function ndDrawBookers(ids){
    ndBookingOwnerSelect=new Set((ids||[]).map(String));
    const container=ownerPanel.querySelector('[data-booker-choices]');
-   container.innerHTML=staff.filter(x=>x.outlet===form.elements.branch.value).map(x=>`<label><input type="checkbox" data-booker-id="${esc(x.id)}" ${ndBookingOwnerSelect.has(String(x.id))?'checked':''}>${esc(x.nickname||x.name||x.id)}</label>`).join('');
+   // Booking Staff is independent of appointment branch; identify the signed-in employee first.
+   const allBookers=staff.slice().sort((a,b)=>{
+     const aMine=String(a.id)===String(ndLoginEmployeeId),bMine=String(b.id)===String(ndLoginEmployeeId);
+     if(aMine!==bMine)return aMine?-1:1;
+     return String(a.nickname||a.name||'').localeCompare(String(b.nickname||b.name||''));
+   });
+   container.innerHTML=allBookers.map(x=>`<label><input type="checkbox" data-booker-id="${esc(x.id)}" ${ndBookingOwnerSelect.has(String(x.id))?'checked':''}>${esc(x.nickname||x.name||x.id)}</label>`).join('');
    container.querySelectorAll('[data-booker-id]').forEach(input=>input.onchange=()=>{if(input.checked)ndBookingOwnerSelect.add(input.dataset.bookerId);else ndBookingOwnerSelect.delete(input.dataset.bookerId);});
  }
  function ndSyncBookersForBooking(bookingId){const existing=ndBookerIdsByAppointment.get(String(bookingId));ndDrawBookers(existing|| (ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]));}
@@ -41043,6 +41064,7 @@ let guestCount=1;
  breakBtn.onclick=()=>{form.elements.customer.value='';form.elements.service.value='Midday Break';appointmentModal?.classList.add('nd-break-mode');details.hidden=false;selection.hidden=true;ndDrawBookers(ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]);};
  form.elements.service.addEventListener('change',()=>{appointmentModal?.classList.toggle('nd-break-mode',ndIsBreakName(form.elements.service.value));});
 
+ form.elements.branch.addEventListener('change',()=>{refreshGuestWorkers(false);ndDrawBookers([...ndBookingOwnerSelect]);});
  mainWorker.addEventListener('change',()=>refreshGuestWorkers(false));
  el('proGuestsMinus').onclick=()=>{guestCount=Math.max(1,guestCount-1);updateGuests();};
  el('proGuestsPlus').onclick=()=>{guestCount=Math.min(20,guestCount+1);updateGuests();};
@@ -41405,8 +41427,9 @@ el('proQuickSave').onclick=async()=>{
    const b=form.elements.branch.value,d=form.elements.date.value;
    if(!b||!d)return {bookings:[],assignments:[]};
    const from=localIso(d,'00:00'),to=new Date(new Date(from).getTime()+86400000).toISOString();
+   // Check staff availability across BOTH branches, since transferred staff may be selected.
    const [a,l]=await Promise.all([
-     db.from('nd_pro_beta_appointments').select('id,branch,starts_at,ends_at,status,room_id').eq('branch',b).lt('starts_at',to).gt('ends_at',from),
+     db.from('nd_pro_beta_appointments').select('id,branch,starts_at,ends_at,status,room_id').lt('starts_at',to).gt('ends_at',from),
      db.from('nd_pro_beta_appointment_staff').select('appointment_id,employee_id')
    ]);
    if(a.error)throw a.error;if(l.error)throw l.error;
@@ -41415,11 +41438,11 @@ el('proQuickSave').onclick=async()=>{
  function applyAvailability(data){
    const f=form.elements,start=localIso(f.date.value,f.time.value),startMs=Date.parse(start),duration=Number(f.duration.value)||60,endMs=startMs+duration*60000,editing=String(f.appointment_id.value||'');
    const intersect=data.bookings.filter(a=>!busyStatuses.has(a.status)&&String(a.id)!==editing&&Date.parse(a.starts_at)<endMs&&Date.parse(a.ends_at)>startMs);
-   const occupiedRooms=new Set(intersect.map(a=>String(a.room_id||'')).filter(Boolean));
+   const occupiedRooms=new Set(intersect.filter(a=>a.branch===f.branch.value).map(a=>String(a.room_id||'')).filter(Boolean));
    const occupiedIds=new Set(intersect.map(a=>String(a.id)));
    const occupiedStaff=new Set(data.assignments.filter(x=>occupiedIds.has(String(x.appointment_id))).map(x=>String(x.employee_id)));
    bookedWorkerIds.clear();for(const id of occupiedStaff)bookedWorkerIds.add(id);const worker=f.employee,room=f.room_id;
-   for(const o of worker.options){if(!o.value)continue;const member=staff.find(x=>String(x.id)===o.value);const otherBranch=member?.outlet!==f.branch.value;const busy=occupiedStaff.has(o.value);o.disabled=otherBranch||busy;o.textContent=(member?.nickname||member?.name||o.value)+(busy?' · 已预约 / Booked':otherBranch?' · Other branch':'');}
+   for(const o of worker.options){if(!o.value)continue;const member=staff.find(x=>String(x.id)===o.value);const otherBranch=member?.outlet!==f.branch.value;const busy=occupiedStaff.has(o.value);o.disabled=busy;o.textContent=(member?.nickname||member?.name||o.value)+(busy?' · Booked':otherBranch?' · Transfer':'');}
    for(const o of room.options){if(!o.value)continue;const busy=occupiedRooms.has(o.value);o.disabled=busy;const r=rooms.find(x=>String(x.id)===o.value);o.textContent=(r?.room_name||o.value)+(busy?' · 已预约 / Booked':'');}
    refreshGuestWorkers(true);const invalid=(guestWorkers().some(sel=>sel.value&&sel.selectedOptions[0]?.disabled))||(room.value&&room.selectedOptions[0]?.disabled);
    availabilityMessage.textContent=invalid?'所选技师或房间已占用，请选择其他选项。':'相同时间已预约的技师和房间不可选择。';
