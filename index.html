@@ -5770,6 +5770,19 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
 <div id="ndExpenseActionCard" class="card span12 nd-petty-compact" style="background:var(--soft)">
 <details class="nd-action-expand" id="ndExpenseExpand"><summary><span><strong>Cash Expense</strong></span><span class="nd-action-plus" aria-hidden="true">›</span></summary><input id="pettyRemaining" aria-label="Legacy Cash Expense Balance (internal only)" type="hidden" /><div class="nd-petty-head"><h3 id="pettyInOutTitle">Cash Expense</h3></div>
 <div class="nd-petty-fields">
+<div class="nd-exp-category-wrap" id="ndExpenseCategoryPicker">
+  <strong class="nd-exp-cat-title">Expense Category</strong>
+  <div class="nd-exp-group-title">Staff Expenses</div>
+  <div class="nd-exp-cat-options" data-exp-group="STAFF">
+    <button type="button" data-exp-cat="Rice">Rice</button><button type="button" data-exp-cat="Food">Food</button><button type="button" data-exp-cat="Medicine">Medicine</button><button type="button" data-exp-cat="Other Supplies">Other Supplies</button><button type="button" data-exp-cat="Red Packet">Red Packet</button><button type="button" data-exp-custom="STAFF">+ Add</button>
+  </div>
+  <div class="nd-exp-group-title">Company Expenses</div>
+  <div class="nd-exp-cat-options" data-exp-group="COMPANY">
+    <button type="button" data-exp-cat="Massage Oil">Massage Oil</button><button type="button" data-exp-cat="Massage Tools">Massage Tools</button><button type="button" data-exp-cat="Laundry Detergent">Laundry Detergent</button><button type="button" data-exp-cat="Floor Cleaning">Floor Cleaning</button><button type="button" data-exp-cat="Repairs">Repairs 🧰</button><button type="button" data-exp-cat="Tea">Tea</button><button type="button" data-exp-cat="Snacks">Snacks</button><button type="button" data-exp-cat="Candy">Candy</button><button type="button" data-exp-custom="COMPANY">+ Add</button>
+  </div>
+  <div id="ndExpSelectedCategory" class="nd-exp-selected" aria-live="polite">Select one category before submitting</div>
+  <button type="button" class="btn" id="ndExpenseReportOpen" hidden>Expense Category Report · UMO</button>
+</div>
 <div class="nd-petty-field nd-petty-reason"><label for="pettyReason">Reason</label><input id="pettyReason" placeholder="Enter expense reason" required="required" type="text"/></div>
 <div class="nd-petty-field nd-petty-amount"><label for="pettyAmount">Amount</label><div class="nd-petty-money"><span aria-hidden="true">RM</span><input id="pettyAmount" aria-label="Expense amount in RM" inputmode="decimal" autocomplete="off" min="0.01" placeholder="0.00" step="0.01" type="number" value=""/></div></div>
 <div class="nd-petty-field nd-petty-receipt"><label>Receipt</label><div class="petty-inline-receipt">
@@ -9967,9 +9980,9 @@ return `<div class="history-date-card">
     // Submit expense to cloud once; cloud Cash Balance subtracts submitted requests.
     // Never write it to legacy petty_entries as well (would double-debit).
     if($("addPettyBtn")) $("addPettyBtn").onclick=async()=>{
-      const amount=num("pettyAmount"),reason=$("pettyReason").value.trim();
+      const amount=num("pettyAmount"),reason=($("pettyType")?.value==="in" ? $("pettyReason").value.trim() : window.ndExpenseCategorizeReason?.($("pettyReason").value.trim()));
       if(!Number.isFinite(amount)||amount<=0||Math.abs(Math.round(amount*100)-amount*100)>0.0000001){alert("Enter a valid amount (2 decimal places).");return;}
-      if(!reason){alert("Enter an expense reason.");return;}
+      if(!reason){alert("Select Staff Expenses or Company Expenses and a category first.");return;}
       if(!pendingPettyReceiptFile){alert("Attach a receipt before submitting Cash Expense.");return;}
       const button=$("addPettyBtn"),label=button.textContent;
       button.disabled=true;button.textContent="Submitting Cash Expense...";
@@ -9981,10 +9994,11 @@ return `<div class="history-date-card">
           p_branch:currentBranch,p_amount:amount,p_reason:reason,p_receipt_path:receipt.path
         });
         if(result.error)throw result.error;
-        $("pettyAmount").value="";$("pettyReason").value="";
+        $("pettyAmount").value="";$("pettyReason").value="";window.ndExpenseResetCategory?.();
         pendingPettyReceiptFile=null;refreshPendingPettyReceiptUI();
-        alert("Cash Expense submitted. The saved amount is now deducted from Today's Cash Balance unless marked Error.");
+        alert("Cash Expense submitted. Cash Balance will reflect the submitted debit after the cloud ledger refresh. If rejected, the recorded amount must be refunded automatically.");
         window.dispatchEvent(new Event('nd-cash-expense-submitted'));
+        try{const refreshed=await fetchRows();if(refreshed){renderAll();}}catch(refreshError){console.warn('Cash Expense balance refresh failed:',refreshError);}
       }catch(error){
         // Keep the uploaded receipt when the submission outcome is uncertain:
         // deleting it could break an already-created approval record.
@@ -10161,46 +10175,21 @@ return `<div class="history-date-card">
   async function ndWeeklyCashRead(make){
     const rows=[];for(let offset=0;;offset+=500){const r=await make().range(offset,offset+499);if(r.error)throw r.error;rows.push(...(r.data||[]));if((r.data||[]).length<500)return rows;}
   }
-  async function ndWeeklyCashCheck(){
-    const existing=$('ndWeeklyCashDialog');
-    if(!currentUserEmail||!canViewDailySettlement){if(existing?.open)existing.close();return;}
-    if(ndWeeklyCashBusy||document.hidden)return;
-    const monday=ndVerifyMalaysiaNow().ymd,day=new Date(monday+'T12:00:00Z');
-    if(day.getUTCDay()!==1)return;
-    if(document.querySelector('dialog[open],.salary-modal.open,#ndPettyGlobalAck.nd-show'))return;
-    const actor=String(currentUserEmail).toLowerCase(),key='nd_weekly_cash_ack_v1::'+actor+'::'+monday;
-    if(ndWeeklyCashSeen.has(key))return;
-    try{if(localStorage.getItem(key)==='1')return;}catch(_){}
-    ndWeeklyCashBusy=true;
-    try{
-      const auth=await db.auth.getUser();if(auth.error||!auth.data?.user||String(auth.data.user.email||'').toLowerCase()!==actor)return;
-      day.setUTCDate(day.getUTCDate()-1);const cutoff=day.toISOString().slice(0,10);
-      const [daily,transfers]=await Promise.all([
-        ndWeeklyCashRead(()=>db.from('daily_settlements').select('id,branch,settlement_date,cash,cash_withdrawal').gte('settlement_date',ND_CASH_LEDGER_START).lte('settlement_date',cutoff).order('settlement_date').order('id')),
-        ndWeeklyCashRead(()=>db.from('cash_remittances').select('id,branch,remittance_date,amount,status').gte('remittance_date',ND_CASH_LEDGER_START).lte('remittance_date',cutoff).order('remittance_date').order('id'))
-      ]);
-      const check=await db.auth.getUser();
-      if(check.error||check.data?.user?.id!==auth.data.user.id||String(currentUserEmail).toLowerCase()!==actor||ndVerifyMalaysiaNow().ymd!==monday)return;
-      if(document.querySelector('dialog[open],.salary-modal.open,#ndPettyGlobalAck.nd-show'))return;
-      // Weekly Cash must use the SAME complete cloud snapshot as the Ledger.
-      // Never publish a figure based on a different/incomplete data source.
-      if(!ndCashCloudSnapshotReady || !ndCashAdvanceReady || ndApprovedCashExpenseError || ndCashRemittanceError)return;
-      const items=ndWeeklyCashSnapshot(daily,transfers,cutoff);if(!items.length)return;
-      let dialog=$('ndWeeklyCashDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='ndWeeklyCashDialog';document.body.append(dialog);}
-      dialog.dataset.actor=actor;dialog.setAttribute('aria-label','Weekly Cash to Bank');
-      const total=items.reduce((sum,x)=>sum+x.toBank,0);
-      dialog.innerHTML='<header><small>NATURE’S DAO</small><h2>Weekly Cash to Bank</h2><p>Today Cash through Sunday · '+escHtml(cutoff)+'</p></header><div class="nd-weekly-cash-body">'+items.map(x=>'<article><h3>'+escHtml(x.branch)+'</h3><dl><dt>Cash received</dt><dd>'+money(x.cash)+'</dd><dt>Cash withdrawals</dt><dd>'+money(x.withdrawals)+'</dd><dt>Verified bank deposits</dt><dd>'+money(x.verified)+'</dd><dt>Salary advances (cash paid out)</dt><dd>'+money(x.advances)+'</dd><dt>Cash expenses (legacy + submitted)</dt><dd>'+money(x.expenses)+'</dd><dt>Other cash adjustments</dt><dd>'+money(x.adjustments)+'</dd><dt>Cash balance through Sunday</dt><dd><strong>'+money(x.balance)+'</strong></dd>'+(x.pending>0?'<dt>Deposits awaiting verification</dt><dd>'+money(x.pending)+'</dd>':'')+'</dl></article>').join('')+'<div class="nd-weekly-cash-total"><span>Cash awaiting verified bank deposit</span><strong>'+money(total)+'</strong></div><button type="button" class="btn" data-weekly-cash-ack>I Understand</button></div>';
-      dialog.querySelector('[data-weekly-cash-ack]').onclick=()=>{ndWeeklyCashSeen.add(key);try{localStorage.setItem(key,'1');}catch(_){}dialog.close();};
-      dialog.oncancel=()=>{ndWeeklyCashSeen.add(key);try{localStorage.setItem(key,'1');}catch(_){}};
-      dialog.showModal();
-    }catch(error){console.warn('Weekly cash summary unavailable:',error?.message||error);}
-    finally{ndWeeklyCashBusy=false;}
-  }
-  setTimeout(()=>void ndWeeklyCashCheck(),2500);
-  setInterval(()=>void ndWeeklyCashCheck(),60000);
-  window.addEventListener('focus',()=>void ndWeeklyCashCheck());
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)void ndWeeklyCashCheck();});
-  document.addEventListener('close',()=>setTimeout(()=>void ndWeeklyCashCheck(),0),true);
+  // One canonical Sunday closing-balance source for the compact transfer reminders.
+  // The former long "Weekly Cash to Bank" dialog is intentionally retired.
+  window.ndWeeklyCashSundayTotals=async function(cutoff){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(cutoff||'')))throw Error('Invalid Sunday date');
+    if(!ndCashCloudSnapshotReady||!ndCashAdvanceReady||ndApprovedCashExpenseError||ndCashRemittanceError)
+      throw Error('Cash ledger is not fully synchronized');
+    const [daily,transfers]=await Promise.all([
+      ndWeeklyCashRead(()=>db.from('daily_settlements').select('id,branch,settlement_date,cash,cash_withdrawal').gte('settlement_date',ND_CASH_LEDGER_START).lte('settlement_date',cutoff).order('settlement_date').order('id')),
+      ndWeeklyCashRead(()=>db.from('cash_remittances').select('id,branch,remittance_date,amount,status').gte('remittance_date',ND_CASH_LEDGER_START).lte('remittance_date',cutoff).order('remittance_date').order('id'))
+    ]);
+    const items=ndWeeklyCashSnapshot(daily,transfers,cutoff);
+    return Object.fromEntries(items.filter(x=>['Eco Botanic','Nusa Bestari'].includes(x.branch)).map(x=>[x.branch,Number(x.toBank)||0]));
+  };
+  // Remove any older dialog left in the DOM by an earlier version.
+  document.getElementById('ndWeeklyCashDialog')?.remove();
 
   /* UMO verification queue: shares History's actual payment_statuses and remittance status. */
   const ndVerifyItems=[['visa_master','VISA / MASTER',r=>Number(r.visa||0)+Number(r.master||0)],['tng','TNG',r=>Number(r.tng||0)],['bank_transfer','Bank Transfer',r=>Number(r.bank_transfer||0)],['tips','Tips',r=>Number(r.tips||0)],['alipay','ZFB / ALIPAY',r=>Number(r.alipay||0)],['online_card','Online Credit Card',r=>Number(r.online_card||0)],['amex','AMEX',r=>Number(r.amex||0)]];
@@ -36899,7 +36888,7 @@ setInterval(()=>{if(!document.hidden)void load(false);},60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void load(false);});
 })();</script>
 
-<script id="nd-cash-expense-approval-note">document.addEventListener('DOMContentLoaded',()=>{const card=document.getElementById('ndPettyCashCard')||document.getElementById('pettyCashCard');if(card&&!document.getElementById('ndCashExpenseNote')){const p=document.createElement('p');p.id='ndCashExpenseNote';p.className='helper';p.textContent='Submitted Cash Expenses are deducted automatically unless marked Error.';card.appendChild(p);}});</script>
+<script id="nd-cash-expense-approval-note">document.addEventListener('DOMContentLoaded',()=>{const card=document.getElementById('ndPettyCashCard')||document.getElementById('pettyCashCard');if(card&&!document.getElementById('ndCashExpenseNote')){const p=document.createElement('p');p.id='ndCashExpenseNote';p.className='helper';p.textContent='Cash Expense: Submit = debit once · Approved = no second debit · Rejected = refund once. Staff Expenses reduce the Team Bonus only after approval.';card.appendChild(p);}});</script>
 
 <script id="nd-cash-expense-ledger-integrity-v1">
 (()=>{'use strict';
@@ -37371,14 +37360,14 @@ const el=document.createElement('section');el.id='ndBonusDistribution';el.innerH
 shell.append(el);$('ndbdMonth').value=month;
 $('ndbdChooseBranch').addEventListener('click',()=>{$('ndbdBranchDialog').hidden=false});
 $('ndbdCloseBranch').addEventListener('click',()=>{$('ndbdBranchDialog').hidden=true});
-$('ndbdBranchChoices').addEventListener('click',e=>{const btn=e.target.closest('[data-bonus-branch]');if(!btn)return;branch=btn.dataset.bonusBranch;$('ndbdBranch').value=branch;$('ndbdBranchDialog').hidden=true;renderBranch();void loadDeductionHistory()});
+$('ndbdBranchChoices').addEventListener('click',e=>{const btn=e.target.closest('[data-bonus-branch]');if(!btn)return;branch=btn.dataset.bonusBranch;$('ndbdBranch').value=branch;$('ndbdBranchDialog').hidden=true;void load()});
 $('ndbdEditManagers').addEventListener('click',()=>{$('ndbdManagersDialog').hidden=false});
 $('ndbdCloseManagers').addEventListener('click',()=>{$('ndbdManagersDialog').hidden=true;drawManagers();drawStaff()});
 $('ndbdEditStaff').addEventListener('click',()=>{$('ndbdStaffDialog').hidden=false;drawStaff()});
 $('ndbdCloseStaff').addEventListener('click',()=>{$('ndbdStaffDialog').hidden=true;drawStaff()});
 for(const id of ['ndbdBranchDialog','ndbdManagersDialog','ndbdStaffDialog'])$(id).addEventListener('click',e=>{if(e.target===e.currentTarget){e.currentTarget.hidden=true;drawManagers();drawStaff()}});
 $('ndbdMonth').addEventListener('change',e=>{month=e.target.value;void load()});
-$('ndbdBranch').addEventListener('change',e=>{branch=e.target.value;renderBranch();void loadDeductionHistory()});
+$('ndbdBranch').addEventListener('change',e=>{branch=e.target.value;void load()});
 $('ndbdManagers').addEventListener('change',e=>{const row=e.target.closest('[data-manager-id]');if(!row||e.target.dataset.field!=='managerCheck')return;const id=String(row.dataset.managerId);if(e.target.checked)managers.set(id,0);else managers.delete(id);drawManagers();drawStaff();saveDraft()});
 $('ndbdManagers').addEventListener('input',e=>{const row=e.target.closest('[data-manager-id]');if(!row||e.target.dataset.field!=='managerRate')return;const id=String(row.dataset.managerId);if(managers.has(id)){managers.set(id,Math.min(100,safeNum(e.target.value)));calculate();saveDraft()}});
 $('ndbdStaffEditor').addEventListener('change',e=>{const tr=e.target.closest('[data-staff-id]');if(!tr)return;const r=members.find(x=>String(x.id)===tr.dataset.staffId);if(!r)return;const field=e.target.dataset.field;if(field==='selected')r.selected=e.target.checked;else if(field==='mc')r.mc=e.target.checked;else if(field==='target')r.target=e.target.checked;drawStaff();saveDraft()});
@@ -37528,7 +37517,18 @@ function drawQuarterPreview(current){
  $('ndbdQuarterRelease').textContent=payment?'Month 3 · '+money(net):'Month 3';
  $('ndbdQuarterStatus').textContent='';
 }
-function deductionForMonth(b,m){return deductions.filter(x=>x.branch===b&&x.bonus_month===m+'-01').reduce((sum,r)=>sum+Number(r.amount||0),0)}
+let ndAutoStaffExpenseDeductions=new Map();
+function ndAutoStaffExpenseKey(branch,month){return String(branch).toLowerCase().trim()+'|'+String(month).slice(0,7)}
+function ndAutoStaffExpenseAmount(branch,month){return Number(ndAutoStaffExpenseDeductions.get(ndAutoStaffExpenseKey(branch,month))||0)}
+async function ndLoadAutoStaffExpenseBonus(branch,month){
+  const key=ndAutoStaffExpenseKey(branch,month),client=db();
+  if(!client)throw Error('Bonus database unavailable');
+  // No local estimates: an RPC error must not be treated as 0.
+  const res=await client.rpc('nd_cash_expense_staff_bonus_total',{p_branch:branch,p_month:month+'-01'});
+  if(res.error)throw res.error;
+  ndAutoStaffExpenseDeductions.set(key,Number(res.data||0));
+}
+function deductionForMonth(b,m){return deductions.filter(x=>x.branch===b&&x.bonus_month===m+'-01').reduce((sum,r)=>sum+Number(r.amount||0),0)+ndAutoStaffExpenseAmount(b,m)}
 function renderDeductionHistory(){
  const host=$('ndbdDeductHistory');if(!host)return;
  const quarter=quarterMonths(month);
@@ -37581,7 +37581,10 @@ else if(eligible.length===0&&gross>0)showStatus('No eligible staff · Pool is no
 function renderBranch(){poolDeduction=deductionForMonth(branch,month);if($('ndbdChooseBranch'))$('ndbdChooseBranch').textContent=branch||'Select Branch';if($('ndbdManagersDialog'))$('ndbdManagersDialog').hidden=true;if($('ndbdStaffDialog'))$('ndbdStaffDialog').hidden=true;if($('ndbdBranchDialog'))$('ndbdBranchDialog').hidden=true;sync=true;members=staff.filter(x=>x.outlet===branch).map(x=>({id:x.id,name:x.nickname||x.name||String(x.id),selected:true,mc:false,target:true}));applyState();poolDeduction=deductionForMonth(branch,month);$('ndbdTeamRate').value=poolRate;$('ndbdDeductAmount').value='';renderDeductionHistory();$('ndbdEcoBox').hidden=!isEco();$('ndbdTeamBox').hidden=isEco();drawManagers();drawStaff();sync=false;showStatus('')}
 const nextMonth=m=>{const [y,n]=m.split('-').map(Number);return n===12?(y+1)+'-01-01':y+'-'+String(n+1).padStart(2,'0')+'-01'};
 async function load(){mount();if(loading)return;loading=true;showStatus('Loading…');const client=db();if(!client){loading=false;showStatus('Sign in first');return}
-try{const qMonths=quarterMonths(month),qStart=qMonths[0]+'-01',qEnd=nextMonth(qMonths[2]);const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',qStart).lt('settlement_date',qEnd).limit(20000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);quarterSettlements=s.data||[];settlements=quarterSettlements.filter(x=>String(x.settlement_date||'').slice(0,7)===month);const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;$('ndbdBranchChoices').innerHTML=bs.map(b=>`<button type="button" data-bonus-branch="${esc(b)}">${esc(b)}</button>`).join('');if(!branch){showStatus('No branch access');return}renderBranch();await loadDeductionHistory()}
+try{const qMonths=quarterMonths(month),qStart=qMonths[0]+'-01',qEnd=nextMonth(qMonths[2]);const [e,s]=await Promise.all([client.from('employees').select('id,name,nickname,email,outlet,staff_category,employment_type,nd_archived_at,last_working_date').limit(5000),client.from('daily_settlements').select('id,branch,settlement_date,grand_total,status').gte('settlement_date',qStart).lt('settlement_date',qEnd).limit(20000)]);if(e.error)throw e.error;if(s.error)throw s.error;staff=(e.data||[]).filter(r=>!collab(r)&&!r.nd_archived_at&&!r.last_working_date);quarterSettlements=s.data||[];settlements=quarterSettlements.filter(x=>String(x.settlement_date||'').slice(0,7)===month);const bs=fixedBranches.filter(allowed);$('ndbdBranch').innerHTML=bs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');if(!bs.includes(branch))branch=bs[0]||'';$('ndbdBranch').value=branch;$('ndbdBranchChoices').innerHTML=bs.map(b=>`<button type="button" data-bonus-branch="${esc(b)}">${esc(b)}</button>`).join('');if(!branch){showStatus('No branch access');return}renderBranch();await loadDeductionHistory();
+  // Load 3 months for a consistent quarterly pool preview.
+  for(const qm of quarterMonths(month))await ndLoadAutoStaffExpenseBonus(branch,qm);
+  poolDeduction=deductionForMonth(branch,month);renderDeductionHistory();calculate();}
 catch(e){showStatus('Unable to load: '+(e?.message||e))}finally{loading=false}}
 window.ndOpenBranchBonusDistribution=async()=>{mount();await load()};
 document.addEventListener('nd-bonus-open',()=>{if(document.body.dataset.ndVisiblePage==='bonus'&&$('bonusPage')?.classList.contains('nd-ledger-mode'))void window.ndOpenBranchBonusDistribution()});
@@ -38790,68 +38793,74 @@ function enhance(){
 #ndWeeklyTransferReminder .ndwtr-body p{margin:0 0 13px}
 #ndWeeklyTransferReminder .ndwtr-branch{font-size:13px;color:#24577a;padding:9px 12px;background:#cce9ff;border-radius:10px;margin:12px 0}
 #ndWeeklyTransferReminder .ndwtr-warn{color:#a32626;font-weight:750}
+#ndWeeklyTransferReminder .ndwtr-balances{background:rgba(255,255,255,.76);border:1px solid #b8d9f0;border-radius:14px;padding:14px;margin-top:15px}
+#ndWeeklyTransferReminder .ndwtr-balance-title{font-weight:800;font-size:14px;margin-bottom:10px;color:#183f61}
+#ndWeeklyTransferReminder .ndwtr-balance-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid #d4e8f7;font-size:14px}
+#ndWeeklyTransferReminder .ndwtr-balance-row strong{font-size:17px;color:#134c79;white-space:nowrap;font-variant-numeric:tabular-nums}
+@media(max-width:370px){#ndWeeklyTransferReminder .ndwtr-balance-row strong{font-size:15px}}
 #ndWeeklyTransferReminder .ndwtr-actions{display:flex;gap:9px;margin-top:18px;justify-content:center;flex-wrap:wrap}
 #ndWeeklyTransferReminder button{cursor:pointer;border-radius:10px;border:1px solid #ccdbce;padding:11px 16px;background:#fff;font-size:14px;font-weight:750;color:#24577a}
 #ndWeeklyTransferReminder button.ndwtr-confirm{background:linear-gradient(100deg,#2988dc,#126ab8);color:white;border-color:#1978cb;min-width:170px;box-shadow:0 4px 12px #1978cb33}
 @media(max-width:480px){#ndWeeklyTransferReminder .ndwtr-head{padding:18px 16px 10px}#ndWeeklyTransferReminder .ndwtr-body{padding:15px 16px 19px}}
 </style>
-<script id="nd-weekly-transfer-reminders-20261114">
+<script id="nd-weekly-transfer-reminders-20261116">
 (function(){'use strict';
   const BRANCHES=['Eco Botanic','Nusa Bestari'];
   const TZ='Asia/Kuala_Lumpur';
-  let busy=false,lastKey='';
+  let busy=false;
   const el=id=>document.getElementById(id);
+  const escapeHTML=v=>String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const currency=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
   function nowMY(){
     const parts=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
     const x=Object.fromEntries(parts.map(p=>[p.type,p.value]));
     const date=x.year+'-'+x.month+'-'+x.day;
-    const utcDate=new Date(date+'T12:00:00Z');
-    return {date,hour:Number(x.hour),weekday:utcDate.getUTCDay()};
+    return {date,hour:Number(x.hour),weekday:new Date(date+'T12:00:00Z').getUTCDay()};
   }
   function shift(date,days){const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
   function client(){return window.salaryDb||null;}
-  function shown(key){try{return sessionStorage.getItem(key)==='1'||localStorage.getItem(key)==='1';}catch(_){return false;}}
-  function mark(key){try{sessionStorage.setItem(key,'1');localStorage.setItem(key,'1');}catch(_){}}
+  function shown(key){try{return localStorage.getItem(key)==='1';}catch(_){return false;}}
+  function mark(key){try{localStorage.setItem(key,'1');}catch(_){}}
   function activePopup(){return !!document.querySelector('dialog[open],.salary-modal.open,#ndPettyGlobalAck.nd-show');}
-  function popup(key,mode,branches){
+  function popup(key,mode,totals,sundayDate){
     if(shown(key)||activePopup())return;
     let dlg=el('ndWeeklyTransferReminder');if(!dlg){dlg=document.createElement('dialog');dlg.id='ndWeeklyTransferReminder';document.body.appendChild(dlg);}
     const sunday=mode==='sunday';
-    const title=sunday?'每周现金转账提醒':'星期一 · 最后转账提醒';
-    const detail=sunday?
-      '<p>请大家记得把<strong>这个星期的账款转账给公司</strong>，并在 Cash Transfer to Bank 提交转账记录和收据。</p><p>如果明天不是你的班，请记得把账目、现金和转账事项<strong>交接清楚</strong>。谢谢大家合作！</p>':
-      '<p>今天是本周账款转账的<strong>最后一天</strong>，请记得把款项转账给公司，并在系统提交转账记录及收据。</p><p class="ndwtr-warn">逾期未提交将按公司制度处理（通知罚款 RM200）；实际处罚须符合适用法律。</p><p>如果明天不是你的班，请先完成交接。谢谢大家合作！</p>';
-    const label=(!sunday&&branches.length)?'<div class="ndwtr-branch">尚未发现有效转账提交：'+branches.map(x=>x.replace(/&/g,'&amp;').replace(/</g,'&lt;')).join('、')+'</div>':'';
-    dlg.innerHTML='<div class="ndwtr-head"><small>NATURE’S DAO · CASH TRANSFER</small><h2>'+title+'</h2></div><div class="ndwtr-body">'+detail+label+'<div class="ndwtr-actions"><button type="button" class="ndwtr-confirm" data-ndwtr-ok>我已了解</button></div></div>';
+    const title=sunday?'每周现金转账提醒':'最后转账提醒';
+    const detail=sunday
+      ?'<p>亲爱的大家，请记得把这个星期的账款转账给公司，并在 <strong>Cash Transfer to Bank</strong> 提交转账记录和收据。</p><p>如果明天不是你的班，请记得把账目、现金及转账事项交接清楚。</p><p>谢谢大家合作！❤</p>'
+      :'<p><strong>今天是转账上周的现金最后一天！</strong></p><p>今天值班必须在<strong>晚上12am之前</strong>把款项转账给公司，并提交转账记录及收据。</p><p class="ndwtr-warn">逾期未提交将按公司制度处理（通知罚款 RM200，希望你不要嫌钱多哦）</p><p>谢谢大家合作！</p>';
+    const amounts='<div class="ndwtr-balances"><div class="ndwtr-balance-title">Cash Balance through Sunday</div>'+BRANCHES.map(b=>'<div class="ndwtr-balance-row"><span>'+escapeHTML(b)+'</span><strong>'+currency(totals[b])+'</strong></div>').join('')+'</div>';
+    dlg.innerHTML='<div class="ndwtr-head"><small>NATURE’S DAO · CASH TRANSFER</small><h2>'+title+'</h2></div><div class="ndwtr-body">'+detail+amounts+'<div class="ndwtr-actions"><button type="button" class="ndwtr-confirm" data-ndwtr-ok>我已了解</button></div></div>';
     dlg.querySelector('[data-ndwtr-ok]').onclick=()=>{mark(key);dlg.close();};
-    dlg.addEventListener('cancel',event=>{event.preventDefault();event.stopImmediatePropagation();},true);
-    try{dlg.showModal();}catch(_){dlg.remove();}
+    dlg.oncancel=event=>{event.preventDefault();};
+    try{dlg.showModal();}catch(error){console.warn('Transfer reminder cannot open:',error?.message||error);}
   }
   async function check(){
-    if(busy||document.hidden)return;
+    if(busy||document.hidden||activePopup())return;
     const time=nowMY();
-    // Sunday from 8 PM; Monday from 10 AM. Shown at next app opening if within the window.
+    // Sunday 20:00 onward; Monday 10:00 onward (Malaysia time).
     const mode=time.weekday===0&&time.hour>=20?'sunday':time.weekday===1&&time.hour>=10?'monday':null;
     if(!mode)return;
-    const db=client();if(!db)return;
+    const db=client();if(!db||typeof window.ndWeeklyCashSundayTotals!=='function')return;
     busy=true;
     try{
-      const result=await db.auth.getUser();const user=result.data?.user;
-      if(result.error||!user)return;
-      const scope=(user.id||String(user.email||'').toLowerCase());
+      const result=await db.auth.getUser();const user=result.data?.user;if(result.error||!user)return;
       const weekEnd=mode==='sunday'?time.date:shift(time.date,-1);
-      const key='nd_weekly_transfer_v2::'+scope+'::'+mode+'::'+weekEnd;
-      if(shown(key)||lastKey===key||activePopup())return;
-      if(mode==='sunday'){lastKey=key;popup(key,mode,[]);return;}
-      // Server-side query intentionally returns only branch/status, not private salary or account details.
-      const {data,error}=await db.rpc('nd_weekly_transfer_submission_status',{p_sunday:weekEnd});
-      if(error){console.warn('Weekly transfer reminder unavailable:',error.message);return;}
-      if(!Array.isArray(data)){console.warn('Unexpected weekly transfer status response');return;}
-      const missing=BRANCHES.filter(b=>{const row=data.find(x=>x.branch===b);return !row||row.submitted!==true;});
-      if(!missing.length){mark(key);return;}
-      if(nowMY().weekday!==1||nowMY().hour<10)return;
-      lastKey=key;popup(key,mode,missing);
-    }catch(error){console.warn('Weekly transfer check failed:',error?.message||error);}finally{busy=false;}
+      const key='nd_weekly_transfer_amounts_v3::'+(user.id||String(user.email||'').toLowerCase())+'::'+mode+'::'+weekEnd;
+      if(shown(key))return;
+      // Preserve the existing final-day check: no reminder if both branches already submitted.
+      if(mode==='monday'){
+        const {data,error}=await db.rpc('nd_weekly_transfer_submission_status',{p_sunday:weekEnd});
+        if(error||!Array.isArray(data)){console.warn('Transfer status unavailable',error?.message||'Invalid result');return;}
+        const missing=BRANCHES.filter(b=>!data.find(x=>x.branch===b&&x.submitted===true));
+        if(!missing.length){mark(key);return;}
+      }
+      const totals=await window.ndWeeklyCashSundayTotals(weekEnd);
+      if(!BRANCHES.every(b=>Number.isFinite(Number(totals[b])))){console.warn('Sunday balances incomplete');return;}
+      const newer=nowMY();if(newer.date!==time.date||newer.hour<(mode==='sunday'?20:10)||activePopup())return;
+      popup(key,mode,totals,weekEnd);
+    }catch(error){console.warn('Cash transfer reminder unavailable:',error?.message||error);}finally{busy=false;}
   }
   function start(){setTimeout(()=>void check(),3500);setInterval(()=>void check(),60000);window.addEventListener('focus',()=>void check());document.addEventListener('visibilitychange',()=>{if(!document.hidden)void check();});window.addEventListener('pageshow',()=>void check());document.addEventListener('close',()=>setTimeout(()=>void check(),200),true);}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
@@ -38869,6 +38878,89 @@ function enhance(){
 function paint(){const field=document.getElementById('settlementDate');if(!field)return;const box=field.parentElement;const raw=field.value;let label='Select Date';if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){const date=new Date(raw+'T12:00:00Z');label=new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric'}).format(date)}box.dataset.dateEn=label;field.setAttribute('lang','en-GB');}
 function init(){const input=document.getElementById('settlementDate');if(!input)return;input.addEventListener('input',paint);input.addEventListener('change',paint);paint();const branch=document.getElementById('appView');if(!branch)return;const mo=new MutationObserver(()=>{if(input.parentElement?.dataset.dateEn===undefined||!input.value)return;const d=new Date(input.value+'T12:00:00Z');const want=Number.isNaN(+d)?'Select Date':new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric'}).format(d);if(input.parentElement.dataset.dateEn!==want)paint()});mo.observe(input,{attributes:true,attributeFilter:['value']});document.addEventListener('click',e=>{if(e.target.closest?.('#dailyBranchToggle,.branch-btn'))requestAnimationFrame(paint)},true);setInterval(paint,2500);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+<style id="nd-exp-category-design">
+#ndExpenseCategoryPicker{padding:14px;margin:4px 0 14px;background:#f9fbf9;border:1px solid #d7e1d8;border-radius:14px}
+.nd-exp-cat-title{display:block;font-size:15px;color:#264537;margin-bottom:12px}
+.nd-exp-group-title{font-size:13px;font-weight:750;color:#3b5749;margin:12px 0 7px}
+.nd-exp-cat-options{display:flex;flex-wrap:wrap;gap:7px}
+.nd-exp-cat-options button{width:auto!important;min-width:0!important;min-height:37px;border-radius:10px;border:1px solid #cbd9d0;background:#fff;color:#2c4738;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.nd-exp-cat-options button.nd-exp-cat-on{background:#24543f!important;color:white!important;border-color:#24543f!important}
+.nd-exp-cat-options[data-exp-group="STAFF"] button.nd-exp-cat-on{background:#375c8f!important;border-color:#375c8f!important}
+.nd-exp-selected{font-size:12px;margin-top:12px;color:#617769}
+#ndExpenseReportOpen{margin-top:12px;border-radius:10px;background:#edf4ef;color:#244a38;border:1px solid #a9c7b0;padding:9px 13px}
+#ndExpenseCategoryReport{border:0;border-radius:18px;padding:0;width:min(850px,96vw);max-height:88dvh;overflow:auto;color:#253c31;background:#fff;box-shadow:0 14px 70px #0006}
+#ndExpenseCategoryReport::backdrop{background:#0008}
+#ndExpenseCategoryReport .nd-cat-report-body{padding:18px}
+#ndExpenseCategoryReport .nd-cat-report-head{display:flex;gap:10px;align-items:center;justify-content:space-between}
+#ndExpenseCategoryReport table{min-width:700px;width:100%;border-collapse:collapse}
+#ndExpenseCategoryReport th,#ndExpenseCategoryReport td{padding:9px;border-bottom:1px solid #e6eae7;text-align:left;font-size:12px;white-space:nowrap}
+#ndExpenseCategoryReport select,#ndExpenseCategoryReport input{width:auto;max-width:100%;font-size:14px}
+#ndExpenseCategoryReport .nd-cat-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+#ndExpenseCategoryReport .nd-cat-report-filter{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:12px 0}
+#ndExpenseCategoryReport .nd-cat-report-filter label{font-size:12px}
+</style>
+<script id="nd-expense-categories-report-v1">
+(function(){
+ 'use strict';
+ const rootId='ndExpenseCategoryPicker';
+ let selected=null;
+ const categories={STAFF:['Rice','Food','Medicine','Other Supplies','Red Packet'],COMPANY:['Massage Oil','Massage Tools','Laundry Detergent','Floor Cleaning','Repairs','Tea','Snacks','Candy']};
+ function root(){return document.getElementById(rootId)}
+ function groupName(g){return g==='STAFF'?'Staff Expenses':'Company Expenses'}
+ function choice(g,c){
+   selected={group:g,category:c};
+   root()?.querySelectorAll('[data-exp-cat]').forEach(b=>b.classList.toggle('nd-exp-cat-on',b.dataset.expGroup===g&&b.dataset.expCat===c));
+   const selectedEl=document.getElementById('ndExpSelectedCategory');if(selectedEl)selectedEl.textContent=groupName(g)+' · '+c;
+ }
+ window.ndExpenseCategorizeReason=function(details){
+   if(!selected)return '';
+   const clean=String(details||'').replace(/[\r\n\t]+/g,' ').trim();
+   // Encoded in the existing approved Cash Expense reason field; no new accounting writes.
+   return '[ND-CAT:'+selected.group+':'+selected.category.replace(/[\[\]]/g,'')+'] '+(clean||selected.category);
+ };
+ window.ndExpenseResetCategory=function(){selected=null;root()?.querySelectorAll('.nd-exp-cat-on').forEach(b=>b.classList.remove('nd-exp-cat-on'));const el=document.getElementById('ndExpSelectedCategory');if(el)el.textContent='Select one category before submitting';};
+ function bind(){
+  const el=root();if(!el||el.dataset.ready==='yes')return;el.dataset.ready='yes';
+  el.querySelectorAll('[data-exp-cat]').forEach(b=>{b.dataset.expGroup=b.closest('[data-exp-group]').dataset.expGroup;b.addEventListener('click',()=>choice(b.dataset.expGroup,b.dataset.expCat));});
+  el.querySelectorAll('[data-exp-custom]').forEach(btn=>btn.addEventListener('click',()=>{
+    const g=btn.dataset.expCustom;const name=prompt('New '+groupName(g)+' category (max 40 characters):');if(name===null)return;
+    const category=name.trim().replace(/[\r\n\t]/g,' ').slice(0,40);if(!category){alert('Category name is required');return;}
+    const container=btn.parentElement;let existing=[...container.querySelectorAll('[data-exp-cat]')].find(x=>x.dataset.expCat.toLowerCase()===category.toLowerCase());
+    if(!existing){existing=document.createElement('button');existing.type='button';existing.dataset.expCat=category;existing.dataset.expGroup=g;existing.textContent=category;container.insertBefore(existing,btn);existing.addEventListener('click',()=>choice(g,category));}
+    choice(g,existing.dataset.expCat);
+  }));
+  const open=document.getElementById('ndExpenseReportOpen');if(open)open.addEventListener('click',openReport);
+  checkUmo();
+ }
+ async function checkUmo(){
+  const btn=document.getElementById('ndExpenseReportOpen');if(!btn)return;
+  try{const db=window.salaryDb||window.ndGetDatabase?.('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');if(!db)return;
+   const {data}=await db.auth.getUser();btn.hidden=String(data?.user?.email||'').trim().toLowerCase()!=='umo1017@gmail.com';
+  }catch(_){btn.hidden=true;}
+ }
+ function reportDialog(){let dlg=document.getElementById('ndExpenseCategoryReport');if(dlg)return dlg;
+  dlg=document.createElement('dialog');dlg.id='ndExpenseCategoryReport';dlg.innerHTML='<div class="nd-cat-report-body"><div class="nd-cat-report-head"><strong>Cash Expense · Category Report</strong><button type="button" class="btn" data-close>Close</button></div><div class="nd-cat-report-filter"><label>Branch<select data-branch><option value="">All Branches</option><option value="Eco Botanic">Eco Botanic</option><option value="Nusa Bestari">Nusa Bestari</option></select></label><label>From<input type="month" data-from></label><label>To<input type="month" data-to></label><button type="button" class="btn" data-refresh>Refresh</button></div><p data-status role="status"></p><div class="nd-cat-scroll"><table><thead><tr><th>Group</th><th>Category</th><th>Branch</th><th>Spent</th><th>Purchases</th><th>Average Interval</th><th>Latest</th><th>Suggested Check</th></tr></thead><tbody data-rows></tbody></table></div><small>Only newly categorized, approved expenses are included. Earlier uncategorized expenses remain unchanged. Suggested check interval uses observed purchase gaps and is not an automatic order.</small></div>';
+  document.body.appendChild(dlg);dlg.querySelector('[data-close]').onclick=()=>dlg.close();dlg.querySelector('[data-refresh]').onclick=loadReport;
+  const d=new Date(),mon=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');dlg.querySelector('[data-to]').value=mon;dlg.querySelector('[data-from]').value=d.getFullYear()+'-01';return dlg;
+ }
+ function esc(s){return String(s??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));}
+ async function openReport(){const d=reportDialog();if(!d.open)d.showModal();await loadReport();}
+ async function loadReport(){
+  const d=reportDialog(),status=d.querySelector('[data-status]'),body=d.querySelector('[data-rows]');status.textContent='Loading approved category spending…';body.replaceChildren();
+  try{const db=window.salaryDb||window.ndGetDatabase?.('https://cofmjwsejcbfsgdrswku.supabase.co','sb_publishable_PIsrDbehIDAri3bugJE3Vw_oaYY2QYU');if(!db)throw Error('Database unavailable');
+   const monthFrom=d.querySelector('[data-from]').value,monthTo=d.querySelector('[data-to]').value;
+   if(!/^\d{4}-\d{2}$/.test(monthFrom)||!/^\d{4}-\d{2}$/.test(monthTo)||monthFrom>monthTo)throw Error('Select a valid month range');
+   const {data,error}=await db.rpc('nd_cash_expense_category_report',{p_start:monthFrom+'-01',p_end:(()=>{const [y,m]=monthTo.split('-').map(Number);return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10)})(),p_branch:d.querySelector('[data-branch]').value||null});
+   if(error)throw error;
+   const rows=Array.isArray(data)?data:[];
+   status.textContent=rows.length+' categories · approved spending only';
+   body.innerHTML=rows.map(r=>'<tr><td>'+esc(groupName(r.expense_group))+'</td><td>'+esc(r.category)+'</td><td>'+esc(r.branch)+'</td><td>RM '+Number(r.total_amount||0).toFixed(2)+'</td><td>'+Number(r.purchase_count||0)+'</td><td>'+(r.average_gap_days==null?'Insufficient data':Number(r.average_gap_days).toFixed(1)+' days')+'</td><td>'+esc(r.last_purchase_date||'—')+'</td><td>'+esc(r.suggested_interval||'Insufficient data')+'</td></tr>').join('');
+  }catch(e){status.textContent='Report unavailable: '+(e?.message||e);}
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
+ window.addEventListener('focus',checkUmo);
 })();
 </script>
 </body>
@@ -39249,23 +39341,7 @@ body #ndStaffFormsPage{width:auto!important;min-width:0!important;max-width:none
 @media(max-width:600px){body #ndStaffFormsPage{margin:68px 10px 20px!important;padding:14px!important}#ndStaffFormsPage .nd-form-tabs{gap:6px!important}#ndStaffFormsPage .nd-form-tabs button{flex:1 1 100px;font-size:12px!important;padding:9px 10px!important}#ndStaffFormsPage #ndInterviewCategory{max-width:100%;font-size:16px}#ndStaffFormsPage .nd-interview-row-layout .nd-form-field{grid-template-columns:minmax(0,100px) minmax(0,1fr)!important}#ndStaffFormsPage input[type=file]{font-size:11px!important;padding:6px!important}}
 </style>
 
-<style id="nd-weekly-cash-style">
-#ndWeeklyCashDialog{width:min(620px,calc(100vw - 28px));max-height:88dvh;overflow:auto;border:1px solid #cbd9cf;border-radius:20px;padding:0;color:#264737;background:#fffdf7;box-sizing:border-box}
-#ndWeeklyCashDialog::backdrop{background:#17372e99}
-#ndWeeklyCashDialog header{background:linear-gradient(120deg,#193f32,#376650);color:#fff;padding:24px}
-#ndWeeklyCashDialog header small{font-size:10px;letter-spacing:2px;color:#e9d9b1}
-#ndWeeklyCashDialog h2{font-size:25px!important;line-height:1.3;margin:10px 0!important;color:#fff!important}
-#ndWeeklyCashDialog header p{font-size:13px;margin:0;color:#e4eee5}
-#ndWeeklyCashDialog .nd-weekly-cash-body{padding:22px}
-#ndWeeklyCashDialog article{border-bottom:1px solid #e0e7dc;padding:0 0 14px;margin:0 0 16px}
-#ndWeeklyCashDialog h3{font-size:17px;margin:0 0 12px;color:#2b533c}
-#ndWeeklyCashDialog dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 16px;font-size:13px;margin:0}
-#ndWeeklyCashDialog dt{color:#66745f}#ndWeeklyCashDialog dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
-#ndWeeklyCashDialog .nd-weekly-cash-total{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;background:#eaf2e6;border-radius:12px;padding:15px;font-size:14px}
-#ndWeeklyCashDialog .nd-weekly-cash-total strong{font-size:22px}
-#ndWeeklyCashDialog .helper{font-size:12px;line-height:1.6;margin:14px 0;color:#6c7764}
-#ndWeeklyCashDialog [data-weekly-cash-ack]{width:100%;min-height:46px;background:#28543d;color:#fff;font-size:14px}
-</style>
+
 
 <style id="nd-ann-simple-layout">
 #ndAnnouncementsPage .nd-section-label{margin:20px 0 8px;color:#284c39;font-size:15px;font-weight:750;line-height:1.4}
