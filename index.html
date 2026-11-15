@@ -5770,18 +5770,24 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
 <div id="ndExpenseActionCard" class="card span12 nd-petty-compact" style="background:var(--soft)">
 <details class="nd-action-expand" id="ndExpenseExpand"><summary><span><strong>Cash Expense</strong></span><span class="nd-action-plus" aria-hidden="true">›</span></summary><input id="pettyRemaining" aria-label="Legacy Cash Expense Balance (internal only)" type="hidden" /><div class="nd-petty-head"><h3 id="pettyInOutTitle">Cash Expense</h3></div>
 <div class="nd-petty-fields">
-<div class="nd-exp-category-wrap" id="ndExpenseCategoryPicker">
-  <strong class="nd-exp-cat-title">Expense Category</strong>
-  <div class="nd-exp-group-title">Staff Expenses</div>
-  <div class="nd-exp-cat-options" data-exp-group="STAFF">
-    <button type="button" data-exp-cat="Rice">Rice</button><button type="button" data-exp-cat="Food">Food</button><button type="button" data-exp-cat="Medicine">Medicine</button><button type="button" data-exp-cat="Other Supplies">Other Supplies</button><button type="button" data-exp-cat="Red Packet">Red Packet</button><button type="button" data-exp-custom="STAFF">+ Add</button>
+<div class="nd-exp-category-wrap" id="ndExpenseCategoryPicker" data-active-group="COMPANY">
+  <div class="nd-exp-topline"><strong class="nd-exp-cat-title">花费分类</strong><button type="button" class="nd-exp-report-shortcut" id="ndExpenseReportOpen" hidden>报表 <span aria-hidden="true">↗</span></button></div>
+  <div class="nd-exp-tabs" role="tablist" aria-label="Expense Type">
+    <button type="button" class="nd-exp-tab nd-exp-tab-active" data-exp-tab="COMPANY" role="tab" aria-selected="true">Company Expense</button>
+    <button type="button" class="nd-exp-tab" data-exp-tab="STAFF" role="tab" aria-selected="false">Staff Expense</button>
   </div>
-  <div class="nd-exp-group-title">Company Expenses</div>
-  <div class="nd-exp-cat-options" data-exp-group="COMPANY">
-    <button type="button" data-exp-cat="Massage Oil">Massage Oil</button><button type="button" data-exp-cat="Massage Tools">Massage Tools</button><button type="button" data-exp-cat="Laundry Detergent">Laundry Detergent</button><button type="button" data-exp-cat="Floor Cleaning">Floor Cleaning</button><button type="button" data-exp-cat="Repairs">Repairs 🧰</button><button type="button" data-exp-cat="Tea">Tea</button><button type="button" data-exp-cat="Snacks">Snacks</button><button type="button" data-exp-cat="Candy">Candy</button><button type="button" data-exp-custom="COMPANY">+ Add</button>
+  <div class="nd-exp-group-panel" data-exp-panel="COMPANY">
+    <div class="nd-exp-cat-options" data-exp-group="COMPANY">
+      <button type="button" data-exp-cat="Massage Oil">按摩油</button><button type="button" data-exp-cat="Massage Tools">按摩工具</button><button type="button" data-exp-cat="Laundry Detergent">洗衣液</button><button type="button" data-exp-cat="Floor Cleaning">洗地</button><button type="button" data-exp-cat="Repairs">维修 🧰</button><button type="button" data-exp-cat="Tea">茶</button><button type="button" data-exp-cat="Snacks">零食</button><button type="button" data-exp-cat="Candy">糖果</button><button type="button" class="nd-exp-add-category" data-exp-custom="COMPANY">+ 新增</button>
+    </div>
   </div>
-  <div id="ndExpSelectedCategory" class="nd-exp-selected" aria-live="polite">Select one category before submitting</div>
-  <button type="button" class="btn" id="ndExpenseReportOpen" hidden>Expense Category Report · UMO</button>
+  <div class="nd-exp-group-panel" data-exp-panel="STAFF" hidden>
+    <div class="nd-exp-cat-options" data-exp-group="STAFF">
+      <button type="button" data-exp-cat="Rice">米</button><button type="button" data-exp-cat="Food">食品</button><button type="button" data-exp-cat="Medicine">药物</button><button type="button" data-exp-cat="Other Supplies">其他用品</button><button type="button" data-exp-cat="Red Packet">红包</button><button type="button" class="nd-exp-add-category" data-exp-custom="STAFF">+ 新增</button>
+    </div>
+  </div>
+
+  <div id="ndExpSelectedCategory" class="nd-exp-selected" aria-live="polite" hidden></div>
 </div>
 <div class="nd-petty-field nd-petty-reason"><label for="pettyReason">Reason</label><input id="pettyReason" placeholder="Enter expense reason" required="required" type="text"/></div>
 <div class="nd-petty-field nd-petty-amount"><label for="pettyAmount">Amount</label><div class="nd-petty-money"><span aria-hidden="true">RM</span><input id="pettyAmount" aria-label="Expense amount in RM" inputmode="decimal" autocomplete="off" min="0.01" placeholder="0.00" step="0.01" type="number" value=""/></div></div>
@@ -33204,7 +33210,15 @@ document.addEventListener('DOMContentLoaded',()=>{sync();new MutationObserver(sy
  function report(r){
   try{
    const a={document_template:'salary-advance-v1',employee_only:true,employee:{employee_name:r.employee_name,branch:r.outlet,identity:r.nric_passport||r.identity||''},company:{name:r.company_name||"NATURE'S DAO"},document_logo:r.document_logo||window.ndReferenceLogos?.passport||'',details:[['Advance Date',r.advance_date],['Advance Amount (RM)',r.amount],['Deduction Month',r.deduction_month],['Repayment Status',r.status==='repaid'?'Repaid':'Pending 7th Payroll']],clauses:[['Employee Written Consent',r.consent_text||el('ndAdvanceConsent').textContent]],employee_signature:r.signature_data||'',signed_date:String(r.created_at||r.advance_date).slice(0,10)};
-   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'</body></html>';
+   const markup=window.ndContractDocumentMarkup(a),html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#eaf0ec;padding:12px}@page{size:A4 portrait;margin:0}@media print{html,body{padding:0;margin:0;background:white}.nd-advance-contract{width:210mm!important;height:297mm!important;max-width:none!important;box-shadow:none!important}}</style></head><body>'+markup+'
+<style id="nd-exp-two-color-tabs">
+#ndExpenseCategoryPicker .nd-exp-tabs{background:#f4f6f4!important;gap:8px!important;padding:5px!important}
+#ndExpenseCategoryPicker .nd-exp-tab[data-exp-tab="STAFF"]{background:#fff0df!important;color:#92520f!important;border:1px solid #ecc69b!important}
+#ndExpenseCategoryPicker .nd-exp-tab[data-exp-tab="STAFF"].nd-exp-tab-active{background:#b76a1d!important;color:#fff!important;border-color:#b76a1d!important;box-shadow:0 2px 6px rgba(144,76,16,.19)!important}
+#ndExpenseCategoryPicker .nd-exp-tab[data-exp-tab="COMPANY"]{background:#e5f1eb!important;color:#28644a!important;border:1px solid #abd1bd!important}
+#ndExpenseCategoryPicker .nd-exp-tab[data-exp-tab="COMPANY"].nd-exp-tab-active{background:#28644a!important;color:#fff!important;border-color:#28644a!important;box-shadow:0 2px 6px rgba(30,84,59,.18)!important}
+</style>
+</body></html>';
    window.ndOpenInlineDocument(html,'Salary Advance Repayment');
   }catch(error){historyStatus('Unable to open advance document: '+error.message);}
  }
@@ -38806,6 +38820,7 @@ function enhance(){
 <script id="nd-weekly-transfer-reminders-20261116">
 (function(){'use strict';
   const BRANCHES=['Eco Botanic','Nusa Bestari'];
+  const MIN_REMINDER_BALANCE=100;
   const TZ='Asia/Kuala_Lumpur';
   let busy=false;
   const el=id=>document.getElementById(id);
@@ -38822,15 +38837,15 @@ function enhance(){
   function shown(key){try{return localStorage.getItem(key)==='1';}catch(_){return false;}}
   function mark(key){try{localStorage.setItem(key,'1');}catch(_){}}
   function activePopup(){return !!document.querySelector('dialog[open],.salary-modal.open,#ndPettyGlobalAck.nd-show');}
-  function popup(key,mode,totals,sundayDate){
-    if(shown(key)||activePopup())return;
+  function popup(key,mode,totals,sundayDate,reminderBranches){
+    if(shown(key)||activePopup()||!reminderBranches.length)return;
     let dlg=el('ndWeeklyTransferReminder');if(!dlg){dlg=document.createElement('dialog');dlg.id='ndWeeklyTransferReminder';document.body.appendChild(dlg);}
     const sunday=mode==='sunday';
     const title=sunday?'每周现金转账提醒':'最后转账提醒';
     const detail=sunday
       ?'<p>亲爱的大家，请记得把这个星期的账款转账给公司，并在 <strong>Cash Transfer to Bank</strong> 提交转账记录和收据。</p><p>如果明天不是你的班，请记得把账目、现金及转账事项交接清楚。</p><p>谢谢大家合作！❤</p>'
       :'<p><strong>今天是转账上周的现金最后一天！</strong></p><p>今天值班必须在<strong>晚上12am之前</strong>把款项转账给公司，并提交转账记录及收据。</p><p class="ndwtr-warn">逾期未提交将按公司制度处理（通知罚款 RM200，希望你不要嫌钱多哦）</p><p>谢谢大家合作！</p>';
-    const amounts='<div class="ndwtr-balances"><div class="ndwtr-balance-title">Cash Balance through Sunday</div>'+BRANCHES.map(b=>'<div class="ndwtr-balance-row"><span>'+escapeHTML(b)+'</span><strong>'+currency(totals[b])+'</strong></div>').join('')+'</div>';
+    const amounts='<div class="ndwtr-balances"><div class="ndwtr-balance-title">Cash Balance through Sunday</div>'+reminderBranches.map(b=>'<div class="ndwtr-balance-row"><span>'+escapeHTML(b)+'</span><strong>'+currency(totals[b])+'</strong></div>').join('')+'</div>';
     dlg.innerHTML='<div class="ndwtr-head"><small>NATURE’S DAO · CASH TRANSFER</small><h2>'+title+'</h2></div><div class="ndwtr-body">'+detail+amounts+'<div class="ndwtr-actions"><button type="button" class="ndwtr-confirm" data-ndwtr-ok>我已了解</button></div></div>';
     dlg.querySelector('[data-ndwtr-ok]').onclick=()=>{mark(key);dlg.close();};
     dlg.oncancel=event=>{event.preventDefault();};
@@ -38849,17 +38864,21 @@ function enhance(){
       const weekEnd=mode==='sunday'?time.date:shift(time.date,-1);
       const key='nd_weekly_transfer_amounts_v3::'+(user.id||String(user.email||'').toLowerCase())+'::'+mode+'::'+weekEnd;
       if(shown(key))return;
-      // Preserve the existing final-day check: no reminder if both branches already submitted.
+      // Monday: only the branches without a valid transfer submission remain eligible.
+      let missing=BRANCHES;
       if(mode==='monday'){
         const {data,error}=await db.rpc('nd_weekly_transfer_submission_status',{p_sunday:weekEnd});
         if(error||!Array.isArray(data)){console.warn('Transfer status unavailable',error?.message||'Invalid result');return;}
-        const missing=BRANCHES.filter(b=>!data.find(x=>x.branch===b&&x.submitted===true));
+        missing=BRANCHES.filter(b=>!data.some(x=>x.branch===b&&x.submitted===true));
         if(!missing.length){mark(key);return;}
       }
       const totals=await window.ndWeeklyCashSundayTotals(weekEnd);
-      if(!BRANCHES.every(b=>Number.isFinite(Number(totals[b])))){console.warn('Sunday balances incomplete');return;}
+      if(!BRANCHES.every(b=>totals[b]!==null&&totals[b]!==undefined&&Number.isFinite(Number(totals[b])))){console.warn('Sunday balances incomplete');return;}
+      // Each branch must independently have at least RM100 outstanding.
+      const reminderBranches=missing.filter(b=>Number(totals[b])>=MIN_REMINDER_BALANCE);
+      if(!reminderBranches.length){mark(key);return;}
       const newer=nowMY();if(newer.date!==time.date||newer.hour<(mode==='sunday'?20:10)||activePopup())return;
-      popup(key,mode,totals,weekEnd);
+      popup(key,mode,totals,weekEnd,reminderBranches);
     }catch(error){console.warn('Cash transfer reminder unavailable:',error?.message||error);}finally{busy=false;}
   }
   function start(){setTimeout(()=>void check(),3500);setInterval(()=>void check(),60000);window.addEventListener('focus',()=>void check());document.addEventListener('visibilitychange',()=>{if(!document.hidden)void check();});window.addEventListener('pageshow',()=>void check());document.addEventListener('close',()=>setTimeout(()=>void check(),200),true);}
@@ -38881,15 +38900,24 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();
 </script>
 <style id="nd-exp-category-design">
-#ndExpenseCategoryPicker{padding:14px;margin:4px 0 14px;background:#f9fbf9;border:1px solid #d7e1d8;border-radius:14px}
-.nd-exp-cat-title{display:block;font-size:15px;color:#264537;margin-bottom:12px}
-.nd-exp-group-title{font-size:13px;font-weight:750;color:#3b5749;margin:12px 0 7px}
-.nd-exp-cat-options{display:flex;flex-wrap:wrap;gap:7px}
-.nd-exp-cat-options button{width:auto!important;min-width:0!important;min-height:37px;border-radius:10px;border:1px solid #cbd9d0;background:#fff;color:#2c4738;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
-.nd-exp-cat-options button.nd-exp-cat-on{background:#24543f!important;color:white!important;border-color:#24543f!important}
-.nd-exp-cat-options[data-exp-group="STAFF"] button.nd-exp-cat-on{background:#375c8f!important;border-color:#375c8f!important}
-.nd-exp-selected{font-size:12px;margin-top:12px;color:#617769}
-#ndExpenseReportOpen{margin-top:12px;border-radius:10px;background:#edf4ef;color:#244a38;border:1px solid #a9c7b0;padding:9px 13px}
+/* Keep the category selector full-width within the daily cash card, including on iPhone. */
+#ndExpenseCategoryPicker{box-sizing:border-box!important;grid-column:1/-1!important;width:100%!important;max-width:none!important;min-width:0!important;padding:0!important;margin:0 0 14px!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+#ndExpenseCategoryPicker *{box-sizing:border-box}
+#ndExpenseCategoryPicker .nd-exp-topline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
+#ndExpenseCategoryPicker .nd-exp-cat-title{display:block;font-size:15px;line-height:1.35;font-weight:750;color:#253f32;margin:0}
+#ndExpenseCategoryPicker .nd-exp-report-shortcut{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:auto!important;min-height:31px!important;margin:0!important;padding:5px 10px!important;border:1px solid #d9e3dc!important;border-radius:9px!important;background:white!important;color:#395747!important;font-size:12px!important;font-weight:650!important;box-shadow:none!important}
+#ndExpenseCategoryPicker .nd-exp-report-shortcut[hidden]{display:none!important}
+#ndExpenseCategoryPicker .nd-exp-tabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%;gap:4px;padding:4px;border-radius:12px;background:#eef2ef;margin-bottom:11px}
+#ndExpenseCategoryPicker .nd-exp-tab{width:100%!important;min-width:0!important;min-height:38px!important;padding:7px 5px!important;border:0!important;border-radius:9px!important;background:transparent!important;color:#65786d!important;font-size:12px!important;font-weight:700!important;line-height:1.25!important;box-shadow:none!important;white-space:normal!important}
+#ndExpenseCategoryPicker .nd-exp-tab.nd-exp-tab-active{background:#fff!important;color:#244735!important;box-shadow:0 1px 5px rgba(25,56,37,.10)!important}
+#ndExpenseCategoryPicker .nd-exp-group-panel[hidden]{display:none!important}
+#ndExpenseCategoryPicker .nd-exp-cat-options{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;width:100%!important;gap:7px!important;align-items:stretch!important}
+#ndExpenseCategoryPicker .nd-exp-cat-options button{display:flex!important;align-items:center!important;justify-content:center!important;min-width:0!important;width:100%!important;max-width:none!important;min-height:39px!important;margin:0!important;padding:7px 4px!important;border:1px solid #dbe4dd!important;border-radius:10px!important;background:#fff!important;color:#35503f!important;font-size:11px!important;font-weight:650!important;line-height:1.25!important;text-align:center!important;white-space:normal!important;overflow-wrap:anywhere!important;box-shadow:none!important}
+#ndExpenseCategoryPicker .nd-exp-cat-options button.nd-exp-cat-on{background:#254a39!important;border-color:#254a39!important;color:white!important}
+#ndExpenseCategoryPicker .nd-exp-cat-options button.nd-exp-add-category{border-style:dashed!important;background:#f8faf8!important;color:#647d6d!important}
+#ndExpenseCategoryPicker .nd-exp-selected{display:block;margin-top:9px;padding:8px 10px;border-radius:9px;background:#eff6f0;color:#2c5840;font-size:12px;font-weight:650}
+#ndExpenseCategoryPicker .nd-exp-selected[hidden]{display:none!important}
+@media(max-width:360px){#ndExpenseCategoryPicker .nd-exp-cat-options{grid-template-columns:repeat(2,minmax(0,1fr))!important}#ndExpenseCategoryPicker .nd-exp-cat-options button{font-size:11px!important}}
 #ndExpenseCategoryReport{border:0;border-radius:18px;padding:0;width:min(850px,96vw);max-height:88dvh;overflow:auto;color:#253c31;background:#fff;box-shadow:0 14px 70px #0006}
 #ndExpenseCategoryReport::backdrop{background:#0008}
 #ndExpenseCategoryReport .nd-cat-report-body{padding:18px}
@@ -38908,11 +38936,19 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  let selected=null;
  const categories={STAFF:['Rice','Food','Medicine','Other Supplies','Red Packet'],COMPANY:['Massage Oil','Massage Tools','Laundry Detergent','Floor Cleaning','Repairs','Tea','Snacks','Candy']};
  function root(){return document.getElementById(rootId)}
- function groupName(g){return g==='STAFF'?'Staff Expenses':'Company Expenses'}
+ const ndExpenseZh={Rice:'米',Food:'食品',Medicine:'药物','Other Supplies':'其他用品','Red Packet':'红包','Massage Oil':'按摩油','Massage Tools':'按摩工具','Laundry Detergent':'洗衣液','Floor Cleaning':'洗地',Repairs:'维修',Tea:'茶',Snacks:'零食',Candy:'糖果'};
+ function ndExpenseLabel(c){return ndExpenseZh[c]||c;}
+ function groupName(g){return g==='STAFF'?'Staff Expense':'Company Expense'}
+ function showGroup(g){
+   const el=root();if(!el)return;
+   el.dataset.activeGroup=g;
+   el.querySelectorAll('[data-exp-tab]').forEach(b=>{const on=b.dataset.expTab===g;b.classList.toggle('nd-exp-tab-active',on);b.setAttribute('aria-selected',on?'true':'false');});
+   el.querySelectorAll('[data-exp-panel]').forEach(panel=>{panel.hidden=panel.dataset.expPanel!==g;});
+ }
  function choice(g,c){
-   selected={group:g,category:c};
+   selected={group:g,category:c};showGroup(g);
    root()?.querySelectorAll('[data-exp-cat]').forEach(b=>b.classList.toggle('nd-exp-cat-on',b.dataset.expGroup===g&&b.dataset.expCat===c));
-   const selectedEl=document.getElementById('ndExpSelectedCategory');if(selectedEl)selectedEl.textContent=groupName(g)+' · '+c;
+   const selectedEl=document.getElementById('ndExpSelectedCategory');if(selectedEl){selectedEl.hidden=false;selectedEl.textContent=groupName(g)+' · '+ndExpenseLabel(c);}
  }
  window.ndExpenseCategorizeReason=function(details){
    if(!selected)return '';
@@ -38920,13 +38956,15 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
    // Encoded in the existing approved Cash Expense reason field; no new accounting writes.
    return '[ND-CAT:'+selected.group+':'+selected.category.replace(/[\[\]]/g,'')+'] '+(clean||selected.category);
  };
- window.ndExpenseResetCategory=function(){selected=null;root()?.querySelectorAll('.nd-exp-cat-on').forEach(b=>b.classList.remove('nd-exp-cat-on'));const el=document.getElementById('ndExpSelectedCategory');if(el)el.textContent='Select one category before submitting';};
+ window.ndExpenseResetCategory=function(){selected=null;root()?.querySelectorAll('.nd-exp-cat-on').forEach(b=>b.classList.remove('nd-exp-cat-on'));const el=document.getElementById('ndExpSelectedCategory');if(el){el.hidden=true;el.textContent='';}};
  function bind(){
   const el=root();if(!el||el.dataset.ready==='yes')return;el.dataset.ready='yes';
+  el.querySelectorAll('[data-exp-tab]').forEach(b=>b.addEventListener('click',()=>showGroup(b.dataset.expTab)));
+  showGroup('COMPANY');
   el.querySelectorAll('[data-exp-cat]').forEach(b=>{b.dataset.expGroup=b.closest('[data-exp-group]').dataset.expGroup;b.addEventListener('click',()=>choice(b.dataset.expGroup,b.dataset.expCat));});
   el.querySelectorAll('[data-exp-custom]').forEach(btn=>btn.addEventListener('click',()=>{
-    const g=btn.dataset.expCustom;const name=prompt('New '+groupName(g)+' category (max 40 characters):');if(name===null)return;
-    const category=name.trim().replace(/[\r\n\t]/g,' ').slice(0,40);if(!category){alert('Category name is required');return;}
+    const g=btn.dataset.expCustom;const name=prompt('新增'+groupName(g)+'分类（最多40字）：');if(name===null)return;
+    const category=name.trim().replace(/[\r\n\t]/g,' ').slice(0,40);if(!category){alert('请输入分类名称');return;}
     const container=btn.parentElement;let existing=[...container.querySelectorAll('[data-exp-cat]')].find(x=>x.dataset.expCat.toLowerCase()===category.toLowerCase());
     if(!existing){existing=document.createElement('button');existing.type='button';existing.dataset.expCat=category;existing.dataset.expGroup=g;existing.textContent=category;container.insertBefore(existing,btn);existing.addEventListener('click',()=>choice(g,category));}
     choice(g,existing.dataset.expCat);
