@@ -6635,9 +6635,11 @@ body:has(#ndIntegratedMemberOverlay.nd-open) #mainSidebar:not(.hidden){
     const rows=ndTransferSelectedRows.filter(x=>ndSubmissionMatchesSelectedDay(x,currentBranch,businessToday))
       .sort((a,b)=>String(b.submitted_at||b.remittance_date||"").localeCompare(String(a.submitted_at||a.remittance_date||"")) || Number(b.id||0)-Number(a.id||0));
     if(!rows.length){root.innerHTML=`<div class="helper" style="padding:10px">No submissions.</div>`;return;}
-    root.innerHTML=`<table class="nd-simple-submissions"><thead><tr><th>Bank</th><th>Amount</th><th>Date</th><th>Receipt</th><th>Status</th></tr></thead><tbody>${rows.map(x=>{
+    root.innerHTML=`<table class="nd-simple-submissions"><thead><tr><th>Bank</th><th>Amount</th><th>Date</th><th>Receipt</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows.map(x=>{
       const status=String(x.status||"pending").toLowerCase();
-      return `<tr><td><strong>${escHtml(x.bank_code==='AFFIN'?'AFFIN BANK':x.bank_code==='HLB'?'Hong Leong Bank':'Not selected')}</strong></td><td><strong>${money(x.amount)}</strong></td><td><small>Record: ${escHtml(String(x.remittance_date||'').slice(0,10))}<br>Submitted: ${escHtml(ndRemittanceBusinessDate(x.submitted_at)||'—')}</small></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Pending"}</span></td></tr>`;
+      const own=String(x.submitted_by||'').trim().toLowerCase()===email;
+      const canRemove=(own||isSystemAdmin)&&['pending','rejected'].includes(status);
+      return `<tr><td><strong>${escHtml(x.bank_code==='AFFIN'?'AFFIN BANK':x.bank_code==='HLB'?'Hong Leong Bank':'Not selected')}</strong></td><td><strong>${money(x.amount)}</strong></td><td><small>Record: ${escHtml(String(x.remittance_date||'').slice(0,10))}<br>Submitted: ${escHtml(ndRemittanceBusinessDate(x.submitted_at)||'—')}</small></td><td>${x.receipt_path?`<button class="mini" type="button" data-my-remittance-receipt="${Number(x.id)}">View</button>`:"—"}</td><td><span class="cash-remittance-status ${escHtml(status)}">${status==="verified"?"✓ Verified":status==="rejected"?"✕ Rejected":"Pending"}</span></td><td>${canRemove?`<button type="button" class="mini nd-remittance-delete" data-my-remittance-delete="${Number(x.id)}" aria-label="Delete submission">Delete</button>`:`<span class="nd-remittance-delete-locked" title="Verified transfers require an audited reversal">—</span>`}</td></tr>`;
     }).join("")}</tbody></table>`;
     root.querySelectorAll("[data-my-remittance-receipt]").forEach(btn=>btn.onclick=()=>{
       const item=rows.find(x=>Number(x.id)===Number(btn.dataset.myRemittanceReceipt));
@@ -6651,23 +6653,28 @@ body:has(#ndIntegratedMemberOverlay.nd-open) #mainSidebar:not(.hidden){
 
   async function deleteMyCashRemittance(item,button){
     const email=String(currentUserEmail||"").trim().toLowerCase();
-    if(!email || String(item?.submitted_by||"").trim().toLowerCase()!==email){
-      alert("You can only delete your own submissions.");return;
+    if(!email || (!isSystemAdmin && String(item?.submitted_by||"").trim().toLowerCase()!==email)){
+      alert("Only your own submissions can be deleted.");return;
     }
     if(!["pending","rejected"].includes(String(item?.status||"").toLowerCase())){
-      alert("Only pending or rejected submissions can be deleted.");return;
+      alert("Approved/verified transfers require an audited reversal and cannot be deleted here.");return;
     }
     if(!confirm(`Delete this ${String(item.status||"pending").toLowerCase()} Cash Transfer to Bank submission (${money(item.amount)})?`))return;
     if(button){button.disabled=true;button.textContent="Deleting...";}
     try{
       // Filter on owner and the original status to protect verified accounting records.
-      const {data,error}=await db.from("cash_remittances")
-        .delete().eq("id",item.id).eq("submitted_by",item.submitted_by)
-        .eq("status",String(item.status||"pending").toLowerCase()).select("id");
+      let query=db.from("cash_remittances").delete().eq("id",item.id)
+        .eq("status",String(item.status||"pending").toLowerCase());
+      if(!isSystemAdmin)query=query.eq("submitted_by",item.submitted_by);
+      const {data,error}=await query.select("id");
       if(error)throw error;
       if(!data?.length)throw new Error("Not deleted. The record status may have changed or your account lacks delete permission.");
       // Keep uploaded receipt intact for audit/recovery; never remove a verified receipt.
+      ndTransferSelectedRows=ndTransferSelectedRows.filter(x=>String(x.id)!==String(item.id));
+      cashRemittances=(cashRemittances||[]).filter(x=>String(x.id)!==String(item.id));
+      renderMyCashRemittanceHistory();
       await fetchRows();
+      await loadSelectedCashTransferHistory();
       renderCashRemittanceHistory();
     }catch(err){
       alert("Delete failed: "+(err?.message||err));
@@ -43068,6 +43075,13 @@ body > #ndProHamburger.nd-pro-portal-menu {
 #ndProBookingModal .proref-primary .nd-ref-customer:not([hidden]){display:flex!important}
 #ndProBookingModal .proref-selection{display:none!important}
 #ndProBookingModal .proref-name-row{display:none!important}
+
+/* Cash Transfer Submissions delete action */
+#cashRemittanceMyHistory .nd-remittance-delete{border:1px solid #edc2c2!important;color:#b42318!important;background:#fff7f7!important;border-radius:7px!important;padding:5px 9px!important;font-size:12px!important;min-height:30px!important;white-space:nowrap!important}
+#cashRemittanceMyHistory .nd-remittance-delete:disabled{opacity:.5!important}
+#cashRemittanceMyHistory .nd-remittance-delete-locked{color:#9ca3af;font-size:12px}
+#cashRemittanceCard #cashRemittanceMyHistory table.nd-simple-submissions{min-width:520px!important}
+@media(max-width:700px){#cashRemittanceCard #cashRemittanceMyHistory{overflow-x:auto!important}#cashRemittanceCard #cashRemittanceMyHistory table.nd-simple-submissions th,#cashRemittanceCard #cashRemittanceMyHistory table.nd-simple-submissions td{font-size:11px!important;padding:8px 4px!important}}
 </style>
 
 <script id="nd-integrated-member-ui-js">
