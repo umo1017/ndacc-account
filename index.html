@@ -43187,6 +43187,44 @@ body > #ndProHamburger.nd-pro-portal-menu {
  importStatus.style.cssText='position:fixed;top:calc(env(safe-area-inset-top) + 60px);right:12px;z-index:2147483643;max-width:min(330px,80vw);border-radius:12px;background:#fff;color:#263248;padding:9px 12px;box-shadow:0 5px 20px #0002;font:12px system-ui;display:none';
  document.body.appendChild(importStatus);
  const normalizePhone=value=>{let d=String(value||'').replace(/\D/g,'');if(d.startsWith('60')&&d.length>=10)d='0'+d.slice(2);else if(d.startsWith('1')&&d.length>=9)d='0'+d;return d.length>=9?d:'';};
+ iframe.addEventListener('load',()=>{
+   const win=iframe.contentWindow;
+   const doc=iframe.contentDocument;
+   if(!win||!doc)return;
+   // Keep the import control on the directory only; it must not cover detail navigation.
+   const syncImportVisibility=()=>{
+     const section=doc.querySelector('.page.active')?.id;
+     if(section!=='members')importButton.style.display='none';
+     else void checkImportAuthority().then(ok=>{if(overlay.classList.contains('nd-open')&&doc.querySelector('.page.active')?.id==='members')importButton.style.display=ok?'block':'none'});
+   };
+   doc.addEventListener('click',()=>setTimeout(syncImportVisibility,0));
+   syncImportVisibility();
+   let referralRequest=0;
+   win.ndLoadReferrals=async person=>{
+     const current=++referralRequest;
+     const target=doc.getElementById('moreRows');
+     if(!target)return;
+     target.textContent='正在读取历史推荐记录…';
+     const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+     const row=(name,date)=>'<div style="padding:13px 0;border-bottom:1px solid #eee;overflow-wrap:anywhere"><strong>'+escape(name||'未登记姓名')+'</strong><small style="display:block;color:#818995;margin-top:5px">'+escape(date||'')+'</small></div>';
+     const section=(title,records,format)=>'<section style="background:#fff;padding:15px;border-radius:17px;margin:12px 0"><strong>'+title+' ('+records.length+')</strong>'+(records.length?records.map(format).join(''):'<p style="color:#8791a0;font-size:13px">暂无已匹配记录</p>')+'</section>';
+     try{
+       const client=window.salaryDb;
+       if(!client)throw Error('Supabase 尚未连接');
+       const auth=await client.auth.getUser();
+       if(auth.error||!auth.data?.user)throw Error('请先登入');
+       const name=String(person?.name||'').trim();
+       const phone=normalizePhone(person?.fullPhone);
+       const queries=[client.from('nd_legacy_member_referrals').select('referred_member_name,referred_at').eq('recommender_name',name).order('referred_at',{ascending:false}).limit(500)];
+       if(phone)queries.push(client.from('nd_legacy_member_referrals').select('recommender_name,referred_at').eq('referred_phone_normalized',phone).order('referred_at',{ascending:false}).limit(25));
+       const data=await Promise.race([Promise.all(queries),new Promise((_,reject)=>setTimeout(()=>reject(Error('读取超时，请重试')),14000))]);
+       if(current!==referralRequest||!target.isConnected)return;
+       for(const part of data)if(part.error)throw part.error;
+       const sent=data[0].data||[],received=data[1]?.data||[];
+       target.innerHTML=section('我推荐的会员',sent,x=>row(x.referred_member_name,x.referred_at))+section('推荐我的人',received,x=>row(x.recommender_name,x.referred_at))+'<p style="font-size:12px;color:#818995;padding:8px">仅显示 Tunai 已导入的历史记录。推荐人按原系统姓名匹配；不代表已计算推荐奖励。</p>';
+     }catch(error){if(current===referralRequest&&target.isConnected)target.innerHTML='<div class="empty">读取推荐记录失败：'+escape(error.message||error)+'</div>'}
+   };
+ });
  function displayImportStatus(message){importStatus.textContent=message;importStatus.style.display=overlay.classList.contains('nd-open')?'block':'none';}
  async function checkImportAuthority(){
    const client=window.salaryDb;
@@ -43260,14 +43298,20 @@ body > #ndProHamburger.nd-pro-portal-menu {
      const mobileFix=`<style id="nd-member-mobile-safe-layout">
        html,body{width:100%;max-width:100%;overflow-x:hidden;height:auto!important;min-height:100%;-webkit-text-size-adjust:100%}
        .app{width:100%;max-width:680px;min-height:100dvh}
-       .page{min-height:0!important;padding:12px 12px calc(112px + env(safe-area-inset-bottom))!important;overflow:visible!important}
+       .page{min-height:100dvh!important;height:auto!important;max-height:none!important;padding:64px 12px calc(120px + env(safe-area-inset-bottom))!important;overflow:visible!important}
        .page:not(.active){display:none!important}
+       .page.active{display:block!important;height:auto!important;max-height:none!important}
        .bar{height:58px!important;min-height:58px;padding:0 5px!important}
        .bar strong{font-size:18px!important;max-width:65%;overflow:hidden;text-overflow:ellipsis}
        .floatnav{min-height:64px!important;padding:8px 14px calc(8px + env(safe-area-inset-bottom))!important;bottom:0!important;z-index:50!important}
        .detail-card,.detail-box,.panel{max-width:100%;min-width:0}
        .detail-rows,.rows{min-width:0;overflow-wrap:anywhere}
        .detail-card{padding:14px!important}
+       #profile .detail-box{overflow:visible!important;height:auto!important;max-height:none!important}
+       #profile .feature-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-auto-rows:auto!important;overflow:visible!important;padding-bottom:28px!important}
+       #profile .feature{min-width:0!important;min-height:95px!important;overflow:visible!important}
+       #profile .feature .bubble{flex:0 0 auto!important}
+       #profile .feature-grid ~ *{clear:both}
        .stat-grid{gap:8px!important}
        @media(max-width:440px){.page{padding-left:10px!important;padding-right:10px!important}.bar{height:54px!important}.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.detail-card{border-radius:18px!important}.floatnav{min-height:60px!important}}
      </style>`;
@@ -43276,7 +43320,27 @@ body > #ndProHamburger.nd-pro-portal-menu {
      const timeoutPatch="const bounded=(promise,ms=14000)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(Error('云端读取超时，请检查网络后重试')),ms))]);";
      html=html.replace("let querySerial=0;", "let querySerial=0;"+timeoutPatch);
      html=html.replace("const match=await lookupCustomer(db,p||{});", "const match=await bounded(lookupCustomer(db,p||{}));");
+     // Resolve a verified import link directly before the legacy all-customers scan.
+     const linkedLookup=`async function ndLinkedCustomer(db,p){
+       const phone=phoneKey(p?.fullPhone||'');
+       if(!validPhone(phone))return {error:'该会员缺少完整电话号码，无法安全关联'};
+       const link=await db.from('nd_legacy_member_imports')
+         .select('customer_id,source_name,import_status').eq('phone_normalized',phone)
+         .in('import_status',['linked','created']).limit(5);
+       if(!link.error&&link.data?.length){
+         const matches=link.data.filter(x=>String(x.source_name||'').trim().toLowerCase()===String(p?.name||'').trim().toLowerCase());
+         const ids=[...new Set(matches.map(x=>x.customer_id).filter(Boolean))];
+         if(ids.length!==1)return {error:'该电话号码有多笔旧会员资料，需要人工核对关联'};
+         const result=await db.from('nd_pro_beta_customers').select('id,full_name,phone').eq('id',ids[0]).single();
+         if(result.error)throw result.error;
+         return {customer:result.data};
+       }
+       return lookupCustomer(db,p);
+     }`;
+     html=html.replace("let querySerial=0;", "let querySerial=0;"+linkedLookup);
+     html=html.replace("bounded(lookupCustomer(db,p||{}))", "bounded(ndLinkedCustomer(db,p||{}))");
      html=html.replace("await Promise.all([allRows(db,'nd_pro_beta_orders',match.customer.id),allRows(db,'nd_pro_beta_appointments',match.customer.id)])", "await bounded(Promise.all([allRows(db,'nd_pro_beta_orders',match.customer.id),allRows(db,'nd_pro_beta_appointments',match.customer.id)]))");
+     html=html.replace("go('profileMore')});", "go('profileMore');if(b.dataset.feature==='用户推荐')window.ndLoadReferrals?.(selectedMember)});");
      iframe.srcdoc=html;
      loaded=true;
    }
