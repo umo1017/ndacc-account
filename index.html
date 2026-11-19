@@ -5741,7 +5741,8 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
 body:has(#ndIntegratedMemberOverlay.nd-open) #mobileSidebarBtn{
   display:flex!important;align-items:center;justify-content:center;
   position:fixed!important;z-index:2147483645!important;
-  top:max(12px,env(safe-area-inset-top))!important;left:12px!important;
+  top:calc(env(safe-area-inset-top) + 5px)!important;left:10px!important;
+  width:42px!important;height:42px!important;border-radius:12px!important;
 }
 body:has(#ndIntegratedMemberOverlay.nd-open) #mainSidebar:not(.hidden){
   z-index:2147483644!important;
@@ -5749,7 +5750,7 @@ body:has(#ndIntegratedMemberOverlay.nd-open) #mainSidebar:not(.hidden){
 </style><style id="nd-integrated-member-ui-css">
 #ndIntegratedMemberOverlay{position:fixed;inset:0;z-index:2147483640;background:#f2f1f7;display:none;flex-direction:column}
 #ndIntegratedMemberOverlay.nd-open{display:flex}
-#ndIntegratedMemberTop{height:47px;flex:none;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #eee;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif}
+#ndIntegratedMemberTop{height:54px;flex:none;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 64px;border-bottom:1px solid #eee;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif}
 #ndIntegratedMemberTop button{border:0;background:#edf4ff;color:#1677ff;border-radius:9px;padding:8px 13px;font-weight:700}
 #ndIntegratedMemberFrame{border:0;flex:1;width:100%;min-height:0;background:#f2f1f7}
 #ndProHomeButton{display:none!important}
@@ -43175,6 +43176,49 @@ body > #ndProHamburger.nd-pro-portal-menu {
  const overlay=document.getElementById('ndIntegratedMemberOverlay');
  const iframe=document.getElementById('ndIntegratedMemberFrame');
  let loaded=false;
+ // An explicit, UMO-only, reversible-by-review import. Never run on page load.
+ const importButton=document.createElement('button');
+ importButton.type='button';importButton.id='ndLegacyMemberImportButton';
+ importButton.textContent='同步旧会员';
+ importButton.style.cssText='position:fixed;right:12px;top:calc(env(safe-area-inset-top) + 10px);z-index:2147483643;border:0;border-radius:11px;background:#1677ff;color:#fff;padding:10px 12px;font:700 12px system-ui;display:none;max-width:130px';
+ document.body.appendChild(importButton);
+ const importStatus=document.createElement('div');
+ importStatus.id='ndLegacyImportStatus';importStatus.setAttribute('role','status');
+ importStatus.style.cssText='position:fixed;top:calc(env(safe-area-inset-top) + 60px);right:12px;z-index:2147483643;max-width:min(330px,80vw);border-radius:12px;background:#fff;color:#263248;padding:9px 12px;box-shadow:0 5px 20px #0002;font:12px system-ui;display:none';
+ document.body.appendChild(importStatus);
+ const normalizePhone=value=>{let d=String(value||'').replace(/\D/g,'');if(d.startsWith('60')&&d.length>=10)d='0'+d.slice(2);else if(d.startsWith('1')&&d.length>=9)d='0'+d;return d.length>=9?d:'';};
+ function displayImportStatus(message){importStatus.textContent=message;importStatus.style.display=overlay.classList.contains('nd-open')?'block':'none';}
+ async function checkImportAuthority(){
+   const client=window.salaryDb;
+   if(!client)return false;
+   const a=await client.auth.getUser();
+   if(a.error||String(a.data?.user?.email||'').toLowerCase()!=='umo1017@gmail.com')return false;
+   const r=await client.rpc('nd_pro_beta_is_umo');return !r.error&&r.data===true;
+ }
+ importButton.onclick=async()=>{
+   if(!await checkImportAuthority()){alert('Only the UMO administrator can import members.');return;}
+   const rows=window.ndGetProImportedMembers?.();
+   if(!Array.isArray(rows)||!rows.length){alert('旧会员目录未加载。');return;}
+   const countByPhone=new Map();
+   rows.forEach(r=>{const k=normalizePhone(r['Phone Number']);if(k)countByPhone.set(k,(countByPhone.get(k)||0)+1)});
+   const repeats=[...countByPhone.values()].filter(n=>n>1).reduce((n,v)=>n+v,0);
+   if(!confirm(`准备检查 ${rows.length} 位旧会员。\n重复电话号码涉及 ${repeats} 条记录，将跳过以便人工核对。\n不会覆盖线上会员、订单、充值和余额。\n确认开始？`))return;
+   importButton.disabled=true;
+   const summary={created:0,linked:0,ambiguous:0,invalid:0,previously_processed:0};
+   try{
+     const unique=rows.map((r,i)=>({source_key:'legacy-csv-'+String(i+1).padStart(5,'0'),name:String(r.Name||'').trim(),phone:String(r['Phone Number']||'').replace(/^T/i,''),birthday:r.Birthdate||null,tier:r.VVVIP==='1'?'VVVIP':r.VVIP==='1'?'VVIP':r.VIP==='1'?'VIP':'Standard',legacy_row:i+1})).filter(r=>{const n=normalizePhone(r.phone);return !n||countByPhone.get(n)===1;});
+     for(let i=0;i<unique.length;i+=100){
+       if(!await checkImportAuthority())throw Error('UMO permission expired; sign in again');
+       const response=await window.salaryDb.rpc('nd_legacy_member_import_batch',{p_members:unique.slice(i,i+100)});
+       if(response.error)throw response.error;
+       for(const key of Object.keys(summary))summary[key]+=Number(response.data?.[key]||0);
+       displayImportStatus(`已检查 ${Math.min(i+100,unique.length)}/${unique.length} · 新增 ${summary.created} · 关联 ${summary.linked}`);
+     }
+     displayImportStatus(`完成：新增 ${summary.created} · 关联 ${summary.linked} · 需核对 ${repeats+summary.ambiguous+summary.invalid} · 已处理过 ${summary.previously_processed}。请重新打开会员以读取线上记录。`);
+     loaded=false;
+   }catch(e){displayImportStatus('导入已暂停（已成功的批次不会重复写入）：'+(e.message||e));}
+   finally{importButton.disabled=false;}
+ };
  function showMember(){
    // Build the preview at open time from the real CSV directory already bundled
    // in this page. Avoid asynchronous postMessage races and demo data.
@@ -43212,11 +43256,34 @@ body > #ndProHamburger.nd-pro-portal-menu {
      html=html.replace("const labels=['近期','新','生日','名字'", "const labels=['全部','新','生日','名字'");
      html=html.replace("let activeTab='近期'", "let activeTab='全部'");
      html=html.replace("let groups=['近期','新','生日','名字'", "let groups=['全部','新','生日','名字'");
+     // Mobile member profile: keep the page scrollable above its fixed toolbar.
+     const mobileFix=`<style id="nd-member-mobile-safe-layout">
+       html,body{width:100%;max-width:100%;overflow-x:hidden;height:auto!important;min-height:100%;-webkit-text-size-adjust:100%}
+       .app{width:100%;max-width:680px;min-height:100dvh}
+       .page{min-height:0!important;padding:12px 12px calc(112px + env(safe-area-inset-bottom))!important;overflow:visible!important}
+       .page:not(.active){display:none!important}
+       .bar{height:58px!important;min-height:58px;padding:0 5px!important}
+       .bar strong{font-size:18px!important;max-width:65%;overflow:hidden;text-overflow:ellipsis}
+       .floatnav{min-height:64px!important;padding:8px 14px calc(8px + env(safe-area-inset-bottom))!important;bottom:0!important;z-index:50!important}
+       .detail-card,.detail-box,.panel{max-width:100%;min-width:0}
+       .detail-rows,.rows{min-width:0;overflow-wrap:anywhere}
+       .detail-card{padding:14px!important}
+       .stat-grid{gap:8px!important}
+       @media(max-width:440px){.page{padding-left:10px!important;padding-right:10px!important}.bar{height:54px!important}.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.detail-card{border-radius:18px!important}.floatnav{min-height:60px!important}}
+     </style>`;
+     html=html.replace('</head>',mobileFix+'</head>');
+     // A stalled Supabase request must never leave the profile spinning forever.
+     const timeoutPatch="const bounded=(promise,ms=14000)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(Error('云端读取超时，请检查网络后重试')),ms))]);";
+     html=html.replace("let querySerial=0;", "let querySerial=0;"+timeoutPatch);
+     html=html.replace("const match=await lookupCustomer(db,p||{});", "const match=await bounded(lookupCustomer(db,p||{}));");
+     html=html.replace("await Promise.all([allRows(db,'nd_pro_beta_orders',match.customer.id),allRows(db,'nd_pro_beta_appointments',match.customer.id)])", "await bounded(Promise.all([allRows(db,'nd_pro_beta_orders',match.customer.id),allRows(db,'nd_pro_beta_appointments',match.customer.id)]))");
      iframe.srcdoc=html;
      loaded=true;
    }
    overlay.classList.add('nd-open');
    overlay.setAttribute('aria-hidden','false');
+   importButton.style.display='none';
+   void checkImportAuthority().then(ok=>{if(overlay.classList.contains('nd-open'))importButton.style.display=ok?'block':'none'}).catch(()=>{});
    // The original Beta content should never remain stuck on 'Opening Members…'.
    const waiting=document.querySelector('.nd-member-opening');
    if(waiting)waiting.textContent='';
@@ -43232,7 +43299,7 @@ body > #ndProHamburger.nd-pro-portal-menu {
      }
    }
  }
- function closeMember(){overlay.classList.remove('nd-open');overlay.setAttribute('aria-hidden','true')}
+ function closeMember(){overlay.classList.remove('nd-open');overlay.setAttribute('aria-hidden','true');importButton.style.display='none';importStatus.style.display='none'}
  // Keep the original app sidebar available above the embedded Members view.
  // Choosing any main navigation item returns to that app page.
  const mainSidebar=document.getElementById('mainSidebar');
