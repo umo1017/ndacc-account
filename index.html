@@ -41391,6 +41391,43 @@ let guestCount=1;
    }
    guestWorkers().forEach((sel,i)=>{if(i>0&&previously[i])sel.value=previously[i]});
    refreshGuestWorkers(false);
+   drawGuestServiceTabs();
+ }
+ // Each person in a multi-person booking chooses their own service and duration.
+ // Keep the original first-person picker and employee selectors as the source of truth.
+ const guestServiceTabs=document.createElement('div');guestServiceTabs.className='nd-guest-service-tabs';
+ const guestServicePanels=document.createElement('div');guestServicePanels.className='nd-guest-service-panels';
+ bookingFields.service?.before(guestServiceTabs,guestServicePanels);
+ let activeGuestService=0;
+ const otherGuestServices=new Map();
+ function drawGuestServiceTabs(){
+   if(!guestServiceTabs)return;
+   const editing=!!form.elements.appointment_id.value;
+   const multi=guestCount>1&&!editing;
+   guestServiceTabs.hidden=!multi;guestServicePanels.hidden=!multi;
+   if(!multi){bookingFields.service.hidden=false;bookingFields.duration.hidden=false;return;}
+   activeGuestService=Math.min(activeGuestService,guestCount-1);
+   guestServiceTabs.replaceChildren();guestServicePanels.replaceChildren();
+   for(let i=0;i<guestCount;i++){
+     const tab=document.createElement('button');tab.type='button';tab.className=i===activeGuestService?'active':'';tab.textContent='第'+(i+1)+'位';tab.onclick=()=>{activeGuestService=i;drawGuestServiceTabs();};guestServiceTabs.append(tab);
+     if(i===0)continue;
+     if(!otherGuestServices.has(i))otherGuestServices.set(i,{service:'',duration:Number(form.elements.duration.value)||60});
+     const state=otherGuestServices.get(i);
+     const panel=document.createElement('div');panel.className='nd-guest-service-panel';panel.hidden=i!==activeGuestService;
+     const service=document.createElement('select');service.setAttribute('aria-label','第'+(i+1)+'位服务');
+     service.append(...Array.from(form.elements.service.options).map(o=>o.cloneNode(true)));
+     service.value=state.service;
+     service.onchange=()=>{state.service=service.value;const matched=ndBookingServices().find(s=>ndBookingName(s)===state.service);if(matched?.duration_minutes){state.duration=Number(matched.duration_minutes);duration.value=String(state.duration);}};
+     const duration=document.createElement('select');duration.setAttribute('aria-label','第'+(i+1)+'位时长');
+     duration.append(...Array.from(form.elements.duration.options).map(o=>o.cloneNode(true)));
+     if(!Array.from(duration.options).some(o=>Number(o.value)===state.duration))duration.add(new Option(state.duration+' 分钟',String(state.duration)));
+     duration.value=String(state.duration);duration.onchange=()=>{state.duration=Number(duration.value)};
+     const label=document.createElement('strong');label.textContent='选择服务 · 第'+(i+1)+'位';
+     const worker=document.createElement('small');worker.textContent='技师由下方「服务员工」选择区按人数对应分配。';
+     panel.append(label,service,duration,worker);guestServicePanels.append(panel);
+   }
+   bookingFields.service.hidden=activeGuestService!==0;
+   bookingFields.duration.hidden=activeGuestService!==0;
  }
  function refreshGuestWorkers(autoAssign){
    const existing=guestWorkers().map(s=>s.value);
@@ -41512,7 +41549,7 @@ let guestCount=1;
 const appointmentCard=el('proAppointmentCard'), bookingHome=appointmentCard.parentElement,bookingMount=el('ndProBookingMount');
 function showBooking(){if(!form.elements.appointment_id.value && branch!=='all')form.elements.branch.value=branch;if(guestWorkers().length!==guestCount)updateGuests();displayCustomer();ndPaintWorkers();ndUpdateVisualSummary();appointmentCard.hidden=false;bookingMount.appendChild(appointmentCard);el('ndProBookingModal').hidden=false;el('ndProBookingClose').focus();void ndReloadBookingServices();}
 function closeBooking(){lookupClose();closeCustomer();el('ndProBookingModal').hidden=true;bookingHome.appendChild(appointmentCard);appointmentCard.hidden=true;el('proQuickCustomer').hidden=true;}
-function reset(){form.reset();el('ndProBookingModal')?.classList.remove('nd-break-mode');ndDrawBookers(ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]);guestCount=1;mainWorker.value='';updateGuests();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
+function reset(){form.reset();el('ndProBookingModal')?.classList.remove('nd-break-mode');ndDrawBookers(ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]);guestCount=1;activeGuestService=0;otherGuestServices.clear();mainWorker.value='';updateGuests();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
 function choose(a){ndSyncBookersForBooking(a.id);el('ndProBookingModal')?.classList.remove('nd-break-mode');form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=mins(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}if(a.service_name&&!Array.from(form.elements.service.options).some(o=>o.value===a.service_name)){
   form.elements.service.add(new Option(a.service_name,a.service_name));
 }form.elements.service.value=a.service_name;guestCount=Math.max(1,assigned(a.id).length);updateGuests();guestWorkers().forEach((sel,i)=>{const id=assigned(a.id)[i]||'';if(id&&Array.from(sel.options).some(o=>o.value===id))sel.value=id;});refreshGuestWorkers(false);ndPaintWorkers();form.elements.room_id.value=a.room_id||'';displayCustomer();el('proAppointmentHeading').textContent=tr('Edit Appointment','编辑预约');el('proAppointmentSave').textContent=tr('Save Changes','保存修改');el('proAppointmentReset').hidden=false;el('proAppointmentCancel').hidden=a.status==='cancelled'||a.status==='completed';showBooking();}
@@ -41948,7 +41985,23 @@ el('proQuickSave').onclick=async()=>{
 el('proAppointmentReset').onclick=reset;
 el('proAppointmentCancel').onclick=async()=>{const id=form.elements.appointment_id.value;if(!id||!confirm(tr('Cancel this appointment?','确定取消这个预约吗？')))return;const buttons=[el('proAppointmentCancel'),el('proAppointmentSave')];buttons.forEach(b=>b.disabled=true);try{const r=await db.rpc('nd_pro_beta_cancel_appointment',{p_appointment_id:id});if(r.error)throw r.error;closeBooking();await load();stat(tr('Appointment cancelled.','预约已取消。'));}catch(e){stat(e.message,true);buttons.forEach(b=>b.disabled=false);}};
 form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries(new FormData(f));
- if(!x.appointment_id && f.elements.service?.selectedOptions[0]?.dataset.existingOnly==='true'){stat(tr('Select an active service.','请选择已启用的服务。'),true);return;}if(!x.customer){phoneSearch.focus();phoneSearch.classList.add('proref-invalid');stat(tr('Select or add a customer.','请选择或新增顾客。'),true);return;}if(!x.employee){stat(tr('Select a therapist.','请选择技师。'),true);return;}if(!x.date||!x.time){stat('Date and time are required.',true);return;}const start=localIso(x.date,x.time),end=new Date(new Date(start).getTime()+Number(x.duration)*60000).toISOString();const editing=Boolean(x.appointment_id);if(!editing&&!ndLoginEmployeeId){stat('登录账号未绑定员工，无法建立预约。请先绑定员工账号。',true);return;}const selectedWorkers=guestWorkers().map(sel=>sel.value);if(selectedWorkers.length!==guestCount||selectedWorkers.some(id=>!id)||new Set(selectedWorkers).size!==guestCount){stat('每位顾客必须选择一位不同的空闲技师。',true);return;}const payload={p_branch:x.branch,p_starts_at:start,p_ends_at:end,p_service_name:x.service,p_employee_ids:selectedWorkers.map(Number),p_room_id:x.room_id||null};if(editing)payload.p_appointment_id=x.appointment_id;else payload.p_customer_id=x.customer;const button=el('proAppointmentSave');button.disabled=true;try{const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
+ if(!x.appointment_id && f.elements.service?.selectedOptions[0]?.dataset.existingOnly==='true'){stat(tr('Select an active service.','请选择已启用的服务。'),true);return;}if(!x.customer){phoneSearch.focus();phoneSearch.classList.add('proref-invalid');stat(tr('Select or add a customer.','请选择或新增顾客。'),true);return;}if(!x.employee){stat(tr('Select a therapist.','请选择技师。'),true);return;}if(!x.date||!x.time){stat('Date and time are required.',true);return;}const start=localIso(x.date,x.time),end=new Date(new Date(start).getTime()+Number(x.duration)*60000).toISOString();const editing=Boolean(x.appointment_id);if(!editing&&!ndLoginEmployeeId){stat('登录账号未绑定员工，无法建立预约。请先绑定员工账号。',true);return;}const selectedWorkers=guestWorkers().map(sel=>sel.value);if(selectedWorkers.length!==guestCount||selectedWorkers.some(id=>!id)||new Set(selectedWorkers).size!==guestCount){stat('每位顾客必须选择一位不同的空闲技师。',true);return;}const payload={p_branch:x.branch,p_starts_at:start,p_ends_at:end,p_service_name:x.service,p_employee_ids:selectedWorkers.map(Number),p_room_id:x.room_id||null};if(editing)payload.p_appointment_id=x.appointment_id;else payload.p_customer_id=x.customer;const button=el('proAppointmentSave');button.disabled=true;let groupCreated=0;try{
+ if(!editing&&guestCount>1){
+   const selections=selectedWorkers.map((workerId,i)=>i===0?{employee_id:workerId,service:x.service,duration:Number(x.duration)}:{employee_id:workerId,...otherGuestServices.get(i)});
+   if(selections.some(s=>!s.service||!Number.isFinite(Number(s.duration))||Number(s.duration)<5))throw Error('请为每一位顾客选择护理和时长。');
+   // Each person is a real appointment with its own service and therapist.
+   // The server validates clashes for each appointment; no pretend group transaction.
+   for(const item of selections){
+     const itemEnd=new Date(new Date(start).getTime()+Number(item.duration)*60000).toISOString();
+     const r=await db.rpc('nd_pro_beta_create_booking_with_room',{p_branch:x.branch,p_starts_at:start,p_ends_at:itemEnd,p_service_name:item.service,p_employee_ids:[Number(item.employee_id)],p_room_id:null,p_customer_id:x.customer});
+     if(r.error)throw r.error;
+     groupCreated++;
+     const createdId=typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data;
+     if(createdId){const stored=await db.from('nd_pro_beta_booking_staff_meta').upsert({appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]},{onConflict:'appointment_id'});if(stored.error)throw Error('已创建预约，但保存预约员工失败：'+stored.error.message);}
+   }
+   date=x.date;branch=x.branch;closeBooking();await load();stat('已新增 '+groupCreated+' 位顾客的关联预约。');return;
+ }
+ const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
  const createdId=editing?x.appointment_id:(typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data);
  if(createdId&&!editing){
    // Booking staff is always the signed-in employee and cannot be manually picked.
@@ -41958,7 +42011,7 @@ form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries
    ndBookerIdsByAppointment.set(String(createdId),[String(ndLoginEmployeeId)]);
  }
  // Never overwrite original booking staff while editing an appointment.
- date=x.date;branch=x.branch;closeBooking();await load();stat(tr(editing?'Appointment updated successfully.':'Appointment created successfully.',editing?'预约已更新。':'预约已新增。'));}catch(err){stat(err.message,true);}finally{button.disabled=false;}};
+ date=x.date;branch=x.branch;closeBooking();await load();stat(tr(editing?'Appointment updated successfully.':'Appointment created successfully.',editing?'预约已更新。':'预约已新增。'));}catch(err){stat((groupCreated?`已建立 ${groupCreated} 项预约，后续保存失败。请先核对预约表，避免重复创建。`:'')+err.message,true);if(groupCreated)await load();}finally{button.disabled=false;}};
 }
 function renderProSettings(host){
  host.innerHTML=`<div class="pro-card pro-settings-page"><h2>${tr('Settings','设置')}</h2><div class="pro-field"><label>${tr('Language','语言')}</label><select id="ndProSettingsLanguage"><option value="en" ${lang==='en'?'selected':''}>English</option><option value="zh" ${lang==='zh'?'selected':''}>简体中文</option></select></div><div class="pro-field"><label>${tr('Room Management','房间管理')}</label><select id="ndProSettingsRoomBranch">${opt(valid.map(v=>[v,v]),branch==='all'?'Eco Botanic':branch)}</select></div><button type="button" class="pro-action" id="ndProSettingsAddRoom">+ ${tr('Add Room','新增房间')}</button><div id="ndProSettingsRoomList" class="pro-settings-rooms"></div><button type="button" class="pro-tab" id="ndProSettingsExit">${tr('Back to Daily Settlement','返回日结')}</button></div>`;
@@ -44038,4 +44091,15 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
 .nd-multi-sheet footer{flex:none;padding:8px 0 0;background:#f2f1f7}
 .nd-multi-sheet footer button{width:100%;min-height:54px;border:0;border-radius:13px;background:#3978f8;color:#fff;font-size:17px;font-weight:800;cursor:pointer}
 @media(min-width:700px){.nd-multi-booking{align-items:center}.nd-multi-sheet{border-radius:24px;min-height:480px;max-height:88dvh}}
+</style>
+<style id="nd-multi-create-form-20261125">
+#ndProBookingModal .nd-guest-service-tabs[hidden],#ndProBookingModal .nd-guest-service-panels[hidden],#ndProBookingModal .nd-guest-service-panel[hidden],#ndProBookingModal .pro-field[hidden]{display:none!important}
+#ndProBookingModal .nd-guest-service-tabs{display:flex!important;background:#fff;border-radius:16px 16px 0 0;overflow:hidden;margin-bottom:0!important}
+#ndProBookingModal .nd-guest-service-tabs button{flex:1;min-height:48px;border:0;background:#fff;color:#222;font-size:16px;font-weight:800;cursor:pointer}
+#ndProBookingModal .nd-guest-service-tabs button.active{background:#e6e6eb}
+#ndProBookingModal .nd-guest-service-panels{background:#fff;padding:0 14px 10px;border-radius:0 0 16px 16px}
+#ndProBookingModal .nd-guest-service-panel{display:flex;flex-direction:column;gap:11px;padding:15px 0}
+#ndProBookingModal .nd-guest-service-panel strong{font-size:15px}
+#ndProBookingModal .nd-guest-service-panel select{width:100%;min-height:44px;border:0;border-bottom:1px solid #e7e7ea;border-radius:0;background:#fff;font-size:15px;color:#272a31}
+#ndProBookingModal .nd-guest-service-panel small{font-size:12px;color:#7a7e87}
 </style>
