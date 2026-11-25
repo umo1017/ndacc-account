@@ -40730,7 +40730,7 @@ el('ndProRestClose')?.addEventListener('click',()=>{el('ndProRestModal').hidden=
 el('ndProSideNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-pro-page]');if(!b||!ready)return;active=b.dataset.proPage;if(active==='appointments'){calendarMode='staff';showTherapists=true;}else if(active==='room_calendar'){calendarMode='room';}drawerToggle(false);render();});
 
 async function read(table,select='*'){const r=await db.from(table).select(select);if(r.error)throw new Error(`${table}: ${r.error.message}`);return r.data||[];}
-async function load(){stat(tr('Loading beta data…','正在读取测试数据…'));try{const out=await Promise.all([read('nd_pro_beta_customers'),read('nd_pro_beta_services'),read('nd_pro_beta_service_prices'),read('nd_pro_beta_appointments'),read('nd_pro_beta_appointment_staff'),read('employees','id,name,nickname,outlet,nd_archived_at,last_working_date')]);[customers,services,prices,appointments,links,staff]=out;await ndRefreshCloudCatalog();ndBenefitCacheKey='';staff=staff.filter(x=>!x.nd_archived_at&&!x.last_working_date);const roomRes=await db.from('nd_pro_beta_rooms').select('id,branch,room_name,is_active').order('room_name');rooms=roomRes.error?[]:(roomRes.data||[]);await refreshRest();await ndFetchBookingExtras();await ndFetchBookingBenefits();stat(roomRes.error?tr('Room list unavailable. Check Beta SQL.','房间资料无法读取，请检查 Beta SQL。'):'');render();}catch(e){
+async function load(){stat(tr('Loading beta data…','正在读取测试数据…'));try{const out=await Promise.all([read('nd_pro_beta_customers'),read('nd_pro_beta_services'),read('nd_pro_beta_service_prices'),read('nd_pro_beta_appointments'),read('nd_pro_beta_appointment_staff'),read('employees','*')]);[customers,services,prices,appointments,links,staff]=out;await ndRefreshCloudCatalog();ndBenefitCacheKey='';staff=staff.filter(x=>!x.nd_archived_at&&!x.last_working_date);const roomRes=await db.from('nd_pro_beta_rooms').select('id,branch,room_name,is_active').order('room_name');rooms=roomRes.error?[]:(roomRes.data||[]);await refreshRest();await ndFetchBookingExtras();await ndFetchBookingBenefits();stat(roomRes.error?tr('Room list unavailable. Check Beta SQL.','房间资料无法读取，请检查 Beta SQL。'):'');render();}catch(e){
   const message=String(e?.message||e||'Unknown error');
   stat(tr('Beta data loading failed: ','测试数据读取失败：')+message,true);
   const host=el('ndProContent');
@@ -41076,7 +41076,9 @@ async function openRestPanel(employeeId){
 function renderAppointments(host){
 if(branch==='all'||!valid.includes(branch))branch=valid.includes('Eco Botanic')?'Eco Botanic':valid[0];
 const list=appointments.filter(a=>tzDate(a.starts_at)===date&&a.branch===branch);
-const staffs=activeStaff().filter(s=>s.outlet===branch);
+const staffGender=s=>{const raw=String(s.gender||s.sex||s.employee_gender||'').trim().toLowerCase();if(['male','m','男','男性','man','boy'].includes(raw))return 'male';if(['female','f','女','女性','woman','girl'].includes(raw))return 'female';return 'other';};
+const genderOrder={male:0,other:1,female:2};
+const staffs=activeStaff().filter(s=>s.outlet===branch).sort((a,b)=>genderOrder[staffGender(a)]-genderOrder[staffGender(b)]);
 const roomCols=calendarMode==='room';
 const columns=roomCols?roomsFor(branch).filter(r=>r.branch===branch):staffs;
 const assigned=id=>links.filter(l=>l.appointment_id===id).map(l=>String(l.employee_id));
@@ -41089,7 +41091,7 @@ const weekStart=new Date(dayObj);weekStart.setDate(dayObj.getDate()-((dayObj.get
 const weekdayNames=lang==='zh'?['一','二','三','四','五','六','日']:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const weekButtons=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);const ymd=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const n=appointments.filter(a=>tzDate(a.starts_at)===ymd&&(branch==='all'||a.branch===branch)&&a.status!=='cancelled').length;return `<button type="button" class="proref-weekday ${ymd===date?'selected':''}" data-pro-date="${ymd}"><span>${weekdayNames[i]}</span><b>${d.getDate()}</b><small>${n}</small></button>`;}).join('');
 const ccount=Math.max(1,columns.length);
-let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="Business Hours">⚙</button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:`<button type="button" class="pro-calhead pro-employee-head" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
+let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="Business Hours">⚙</button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${staffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
 const toMinutes=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 for(let ri=0;ri<slots.length;ri++){
  const t=slots[ri];const row=ri+2;
@@ -41105,7 +41107,7 @@ for(let ri=0;ri<slots.length;ri++){
    span=Math.max(1,span);
    const customer=customers.find(c=>c.id===booking.customer_id);
    grid+=`<button type="button" class="pro-cell pro-booked proref-booking nd-cal-status-${esc(booking.status)} nd-entitlement-${esc(ndBenefitCache.get(String(booking.customer_id))?.value||'unknown')}" style="grid-column:${col};grid-row:${row}/span ${span}" data-edit="${esc(booking.id)}"><strong>${esc(customer?.full_name||'Customer')}</strong><span>${esc(booking.service_name)}</span><small>${clock12(mins(booking.starts_at))} · ${esc(booking.status)}</small></button>`;
-  }else grid+=`<button type="button" class="pro-cell proref-empty ${resting?'pro-resting pro-resting-'+rest.kind:''}" style="grid-column:${col};grid-row:${row}" data-slot="${t}" ${resting?'data-rest-blocked="true"':''} ${roomCols?`data-room="${person.id}"`:`data-staff="${person.id}"`} aria-label="Add appointment ${t}"></button>`;
+  }else grid+=`<button type="button" class="pro-cell proref-empty ${roomCols?'':'nd-gender-'+staffGender(person)} ${resting?'pro-resting pro-resting-'+rest.kind:''}" style="grid-column:${col};grid-row:${row}" data-slot="${t}" ${resting?'data-rest-blocked="true"':''} ${roomCols?`data-room="${person.id}"`:`data-staff="${person.id}"`} aria-label="Add appointment ${t}"></button>`;
  }
 }
 if(!roomCols)for(const record of ndBreakRows){
@@ -44097,6 +44099,12 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
 #ndProBetaPage .proref-calendar-grid .proref-time-head{font-size:23px!important}
 #ndProBetaPage .proref-calendar-grid .pro-time{max-width:61px!important;font-size:11px!important;line-height:1.1!important;border-radius:10px!important;padding:0!important}
 #ndProBetaPage .proref-calendar-grid .pro-cell{border-radius:11px!important;font-size:10px!important}
+/* Gender grouping: men left, unspecified middle, women right. Only free cells
+   and staff headings are tinted; booked/status colors retain their meaning. */
+#ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-male{background:#cfe5ff!important;color:#175ca9!important}
+#ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-female{background:#f9dce9!important;color:#a34273!important}
+#ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-male:not(.pro-resting){background:#e9f4ff!important}
+#ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-female:not(.pro-resting){background:#fff0f6!important}
 #ndProBetaPage .proref-calendar-grid .pro-booked,#ndProBetaPage .proref-calendar-grid .proref-booking{padding:5px 4px!important;gap:3px!important;border-radius:11px!important}
 #ndProBetaPage .proref-calendar-grid .pro-booked strong,#ndProBetaPage .proref-calendar-grid .proref-booking strong{font-size:10px!important;line-height:1.15!important}
 #ndProBetaPage .proref-calendar-grid .pro-booked span,#ndProBetaPage .proref-calendar-grid .proref-booking span{font-size:9px!important;line-height:1.2!important}
