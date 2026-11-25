@@ -41746,6 +41746,35 @@ function detailOpen(a){
 
  detailShell.querySelector('[data-detail-actions]').hidden=true;detailShell.hidden=false;
 }
+// A single calendar cell can represent several simultaneous, linked treatments.
+// Show the group manager first; selecting an entry then opens its own detail sheet.
+const groupShell=document.createElement('div');
+groupShell.className='nd-multi-booking';groupShell.hidden=true;
+groupShell.innerHTML=`<div class="nd-multi-shade"></div><section class="nd-multi-sheet" role="dialog" aria-modal="true" aria-label="多人预约"><header><button type="button" data-multi-close aria-label="关闭">×</button><strong>多人预约</strong><span aria-hidden="true">✓</span></header><div class="nd-multi-list"></div><footer><button type="button" data-multi-checkout></button></footer></section>`;
+document.body.appendChild(groupShell);
+const closeGroup=()=>{groupShell.hidden=true;};
+groupShell.querySelector('[data-multi-close]').onclick=closeGroup;
+groupShell.querySelector('.nd-multi-shade').onclick=closeGroup;
+function linkedBookings(a){
+ const start=new Date(a.starts_at).getTime(),end=new Date(a.ends_at).getTime();
+ return appointments.filter(x=>x.branch===a.branch&&x.customer_id===a.customer_id&&tzDate(x.starts_at)===tzDate(a.starts_at)&&!['cancelled','no_show'].includes(x.status)&&new Date(x.starts_at).getTime()<end&&new Date(x.ends_at).getTime()>start).sort((x,y)=>x.starts_at.localeCompare(y.starts_at));
+}
+function openCalendarBooking(a){
+ const group=linkedBookings(a);
+ if(group.length<2&&assigned(a.id).length<2){detailOpen(a);return;}
+ const customer=customers.find(c=>String(c.id)===String(a.customer_id));
+ const displayName=esc(customer?.full_name||'顾客');
+ const list=groupShell.querySelector('.nd-multi-list');
+ list.innerHTML=group.map((item,index)=>{
+   const workerNames=assigned(item.id).map(id=>staff.find(s=>String(s.id)===String(id))?.nickname||staff.find(s=>String(s.id)===String(id))?.name||id).join('、')||'未分配技师';
+   return `<button type="button" class="nd-multi-entry" data-multi-id="${esc(item.id)}"><strong>${displayName}</strong><b>${esc(item.service_name||'预约')}</b><span>◷ ${esc(clock12(mins(item.starts_at)))} – ${esc(clock12(mins(item.ends_at)))}</span><span>♙ ${esc(workerNames)}</span><small>预约 ${index+1} / ${group.length} · 点击管理 ›</small></button>`;
+ }).join('');
+ list.querySelectorAll('[data-multi-id]').forEach(btn=>btn.onclick=()=>{const item=group.find(x=>String(x.id)===btn.dataset.multiId);if(item){closeGroup();detailOpen(item);}});
+ const checkout=groupShell.querySelector('[data-multi-checkout]');
+ checkout.textContent=`查看开单 (${group.length})`;
+ checkout.onclick=()=>{alert('多人合并收款尚未连接正式订单系统。可以逐笔打开预约详情，再选择开单预览。');};
+ groupShell.hidden=false;
+}
 detailShell.querySelector('[data-detail-edit]').onclick=()=>{if(selectedBooking){const a=selectedBooking;closeDetail();choose(a)}};
 detailShell.querySelector('[data-detail-cancel]').onclick=async()=>{
  if(detailBusy||!selectedBooking)return;
@@ -41769,7 +41798,7 @@ detailShell.querySelectorAll('[data-detail-delay]').forEach(b=>b.onclick=async()
  if(r.error)throw r.error;closeDetail();await load();stat(`预约已延迟 ${delta} 分钟。`);
  }catch(e){stat(e.message,true);alert('无法延迟预约：'+e.message)}finally{detailBusy=false;}
 });
-host.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const a=appointments.find(x=>x.id===b.dataset.edit);if(a)detailOpen(a);});
+host.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const a=appointments.find(x=>String(x.id)===String(b.dataset.edit));if(a)openCalendarBooking(a);});
 el('proNewBooking').onclick=()=>{reset();showBooking()};
 el('ndProBookingClose').onclick=closeBooking;
 el('ndProBookingBackdrop').onclick=closeBooking;
@@ -43994,4 +44023,19 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
 #ndProBetaPage .proref-scroll-x .pro-calendar{max-height:none!important;min-height:0!important}
 @media(min-width:850px){#ndProBetaPage .proref-calendar-grid{grid-template-columns:61px repeat(var(--cols),minmax(76px,1fr))!important;min-width:calc(61px + var(--cols) * 76px)!important}}
 #ndProBetaPage .proref-calendar-top>#proWeekPrev,#ndProBetaPage .proref-calendar-top>#proWeekNext{display:none!important}
+</style>
+<style id="nd-multi-booking-style-20261125">
+.nd-multi-booking[hidden]{display:none!important}
+.nd-multi-booking{position:fixed;inset:0;z-index:2147483150;display:flex;align-items:flex-end;justify-content:center;font-family:inherit;color:#24262d}
+.nd-multi-shade{position:absolute;inset:0;background:rgba(0,0,0,.32)}
+.nd-multi-sheet{position:relative;display:flex;flex-direction:column;width:min(560px,100%);max-height:94dvh;min-height:min(70dvh,580px);overflow:hidden;background:#f2f1f7;border-radius:25px 25px 0 0;padding:0 16px max(16px,env(safe-area-inset-bottom));box-sizing:border-box}
+.nd-multi-sheet>header{display:flex;justify-content:space-between;align-items:center;flex:none;height:66px;font-size:19px;font-weight:800}
+.nd-multi-sheet>header button{border:0;background:transparent;color:#3478f6;font-size:33px;font-weight:300;width:36px;height:44px;cursor:pointer}
+.nd-multi-sheet>header span{font-size:25px;color:#3478f6;width:36px;text-align:center}
+.nd-multi-list{overflow-y:auto;min-height:0;flex:1;padding:0 1px 12px}
+.nd-multi-entry{display:flex;flex-direction:column;gap:8px;width:100%;margin:0 0 12px;padding:16px;border:1.5px solid #ff463c;border-radius:17px;background:#f1e0e3;text-align:left;color:#25272c;cursor:pointer}
+.nd-multi-entry strong{font-size:17px;font-weight:850}.nd-multi-entry b{font-size:15px;line-height:1.35;overflow-wrap:anywhere}.nd-multi-entry span{font-size:14px;font-weight:700}.nd-multi-entry small{font-size:12px;color:#6e737c}
+.nd-multi-sheet footer{flex:none;padding:8px 0 0;background:#f2f1f7}
+.nd-multi-sheet footer button{width:100%;min-height:54px;border:0;border-radius:13px;background:#3978f8;color:#fff;font-size:17px;font-weight:800;cursor:pointer}
+@media(min-width:700px){.nd-multi-booking{align-items:center}.nd-multi-sheet{border-radius:24px;min-height:480px;max-height:88dvh}}
 </style>
