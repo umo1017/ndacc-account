@@ -40789,7 +40789,7 @@ async function ndHistoryFetch(kind,date){const dayStart=date+'T00:00:00+08:00',d
  }
  const r=await db.from('nd_pro_beta_orders').select('*').gte('created_at',dayStart).lt('created_at',dayEnd).order('created_at',{ascending:false}).limit(2000);if(r.error)throw r.error;
  let rows=(r.data||[]).filter(o=>branch==='all'||String(o.branch||o.outlet||'')===branch);
- if(kind==='cash')rows=rows.filter(o=>['paid','completed'].includes(String(o.order_status||o.status||'').toLowerCase())&&ndHistoryPaymentChips(o).some(p=>/cash|card|tng|bank|transfer|duitnow|fpX/i.test(String(p[0]))));
+ if(kind==='cash')rows=rows.filter(o=>['paid','completed'].includes(String(o.order_status||o.status||'').toLowerCase()));
  if(kind==='debt')rows=rows.filter(o=>Number(ndHistoryValue(o,['outstanding_amount','balance_due','debt_balance'],0))>0||/partial|unpaid|outstanding|debt/i.test(String(ndHistoryValue(o,['payment_status'],''))));
  return ndHistoryHydrate(rows);
 }
@@ -40804,14 +40804,14 @@ function ndHistoryDetail(host,row,kind){let overlay=document.getElementById('ndH
  const id=ndHistoryValue(row,['id'],null);if(id==null){itemBox.textContent='无订单 ID';return;}
  (async()=>{try{const r=await db.from('nd_pro_beta_order_items').select('*').eq('order_id',id).limit(200);if(r.error)throw r.error;if(!itemBox.isConnected)return;itemBox.innerHTML=(r.data||[]).map(x=>`<div class="nd-history-item"><strong>${ndHistorySafe(ndHistoryValue(x,['item_name','name','service_name','product_name'],'项目'))}</strong><span>× ${ndHistorySafe(ndHistoryValue(x,['quantity'],1))} · RM ${ndHistoryMoney(ndHistoryValue(x,['total_amount','line_total','unit_price','price'],0))}</span></div>`).join('')||'没有关联项目记录';}catch(e){if(itemBox.isConnected)itemBox.textContent='项目资料读取失败：'+String(e.message||e);}})();
 }
-function renderCustomerHistory(host){const kinds=[['cash','现金收款 Cash'],['recharge','注册 · 储值'],['debt','欠款']];host.innerHTML=`<section class="nd-history-page"><header class="nd-history-head"><button type="button" id="ndHistBack">‹</button><strong>历史 History</strong><div class="nd-history-date"><button type="button" id="ndHistPrev">‹</button><input type="date" id="ndHistDate" value="${ndHistoryDate}"><button type="button" id="ndHistNext">›</button></div></header><nav class="nd-history-tabs">${kinds.map(([k,label])=>`<button type="button" data-history-kind="${k}" class="${k===ndHistoryKind?'on':''}">${label}</button>`).join('')}</nav><div class="nd-history-summary" id="ndHistorySummary"></div><div class="nd-history-cards" id="ndHistoryRows">正在读取数据库…</div></section>`;
+function renderCustomerHistory(host){const kinds=[['cash','总收款额'],['recharge','储值'],['debt','欠款']];host.innerHTML=`<section class="nd-history-page nd-history-ref"><header class="nd-history-head"><button type="button" id="ndHistBack" aria-label="返回">‹</button><div class="nd-history-heading"><strong>${ndHistoryKind==='cash'?'总收款额':ndHistoryKind==='recharge'?'储值':'欠款'}</strong><small id="ndHistMethodTitle"></small></div><div class="nd-history-date"><button type="button" id="ndHistPrev" aria-label="上一日">‹</button><input type="date" id="ndHistDate" value="${ndHistoryDate}"><button type="button" id="ndHistNext" aria-label="下一日">›</button></div></header><nav class="nd-history-tabs">${kinds.map(([k,label])=>`<button type="button" data-history-kind="${k}" class="${k===ndHistoryKind?'on':''}">${label}</button>`).join('')}</nav><nav class="nd-history-methods" id="ndHistMethods" aria-label="付款方式筛选"></nav><div class="nd-history-summary" id="ndHistorySummary"></div><div class="nd-history-cards" id="ndHistoryRows">正在读取数据库…</div></section>`;
  host.querySelector('#ndHistBack').onclick=()=>{active='home';render()};
  host.querySelector('#ndHistPrev').onclick=()=>{ndHistoryDate=ndShiftDate(ndHistoryDate,-1);renderCustomerHistory(host)};
  host.querySelector('#ndHistNext').onclick=()=>{ndHistoryDate=ndShiftDate(ndHistoryDate,1);renderCustomerHistory(host)};
  host.querySelector('#ndHistDate').onchange=e=>{if(e.target.value){ndHistoryDate=e.target.value;renderCustomerHistory(host)}};
  host.querySelectorAll('[data-history-kind]').forEach(b=>b.onclick=()=>{ndHistoryKind=b.dataset.historyKind;renderCustomerHistory(host)});
  const rowsBox=host.querySelector('#ndHistoryRows'),summary=host.querySelector('#ndHistorySummary');if(!db){rowsBox.textContent='数据库未连接';return;}
- (async()=>{try{const rows=await ndHistoryFetch(ndHistoryKind,ndHistoryDate);if(!rowsBox.isConnected)return;summary.textContent=`总 - ${rows.length}`;rowsBox.innerHTML=rows.map((r,i)=>ndHistoryCard(r,ndHistoryKind,i)).join('')||'<div class="nd-history-empty">暂无数据记录</div>';rowsBox.querySelectorAll('[data-history-index]').forEach(button=>button.onclick=()=>ndHistoryDetail(host,rows[Number(button.dataset.historyIndex)],ndHistoryKind));}catch(e){if(rowsBox.isConnected)rowsBox.textContent='历史资料读取失败：'+String(e.message||e);}})();
+ (async()=>{try{const rows=await ndHistoryFetch(ndHistoryKind,ndHistoryDate);if(!rowsBox.isConnected)return;const methods=host.querySelector('#ndHistMethods'),heading=host.querySelector('#ndHistMethodTitle');let selected='全部';const names=['全部',...new Set(rows.flatMap(r=>ndHistoryPaymentChips(r).map(p=>String(p[0]))))];if(ndHistoryKind==='cash'&&rows.some(r=>!ndHistoryPaymentChips(r).length))names.push('付款方式未记录');const draw=()=>{const visible=selected==='全部'?rows:rows.filter(r=>{const p=ndHistoryPaymentChips(r);return selected==='付款方式未记录'?!p.length:p.some(x=>String(x[0])===selected)});const amount=visible.reduce((sum,r)=>sum+Number(ndHistoryValue(r,['paid_amount','total_amount','amount'],0)||0),0);summary.innerHTML=`<span>总 - ${visible.length}</span><strong>${ndHistoryKind==='cash'?'RM '+ndHistoryMoney(amount):''}</strong>`;heading.textContent=selected==='全部'?'':selected;rowsBox.innerHTML=visible.map((r,i)=>ndHistoryCard(r,ndHistoryKind,i)).join('')||'<div class="nd-history-empty">暂无数据记录</div>';rowsBox.querySelectorAll('[data-history-index]').forEach(button=>button.onclick=()=>ndHistoryDetail(host,visible[Number(button.dataset.historyIndex)],ndHistoryKind));methods.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.method===selected));};methods.innerHTML=ndHistoryKind==='cash'?names.map(name=>`<button type="button" data-method="${ndHistorySafe(name)}">${ndHistorySafe(name)}</button>`).join(''):'';methods.querySelectorAll('button').forEach(b=>b.onclick=()=>{selected=b.dataset.method;draw()});draw();}catch(e){if(rowsBox.isConnected)rowsBox.textContent='历史资料读取失败：'+String(e.message||e);}})();
 }
 
 function renderDailyReport(host){
@@ -40823,6 +40823,7 @@ function renderDailyReport(host){
  host.querySelector('#ndRptNext').onclick=()=>go(ndShiftDate(ndReportDate,1));
  host.querySelector('#ndRptDate').onchange=e=>{if(e.target.value)go(e.target.value)};
  host.querySelector('#ndRptPrint').onclick=()=>window.print();
+ host.querySelector('.nd-ref-total').setAttribute('role','button');host.querySelector('.nd-ref-total').tabIndex=0;const openReceipts=()=>{ndHistoryDate=ndReportDate;ndHistoryKind='cash';active='customer_history';render()};host.querySelector('.nd-ref-total').onclick=openReceipts;host.querySelector('.nd-ref-total').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openReceipts()}};
  (async()=>{
   const set=(k,v)=>{const e=host.querySelector(`[data-stat="${k}"]`);if(e)e.textContent=v};
   const state=host.querySelector('#ndRptState');
@@ -43399,8 +43400,120 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  #ndProBetaPage:not([hidden])>#ndProHamburger{position:fixed!important;top:calc(max(8px,env(safe-area-inset-top)) + 4px)!important;left:10px!important}
 }
 </style>
-<style id="nd-booking-consistent-sizing-20261125">
+<style id="nd-history-screenshot-layout-20261125">
 @media(max-width:1024px){
+ #ndProBetaPage:has(.nd-history-ref){position:fixed!important;inset:0!important;width:100vw!important;max-width:none!important;height:100dvh!important;margin:0!important;padding:0!important;overflow:auto!important;z-index:2147482800!important;background:#f2f1f7!important}
+ #ndProBetaPage:has(.nd-history-ref)>#ndProContent{padding:0!important;margin:0!important;width:100%!important;max-width:none!important}
+ #ndProBetaPage .nd-history-ref{box-sizing:border-box!important;width:100%!important;min-height:100dvh!important;padding:calc(env(safe-area-inset-top) + 14px) 16px max(28px,env(safe-area-inset-bottom))!important;background:#f2f1f7!important;color:#22252a!important;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif!important}
+ #ndProBetaPage .nd-history-ref .nd-history-head{display:grid!important;grid-template-columns:35px minmax(80px,1fr) auto!important;min-height:62px!important;gap:7px!important;margin-bottom:9px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-head>button{font-size:32px!important;width:34px!important;padding:0!important}
+ #ndProBetaPage .nd-history-ref .nd-history-heading{text-align:center;display:flex;flex-direction:column;justify-content:center;min-width:0;gap:2px}
+ #ndProBetaPage .nd-history-ref .nd-history-heading strong{font-size:19px!important;white-space:nowrap;font-weight:800!important}
+ #ndProBetaPage .nd-history-ref .nd-history-heading small{font-size:13px;color:#9a9a9a;font-weight:800;overflow:hidden;text-overflow:ellipsis}
+ #ndProBetaPage .nd-history-ref .nd-history-date{height:45px!important;padding:3px!important;border-radius:14px!important;box-sizing:border-box!important;background:#dff0ff!important}
+ #ndProBetaPage .nd-history-ref .nd-history-date input{width:118px!important;font-size:14px!important;min-height:32px!important;box-shadow:none!important}
+ #ndProBetaPage .nd-history-ref .nd-history-date button{font-size:20px!important;width:25px!important;padding:0!important}
+ #ndProBetaPage .nd-history-ref .nd-history-tabs{padding:2px 0 8px!important;gap:6px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-tabs button{font-size:12px!important;min-height:31px!important;padding:7px 11px!important;border-radius:15px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-methods{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:3px 0 8px}
+ #ndProBetaPage .nd-history-ref .nd-history-methods:empty{display:none}
+ #ndProBetaPage .nd-history-ref .nd-history-methods button{flex:0 0 auto;border:1px solid #cfe0f8;background:#fff;color:#3970af;border-radius:12px;min-height:34px;padding:6px 10px;font-size:12px;font-weight:750}
+ #ndProBetaPage .nd-history-ref .nd-history-methods button.selected{color:#1677ff;background:#dff0ff;border-color:#dff0ff}
+ #ndProBetaPage .nd-history-ref .nd-history-summary{display:flex;justify-content:space-between;align-items:center;margin:10px 1px 16px!important;font-size:20px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-summary strong{color:#1677ff;font-size:19px}
+ #ndProBetaPage .nd-history-ref .nd-history-cards{display:grid!important;gap:16px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-card{padding:15px 16px!important;border-radius:15px!important;box-shadow:none!important;min-height:130px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-card-top{font-size:17px!important;font-weight:850!important}
+ #ndProBetaPage .nd-history-ref .nd-history-card-top strong{font-size:19px!important;color:#1677ff!important}
+ #ndProBetaPage .nd-history-ref .nd-history-card-mid{font-size:16px!important;margin-top:5px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-customer{font-size:16px!important;margin:5px 0 12px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-payments{padding-top:10px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-pill{padding:7px 11px!important;font-size:15px!important;color:#20242a!important;background:#f4f4f4!important;border-radius:7px!important}
+ #ndProBetaPage .nd-history-ref .nd-history-methods button.selected~button{opacity:1}
+ .nd-history-overlay .nd-history-detail{height:100dvh!important;max-height:100dvh!important;width:100vw!important;max-width:none!important;border-radius:0!important}
+ .nd-history-overlay .nd-history-detail header{padding:calc(env(safe-area-inset-top) + 12px) 16px 14px!important;min-height:65px!important;background:#f2f1f7!important}
+ .nd-history-overlay .nd-history-detail header strong{font-size:18px!important}
+ .nd-history-overlay .nd-history-detail-scroll{padding:16px!important;gap:15px!important}
+ .nd-history-overlay .nd-history-detail-panel{border-radius:16px!important}
+}
+</style>
+<style id="nd-booking-reference-unified-20261125">
+/* One iPhone-sized design system for the appointment detail and editor. */
+@media (max-width:1024px) {
+  #ndProBookingModal, .nd-booking-detail {
+    --nd-appt-bg:#f2f1f7;
+    --nd-appt-ink:#20242a;
+    --nd-appt-blue:#1677ff;
+    --nd-appt-card-radius:16px;
+    --nd-appt-card-gap:16px;
+    --nd-appt-font:16px;
+    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif!important;
+  }
+  #ndProBookingModal .pro-booking-panel,
+  .nd-booking-detail .nd-booking-detail-sheet {
+    width:100vw!important;max-width:100vw!important;min-width:0!important;
+    height:100dvh!important;min-height:100dvh!important;max-height:100dvh!important;
+    border-radius:0!important;box-shadow:none!important;
+    background:var(--nd-appt-bg)!important;
+    padding:calc(env(safe-area-inset-top) + 14px) 16px max(24px,env(safe-area-inset-bottom))!important;
+    box-sizing:border-box!important;overflow-y:auto!important;overflow-x:hidden!important;
+    font-size:var(--nd-appt-font)!important;color:var(--nd-appt-ink)!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  #ndProBookingModal #proAppointmentHeading,
+  .nd-booking-detail .nd-booking-detail-sheet>header {
+    height:50px!important;min-height:50px!important;line-height:50px!important;
+    font-size:20px!important;font-weight:800!important;text-align:center!important;
+    margin:0 0 16px!important;padding:0!important;box-sizing:border-box!important;
+  }
+  #ndProBookingModal #proAppointmentHeading {position:relative!important;top:auto!important;background:transparent!important}
+  #ndProBookingModal #ndProBookingClose {position:absolute!important;top:calc(env(safe-area-inset-top) + 14px)!important;left:16px!important;float:none!important;margin:0!important}
+  #ndProBookingModal .proref-primary,
+  #ndProBookingModal .nd-ref-guests,
+  #ndProBookingModal .nd-ref-tabs-card,
+  #ndProBookingModal .nd-ref-reminder,
+  .nd-booking-detail .nd-detail-card {
+    background:#fff!important;border:0!important;border-radius:var(--nd-appt-card-radius)!important;
+    box-shadow:none!important;box-sizing:border-box!important;overflow:hidden!important;
+  }
+  #ndProBookingModal .proref-details:not([hidden]) {gap:var(--nd-appt-card-gap)!important;margin-top:var(--nd-appt-card-gap)!important}
+  #ndProBookingModal .proref-primary .proref-datetime {
+    min-height:70px!important;padding:11px 12px 11px 58px!important;
+    box-sizing:border-box!important;
+  }
+  #ndProBookingModal .proref-datetime:before {left:12px!important;width:32px!important;height:32px!important;font-size:21px!important}
+  #ndProBookingModal .nd-date-render {font-size:17px!important;line-height:23px!important;font-weight:800!important}
+  #ndProBookingModal .nd-time-render {font-size:16px!important;line-height:22px!important;font-weight:700!important}
+  #ndProBookingModal .proref-phone-row {min-height:64px!important;padding:8px 12px!important;gap:10px!important}
+  #ndProBookingModal .proref-phone-input input {font-size:17px!important;line-height:24px!important;min-height:40px!important}
+  #ndProBookingModal .nd-ref-customer {min-height:64px!important;padding:12px 16px!important;gap:12px!important}
+  #ndProBookingModal .nd-ref-customer strong {font-size:17px!important;line-height:24px!important;font-weight:800!important}
+  #ndProBookingModal .nd-ref-avatar {width:34px!important;height:34px!important;flex:0 0 34px!important}
+  #ndProBookingModal .nd-ref-guests {min-height:62px!important;padding:9px 16px!important}
+  #ndProBookingModal .nd-ref-guests .pro-field>label {font-size:16px!important;font-weight:800!important}
+  #ndProBookingModal .nd-ref-tab-body {padding:0 16px!important}
+  #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="service"],
+  #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="room"],
+  #ndProBookingModal .nd-staff-compact,
+  #ndProBookingModal .nd-ref-room-block {
+    min-height:64px!important;box-sizing:border-box!important;
+    margin:0!important;padding:10px 0!important;
+    font-size:16px!important;line-height:23px!important;
+  }
+  #ndProBookingModal .nd-ref-tab-body .pro-field select {font-size:16px!important;line-height:23px!important;min-height:40px!important}
+  #ndProBookingModal .nd-ref-reminder {min-height:62px!important;padding:14px 16px!important;font-size:16px!important}
+  #ndProBookingModal #proAppointmentSave {min-height:56px!important;font-size:18px!important;border-radius:14px!important}
+  .nd-booking-detail .nd-detail-card {margin:0 0 var(--nd-appt-card-gap)!important;padding:0 16px!important}
+  .nd-booking-detail .nd-detail-line {min-height:64px!important;padding:12px 0!important;box-sizing:border-box!important;gap:12px!important}
+  .nd-booking-detail .nd-detail-line strong {font-size:16px!important;line-height:23px!important}
+  .nd-booking-detail .nd-detail-line small {font-size:14px!important;line-height:20px!important}
+  .nd-booking-detail .nd-detail-line>span {width:34px!important;height:34px!important}
+  .nd-booking-detail .nd-detail-bottom-bar {margin-top:12px!important}
+}
+</style>
+<style id="nd-booking-consistent-sizing-20261125">
+/* Superseded by the shared appointment-detail sizing above. */
+@media(max-width:0px){
  /* All appointment rows share the same compact iPhone scale. */
  #ndProBookingModal .pro-booking-panel{font-size:16px!important;line-height:1.35!important}
  #ndProBookingModal #proAppointmentHeading{font-size:22px!important;font-weight:800!important;height:48px!important;line-height:48px!important}
