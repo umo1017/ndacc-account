@@ -43173,6 +43173,26 @@ body > #ndProHamburger.nd-pro-portal-menu {
 <style id="nd-booking-screenshot-mobile-20261125">
 /* Screenshot-matched booking and member-search sheets; backend form remains unchanged. */
 @media(max-width:760px){
+ /* Remove the redundant overview introduced by the legacy appointment editor. */
+ #ndProBookingModal .nd-appointment-visual-summary{display:none!important}
+ body:has(#ndProBookingModal:not([hidden])) #ndProHamburger,
+ body:has(.proref-lookup-modal:not([hidden])) #ndProHamburger{display:none!important}
+ #ndProBookingModal .proref-details>.pro-field:has([name="employee"]){padding:0!important;margin:0!important;border:0!important}
+ #ndProBookingModal .nd-appointment-staff-toggle{display:block!important;width:100%!important;min-width:0!important}
+ #ndProBookingModal .nd-touch-row-heading{display:none!important}
+ #ndProBookingModal .nd-staff-compact{width:100%!important;display:flex!important;align-items:center!important;gap:13px!important;min-height:68px!important;padding:12px 1px!important;border:0!important;background:#fff!important;text-align:left!important;color:#21252a!important;font-size:17px!important;font-weight:750!important}
+ #ndProBookingModal .nd-staff-compact:before{content:'👤';width:37px;height:37px;display:grid;place-items:center;background:#2496ee;border-radius:9px;font-size:24px;flex:none}
+ #ndProBookingModal .nd-staff-compact:after{content:'›';color:#1677ff;font-size:25px;margin-left:auto}
+ #ndProBookingModal .nd-touch-workers{display:none!important;max-height:240px!important;overflow-y:auto!important;gap:8px!important;padding:10px 0 15px!important}
+ #ndProBookingModal .nd-appointment-staff-toggle.nd-staff-expanded .nd-touch-workers{display:flex!important}
+ #ndProBookingModal .nd-touch-worker-message{display:none!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"]{min-height:0!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"]:before{display:none!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="service"]{min-height:75px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="room"]{min-height:67px!important}
+ #ndProBookingModal .nd-ref-tab-body .nd-ref-room-block{padding:17px 0!important;min-height:65px!important}
+ #ndProBookingModal .nd-ref-tabs-card,#ndProBookingModal .nd-ref-guests{width:100%!important;min-width:0!important;box-sizing:border-box!important}
+ #ndProBookingModal .pro-booking-panel,#ndProBookingModal #proAppointmentForm,#ndProBookingModal .proref-details,#ndProBookingModal .nd-ref-tab-body{overflow-x:hidden!important;min-width:0!important}
  #ndProBookingModal{position:fixed!important;inset:0!important;z-index:2147483050!important;align-items:flex-end!important;justify-content:center!important;overflow:hidden!important}
  #ndProBookingModal .pro-booking-backdrop{background:rgba(0,0,0,.32)!important}
  #ndProBookingModal .pro-booking-panel{position:relative!important;box-sizing:border-box!important;width:100vw!important;max-width:100vw!important;height:calc(100dvh - max(34px,env(safe-area-inset-top)))!important;max-height:none!important;margin:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;border-radius:25px 25px 0 0!important;padding:18px 12px max(24px,env(safe-area-inset-bottom))!important;background:#f2f1f7!important;box-shadow:none!important}
@@ -43242,8 +43262,10 @@ body > #ndProHamburger.nd-pro-portal-menu {
   save.onclick=()=>{const input=document.getElementById('proCustomerFind');if(!input)return;input.value=out.textContent;input.dispatchEvent(new Event('input',{bubbles:true}));close();document.getElementById('proRefSearch')?.click();};
   booking.addEventListener('click',e=>{if(matchMedia('(max-width:760px)').matches&&e.target?.id==='proCustomerFind'){e.preventDefault();const raw=String(e.target.value||'').replace(/\D/g,'');out.textContent=raw||'60';save.disabled=raw.length<10||raw.length>14;dial.hidden=false;e.target.blur();}});
   const paint=()=>{const heading=document.getElementById('proAppointmentHeading');if(heading&&booking.hidden===false){const next=/edit|编辑/i.test(heading.textContent)?'编辑预约':'新预约';if(heading.textContent!==next)heading.textContent=next;}const input=document.getElementById('proCustomerFind');if(input&&matchMedia('(max-width:760px)').matches){input.readOnly=true;input.placeholder='电话号码';}const btn=document.getElementById('proAppointmentSave');const form=document.getElementById('proAppointmentForm');if(btn&&form){const selected=!!form.elements.customer?.value,worker=!!form.elements.employee?.value,service=!!form.elements.service?.value;btn.disabled=!(selected&&worker&&service);const next=/edit|修改|save changes/i.test(btn.textContent)?'保存修改':'确认';if(btn.textContent!==next)btn.textContent=next;}};
+  const compactStaff=()=>{const host=booking.querySelector('.nd-appointment-staff-toggle');if(!host||host.querySelector('.nd-staff-compact'))return;const control=document.createElement('button');control.type='button';control.className='nd-staff-compact';control.setAttribute('aria-expanded','false');host.prepend(control);const update=()=>{const picked=[...host.querySelectorAll('.nd-touch-worker.is-active')].map(x=>x.textContent.replace(/^✓\s*/,''));const label=picked.length?picked.join('、'):'选择服务员工';if(control.textContent!==label)control.textContent=label;};control.onclick=()=>{host.classList.toggle('nd-staff-expanded');control.setAttribute('aria-expanded',String(host.classList.contains('nd-staff-expanded')));};new MutationObserver(update).observe(host.querySelector('.nd-touch-workers'),{childList:true});update();};
   new MutationObserver(()=>{if(!booking.hidden)paint()}).observe(booking,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','value']});
-  booking.addEventListener('change',paint);booking.addEventListener('click',()=>requestAnimationFrame(paint));
+  booking.addEventListener('change',paint);booking.addEventListener('click',()=>requestAnimationFrame(()=>{compactStaff();paint()}));
+  new MutationObserver(()=>{if(!booking.hidden)compactStaff()}).observe(booking,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});
   const lookup=document.getElementById('proRefLookupModal');if(lookup){const list=lookup.querySelector('[data-lookup-results]');let scheduled=false;new MutationObserver(()=>{if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;list.querySelectorAll('.proref-lookup-card').forEach(card=>{if(card.querySelector('.nd-member-pin'))return;const pin=document.createElement('span');pin.className='nd-member-pin';pin.textContent='♧';pin.setAttribute('aria-hidden','true');pin.style.cssText='position:absolute;right:11px;top:9px;color:#1677ff;font-size:24px;padding:0';card.append(pin)})})}).observe(list,{childList:true});}
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
