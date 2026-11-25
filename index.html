@@ -42444,7 +42444,7 @@ function ndOpenServiceEditor(serviceId,host){
  }
  draw();
 }
-function renderPos(host){const filtered=services.filter(s=>prices.some(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch)));host.innerHTML=`<div class="pro-card pro-line"><div>${field(tr('Branch','分行'),chooseBranch())}</div><strong>${tr('POS Demo — Not a real payment','POS 测试 — 不进行真实付款')}</strong></div><div class="pro-grid">${filtered.map(s=>{const p=prices.find(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch));return `<div class="pro-card"><strong>${esc(lang==='zh'&&s.name_zh?s.name_zh:s.name_en)}</strong><p class="pro-muted">${esc(p?.branch||'')}</p><p>RM ${Number(p?.price||0).toFixed(2)}</p><button type="button" class="pro-tab" data-add="${s.id}" data-price="${p?.id||''}">+ Add</button></div>`;}).join('')}</div><div class="pro-card"><h3>${tr('Demo Cart','测试购物车')}</h3><div id="proCart"></div><button class="pro-action" type="button" id="proClearCart">${tr('Clear Cart','清空购物车')}</button><p class="pro-muted">Checkout, cash settlement, wallet deductions, commissions and WhatsApp sending are intentionally disabled.</p></div>`;
+function renderPos(host){if(typeof window.ndRenderOrderFlow==='function')return window.ndRenderOrderFlow({host,customers,services,prices,branch});const filtered=services.filter(s=>prices.some(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch)));host.innerHTML=`<div class="pro-card pro-line"><div>${field(tr('Branch','分行'),chooseBranch())}</div><strong>${tr('POS Demo — Not a real payment','POS 测试 — 不进行真实付款')}</strong></div><div class="pro-grid">${filtered.map(s=>{const p=prices.find(p=>p.service_id===s.id&&(branch==='all'||p.branch===branch));return `<div class="pro-card"><strong>${esc(lang==='zh'&&s.name_zh?s.name_zh:s.name_en)}</strong><p class="pro-muted">${esc(p?.branch||'')}</p><p>RM ${Number(p?.price||0).toFixed(2)}</p><button type="button" class="pro-tab" data-add="${s.id}" data-price="${p?.id||''}">+ Add</button></div>`;}).join('')}</div><div class="pro-card"><h3>${tr('Demo Cart','测试购物车')}</h3><div id="proCart"></div><button class="pro-action" type="button" id="proClearCart">${tr('Clear Cart','清空购物车')}</button><p class="pro-muted">Checkout, cash settlement, wallet deductions, commissions and WhatsApp sending are intentionally disabled.</p></div>`;
 el('proBranch').value=branch;el('proBranch').onchange=e=>{branch=e.target.value;cart=[];render();};host.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const s=services.find(x=>x.id===b.dataset.add),p=prices.find(x=>x.id===b.dataset.price);if(s&&p){cart.push({name:s.name_en,price:Number(p.price),branch:p.branch});drawCart();}});el('proClearCart').onclick=()=>{cart=[];drawCart();};function drawCart(){el('proCart').innerHTML=cart.map((x,i)=>`<div class="pro-row"><span>${esc(x.name)} (${esc(x.branch)})</span><strong>RM ${x.price.toFixed(2)}</strong></div>`).join('')+`<div class="pro-row"><strong>Total</strong><strong>RM ${cart.reduce((n,x)=>n+x.price,0).toFixed(2)}</strong></div>`;}drawCart();}
 function init(){if(!nav||!page)return;nav.hidden=true;nav.style.display='none';void updateNav();
   try{getDb()?.auth?.onAuthStateChange?.(()=>setTimeout(()=>void updateNav(),0));}catch(_e){}
@@ -43288,6 +43288,86 @@ body > #ndProHamburger.nd-pro-portal-menu {
  .proref-lookup-sheet{height:100dvh!important;min-height:100dvh!important;max-height:100dvh!important;border-radius:0!important;padding-top:calc(max(12px,env(safe-area-inset-top)) + 12px)!important}
 }
 </style>
+<style id="nd-order-mobile-flow-20261125">
+@media(max-width:760px){
+ #ndProBetaPage:has(.nd-order-flow){padding:0!important;background:#f2f1f7!important}
+ #ndProBetaPage:has(.nd-order-flow)>#ndProContent{padding:0!important;margin:0!important;width:100%!important;max-width:none!important}
+ #ndProBetaPage:has(.nd-order-flow) #ndProHomeButton{display:none!important}
+ #ndProBetaPage:has(.nd-order-flow) #ndProHamburger{display:none!important}
+ .nd-order-flow{position:relative;width:100%;min-height:100dvh;background:#f2f1f7;color:#22262b;font-family:system-ui,-apple-system,sans-serif;font-weight:700;padding:calc(max(12px,env(safe-area-inset-top)) + 18px) 12px max(25px,env(safe-area-inset-bottom));box-sizing:border-box}
+ .nd-order-flow button,.nd-order-flow input{font:inherit}
+ .nd-order-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:54px;margin-bottom:18px}
+ .nd-order-head h2{font-size:21px;margin:0;text-align:center;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:850}
+ .nd-order-head button{border:0;background:transparent;color:#3178ff;font-size:28px;width:40px;height:42px}
+ .nd-order-flow .nd-order-search{display:flex;background:#e6e6e9;border-radius:16px;padding:12px;align-items:center;gap:10px}
+ .nd-order-flow .nd-order-search input{background:transparent;border:0;outline:0;min-width:0;width:100%;font-size:16px}
+ .nd-order-today{color:#999;font-size:17px;margin:20px 12px 10px}
+ .nd-order-new{border:0;background:white;color:#1677ff;border-radius:18px;min-height:130px;width:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;font-size:17px}
+ .nd-order-new i{display:grid;place-items:center;font-size:38px;background:#dceefe;border-radius:50%;width:65px;height:65px;font-style:normal}
+ .nd-order-client{background:#fff;border-radius:17px;padding:16px;margin-bottom:12px}
+ .nd-order-client strong{font-size:18px}.nd-order-client p{color:#85858a;margin:6px 0}
+ .nd-order-tags{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 12px}.nd-order-tags span{padding:4px 8px;border-radius:6px;background:#a38c7e;color:#fff;font-size:12px}
+ .nd-order-tags span:first-child{background:#1677ff}
+ .nd-order-balances{border-top:1px solid #e7e7e7;padding-top:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:12px}
+ .nd-order-balances b{display:block;font-size:16px;margin-top:4px}
+ .nd-order-filter{display:flex;gap:7px;overflow-x:auto;white-space:nowrap;padding:8px 0 15px}.nd-order-filter button{background:white;border:0;border-radius:12px;padding:10px 14px;color:#202226;font-size:14px;flex:none}
+ .nd-order-filter button[aria-pressed="true"]{background:#326ff4;color:white}
+ .nd-order-products{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-bottom:95px}
+ .nd-order-product{position:relative;text-align:left;display:flex;flex-direction:column;gap:8px;min-height:126px;background:white;border:2px solid transparent;border-radius:16px;padding:12px;min-width:0}
+ .nd-order-product[aria-pressed="true"]{border-color:#3178ff}
+ .nd-order-product strong{font-size:14px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+ .nd-order-product small{font-size:15px;color:#687083;margin-top:auto}.nd-order-product i{font-style:normal;font-size:27px}
+ .nd-order-cartbar{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:12px;right:12px;min-height:59px;border-radius:15px;border:0;background:#3677f5;color:white;font-size:20px;font-weight:850;z-index:5}
+ .nd-order-detail{background:#fff;border-radius:18px;min-height:calc(100dvh - 170px);padding:16px;display:flex;flex-direction:column}
+ .nd-order-line{display:grid;grid-template-columns:1fr auto;gap:8px;border-radius:14px;background:#f4f4f4;padding:14px;margin-top:12px}
+ .nd-order-line strong{font-size:17px}.nd-order-line small{display:block;color:#888;margin-top:8px}
+ .nd-order-qty{display:flex;align-items:center;gap:9px}.nd-order-qty button{border:0;background:white;border-radius:50%;height:30px;width:30px;font-size:21px;color:#3178ff}
+ .nd-order-summary{margin-top:auto;padding-top:16px}.nd-order-summary div{display:flex;justify-content:space-between;margin:9px 0}.nd-order-summary button{width:100%;border:0;border-radius:14px;background:#3677f5;color:white;min-height:61px;font-size:19px}
+ .nd-order-due{padding:20px;background:white;border-radius:18px;margin-bottom:28px}.nd-order-due span{color:#1677ff}.nd-order-due strong{display:block;font-size:52px}
+ .nd-order-methods h3{color:#999;margin:18px 4px 8px;font-size:17px}.nd-order-methods>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .nd-order-methods button{background:white;border:2px solid transparent;border-radius:12px;padding:17px 10px;text-align:left;font-size:15px;min-height:65px}
+ .nd-order-methods button[aria-pressed="true"]{border-color:#3677f5;color:#1677ff}
+ .nd-order-methods .nd-order-cash{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .nd-order-methods .nd-order-cash button{text-align:center;font-size:14px;padding:15px 2px}
+ .nd-order-confirm{position:sticky;bottom:max(12px,env(safe-area-inset-bottom));display:block;width:100%;margin-top:16px;background:#ddd;color:#999;border:0;border-radius:13px;min-height:60px;font-size:19px}
+ .nd-order-note{font-size:12px;color:#888;line-height:1.5;margin:8px 0}
+}
+</style>
+<script id="nd-order-mobile-flow-behaviour-20261125">
+(()=>{'use strict';
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branch='all'}){
+ let stage='list',member=null,search='',category='全部',method='',items=[];
+ const products=services.flatMap(s=>prices.filter(p=>String(p.service_id)===String(s.id)&&(branch==='all'||p.branch===branch)).map(p=>({id:String(s.id)+':'+String(p.id),name:s.name_zh||s.name_en||'护理',price:Number(p.price)||0,branch:p.branch||'',duration:s.duration_minutes||0,type:s.item_type||'服务'})));
+ const total=()=>items.reduce((n,x)=>n+x.price*x.qty,0);
+ const count=()=>items.reduce((n,x)=>n+x.qty,0);
+ const header=(title,back)=>`<header class="nd-order-head"><button type="button" data-go="${back}" aria-label="返回">‹</button><h2>${esc(title)}</h2><button type="button" data-go="list" aria-label="返回挂单">⋯</button></header>`;
+ const card=()=>`<section class="nd-order-client"><strong>👩🏻 ${esc(member.full_name||member.name||'会员')}</strong><p>${esc(String(member.phone||'').replace(/\d(?=\d{4})/g,'•'))}</p><div class="nd-order-tags"><span>会员</span><span>${esc(branch==='all'?'Nature’s Dao':branch)}</span></div><div class="nd-order-balances"><div>储值<b>—</b></div><div>积分<b>—</b></div><div>优惠券<b>—</b></div><div>礼品卡<b>—</b></div></div></section>`;
+ const render=()=>{
+  const categories=['全部','PROMOTION','会员卡专享',...new Set(products.map(p=>p.type))];
+  let html='';
+  if(stage==='list')html=header('挂单','home')+`<div class="nd-order-search">⌕ <input id="ndOrderSearch" placeholder="通过会员姓名或电话号码搜索待处理订单" value="${esc(search)}"></div><div class="nd-order-today">今天（0）</div><button class="nd-order-new" data-go="members"><i>＋</i>新增订单</button><p class="nd-order-note">待处理订单尚未接入正式订单查询；此处不代表真实订单数量。</p>`;
+  if(stage==='members')html=header('选择会员','list')+`<div class="nd-order-search">⌕ <input id="ndOrderSearch" placeholder="搜索姓名或电话号码" value="${esc(search)}"></div><div id="ndOrderMemberResults">${customerMatches()}</div>`;
+  if(stage==='products')html=header(member.full_name||member.name||'选择护理','members')+card()+`<nav class="nd-order-filter">${categories.map(c=>`<button data-category="${esc(c)}" aria-pressed="${category===c}">${esc(c)}</button>`).join('')}</nav><div class="nd-order-products">${products.filter(p=>category==='全部'||(category==='PROMOTION'?/promo|促销|优惠/i.test(p.name):category==='会员卡专享'?/会员|member/i.test(p.name):p.type===category)).map(p=>`<button class="nd-order-product" data-add="${esc(p.id)}" aria-pressed="${items.some(x=>x.id===p.id)}"><i>⭐</i><strong>${esc(p.name)}</strong><small>RM ${money(p.price)}</small></button>`).join('')||'<p>此分类暂时没有项目</p>'}</div><button class="nd-order-cartbar" data-go="detail" ${!items.length?'disabled':''}>${count()} 项目 ｜ RM ${money(total())}</button>`;
+  if(stage==='detail')html=header(member.full_name||member.name||'订单明细','products')+`<div class="nd-order-detail"><div>服务</div>${items.map((x,i)=>`<div class="nd-order-line"><div><strong>${esc(x.name)}</strong><small>RM ${money(x.price)} × ${x.qty}</small></div><div><strong>RM ${money(x.price*x.qty)}</strong><div class="nd-order-qty"><button data-qty="${i}" data-delta="-1">−</button>${x.qty}<button data-qty="${i}" data-delta="1">＋</button></div></div></div>`).join('')}<section class="nd-order-summary"><div>数量 <strong>${count()}</strong></div><div>小计 <strong>RM ${money(total())}</strong></div><button data-go="payment">付款：RM ${money(total())}</button></section></div>`;
+  if(stage==='payment')html=header('付款','detail')+`<section class="nd-order-due"><span>余额支付</span><strong>${money(total())}</strong></section><div class="nd-order-methods"><h3>现金</h3><div class="nd-order-cash">${['自定义',money(total()),money(Math.ceil(total()/10)*10),money(Math.ceil(total()/100)*100)].map(x=>`<button data-method="现金 ${x}" aria-pressed="${method==='现金 '+x}">${esc(x)}</button>`).join('')}</div><h3>卡</h3><div>${['Credit卡','Debit卡'].map(x=>`<button data-method="${x}" aria-pressed="${method===x}">▰ ${x}</button>`).join('')}</div><h3>在线</h3><div><button data-method="Online" aria-pressed="${method==='Online'}">◎ Online</button></div><h3>其他</h3><div>${['TNG PAYMENT','3 MONTH INSTALLMENT','6 MONTH INSTALLMENT','12 MONTH INSTALLMENT','ALIPAY','Online-credit card','BANK TRANSFER','床位费'].map(x=>`<button data-method="${x}" aria-pressed="${method===x}">▣ ${x}</button>`).join('')}</div></div><p class="nd-order-note">付款方式仅供界面核对；正式付款、储值扣减及奖励审批尚未连接，不会自动发放或入账。</p><button class="nd-order-confirm" disabled>确认付款（尚未连接）</button>`;
+  host.innerHTML=`<main class="nd-order-flow" data-order-stage="${stage}">${html}</main>`;
+  host.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{const target=b.dataset.go;if(target==='home'){document.getElementById('ndProTabs')?.querySelector('[data-tab="home"]')?.click();return;}stage=target;search='';render();});
+  host.querySelector('#ndOrderSearch')?.addEventListener('input',e=>{search=e.target.value;if(stage==='members')host.querySelector('#ndOrderMemberResults').innerHTML=customerMatches();});
+  host.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{category=b.dataset.category;render();});
+  host.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{const item=products.find(p=>p.id===b.dataset.add);if(!item)return;const existing=items.find(x=>x.id===item.id);if(existing)existing.qty++;else items.push({...item,qty:1});render();});
+  host.querySelectorAll('[data-qty]').forEach(b=>b.onclick=()=>{const item=items[Number(b.dataset.qty)];if(!item)return;item.qty+=Number(b.dataset.delta);items=items.filter(x=>x.qty>0);render();});
+  host.querySelectorAll('[data-method]').forEach(b=>b.onclick=()=>{method=b.dataset.method;render();});
+  bindMembers();
+ };
+ const customerMatches=()=>customers.filter(c=>(String(c.full_name||c.name||'')+' '+String(c.phone||'')).toLowerCase().includes(search.trim().toLowerCase())).slice(0,80).map(c=>`<button type="button" data-member="${esc(c.id)}" class="nd-order-client" style="width:100%;text-align:left;border:0;margin-top:9px"><strong>${esc(c.full_name||c.name||'未命名会员')}</strong><p>${esc(c.phone||'')}</p></button>`).join('')||'<p class="nd-order-today">找不到匹配会员，请先在会员页面核对资料。</p>';
+ const bindMembers=()=>host.querySelectorAll('[data-member]').forEach(b=>b.onclick=()=>{member=customers.find(c=>String(c.id)===b.dataset.member);if(!member)return;items=[];category='全部';stage='products';render();});
+ host.addEventListener('click',e=>{if(stage==='members'&&e.target.closest('[data-member]')){const id=e.target.closest('[data-member]').dataset.member;member=customers.find(c=>String(c.id)===id);if(member){items=[];stage='products';render();}}},{once:false});
+ render();
+};
+})();
+</script>
 <script id="nd-booking-screenshot-mobile-behaviour-20261125">
 (()=>{'use strict';
  const start=()=>{
