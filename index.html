@@ -40721,7 +40721,7 @@ el('ndProHomeButton')?.addEventListener('click',()=>{active='home';render();});e
 el('ndProDrawerClose')?.addEventListener('click',()=>drawerToggle(false));el('ndProSettingsNav')?.addEventListener('click',()=>{active='settings';drawerToggle(false);render();});el('ndProLeaveNav')?.addEventListener('click',()=>{drawerToggle(false);leave();});
 el('ndProShade')?.addEventListener('click',()=>drawerToggle(false));
 el('ndProRestClose')?.addEventListener('click',()=>{el('ndProRestModal').hidden=true;});el('ndProRestBackdrop')?.addEventListener('click',()=>{el('ndProRestModal').hidden=true;});
-el('ndProSideNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-pro-page]');if(!b||!ready)return;active=b.dataset.proPage;if(active==='appointments'){calendarMode='staff';showTherapists=true;}else if(active==='room_calendar'){calendarMode='room';}drawerToggle(false);render();});
+el('ndProSideNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-pro-page]');if(!b||!ready)return;active=b.dataset.proPage;if(active==='customer_history')active='daily_report';if(active==='appointments'){calendarMode='staff';showTherapists=true;}else if(active==='room_calendar'){calendarMode='room';}drawerToggle(false);render();});
 
 async function read(table,select='*'){const r=await db.from(table).select(select);if(r.error)throw new Error(`${table}: ${r.error.message}`);return r.data||[];}
 async function load(){stat(tr('Loading beta data…','正在读取测试数据…'));try{const out=await Promise.all([read('nd_pro_beta_customers'),read('nd_pro_beta_services'),read('nd_pro_beta_service_prices'),read('nd_pro_beta_appointments'),read('nd_pro_beta_appointment_staff'),read('employees','id,name,nickname,outlet,nd_archived_at,last_working_date')]);[customers,services,prices,appointments,links,staff]=out;await ndRefreshCloudCatalog();ndBenefitCacheKey='';staff=staff.filter(x=>!x.nd_archived_at&&!x.last_working_date);const roomRes=await db.from('nd_pro_beta_rooms').select('id,branch,room_name,is_active').order('room_name');rooms=roomRes.error?[]:(roomRes.data||[]);await refreshRest();await ndFetchBookingExtras();await ndFetchBookingBenefits();stat(roomRes.error?tr('Room list unavailable. Check Beta SQL.','房间资料无法读取，请检查 Beta SQL。'):'');render();}catch(e){
@@ -40750,7 +40750,7 @@ function renderHome(host){
  </section>`;
  host.querySelectorAll('[data-quick]').forEach(btn=>btn.onclick=()=>{
   const key=btn.dataset.quick;
-  if(key==='report'){active=btn.textContent.includes('班次')?'daily_report':'customer_history';render();return;}
+  if(key==='report'){active='daily_report';render();return;}
   if(key==='announcements'||key==='help'||key==='sos'||key==='whatsapp'||key==='rental'){
     alert('此功能尚未接入当前 Pro Beta 页面，请从主系统对应模块操作。');return;
   }
@@ -40805,7 +40805,7 @@ function ndHistoryDetail(host,row,kind){let overlay=document.getElementById('ndH
  (async()=>{try{const r=await db.from('nd_pro_beta_order_items').select('*').eq('order_id',id).limit(200);if(r.error)throw r.error;if(!itemBox.isConnected)return;itemBox.innerHTML=(r.data||[]).map(x=>`<div class="nd-history-item"><strong>${ndHistorySafe(ndHistoryValue(x,['item_name','name','service_name','product_name'],'项目'))}</strong><span>× ${ndHistorySafe(ndHistoryValue(x,['quantity'],1))} · RM ${ndHistoryMoney(ndHistoryValue(x,['total_amount','line_total','unit_price','price'],0))}</span></div>`).join('')||'没有关联项目记录';}catch(e){if(itemBox.isConnected)itemBox.textContent='项目资料读取失败：'+String(e.message||e);}})();
 }
 function renderCustomerHistory(host){const kinds=[['cash','总收款额'],['recharge','储值'],['debt','欠款']];host.innerHTML=`<section class="nd-history-page nd-history-ref"><header class="nd-history-head"><button type="button" id="ndHistBack" aria-label="返回">‹</button><div class="nd-history-heading"><strong>${ndHistoryKind==='cash'?'总收款额':ndHistoryKind==='recharge'?'储值':'欠款'}</strong><small id="ndHistMethodTitle"></small></div><div class="nd-history-date"><button type="button" id="ndHistPrev" aria-label="上一日">‹</button><input type="date" id="ndHistDate" value="${ndHistoryDate}"><button type="button" id="ndHistNext" aria-label="下一日">›</button></div></header><nav class="nd-history-tabs">${kinds.map(([k,label])=>`<button type="button" data-history-kind="${k}" class="${k===ndHistoryKind?'on':''}">${label}</button>`).join('')}</nav><nav class="nd-history-methods" id="ndHistMethods" aria-label="付款方式筛选"></nav><div class="nd-history-summary" id="ndHistorySummary"></div><div class="nd-history-cards" id="ndHistoryRows">正在读取数据库…</div></section>`;
- host.querySelector('#ndHistBack').onclick=()=>{active='home';render()};
+ host.querySelector('#ndHistBack').onclick=()=>{active='daily_report';ndReportDate=ndHistoryDate;render()};
  host.querySelector('#ndHistPrev').onclick=()=>{ndHistoryDate=ndShiftDate(ndHistoryDate,-1);renderCustomerHistory(host)};
  host.querySelector('#ndHistNext').onclick=()=>{ndHistoryDate=ndShiftDate(ndHistoryDate,1);renderCustomerHistory(host)};
  host.querySelector('#ndHistDate').onchange=e=>{if(e.target.value){ndHistoryDate=e.target.value;renderCustomerHistory(host)}};
@@ -40815,15 +40815,17 @@ function renderCustomerHistory(host){const kinds=[['cash','总收款额'],['rech
 }
 
 function renderDailyReport(host){
- const stats=[['工作',[['🛒','订单','order_count'],['👜','项目','item_count'],['👤','客户','customer_count'],['▣','员工','staff_count']]],['欠款交易',[['🔥','欠款总数','debt_count'],['💲','已收欠款','debt_paid']]],['注册',[['🟠','储值','recharge'],['🎁','优惠券','voucher_issued'],['⭐','积分','points_issued']]],['兑换',[['🟠','储值','wallet_redeemed'],['🎁','优惠券','voucher_redeemed'],['⭐','积分','points_redeemed'],['🎁','礼品卡','gift_redeemed'],['🟠','押金','deposit']]]];
- host.innerHTML=`<div class="nd-ref-report"><header class="nd-ref-report-head"><button type="button" id="ndRptBack" aria-label="返回">‹</button><div class="nd-ref-date"><button type="button" id="ndRptPrev" aria-label="上一天">❮</button><input id="ndRptDate" type="date" value="${ndReportDate}" aria-label="日期"><button type="button" id="ndRptNext" aria-label="下一天">❯</button></div><button type="button" id="ndRptPrint" aria-label="打印">▣</button></header><div class="nd-ref-total"><strong>总收款额</strong><strong id="ndRptTotal">—</strong></div><div class="nd-ref-report-state" id="ndRptState" aria-live="polite">正在读取数据库…</div>${stats.map(g=>`<section class="nd-ref-report-group"><h2>${g[0]}</h2>${g[1].map(v=>`<div class="nd-ref-report-row"><span class="nd-ref-report-ico">${v[0]}</span><span>${v[1]}</span><strong data-stat="${v[2]}">—</strong></div>`).join('')}</section>`).join('')}</div>`;
+ const stats=[['工作',[['🛒','订单','order_count'],['🛍','项目','item_count'],['●','客户','customer_count'],['▣','员工','staff_count']]],['欠款交易',[['🔥','欠款总数','debt_count'],['↻','已收欠款','debt_paid']]],['注册',[['＄','储值','recharge'],['🎁','优惠券','voucher_issued'],['★','积分','points_issued']]],['兑换',[['＄','储值','wallet_redeemed'],['🎁','优惠券','voucher_redeemed'],['★','积分','points_redeemed'],['🎁','礼品卡','gift_redeemed'],['＄','押金','deposit']]]];
+ const readableDate=d=>{const [y,m,day]=d.split('-');return `${day}/${m}/${y}`};
+ host.innerHTML=`<div class="nd-ref-report nd-report-screenshot"><header class="nd-ref-report-head"><button type="button" id="ndRptBack" aria-label="返回">‹</button><div class="nd-ref-date"><button type="button" id="ndRptPrev" aria-label="上一天">❮</button><label class="nd-report-date-label" for="ndRptDate">${readableDate(ndReportDate)}</label><input id="ndRptDate" type="date" value="${ndReportDate}" aria-label="日期"><button type="button" id="ndRptNext" aria-label="下一天">❯</button></div><button type="button" id="ndRptPrint" aria-label="打印">▣</button></header><div class="nd-ref-total" role="button" tabindex="0"><strong>总收款额</strong><strong id="ndRptTotal">—</strong></div><div class="nd-ref-payment-rows" id="ndRptPayments"></div>${stats.map((g,index)=>`<section class="nd-ref-report-group nd-report-group-${index}"><h2>${g[0]}</h2>${g[1].map(v=>`<button type="button" class="nd-ref-report-row" data-report-stat="${v[2]}"><span class="nd-ref-report-ico">${v[0]}</span><span>${v[1]}</span><strong data-stat="${v[2]}">—</strong></button>`).join('')}</section>`).join('')}<div class="nd-ref-report-state" id="ndRptState" aria-live="polite">正在读取数据库…</div></div>`;
  const go=d=>{ndReportDate=d;renderDailyReport(host)};
  host.querySelector('#ndRptBack').onclick=()=>{active='home';render()};
  host.querySelector('#ndRptPrev').onclick=()=>go(ndShiftDate(ndReportDate,-1));
  host.querySelector('#ndRptNext').onclick=()=>go(ndShiftDate(ndReportDate,1));
  host.querySelector('#ndRptDate').onchange=e=>{if(e.target.value)go(e.target.value)};
  host.querySelector('#ndRptPrint').onclick=()=>window.print();
- host.querySelector('.nd-ref-total').setAttribute('role','button');host.querySelector('.nd-ref-total').tabIndex=0;const openReceipts=()=>{ndHistoryDate=ndReportDate;ndHistoryKind='cash';active='customer_history';render()};host.querySelector('.nd-ref-total').onclick=openReceipts;host.querySelector('.nd-ref-total').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openReceipts()}};
+ const openReceipts=(kind='cash')=>{ndHistoryDate=ndReportDate;ndHistoryKind=kind;active='customer_history';render()};host.querySelector('.nd-ref-total').onclick=()=>openReceipts();host.querySelector('.nd-ref-total').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openReceipts()}};
+ host.querySelectorAll('[data-report-stat]').forEach(b=>b.onclick=()=>{const stat=b.dataset.reportStat;if(stat==='order_count'||stat==='item_count'||stat==='customer_count'||stat==='staff_count')openReceipts('cash');else if(stat.includes('debt'))openReceipts('debt');else if(stat.includes('recharge')||stat.includes('wallet'))openReceipts('recharge')});
  (async()=>{
   const set=(k,v)=>{const e=host.querySelector(`[data-stat="${k}"]`);if(e)e.textContent=v};
   const state=host.querySelector('#ndRptState');
@@ -40838,7 +40840,11 @@ function renderDailyReport(host){
    set('order_count',String(orders.length));
    set('customer_count',String(new Set(orders.map(o=>o.customer_id).filter(Boolean)).size));
    host.querySelector('#ndRptTotal').textContent=ndMoney(amount);
-   state.textContent='订单金额依据已付款／完成的订单汇总；其余项目待对应账本接入。';
+   const paymentMap=new Map();for(const order of settled){for(const [name,value] of ndHistoryPaymentChips(order)){const n=Number(value);if(Number.isFinite(n)&&n>0)paymentMap.set(name,(paymentMap.get(name)||0)+n)}}
+   host.querySelector('#ndRptPayments').innerHTML=[...paymentMap].map(([name,value])=>`<button type="button" class="nd-report-payment"><span class="nd-report-payment-icon">▣</span><span>${ndHistorySafe(name)}</span><strong>${ndHistoryMoney(value)}</strong></button>`).join('');
+   host.querySelectorAll('.nd-report-payment').forEach(b=>b.onclick=()=>openReceipts('cash'));
+   if(orders.length){const ids=orders.map(o=>o.id).filter(x=>x!=null);if(ids.length){const items=await db.from('nd_pro_beta_order_items').select('order_id,quantity').in('order_id',ids.slice(0,1000)).limit(5000);if(!items.error&&host.querySelector('#ndRptState'))set('item_count',String((items.data||[]).reduce((n,x)=>n+(Number(x.quantity)||1),0)))}}
+   state.textContent='仅统计已连接的真实订单；未连接的账本以「—」显示。';
   }catch(e){if(host.querySelector('#ndRptState'))state.textContent='订单报表读取失败：'+String(e.message||e)}
  })();
 }
@@ -42721,7 +42727,7 @@ body > #ndProHamburger.nd-pro-portal-menu {
   trigger.setAttribute('aria-label','Open Nature’s Dao Pro side menu');
   document.body.appendChild(trigger);
   function sync(){
-   const visible=!page.hidden && getComputedStyle(page).display!=='none' && page.getClientRects().length>0;
+   const visible=!page.hidden && getComputedStyle(page).display!=='none' && page.getClientRects().length>0 && !page.querySelector('.nd-report-screenshot,.nd-history-ref,.nd-order-flow,.proref-schedule,.pro-calendar');
    if(trigger.style.display!==(visible?'flex':'none')){
      trigger.style.setProperty('display',visible?'flex':'none','important');
    }
@@ -43436,6 +43442,33 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  .nd-history-overlay .nd-history-detail-scroll{padding:16px!important;gap:15px!important}
  .nd-history-overlay .nd-history-detail-panel{border-radius:16px!important}
 }
+</style>
+<style id="nd-daily-report-true-reference-20261125">
+#ndProBetaPage:has(.nd-report-screenshot){background:#fff!important}
+#ndProBetaPage:has(.nd-report-screenshot)>.pro-head,#ndProBetaPage:has(.nd-report-screenshot)>#ndProHamburger,#ndProBetaPage:has(.nd-report-screenshot) #ndProHomeButton,#ndProBetaPage:has(.nd-report-screenshot) #ndProQuickCart{display:none!important}
+#ndProBetaPage:has(.nd-report-screenshot)>#ndProContent{padding:0!important;margin:0!important;width:100%!important;max-width:none!important}
+#ndProBetaPage .nd-report-screenshot{box-sizing:border-box!important;max-width:none!important;width:100%!important;min-height:100dvh!important;padding:18px 22px 65px!important;background:#fff!important;color:#202329!important;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-report-head{display:grid!important;grid-template-columns:40px 1fr 40px!important;align-items:center!important;gap:10px!important;margin:0 0 30px!important;min-height:66px!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-report-head>button{font-size:37px!important;color:#1679ff!important;border:0!important;background:transparent!important;padding:0!important;width:40px!important;height:52px!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-date{justify-self:center!important;display:flex!important;align-items:center!important;gap:8px!important;background:#dff0ff!important;border-radius:15px!important;padding:8px 9px!important;min-height:46px!important;box-sizing:border-box!important;position:relative!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-date button{font-size:17px!important;color:#167aff!important;background:transparent!important;min-width:22px!important;padding:0!important;position:relative!important;z-index:2!important}
+#ndProBetaPage .nd-report-screenshot .nd-report-date-label{font-size:clamp(15px,4.1vw,21px)!important;white-space:nowrap!important;font-weight:850!important;color:#147aff!important;pointer-events:none!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-date input{position:absolute!important;left:38px!important;top:0!important;width:calc(100% - 76px)!important;height:100%!important;opacity:0!important;cursor:pointer!important;z-index:1!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-total{display:flex!important;align-items:center!important;justify-content:space-between!important;margin:0 0 23px!important;gap:15px!important;color:#147aff!important;font-size:clamp(20px,5.3vw,25px)!important;font-weight:850!important;cursor:pointer!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-total strong{font-size:inherit!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-payment-rows{display:grid!important;gap:0!important;margin-bottom:33px!important}
+#ndProBetaPage .nd-report-screenshot .nd-report-payment{display:grid!important;grid-template-columns:32px minmax(0,1fr) auto!important;align-items:center!important;gap:10px!important;padding:0!important;margin:0!important;height:69px!important;width:100%!important;border:0!important;background:none!important;text-align:left!important;color:#22252a!important;font-size:clamp(17px,4.5vw,21px)!important;font-weight:800!important}
+#ndProBetaPage .nd-report-screenshot .nd-report-payment-icon,#ndProBetaPage .nd-report-screenshot .nd-report-payment strong{color:#ca4df2!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-report-group{margin:0 0 33px!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-report-group h2{font-size:clamp(21px,5vw,25px)!important;margin:0 0 11px!important;font-weight:850!important;line-height:1.25!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-report-row{box-sizing:border-box!important;width:100%!important;display:grid!important;grid-template-columns:37px minmax(0,1fr) auto!important;align-items:center!important;gap:8px!important;border:0!important;background:transparent!important;padding:0!important;margin:0!important;min-height:72px!important;text-align:left!important;font-size:clamp(17px,4.5vw,21px)!important;font-weight:800!important;color:#202329!important;cursor:pointer!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-report-row strong{font-size:clamp(18px,5vw,23px)!important;font-weight:850!important;color:#167aff!important;text-align:right!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-report-ico{font-size:27px!important;line-height:1!important;color:#147aff!important;text-align:left!important}
+#ndProBetaPage .nd-report-screenshot .nd-report-group-1 .nd-ref-report-row:first-of-type .nd-ref-report-ico,#ndProBetaPage .nd-report-screenshot .nd-report-group-1 .nd-ref-report-row:first-of-type strong{color:#ff686f!important}
+#ndProBetaPage .nd-report-screenshot .nd-report-group-2 .nd-ref-report-ico,#ndProBetaPage .nd-report-screenshot .nd-report-group-2 .nd-ref-report-row strong,#ndProBetaPage .nd-report-screenshot .nd-report-group-3 .nd-ref-report-ico,#ndProBetaPage .nd-report-screenshot .nd-report-group-3 .nd-ref-report-row strong{color:#ff9700!important}
+#ndProBetaPage .nd-report-screenshot .nd-ref-report-state{font-size:11px!important;line-height:1.5!important;color:#858a94!important;padding-top:4px!important;margin:0!important}
+@media(max-width:1024px){#ndProBetaPage:has(.nd-report-screenshot){position:fixed!important;inset:0!important;height:100dvh!important;width:100vw!important;z-index:2147482800!important;overflow-y:auto!important;overflow-x:hidden!important}#ndProBetaPage .nd-report-screenshot{padding-top:calc(env(safe-area-inset-top) + 16px)!important}}
+@media print{#ndProBetaPage .nd-report-screenshot .nd-ref-report-head{display:none!important}}
 </style>
 <style id="nd-booking-reference-unified-20261125">
 /* One iPhone-sized design system for the appointment detail and editor. */
