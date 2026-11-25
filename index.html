@@ -40770,8 +40770,46 @@ const ndHistorySafe=v=>esc(v==null?'':String(v));
 function ndHistoryValue(row,keys,fallback='') {for(const k of keys){if(row&&row[k]!==undefined&&row[k]!==null&&row[k]!=='')return row[k]}return fallback;}
 function ndHistoryTimestamp(row){return ndHistoryValue(row,['paid_at','completed_at','created_at','transaction_at','occurred_at','updated_at']);}
 function ndHistoryTime(value){if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleString('zh-MY',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',year:'numeric',hour12:true});}
-function ndHistoryIsDay(value,date){if(!value)return false;const d=new Date(value);if(Number.isNaN(d.getTime()))return String(value).slice(0,10)===date;return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(d)===date;}
+function ndHistoryIsDay(value,date){if(!value)return false;if(/^\d{4}-\d\d-\d\d$/.test(String(value)))return String(value)===date;const d=new Date(value);if(Number.isNaN(d.getTime()))return String(value).slice(0,10)===date;return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(d)===date;}
 function ndHistoryMoney(v){return Number.isFinite(Number(v))?Number(v).toFixed(2):'—';}
+function ndTunaiHistoricalNormalize(raw){
+ const nested=raw.raw_data||raw.raw_record||raw.source_record||raw.receipt_data||raw.data||raw.payload||{};
+ const x={...(nested&&typeof nested==='object'&&!Array.isArray(nested)?nested:{}),...raw};
+ const pick=keys=>ndHistoryValue(x,keys,null);
+ const number=pick(['receipt_no','receipt_number','receipt_id','invoice_no','invoice_number','order_no','order_number','sale_no','transaction_no','reference_no','source_receipt_id','id']);
+ const time=pick(['paid_at','payment_at','transaction_at','sale_at','sold_at','receipt_at','receipt_date','sale_date','transaction_date','date','created_at']);
+ const amount=pick(['net_amount','net_total','total_paid','paid_amount','total_amount','grand_total','final_amount','net_sales','total','amount']);
+ const payments=pick(['payment_details','payments','payment_breakdown','payment_methods']);
+ const method=pick(['payment_method','payment_type','pay_method','payment_mode','payment_name']);
+ const rawName=pick(['customer_name','member_name','client_name','customer','member','name']);
+ const rawPhone=pick(['customer_phone','member_phone','phone_number','mobile_number','mobile','phone']);
+ return {...x,_nd_tunai_history:true,order_no:number,created_at:time,total_amount:amount,
+  customer_name:typeof rawName==='object'?(rawName?.name||rawName?.full_name||''):rawName,
+  customer_phone:typeof rawPhone==='object'?(rawPhone?.phone||''):rawPhone,
+  item_count:pick(['item_count','items_count','total_items','quantity','total_quantity'])??(Array.isArray(x.items)?x.items.length:null),
+  payment_method:typeof method==='string'?method:null,
+  payment_details:Array.isArray(payments)?payments:null,
+  _nd_tunai_items:Array.isArray(x.items)?x.items:(Array.isArray(x.line_items)?x.line_items:[])};
+}
+async function ndTunaiHistoricalFetch(date){
+ // Historical receipts are read-only. Keep the date filter client-side because old
+ // Tunai imports differ in their date-column names and JSON payload structures.
+ const all=[];for(let offset=0;offset<10000;offset+=1000){
+  const q=await db.from('nd_tunai_historical_sales').select('*').range(offset,offset+999);
+  if(q.error){if(/does not exist|schema cache|permission denied|not found/i.test(q.error.message||''))return {rows:[],warning:q.error.message};throw q.error;}
+  const batch=q.data||[];all.push(...batch);if(batch.length<1000)break;
+ }
+ const seen=new Set(),rows=[];
+ for(const raw of all){const r=ndTunaiHistoricalNormalize(raw);
+  const when=ndHistoryTimestamp(r);if(!ndHistoryIsDay(when,date))continue;
+  const b=String(ndHistoryValue(r,['branch','outlet','store','location'],'')).trim().toLowerCase();
+  if(branch!=='all'&&b&&b!==String(branch).trim().toLowerCase())continue;
+  const id=String(ndHistoryValue(r,['order_no','receipt_number','id'],'')).trim();
+  const key=[b,id||String(when),ndHistoryValue(r,['total_amount'],0)].join('|');
+  if(seen.has(key))continue;seen.add(key);rows.push(r);
+ }
+ return {rows,warning:all.length>=10000?'历史记录超过查询上限，较早记录可能尚未加载。':''};
+}
 function ndHistoryMask(v){let t=String(v||'').replace(/\s/g,'');return t?'•••'+t.slice(-4):'—';}
 function ndHistoryPaymentChips(row){const result=[];const candidates=[['Cash',['cash_amount','cash_paid','paid_cash']],['Credit Card',['card_amount','credit_card_amount','paid_card']],['TNG',['tng_amount','touch_n_go_amount']],['Credit',['wallet_amount','credit_amount','member_credit_used']],['Deposit',['deposit_amount','deposit_used']]];
  for(const [label,keys] of candidates){const val=ndHistoryValue(row,keys,null);if(val!==null&&Number(val)>0)result.push([label,Number(val)]);}
@@ -40791,10 +40829,12 @@ async function ndHistoryFetch(kind,date){const dayStart=date+'T00:00:00+08:00',d
  const r=await db.from('nd_pro_beta_wallet_ledger').select('*').order('created_at',{ascending:false}).limit(2000);if(r.error)throw r.error;
  const rows=(r.data||[]).filter(x=>ndHistoryIsDay(ndHistoryTimestamp(x),date)).filter(x=>{const type=String(ndHistoryValue(x,['transaction_type','entry_type','type','movement_type'],'')).toLowerCase();return /top.?up|recharge|deposit|credit_added|credit_in|manual/.test(type)&&!/redeem|refund|deduct|reverse/.test(type);});return ndHistoryHydrate(rows);
  }
- const r=await db.from('nd_pro_beta_orders').select('*').gte('created_at',dayStart).lt('created_at',dayEnd).order('created_at',{ascending:false}).limit(2000);if(r.error)throw r.error;
+ const [r,legacy]=await Promise.all([db.from('nd_pro_beta_orders').select('*').gte('created_at',dayStart).lt('created_at',dayEnd).order('created_at',{ascending:false}).limit(2000),kind==='cash'?ndTunaiHistoricalFetch(date):Promise.resolve({rows:[]})]);
+ if(r.error&&!(legacy.rows||[]).length)throw r.error;
  let rows=(r.data||[]).filter(o=>branch==='all'||String(o.branch||o.outlet||'')===branch);
  if(kind==='cash')rows=rows.filter(o=>['paid','completed'].includes(String(o.order_status||o.status||'').toLowerCase()));
  if(kind==='debt')rows=rows.filter(o=>Number(ndHistoryValue(o,['outstanding_amount','balance_due','debt_balance'],0))>0||/partial|unpaid|outstanding|debt/i.test(String(ndHistoryValue(o,['payment_status'],''))));
+ if(kind==='cash'){const keys=new Set(rows.map(o=>String(ndHistoryValue(o,['order_no','receipt_number','order_number'],'')).trim()).filter(Boolean));rows.push(...legacy.rows.filter(o=>!keys.has(String(o.order_no||'').trim())));rows.sort((a,b)=>new Date(ndHistoryTimestamp(b)||0)-new Date(ndHistoryTimestamp(a)||0));}
  return ndHistoryHydrate(rows);
 }
 function ndHistoryDetail(host,row,kind){let overlay=document.getElementById('ndHistoryDetailOverlay');if(!overlay){overlay=document.createElement('div');overlay.id='ndHistoryDetailOverlay';overlay.className='nd-history-overlay';document.body.appendChild(overlay);}
@@ -40806,6 +40846,11 @@ function ndHistoryDetail(host,row,kind){let overlay=document.getElementById('ndH
  overlay.querySelector('#ndHistoryDetailPrint').onclick=()=>window.print();
  overlay.onclick=e=>{if(e.target===overlay)close();};
  const itemBox=overlay.querySelector('#ndHistoryDetailItems');if(!db||kind==='recharge'){itemBox.textContent=kind==='recharge'?'充值记录无服务项目':'无法连接';return;}
+ if(row._nd_tunai_history){
+  const items=row._nd_tunai_items||[];
+  itemBox.innerHTML=items.length?items.map(x=>`<div class="nd-receipt-service"><div class="nd-receipt-service-top"><span class="nd-receipt-service-icon">▧</span><div><strong>${ndHistorySafe(ndHistoryValue(x,['item_name','service_name','name','description'],'历史服务'))}</strong><small>${ndHistoryMoney(ndHistoryValue(x,['amount','total','line_total','price'],0))}</small></div><b>${ndHistorySafe(ndHistoryValue(x,['quantity','qty'],1))}</b></div></div>`).join(''):'<div class="nd-receipt-panel">该历史收据未包含逐项服务资料</div>';
+  const qty=overlay.querySelector('#ndReceiptQty');if(qty)qty.textContent=String(row.item_count??items.length??'—');return;
+ }
  const id=ndHistoryValue(row,['id'],null);if(id==null){itemBox.textContent='无订单 ID';return;}
  (async()=>{try{const r=await db.from('nd_pro_beta_order_items').select('*').eq('order_id',id).limit(200);if(r.error)throw r.error;if(!itemBox.isConnected)return;const items=r.data||[];itemBox.innerHTML=items.map(x=>{const qty=ndHistoryValue(x,['quantity'],1);const amount=ndHistoryValue(x,['total_amount','line_total','unit_price','price'],null);const staffName=ndHistoryValue(x,['staff_name','employee_name','service_staff_name'],null);return `<div class="nd-receipt-service"><div class="nd-receipt-service-top"><span class="nd-receipt-service-icon">▧</span><div><strong>${ndHistorySafe(ndHistoryValue(x,['item_name','name','service_name','product_name'],'服务项目'))}</strong><small>${amount==null?'—':ndHistoryMoney(amount)}</small></div><b>${ndHistorySafe(qty)}</b></div>${staffName?`<div class="nd-receipt-staff"><span>员工</span><strong>${ndHistorySafe(staffName)}</strong></div>`:''}</div>`}).join('')||'<div class="nd-receipt-panel">没有关联服务记录</div>';const qty=overlay.querySelector('#ndReceiptQty');if(qty)qty.textContent=String(items.reduce((n,x)=>n+(Number(x.quantity)||1),0));}catch(e){if(itemBox.isConnected)itemBox.textContent='项目资料读取失败：'+String(e.message||e);}})();
 }
@@ -40840,16 +40885,19 @@ function renderDailyReport(host){
    if(query.error)throw query.error;
    const orders=(query.data||[]).filter(o=>branch==='all'||String(o.branch||o.outlet||'')===branch);
    const settled=orders.filter(o=>['paid','completed'].includes(String(o.order_status||'').toLowerCase()));
-   const amount=settled.reduce((sum,o)=>sum+Number(o.total_amount||0),0);
+   const legacy=await ndTunaiHistoricalFetch(ndReportDate);
+   const knownReceipts=new Set(settled.map(o=>String(ndHistoryValue(o,['order_no','receipt_number','order_number'],'')).trim()).filter(Boolean));
+   const legacyRows=legacy.rows.filter(o=>!knownReceipts.has(String(o.order_no||'').trim()));
+   const amount=[...settled,...legacyRows].reduce((sum,o)=>sum+Number(o.total_amount||0),0);
    if(!host.querySelector('#ndRptState'))return;
-   set('order_count',String(orders.length));
-   set('customer_count',String(new Set(orders.map(o=>o.customer_id).filter(Boolean)).size));
+   set('order_count',String(orders.length+legacyRows.length));
+   set('customer_count',String(new Set([...orders.map(o=>o.customer_id).filter(Boolean).map(String),...legacyRows.map(o=>String(o.customer_phone||o.customer_name||o.order_no)).filter(Boolean)]).size));
    host.querySelector('#ndRptTotal').textContent=ndMoney(amount);
-   const paymentMap=new Map();for(const order of settled){for(const [name,value] of ndHistoryPaymentChips(order)){const n=Number(value);if(Number.isFinite(n)&&n>0)paymentMap.set(name,(paymentMap.get(name)||0)+n)}}
+   const paymentMap=new Map();for(const order of [...settled,...legacyRows]){for(const [name,value] of ndHistoryPaymentChips(order)){const n=Number(value);if(Number.isFinite(n)&&n>0)paymentMap.set(name,(paymentMap.get(name)||0)+n)}}
    host.querySelector('#ndRptPayments').innerHTML=[...paymentMap].map(([name,value])=>`<button type="button" class="nd-report-payment"><span class="nd-report-payment-icon">▣</span><span>${ndHistorySafe(name)}</span><strong>${ndHistoryMoney(value)}</strong></button>`).join('');
    host.querySelectorAll('.nd-report-payment').forEach(b=>b.onclick=()=>openReceipts('cash'));
    if(orders.length){const ids=orders.map(o=>o.id).filter(x=>x!=null);if(ids.length){const items=await db.from('nd_pro_beta_order_items').select('order_id,quantity').in('order_id',ids.slice(0,1000)).limit(5000);if(!items.error&&host.querySelector('#ndRptState'))set('item_count',String((items.data||[]).reduce((n,x)=>n+(Number(x.quantity)||1),0)))}}
-   state.textContent='仅统计已连接的真实订单；未连接的账本以「—」显示。';
+   state.textContent=legacy.warning||'仅统计已连接的真实订单；未连接的账本以「—」显示。';
   }catch(e){if(host.querySelector('#ndRptState'))state.textContent='订单报表读取失败：'+String(e.message||e)}
  })();
 }
