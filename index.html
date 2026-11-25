@@ -9,6 +9,7 @@ html.nd-network-offline #ndOfflineLogoScreen{display:flex!important}
 #ndOfflineLogoScreen img{display:block;width:min(82vw,430px);height:auto;max-height:80dvh;object-fit:contain}
 @media (prefers-reduced-motion:no-preference){#ndOfflineLogoScreen{transition:opacity .2s ease}}
 </style>
+
 <script id="nd-offline-logo-script">
 (function(){
  'use strict';
@@ -41012,6 +41013,15 @@ function ndUnifiedVoucherInfo(host){
   host.querySelector('#ndVoucherOpenPackages').addEventListener('click',()=>{active='packages';render()});
 }
 const activeStaff=()=>staff.filter(s=>branch==='all'||s.outlet===branch);
+const ndGenderKey='nd_pro_staff_calendar_gender_v1';
+function ndGenderOverrides(){try{return JSON.parse(localStorage.getItem(ndGenderKey)||'{}')||{}}catch(_){return {}}}
+function ndStaffGender(s){
+ const raw=String(ndGenderOverrides()[String(s.id)]||s.gender||s.sex||s.employee_gender||s.profile?.gender||'').trim().toLowerCase();
+ if(['male','m','男','男性','man','boy'].includes(raw))return 'male';
+ if(['female','f','女','女性','woman','girl'].includes(raw))return 'female';
+ return 'other';
+}
+function ndSetStaffGender(id,gender){const values=ndGenderOverrides();values[String(id)]=gender;localStorage.setItem(ndGenderKey,JSON.stringify(values));}
 const timeSlots=()=>{const {start,end}=visibleTimes(),a=[];for(let m=start;m<end;m+=15)a.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));return a;};
 const tzTime=(v)=>new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(v));
 const tzDate=(v)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(v));
@@ -41030,6 +41040,10 @@ async function openRestPanel(employeeId){
   const savedValue=saved>=1?'full':saved===.5?half:'work';
   const opts=[['work',tr('Working','上班'),'✓'],['first',tr('First Half Off','上半时段休息'),'☀'],['second',tr('Second Half Off','下半时段休息'),'☾'],['full',tr('Full Day Off','全天休息'),'⊘']];
   body.innerHTML=`<div class="prostaff-tabs"><button type="button" class="chosen" data-staff-tab="bookings">${tr('Appointments','预约')}</button><button type="button" data-staff-tab="rest">${tr('Rest Time','休息时间')}</button></div><button type="button" class="prostaff-add" aria-label="${tr('New Appointment','新增预约')}" title="${tr('New Appointment','新增预约')}">＋</button><header class="prostaff-title"><span class="prostaff-avatar">${esc((emp.nickname||emp.name||'S').slice(0,1).toUpperCase())}</span><div><h3>${esc(emp.nickname||emp.name)}</h3><small>${esc(b)} · ${esc(date)}</small></div><span class="prostaff-pill ${saved?'is-off':'is-working'}">${esc(label(saved,half))}</span></header><section id="proStaffBookingTab" class="prostaff-tab-body">${booked.length?booked.map(a=>`<button type="button" class="prostaff-booking" data-staff-booking="${esc(a.id)}"><strong>${esc(customers.find(c=>String(c.id)===String(a.customer_id))?.full_name||tr('Customer','顾客'))}</strong><span class="prostaff-service">${esc(a.service_name||'')}</span><span class="prostaff-time">◷ ${clock12(tzTime(a.starts_at))} · ${esc(a.duration_minutes||60)} ${tr('min','分钟')}</span><span class="prostaff-status">${esc(a.status||'')}</span></button>`).join(''):`<div class="prostaff-empty"><span>▦</span><strong>${tr('No appointments today','当天没有预约')}</strong></div>`}</section><section id="proStaffRestTab" class="prostaff-tab-body" hidden><div class="prostaff-choices">${opts.map(([v,n,ico])=>`<label class="prostaff-choice opt-${v}"><input type="radio" name="restDays" value="${v}" ${savedValue===v?'checked':''} ${today?'':'disabled'}><span class="prostaff-symbol">${ico}</span><span>${n}</span><span class="prostaff-check">✓</span></label>`).join('')}</div>${today?`<button id="ndProRestSave" type="button" class="pro-action prostaff-save">${tr('Save','保存')}</button>`:''}</section>`;
+  const genderControls=document.createElement('div');genderControls.className='nd-staff-gender-controls';
+  genderControls.innerHTML=`<span>日历分组 / Gender</span><div>${[['male','♂ 男 · 蓝色'],['other','— 未设置'],['female','♀ 女 · 粉色']].map(([v,t])=>`<button type="button" data-choose-gender="${v}" class="${ndStaffGender(emp)===v?'selected':''}">${t}</button>`).join('')}</div>`;
+  body.querySelector('.prostaff-title')?.after(genderControls);
+  genderControls.querySelectorAll('[data-choose-gender]').forEach(button=>button.onclick=()=>{ndSetStaffGender(employeeId,button.dataset.chooseGender);el('ndProRestModal').hidden=true;render();stat('已保存技师日历分组：男左、未设置居中、女右');});
   body.querySelector('.prostaff-add').onclick=()=>{
    el('ndProRestModal').hidden=true;
    const slot=Array.from(el('ndProContent')?.querySelectorAll('[data-slot][data-staff]')||[]).find(x=>Number(x.dataset.staff)===employeeId&&!x.hasAttribute('data-rest-blocked'));
@@ -41076,9 +41090,8 @@ async function openRestPanel(employeeId){
 function renderAppointments(host){
 if(branch==='all'||!valid.includes(branch))branch=valid.includes('Eco Botanic')?'Eco Botanic':valid[0];
 const list=appointments.filter(a=>tzDate(a.starts_at)===date&&a.branch===branch);
-const staffGender=s=>{const raw=String(s.gender||s.sex||s.employee_gender||'').trim().toLowerCase();if(['male','m','男','男性','man','boy'].includes(raw))return 'male';if(['female','f','女','女性','woman','girl'].includes(raw))return 'female';return 'other';};
 const genderOrder={male:0,other:1,female:2};
-const staffs=activeStaff().filter(s=>s.outlet===branch).sort((a,b)=>genderOrder[staffGender(a)]-genderOrder[staffGender(b)]);
+const staffs=activeStaff().filter(s=>s.outlet===branch).sort((a,b)=>genderOrder[ndStaffGender(a)]-genderOrder[ndStaffGender(b)]);
 const roomCols=calendarMode==='room';
 const columns=roomCols?roomsFor(branch).filter(r=>r.branch===branch):staffs;
 const assigned=id=>links.filter(l=>l.appointment_id===id).map(l=>String(l.employee_id));
@@ -41091,7 +41104,7 @@ const weekStart=new Date(dayObj);weekStart.setDate(dayObj.getDate()-((dayObj.get
 const weekdayNames=lang==='zh'?['一','二','三','四','五','六','日']:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const weekButtons=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);const ymd=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const n=appointments.filter(a=>tzDate(a.starts_at)===ymd&&(branch==='all'||a.branch===branch)&&a.status!=='cancelled').length;return `<button type="button" class="proref-weekday ${ymd===date?'selected':''}" data-pro-date="${ymd}"><span>${weekdayNames[i]}</span><b>${d.getDate()}</b><small>${n}</small></button>`;}).join('');
 const ccount=Math.max(1,columns.length);
-let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="Business Hours">⚙</button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${staffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
+let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="Business Hours">⚙</button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${ndStaffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
 const toMinutes=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 for(let ri=0;ri<slots.length;ri++){
  const t=slots[ri];const row=ri+2;
@@ -41107,7 +41120,7 @@ for(let ri=0;ri<slots.length;ri++){
    span=Math.max(1,span);
    const customer=customers.find(c=>c.id===booking.customer_id);
    grid+=`<button type="button" class="pro-cell pro-booked proref-booking nd-cal-status-${esc(booking.status)} nd-entitlement-${esc(ndBenefitCache.get(String(booking.customer_id))?.value||'unknown')}" style="grid-column:${col};grid-row:${row}/span ${span}" data-edit="${esc(booking.id)}"><strong>${esc(customer?.full_name||'Customer')}</strong><span>${esc(booking.service_name)}</span><small>${clock12(mins(booking.starts_at))} · ${esc(booking.status)}</small></button>`;
-  }else grid+=`<button type="button" class="pro-cell proref-empty ${roomCols?'':'nd-gender-'+staffGender(person)} ${resting?'pro-resting pro-resting-'+rest.kind:''}" style="grid-column:${col};grid-row:${row}" data-slot="${t}" ${resting?'data-rest-blocked="true"':''} ${roomCols?`data-room="${person.id}"`:`data-staff="${person.id}"`} aria-label="Add appointment ${t}"></button>`;
+  }else grid+=`<button type="button" class="pro-cell proref-empty ${roomCols?'':'nd-gender-'+ndStaffGender(person)} ${resting?'pro-resting pro-resting-'+rest.kind:''}" style="grid-column:${col};grid-row:${row}" data-slot="${t}" ${resting?'data-rest-blocked="true"':''} ${roomCols?`data-room="${person.id}"`:`data-staff="${person.id}"`} aria-label="Add appointment ${t}"></button>`;
  }
 }
 if(!roomCols)for(const record of ndBreakRows){
@@ -41146,6 +41159,11 @@ host.innerHTML=`<section class="proref-schedule"><div class="proref-calendar-top
 host.querySelectorAll('[data-pro-date]').forEach(b=>b.onclick=async()=>{date=b.dataset.proDate;await refreshRest();await ndFetchBookingBenefits();render();});
 const shiftWeek=async n=>{const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+n);date=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;await refreshRest();await ndFetchBookingBenefits();render();};
 const calendarBack=document.createElement('button');calendarBack.type='button';calendarBack.id='proCalendarBack';calendarBack.setAttribute('aria-label','返回 Pro Beta 首页');calendarBack.textContent='‹';calendarBack.onclick=()=>{active='home';render();};host.querySelector('.proref-calendar-top')?.prepend(calendarBack);
+// Keep branch selection visible even though the older oversized toolbar is hidden.
+const branchPicker=document.createElement('select');branchPicker.id='ndProCalendarBranch';branchPicker.setAttribute('aria-label','选择分行');
+for(const name of valid){const option=document.createElement('option');option.value=name;option.textContent=name;option.selected=name===branch;branchPicker.appendChild(option)}
+branchPicker.onchange=async()=>{branch=branchPicker.value;await refreshRest();await ndFetchBookingBenefits();render();};
+host.querySelector('.proref-calendar-top')?.append(branchPicker);
 el('proWeekPrev').onclick=()=>void shiftWeek(-7);el('proWeekNext').onclick=()=>void shiftWeek(7);el('proWeekDate').onchange=async e=>{date=e.target.value;await refreshRest();await ndFetchBookingBenefits();render();};
 
 // Week date-strip swipes navigate weeks. Calendar's staff columns keep their own horizontal scroll.
@@ -44105,6 +44123,12 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
 #ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-female{background:#f9dce9!important;color:#a34273!important}
 #ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-male:not(.pro-resting){background:#e9f4ff!important}
 #ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-female:not(.pro-resting){background:#fff0f6!important}
+.nd-staff-gender-controls{background:#fff;border-radius:14px;padding:12px;margin:0 0 14px;color:#536178;font-size:12px;font-weight:700}
+.nd-staff-gender-controls>div{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.nd-staff-gender-controls button{flex:1 1 auto;border:1px solid #dbe2ec;border-radius:9px;background:#f5f7fa;color:#26364d;padding:9px 5px;font-size:12px;font-weight:700}
+.nd-staff-gender-controls button[data-choose-gender="male"]{background:#e9f4ff}
+.nd-staff-gender-controls button[data-choose-gender="female"]{background:#fff0f6}
+.nd-staff-gender-controls button.selected{border:2px solid #3677f3;box-shadow:0 0 0 1px #3677f3}
 #ndProBetaPage .proref-calendar-grid .pro-booked,#ndProBetaPage .proref-calendar-grid .proref-booking{padding:5px 4px!important;gap:3px!important;border-radius:11px!important}
 #ndProBetaPage .proref-calendar-grid .pro-booked strong,#ndProBetaPage .proref-calendar-grid .proref-booking strong{font-size:10px!important;line-height:1.15!important}
 #ndProBetaPage .proref-calendar-grid .pro-booked span,#ndProBetaPage .proref-calendar-grid .proref-booking span{font-size:9px!important;line-height:1.2!important}
@@ -44158,4 +44182,21 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  #ndProBookingModal .nd-guest-service-tabs button{min-height:44px!important;font-size:14px!important}
  #ndProBookingModal .nd-guest-service-panel{gap:8px!important;padding:10px 0!important}
 }
+</style>
+
+<style id="nd-pro-beta-consistency-fix-20261126">
+/* Final shared mobile scale. Do not enlarge the compact screenshot-based UI. */
+#ndProBetaPage,#ndProBetaPage button,#ndProBetaPage input,#ndProBetaPage select,#ndProBetaPage textarea{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#ndProBetaPage,#ndProBetaPage *{box-sizing:border-box}
+#ndProBetaPage #ndProContent{min-width:0}
+#ndProBetaPage .proref-calendar-top{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;overflow:hidden!important}
+#ndProBetaPage .proref-calendar-top .proref-current-date{flex:0 1 175px!important;min-width:0!important}
+#ndProBetaPage #ndProCalendarBranch{display:block!important;flex:0 1 115px!important;width:115px!important;min-width:70px!important;max-width:120px!important;height:36px!important;min-height:36px!important;padding:3px 18px 3px 6px!important;border:1px solid #dbe5ef!important;border-radius:11px!important;background:#f1f6ff!important;color:#2468cc!important;font-size:11px!important;font-weight:750!important;text-overflow:ellipsis!important}
+#ndProBetaPage .proref-calendar-top .proref-cal-count{display:none!important}
+#ndProBetaPage .proref-calendar-top>#proCalendarBack{flex:0 0 26px!important;width:26px!important;min-width:26px!important}
+#ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-male{background:#d3e8ff!important;color:#1556a0!important}
+#ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-female{background:#f9d7e5!important;color:#9a3e6c!important}
+#ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-male:not(.pro-resting){background:#e8f3ff!important}
+#ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-female:not(.pro-resting){background:#ffedf4!important}
+@media(max-width:390px){#ndProBetaPage .proref-calendar-top{gap:4px!important;padding-inline:5px!important}#ndProBetaPage .proref-calendar-top .proref-current-date{max-width:165px!important}#ndProBetaPage #ndProCalendarBranch{max-width:105px!important;font-size:10px!important}}
 </style>
