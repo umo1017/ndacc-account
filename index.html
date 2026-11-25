@@ -38914,11 +38914,17 @@ function enhance(){
  const tabsCard=document.createElement('section');tabsCard.className='nd-ref-tabs-card';const tabs=document.createElement('div');tabs.className='nd-ref-tabs';const tabBody=document.createElement('div');tabBody.className='nd-ref-tab-body';tabsCard.append(tabs,tabBody);details.append(tabsCard);
  const serviceField=details.querySelector('[name="service"]')?.closest('.pro-field');const durationField=details.querySelector('[name="duration"]')?.closest('.pro-field');const employeeField=details.querySelector('[name="employee"]')?.closest('.pro-field');const roomField=details.querySelector('[name="room_id"]')?.closest('.pro-field');
  for(const [el,kind] of [[serviceField,'service'],[durationField,'duration'],[employeeField,'employee'],[roomField,'room']])if(el){el.dataset.refKind=kind;tabBody.append(el)}
+ // Use the booking module's real per-person service controls.  This earlier
+ // reference enhancer must not paint a second, disconnected set of guest tabs.
+ const perPersonTabs=details.querySelector('.nd-guest-service-tabs');
+ const perPersonPanels=details.querySelector('.nd-guest-service-panels');
+ if(perPersonTabs)tabBody.prepend(perPersonTabs);
+ if(perPersonPanels)perPersonTabs?.after(perPersonPanels);
  const block=document.createElement('label');block.className='nd-ref-room-block';block.innerHTML='<span>🔒 封锁预约时间段</span><input type="checkbox" disabled title="暂未连接封锁时段数据库">';tabBody.append(block);
- const hint=document.createElement('p');hint.className='nd-ref-hint';hint.textContent='多人预约共用同一服务与时长；技师分别安排。';tabBody.append(hint);
+ const hint=document.createElement('p');hint.className='nd-ref-hint';hint.textContent='每位顾客可选择不同护理和时长，并分别安排空闲技师。';tabBody.append(hint);
  const reminder=document.createElement('div');reminder.className='nd-ref-reminder';reminder.textContent='🔔 不提醒';details.insertBefore(reminder,details.querySelector('.proref-actions'));
  let selected=0;
- function refreshTabs(){const n=Math.max(1,Number(document.getElementById('proGuestsCount')?.textContent)||1);selected=Math.min(selected,n-1);tabs.replaceChildren();for(let i=0;i<n;i++){const b=document.createElement('button');b.type='button';b.textContent='第'+(i+1)+'位';b.setAttribute('aria-selected',String(i===selected));b.onclick=()=>{selected=i;refreshTabs()};tabs.append(b)}
+ function refreshTabs(){const n=Math.max(1,Number(document.getElementById('proGuestsCount')?.textContent)||1);selected=0;tabs.replaceChildren();
  const guestRows=employeeField?.querySelectorAll('select[data-guest-worker]')||[];
  const primaryEmployee=form.elements.employee;
  if(employeeField){let active=selected===0?primaryEmployee:guestRows[selected-1];let existing=tabBody.querySelector('.nd-ref-selected-employee');existing?.remove();if(selected>0){const row=document.createElement('label');row.className='pro-field nd-ref-selected-employee';row.dataset.refKind='employee';row.append(document.createTextNode('技师'));if(active){const proxy=document.createElement('select');proxy.className='nd-ref-worker-proxy';for(const option of active.options)proxy.add(new Option(option.text,option.value,option.defaultSelected,option.selected));proxy.value=active.value;proxy.onchange=()=>{active.value=proxy.value;active.dispatchEvent(new Event('change',{bubbles:true}));};row.append(proxy)}tabBody.append(row)}employeeField.style.display=selected===0?'flex':'none';}
@@ -44102,4 +44108,23 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
 #ndProBookingModal .nd-guest-service-panel strong{font-size:15px}
 #ndProBookingModal .nd-guest-service-panel select{width:100%;min-height:44px;border:0;border-bottom:1px solid #e7e7ea;border-radius:0;background:#fff;font-size:15px;color:#272a31}
 #ndProBookingModal .nd-guest-service-panel small{font-size:12px;color:#7a7e87}
+/* One compact booking layout: hide obsolete duplicated reference tabs. */
+#ndProBookingModal .nd-ref-tabs{display:none!important}
+#ndProBookingModal .nd-ref-tabs-card{margin:0!important;padding:0!important;min-height:0!important}
+#ndProBookingModal .nd-ref-tab-body{padding:0 12px!important}
+#ndProBookingModal .nd-ref-tab-body>.nd-guest-service-tabs{margin:0!important}
+#ndProBookingModal .nd-ref-tab-body>.nd-guest-service-panels{padding:0 10px 8px!important}
+#ndProBookingModal .proref-details:not([hidden]){gap:8px!important}
+#ndProBookingModal .nd-ref-guests{margin:0!important;padding:7px 12px!important;min-height:54px!important}
+#ndProBookingModal .nd-ref-tab-body .pro-field{min-height:52px!important;padding:7px 0!important;margin:0!important}
+#ndProBookingModal .nd-ref-tab-body .pro-field select{min-height:38px!important;font-size:14px!important}
+#ndProBookingModal .nd-ref-room-block{min-height:48px!important;padding:8px 0!important}
+#ndProBookingModal .nd-ref-reminder{min-height:50px!important;padding:12px!important;font-size:14px!important}
+#ndProBookingModal #proAppointmentSave{min-height:52px!important;font-size:16px!important}
+@media(max-width:760px){
+ #ndProBookingModal .pro-booking-panel{width:100%!important;max-width:100%!important;box-sizing:border-box!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field{min-height:50px!important}
+ #ndProBookingModal .nd-guest-service-tabs button{min-height:44px!important;font-size:14px!important}
+ #ndProBookingModal .nd-guest-service-panel{gap:8px!important;padding:10px 0!important}
+}
 </style>
