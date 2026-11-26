@@ -9,6 +9,45 @@ html.nd-network-offline #ndOfflineLogoScreen{display:flex!important}
 #ndOfflineLogoScreen img{display:block;width:min(82vw,430px);height:auto;max-height:80dvh;object-fit:contain}
 @media (prefers-reduced-motion:no-preference){#ndOfflineLogoScreen{transition:opacity .2s ease}}
 </style>
+<style id="nd-booking-compact-reference-two-v29">
+/* Reference-two mobile appointment sheet: denser rows without changing form controls. */
+@media (max-width:760px){
+ #ndProBookingModal .pro-booking-panel{padding:10px 12px calc(116px + env(safe-area-inset-bottom))!important;background:#f1f0f6!important}
+ #ndProBookingModal #proAppointmentHeading{font-size:17px!important;line-height:24px!important;margin:0 0 10px!important;padding:0 30px!important}
+ #ndProBookingModal .proref-primary{margin:0 0 9px!important;border-radius:15px!important;box-shadow:none!important;padding:0!important}
+ #ndProBookingModal .proref-primary .proref-datetime{min-height:50px!important;padding:6px 10px 6px 49px!important}
+ #ndProBookingModal .proref-datetime:before{left:12px!important;width:27px!important;height:27px!important}
+ #ndProBookingModal .nd-date-render{font-size:15px!important;line-height:21px!important}
+ #ndProBookingModal .nd-time-render{font-size:14px!important;line-height:19px!important}
+ #ndProBookingModal .proref-phone-row{min-height:48px!important;padding:5px 10px!important}
+ #ndProBookingModal .proref-phone-input input{font-size:16px!important;min-height:34px!important}
+ #ndProBookingModal .nd-ref-customer{min-height:48px!important;padding:6px 10px!important;font-size:14px!important}
+ #ndProBookingModal .nd-ref-customer strong{font-size:15px!important}
+ #ndProBookingModal .proref-details:not([hidden]){gap:8px!important;margin-top:8px!important}
+ #ndProBookingModal .nd-ref-guests{min-height:49px!important;padding:5px 11px!important;border-radius:15px!important}
+ #ndProBookingModal .nd-ref-guests .pro-field>label{font-size:14px!important}
+ #ndProBookingModal .nd-ref-guests .probooking-counter button{width:29px!important;height:29px!important;font-size:19px!important}
+ #ndProBookingModal .nd-ref-tabs-card{border-radius:15px!important}
+ #ndProBookingModal .nd-ref-tab-body{padding:0 11px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field,
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="service"],
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="duration"],
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"],
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="room"]{min-height:46px!important;padding:4px 0!important;gap:10px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind]:before,
+ #ndProBookingModal .nd-staff-compact:before{width:30px!important;height:30px!important;flex-basis:30px!important;font-size:18px!important;border-radius:8px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="service"]:before{font-size:24px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field select,
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="duration"] select{font-size:16px!important;min-height:36px!important;padding:5px 9px!important}
+ #ndProBookingModal .nd-ref-tab-body .nd-service-launch{min-height:36px!important}
+ #ndProBookingModal .nd-ref-tab-body .nd-service-launch-current{font-size:15px!important}
+ #ndProBookingModal .nd-staff-compact{min-height:43px!important;padding:4px 0!important;font-size:14px!important;line-height:19px!important}
+ #ndProBookingModal .nd-ref-room-block{min-height:45px!important;padding:5px 0!important;font-size:14px!important}
+ #ndProBookingModal .nd-ref-reminder{min-height:48px!important;padding:11px!important;font-size:14px!important;border-radius:15px!important}
+ #ndProBookingModal .proref-details .proref-actions textarea{font-size:14px!important;min-height:80px!important}
+ #ndProBookingModal .proref-actions #proAppointmentSave{min-height:48px!important;font-size:16px!important}
+}
+</style>
 <style id="nd-staff-sheet-v23">
 /* Keep the appointment compact; the complete employee list belongs in its own sheet. */
 #ndProBookingModal .nd-appointment-staff-toggle .nd-touch-workers,
@@ -41370,6 +41409,12 @@ el('proCalendarGear')?.addEventListener('click',()=>{active='hours';render();});
 host.querySelectorAll('[data-rest-blocked]').forEach(b=>b.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();stat(tr('This therapist is off during this period.','该技师在此时段休息。'),true);},true));
 
 const form=el('proAppointmentForm');
+// Use a consistent visible MIN suffix in every booking duration picker.
+// The option values remain numbers so saving/editing and multi-guest logic are unchanged.
+for(const option of Array.from(form.elements.duration?.options||[])){
+  const minutes=String(option.value||'').trim();
+  if(/^\d+$/.test(minutes))option.textContent=minutes+' MIN';
+}
 // Refresh the exact same cloud source as Services when booking opens.
 // Match the combined Services & Service Menu list, including catalog entries.
 let ndBookingRefreshToken=0;
@@ -41433,7 +41478,7 @@ form.elements.service?.addEventListener('change',()=>{
   if(minutes>0){
     const duration=form.elements.duration;
     const str=String(minutes);
-    if(!Array.from(duration.options).some(o=>o.value===str))duration.add(new Option(str,str));
+    if(!Array.from(duration.options).some(o=>o.value===str))duration.add(new Option(str+' MIN',str));
     duration.value=str;
   }
 });
@@ -41621,7 +41666,7 @@ let guestCount=1;
      service.onchange=()=>{state.service=service.value;const matched=ndBookingServices().find(s=>ndBookingName(s)===state.service);if(matched?.duration_minutes){state.duration=Number(matched.duration_minutes);duration.value=String(state.duration);}};
      const duration=document.createElement('select');duration.setAttribute('aria-label','第'+(i+1)+'位时长');
      duration.append(...Array.from(form.elements.duration.options).map(o=>o.cloneNode(true)));
-     if(!Array.from(duration.options).some(o=>Number(o.value)===state.duration))duration.add(new Option(state.duration+' 分钟',String(state.duration)));
+     if(!Array.from(duration.options).some(o=>Number(o.value)===state.duration))duration.add(new Option(state.duration+' MIN',String(state.duration)));
      duration.value=String(state.duration);duration.onchange=()=>{state.duration=Number(duration.value)};
      const label=document.createElement('strong');label.textContent='选择服务 · 第'+(i+1)+'位';
      const worker=document.createElement('small');worker.textContent='技师由下方「服务员工」选择区按人数对应分配。';
@@ -44559,3 +44604,92 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
   }
 }
 </style>
+<style id="nd-report-and-pending-compact-v27">
+/* Compact mobile typography and spacing for Daily Report and pending orders. */
+@media(max-width:1024px){
+  #ndProBetaPage .nd-report-screenshot{
+    padding:14px 16px 45px!important;
+    font-size:13px!important;
+    line-height:1.3!important;
+  }
+  #ndProBetaPage .nd-report-screenshot .nd-ref-report-head{
+    min-height:48px!important;
+    margin-bottom:20px!important;
+  }
+  #ndProBetaPage .nd-report-screenshot .nd-ref-report-head>button{font-size:25px!important;height:42px!important}
+  #ndProBetaPage .nd-report-screenshot .nd-ref-date{
+    min-height:39px!important;padding:5px 8px!important;gap:4px!important;border-radius:12px!important;
+  }
+  #ndProBetaPage .nd-report-screenshot .nd-report-date-label{font-size:14px!important}
+  #ndProBetaPage .nd-report-screenshot .nd-ref-date button{font-size:11px!important}
+  #ndProBetaPage .nd-report-screenshot .nd-ref-total{
+    font-size:17px!important;margin-bottom:16px!important;
+  }
+  #ndProBetaPage .nd-report-screenshot .nd-ref-payment-rows{margin-bottom:19px!important}
+  #ndProBetaPage .nd-report-screenshot .nd-report-payment{
+    height:50px!important;font-size:14px!important;grid-template-columns:25px minmax(0,1fr) auto!important;gap:8px!important;
+  }
+  #ndProBetaPage .nd-report-screenshot .nd-ref-report-group{margin-bottom:19px!important}
+  #ndProBetaPage .nd-report-screenshot .nd-ref-report-group h2{
+    font-size:16px!important;margin-bottom:5px!important;
+  }
+  #ndProBetaPage .nd-report-screenshot .nd-ref-report-row{
+    min-height:49px!important;font-size:14px!important;grid-template-columns:25px minmax(0,1fr) auto!important;gap:8px!important;
+  }
+  #ndProBetaPage .nd-report-screenshot .nd-ref-report-row strong{font-size:15px!important}
+  #ndProBetaPage .nd-report-screenshot .nd-ref-report-ico{font-size:18px!important}
+  #ndProBetaPage:has(.nd-order-flow) .nd-order-flow{
+    padding:calc(max(12px,env(safe-area-inset-top)) + 10px) 12px max(24px,env(safe-area-inset-bottom))!important;
+    font-size:13px!important;
+  }
+  #ndProBetaPage .nd-order-flow .nd-order-head{min-height:43px!important;margin-bottom:13px!important}
+  #ndProBetaPage .nd-order-flow .nd-order-head h2{font-size:17px!important}
+  #ndProBetaPage .nd-order-flow .nd-order-head button{font-size:23px!important;width:32px!important;height:36px!important}
+  #ndProBetaPage .nd-order-flow .nd-order-search{padding:9px 11px!important;border-radius:13px!important;gap:8px!important}
+  #ndProBetaPage .nd-order-flow .nd-order-search input{
+    font-size:12px!important;height:36px!important;min-height:36px!important;
+  }
+  #ndProBetaPage .nd-order-flow .nd-order-today{font-size:14px!important;margin:15px 9px 8px!important}
+  #ndProBetaPage .nd-order-flow .nd-order-new{
+    min-height:104px!important;gap:4px!important;font-size:14px!important;border-radius:15px!important;
+  }
+  #ndProBetaPage .nd-order-flow .nd-order-new i{
+    font-size:30px!important;width:49px!important;height:49px!important;
+  }
+  #ndProBetaPage .nd-order-flow .nd-order-note{font-size:11px!important;line-height:1.5!important}
+}
+</style>
+<script id="nd-booking-compact-reference-two-v29-order">
+/* Keep the compact appointment overrides after older reference-theme rules. */
+(()=>{
+ const apply=()=>{const style=document.getElementById('nd-booking-compact-reference-two-v29');if(style&&document.body)document.body.appendChild(style)};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
+})();
+</script>
+<style id="nd-booking-uniform-small-five-v30">
+/* 小五号 typography for the booking sheet. Keep touch-target dimensions unchanged. */
+@media(max-width:760px){
+ #ndProBookingModal .pro-booking-panel,
+ #ndProBookingModal .pro-booking-panel :is(h1,h2,h3,h4,h5,h6,p,span,strong,small,label,button,input,select,option,textarea,div,a),
+ #ndProBookingModal #proAppointmentHeading,
+ #ndProBookingModal .nd-date-render,
+ #ndProBookingModal .nd-time-render,
+ #ndProBookingModal .nd-ref-customer strong,
+ #ndProBookingModal .nd-staff-compact,
+ #ndProBookingModal .nd-ref-tab-body .nd-service-launch-current,
+ #ndProBookingModal .proref-actions #proAppointmentSave{
+  font-size:12px!important;
+  line-height:1.45!important;
+ }
+ #ndProBookingModal .pro-booking-panel :is(input,select,textarea){font-size:12px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind]:before,
+ #ndProBookingModal .nd-staff-compact:before{font-size:19px!important}
+ #ndProBookingModal .pro-booking-panel button{touch-action:manipulation}
+}
+</style>
+<script id="nd-booking-uniform-small-five-v30-order">
+(()=>{
+ const apply=()=>{const style=document.getElementById('nd-booking-uniform-small-five-v30');if(style&&document.body)document.body.appendChild(style)};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
+})();
+</script>
