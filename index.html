@@ -38238,7 +38238,7 @@ function revealFromCell(cell){
 document.addEventListener('click',event=>{
  const cell=event.target instanceof Element?event.target.closest('#ndProBetaPage .proref-calendar-grid [data-slot]'):null;
  if(!cell)return;
- if(cell.hasAttribute('data-rest-blocked'))return;
+ // Rest is a visual status, not a prohibition on opening a booking draft.
  // Capture before a broken/replaced per-cell handler; avoid double opening.
  try{
    const modal=byId('ndProBookingModal');
@@ -38303,6 +38303,41 @@ document.addEventListener('click',event=>{
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 </script>
+<style id="nd-automatic-customer-rest-colors-v42">
+/* Automatic calendar categories: registered new (red), returning (blue), resting (gray). */
+#ndProBetaPage .proref-calendar-grid button.nd-customer-new,
+#ndProBetaPage .pro-calendar button.nd-customer-new{background:#ffe2e2!important;border:2px solid #e96969!important;color:#272b32!important}
+#ndProBetaPage .proref-calendar-grid button.nd-customer-returning,
+#ndProBetaPage .pro-calendar button.nd-customer-returning{background:#e1efff!important;border:2px solid #579ce8!important;color:#272b32!important}
+#ndProBetaPage .proref-calendar-grid button.pro-resting,
+#ndProBetaPage .pro-calendar button.pro-resting{background:#e5e5e8!important;border:1px solid #b4b7bd!important;cursor:pointer!important;pointer-events:auto!important}
+#ndProBetaPage .pro-calendar button.pro-resting::after{content:'休息'!important;color:#626875!important}
+#ndProBookingModal .nd-ref-room-block,
+#ndProBookingModal .probooking-options label:has(#proBlockSlot),
+#ndProBookingModal .nd-booking-color-caption,
+#ndProBookingModal .nd-booking-color-options{display:none!important}
+</style>
+<style id="nd-auto-rotation-v43">
+#ndProBetaPage .nd-rotation-page{padding:14px;max-width:800px;margin:auto;color:#242935;font-size:14px}
+#ndProBetaPage .nd-rotation-page header{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+#ndProBetaPage .nd-rotation-page header button{background:none;border:0;color:#2879fa;font-size:30px}
+#ndProBetaPage .nd-rotation-page h2{font-size:19px;margin:0}
+#ndProBetaPage .nd-rotation-page p{font-size:13px;line-height:1.6;color:#647084}
+#ndProBetaPage .nd-rotation-roster{display:flex;gap:7px;overflow:auto;padding:12px 0}
+#ndProBetaPage .nd-rotation-roster button{white-space:nowrap;padding:10px 13px;border:1px solid #d9e1f0;border-radius:12px;background:#fff;font-size:13px;color:#25304a;font-weight:700}
+#ndProBetaPage .nd-rotation-roster button.active{background:#e9f2ff;border-color:#2879fa;color:#2879fa}
+#ndProBetaPage .nd-rotation-roster small{display:block;font-size:10px;font-weight:400}
+#ndProBetaPage .nd-rotation-search-label{display:block;font-weight:700;margin:12px 0}
+#ndProBetaPage .nd-rotation-search-label input{display:block;width:100%;padding:12px;border-radius:11px;border:1px solid #dce2ec;margin-top:6px;font-size:14px}
+#ndProBetaPage .nd-rotation-services{background:#fff;border-radius:15px;padding:0 14px;max-height:55vh;overflow:auto}
+#ndProBetaPage .nd-rotation-services label{display:flex;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid #eceff4;font-size:13px}
+#ndProBetaPage .nd-rotation-services label span{flex:1;min-width:0;overflow-wrap:anywhere}
+#ndProBetaPage .nd-rotation-services label input{width:20px;height:20px;accent-color:#e45555}
+#ndProBetaPage .nd-rotation-services label b{color:#e45555;font-size:12px}
+#ndProBetaPage .nd-rotation-storage-note{display:block;font-size:11px;color:#8993a3;margin-top:12px}
+#ndProBookingModal .nd-rotation-gender-choice{display:flex!important;align-items:center;gap:8px;font-size:12px!important;margin:5px 0 10px}
+#ndProBookingModal .nd-rotation-gender-choice select{min-height:32px!important;font-size:12px!important;padding:4px 10px!important;width:auto!important;flex:1}
+</style>
 <style id="nd-all-expense-history-v2-css">
 #ndAllExpensePanel{display:none}
 #ndAllExpensePanel .nda-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:12px 0}
@@ -39153,7 +39188,6 @@ function enhance(){
  const perPersonPanels=details.querySelector('.nd-guest-service-panels');
  if(perPersonTabs)tabBody.prepend(perPersonTabs);
  if(perPersonPanels)perPersonTabs?.after(perPersonPanels);
- const block=document.createElement('label');block.className='nd-ref-room-block';block.innerHTML='<span>🔒 封锁预约时间段</span><input type="checkbox" disabled title="暂未连接封锁时段数据库">';tabBody.append(block);
  const hint=document.createElement('p');hint.className='nd-ref-hint';hint.textContent='每位顾客可选择不同护理和时长，并分别安排空闲技师。';tabBody.append(hint);
  const reminder=document.createElement('div');reminder.className='nd-ref-reminder';reminder.textContent='🔔 不提醒';details.insertBefore(reminder,details.querySelector('.proref-actions'));
  let selected=0;
@@ -40858,6 +40892,16 @@ async function refreshRest(){
   try{const r=await db.rpc('nd_daily_rest_load',{p_branch:b});if(!r.error){const data=r.data||{};for(const x of (data.revision>0?data.entries||[]:data.default_entries||data.entries||[]))restById.set(String(x.employee_id),Number(x.days));}}catch(_e){}
   try{const r=await db.rpc('nd_daily_mc_load',{p_branch:b,p_date:date});if(!r.error)for(const row of r.data||[]){ndMcIds.add(String(row.employee_id));restById.set(String(row.employee_id),Math.max(1,Number(row.days)||1));}}catch(_e){}
  }));
+ // Read the dated rest register as well, so past/future calendar days use
+ // the same employee rest data rather than displaying only today's status.
+ try{
+  const r=await db.from('nd_daily_rest_entries').select('employee_id,days,branch').eq('rest_date',date).in('branch',selected);
+  if(!r.error)for(const x of r.data||[])restById.set(String(x.employee_id),Number(x.days)||0);
+ }catch(_e){}
+ try{
+  const r=await db.from('employee_rest_day_overrides').select('employee_id,override_type').eq('work_date',date);
+  if(!r.error)for(const x of r.data||[]){const type=String(x.override_type||'').toLowerCase();if(['off','rest','full','full_day','mc','sick','leave'].includes(type))restById.set(String(x.employee_id),1);else if(['half','half_day'].includes(type))restById.set(String(x.employee_id),.5);else if(['work','working','on'].includes(type))restById.delete(String(x.employee_id));}
+ }catch(_e){}
  try{const r=await db.from('nd_pro_beta_staff_breaks').select('*').eq('break_date',date).in('branch',selected);if(!r.error)ndBreakRows=r.data||[];}catch(_e){}
 }
 
@@ -40960,6 +41004,7 @@ el('ndProHomeButton')?.addEventListener('click',()=>{active='home';render();});e
 el('ndProDrawerClose')?.addEventListener('click',()=>drawerToggle(false));el('ndProSettingsNav')?.addEventListener('click',()=>{active='settings';drawerToggle(false);render();});el('ndProLeaveNav')?.addEventListener('click',()=>{drawerToggle(false);leave();});
 el('ndProShade')?.addEventListener('click',()=>drawerToggle(false));
 el('ndProRestClose')?.addEventListener('click',()=>{el('ndProRestModal').hidden=true;});el('ndProRestBackdrop')?.addEventListener('click',()=>{el('ndProRestModal').hidden=true;});
+const ndRotationNav=document.createElement('button');ndRotationNav.type='button';ndRotationNav.dataset.proPage='staff_rotation';ndRotationNav.textContent='⚖ 自动排单 · 护理排除';el('ndProSideNav')?.appendChild(ndRotationNav);
 el('ndProSideNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-pro-page]');if(!b||!ready)return;active=b.dataset.proPage;if(active==='appointments'){calendarMode='staff';showTherapists=true;}else if(active==='room_calendar'){calendarMode='room';}drawerToggle(false);render();});
 
 async function read(table,select='*'){const r=await db.from(table).select(select);if(r.error)throw new Error(`${table}: ${r.error.message}`);return r.data||[];}
@@ -41224,7 +41269,7 @@ function renderSyncCenter(host){
  };
 }
 
-function render(){ndProCartQuickAccess();el('ndProTabs').querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('selected',b.dataset.tab===active));const host=el('ndProContent');if(!host)return;menuLabels();el('ndProHomeButton').hidden=active==='home';if(active==='home')renderHome(host);else if(active==='daily_report')renderDailyReport(host);else if(active==='customer_history')renderCustomerHistory(host);else if(active==='appointments'||active==='room_calendar')renderAppointments(host);else if(active==='customers')renderCustomers(host);else if(active==='catalog')renderCatalog(host);else if(active==='products')renderProducts(host);else if(active==='packages')ndDrawCommercialCatalog(host,'packages');else if(active==='gift_cards')ndDrawCommercialCatalog(host,'gift_cards');else if(active==='members_csv'){active='customers';ndCombinedCustomerTab='members';renderCustomers(host)}else if(active==='commission_rules')ndDrawCommissionCsv(host);else if(active==='hours')renderHours(host);else if(active==='settings')renderProSettings(host);else if(active==='imports')renderImportCenter(host);else if(active==='sync_center')renderSyncCenter(host);else if(active==='vouchers')ndUnifiedVoucherInfo(host);else renderPos(host);ndUnifiedCatalogTabs(host);}
+function render(){ndProCartQuickAccess();el('ndProTabs').querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('selected',b.dataset.tab===active));const host=el('ndProContent');if(!host)return;menuLabels();el('ndProHomeButton').hidden=active==='home';if(active==='home')renderHome(host);else if(active==='daily_report')renderDailyReport(host);else if(active==='customer_history')renderCustomerHistory(host);else if(active==='appointments'||active==='room_calendar')renderAppointments(host);else if(active==='staff_rotation')ndRenderStaffRotation(host);else if(active==='customers')renderCustomers(host);else if(active==='catalog')renderCatalog(host);else if(active==='products')renderProducts(host);else if(active==='packages')ndDrawCommercialCatalog(host,'packages');else if(active==='gift_cards')ndDrawCommercialCatalog(host,'gift_cards');else if(active==='members_csv'){active='customers';ndCombinedCustomerTab='members';renderCustomers(host)}else if(active==='commission_rules')ndDrawCommissionCsv(host);else if(active==='hours')renderHours(host);else if(active==='settings')renderProSettings(host);else if(active==='imports')renderImportCenter(host);else if(active==='sync_center')renderSyncCenter(host);else if(active==='vouchers')ndUnifiedVoucherInfo(host);else renderPos(host);ndUnifiedCatalogTabs(host);}
 /* Unified product navigation. Read-only catalog pages retain their original data handlers. */
 function ndUnifiedCatalogTabs(host){
   if(!host||!['catalog','products','packages','gift_cards','vouchers'].includes(active))return;
@@ -41254,6 +41299,22 @@ function ndStaffGender(s){
  return 'other';
 }
 function ndSetStaffGender(id,gender){const values=ndGenderOverrides();values[String(id)]=gender;localStorage.setItem(ndGenderKey,JSON.stringify(values));}
+const ndServiceExclusionKey='nd_pro_staff_service_exclusions_v1';
+function ndExclusions(){try{return JSON.parse(localStorage.getItem(ndServiceExclusionKey)||'{}')||{}}catch(_){return {}}}
+function ndExcluded(employeeId,service){return (ndExclusions()[String(employeeId)]||[]).includes(String(service||''))}
+function ndSetExcluded(employeeId,service,excluded){const settings=ndExclusions(),id=String(employeeId),items=new Set(settings[id]||[]);if(excluded)items.add(service);else items.delete(service);settings[id]=[...items];try{localStorage.setItem(ndServiceExclusionKey,JSON.stringify(settings));return true}catch(_){stat('无法储存排除规则。',true);return false}}
+function ndServicesForRotation(){const names=services.filter(s=>s.is_active!==false&&s.available_for_booking!==false).map(s=>String(s.name_zh||s.name_en||s.name||'').trim());return [...new Set(names.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh'))}
+function ndRenderStaffRotation(host){
+ const roster=staff.filter(s=>branch==='all'||s.outlet===branch),allServices=ndServicesForRotation();let selected=roster[0]?.id,search='';
+ host.innerHTML='<section class="nd-rotation-page"><header><button type="button" data-back>‹</button><h2>自动排单 · 护理排除</h2></header><p>选择员工，把该员工<strong>不能做</strong>的护理标记为「排除」。未排除的护理可参与 AUTO 推荐。男、女技师独立轮流，已预约时段不会重复安排。</p><div class="nd-rotation-roster"></div><label class="nd-rotation-search-label">查找护理<input type="search" placeholder="输入护理名称"></label><div class="nd-rotation-services"></div><small class="nd-rotation-storage-note">当前排除设置保存在此设备浏览器中；跨设备同步需连接数据库规则表。</small></section>';
+ host.querySelector('[data-back]').onclick=()=>{active='appointments';render()};
+ const rosterEl=host.querySelector('.nd-rotation-roster'),listEl=host.querySelector('.nd-rotation-services');
+ function draw(){rosterEl.innerHTML=roster.map(s=>`<button type="button" class="${String(s.id)===String(selected)?'active':''}" data-employee="${esc(s.id)}">${esc(s.nickname||s.name)} <small>${ndStaffGender(s)==='male'?'♂ 男':ndStaffGender(s)==='female'?'♀ 女':'未设置'}</small></button>`).join('');rosterEl.querySelectorAll('[data-employee]').forEach(b=>b.onclick=()=>{selected=b.dataset.employee;draw()});
+  const names=allServices.filter(n=>n.toLowerCase().includes(search));listEl.innerHTML=names.map(name=>`<label><span>${esc(name)}</span><input type="checkbox" data-service="${esc(name)}" ${ndExcluded(selected,name)?'checked':''}><b>排除</b></label>`).join('')||'<p>没有匹配的护理</p>';
+  listEl.querySelectorAll('[data-service]').forEach(input=>input.onchange=()=>{if(!ndSetExcluded(selected,input.dataset.service,input.checked))input.checked=!input.checked;});
+ }
+ host.querySelector('input[type="search"]').oninput=e=>{search=e.target.value.trim().toLowerCase();draw()};draw();
+}
 const ndStaffCalendarVisibilityKey='nd_pro_calendar_hidden_staff_v1';
 function ndHiddenCalendarStaff(){try{return JSON.parse(localStorage.getItem(ndStaffCalendarVisibilityKey)||'{}')||{}}catch(_){return {}}}
 function ndStaffVisibleOnCalendar(id){return !ndHiddenCalendarStaff()[String(id)];}
@@ -41380,8 +41441,14 @@ for(let ri=0;ri<slots.length;ri++){
    let span=0;for(let k=ri;k<slots.length;k++){if(toMinutes(slots[k])>=toMinutes(mins(booking.ends_at)))break;span++}
    span=Math.max(1,span);
    const customer=customers.find(c=>c.id===booking.customer_id);
-   grid+=`<button type="button" class="pro-cell pro-booked proref-booking nd-cal-status-${esc(booking.status)} nd-entitlement-${esc(ndBenefitCache.get(String(booking.customer_id))?.value||'unknown')}" style="grid-column:${col};grid-row:${row}/span ${span}" data-edit="${esc(booking.id)}"><strong>${esc(customer?.full_name||'Customer')}</strong><span>${esc(booking.service_name)}</span><small>${clock12(mins(booking.starts_at))} · ${esc(booking.status)}</small></button>`;
-  }else grid+=`<button type="button" class="pro-cell proref-empty ${roomCols?'':'nd-gender-'+ndStaffGender(person)} ${resting?'pro-resting pro-resting-'+rest.kind:''}" style="grid-column:${col};grid-row:${row}" data-slot="${t}" ${resting?'data-rest-blocked="true"':''} ${roomCols?`data-room="${person.id}"`:`data-staff="${person.id}"`} aria-label="Add appointment ${t}"></button>`;
+   // Customer type is inferred from registration and booking history, never a manual color choice.
+   const registered=customer?.created_at?Date.parse(customer.created_at):NaN;
+   const bookedAt=booking.created_at?Date.parse(booking.created_at):NaN;
+   const firstBooking=!list.some(other=>String(other.customer_id)===String(booking.customer_id)&&String(other.id)!==String(booking.id)&&String(other.starts_at)<String(booking.starts_at));
+   const bookingDay=Date.parse(booking.starts_at);
+   const newCustomer=Number.isFinite(registered)?(Number.isFinite(bookedAt)?bookedAt-registered>=0&&bookedAt-registered<=86400000:Number.isFinite(bookingDay)&&bookingDay-registered>=-86400000&&bookingDay-registered<=86400000):firstBooking;
+   grid+=`<button type="button" class="pro-cell pro-booked proref-booking nd-cal-status-${esc(booking.status)} ${newCustomer?'nd-customer-new':'nd-customer-returning'}" style="grid-column:${col};grid-row:${row}/span ${span}" data-edit="${esc(booking.id)}"><strong>${esc(customer?.full_name||'Customer')}</strong><span>${esc(booking.service_name)}</span><small>${clock12(mins(booking.starts_at))} · ${esc(booking.status)}</small></button>`;
+  }else grid+=`<button type="button" class="pro-cell proref-empty ${roomCols?'':'nd-gender-'+ndStaffGender(person)} ${resting?'pro-resting pro-resting-'+rest.kind:''}" style="grid-column:${col};grid-row:${row}" data-slot="${t}" ${roomCols?`data-room="${person.id}"`:`data-staff="${person.id}"`} aria-label="Add appointment ${t}"></button>`;
  }
 }
 if(!roomCols)for(const record of ndBreakRows){
@@ -41459,7 +41526,6 @@ el('proBranch').value=branch;el('proBranch').onchange=async e=>{branch=e.target.
 
 host.querySelectorAll('[data-staff-rest]').forEach(b=>b.onclick=()=>void openRestPanel(Number(b.dataset.staffRest)));
 el('proCalendarGear')?.addEventListener('click',()=>{active='hours';render();});
-host.querySelectorAll('[data-rest-blocked]').forEach(b=>b.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();stat(tr('This therapist is off during this period.','该技师在此时段休息。'),true);},true));
 
 const form=el('proAppointmentForm');
 // Use a consistent visible MIN suffix in every booking duration picker.
@@ -41651,10 +41717,44 @@ const displayCustomer=()=>{const id=form.elements.customer.value,c=customers.fin
 const showCustomerModal=()=>{customerModal.hidden=false;el('proQuickPhone').value=/[0-9]{6}/.test(phoneSearch.value)?phoneSearch.value:'';el('proQuickName').value=/[0-9]{6}/.test(phoneSearch.value)?'':phoneSearch.value;el('proQuickPhone').focus()};
 let guestCount=1;
  const mainWorker=form.elements.employee;
+ const ndGenderRequest=document.createElement('label');ndGenderRequest.className='nd-rotation-gender-choice';ndGenderRequest.innerHTML='<span>技师分组</span><select aria-label="技师男女分组"><option value="any">自动 · 不限男女</option><option value="male">男技师队列</option><option value="female">女技师队列</option></select>';
+ bookingFields.employee?.prepend(ndGenderRequest);
  const guestWorkerWrap=document.createElement('div');guestWorkerWrap.id='ndGuestTherapists';guestWorkerWrap.className='nd-guest-therapists';
  bookingFields.employee?.appendChild(guestWorkerWrap);
  const guestWorkers=()=>[mainWorker,...guestWorkerWrap.querySelectorAll('select[data-guest-worker]')];
  const bookedWorkerIds=new Set();
+ function ndAutoRank(available,index){
+   const chosenService=index===0?form.elements.service.value:(otherGuestServices.get(index)?.service||form.elements.service.value);
+   const wantedGender=ndGenderRequest.querySelector('select').value;
+   const promo=/promo|promotion|优惠|体验|特价|促销/i.test(chosenService);
+   const day=form.elements.date.value;
+   const customer=customers.find(c=>String(c.id)===String(form.elements.customer.value));
+   const currentNew=!!(customer?.created_at&&String(customer.created_at).slice(0,10)===day);
+   const category=currentNew?'new':promo?'promo':'regular';
+   const stats=new Map();
+   const assignedTo=id=>links.filter(l=>String(l.appointment_id)===String(id)).map(l=>String(l.employee_id));
+   appointments.filter(a=>tzDate(a.starts_at)===day&&a.status!=='cancelled'&&a.status!=='no_show').forEach(a=>{
+     const customer=customers.find(c=>String(c.id)===String(a.customer_id));
+     const isNew=customer?.created_at&&String(customer.created_at).slice(0,10)===day;
+     const isPromo=/promo|promotion|优惠|体验|特价|促销/i.test(String(a.service_name||''));
+     for(const id of assignedTo(a.id)){
+       const current=stats.get(id)||{total:0,minutes:0,category:0,categoryMinutes:0};current.total++;
+       // Balance treatment time, not the number of customers: 120 MIN equals two 60 MIN bookings.
+       const workedMinutes=Math.max(0,(Date.parse(a.ends_at)-Date.parse(a.starts_at))/60000)||60;
+       current.minutes+=workedMinutes;
+       if((isNew?'new':isPromo?'promo':'regular')===category){current.category++;current.categoryMinutes+=workedMinutes;}
+       stats.set(id,current);
+     }
+   });
+   return available.filter(id=>{const member=staff.find(s=>String(s.id)===id);return member&&!ndExcluded(id,chosenService)&&(wantedGender==='any'||ndStaffGender(member)===wantedGender)}).sort((a,b)=>{
+     const x=stats.get(a)||{total:0,minutes:0,category:0,categoryMinutes:0},y=stats.get(b)||{total:0,minutes:0,category:0,categoryMinutes:0};
+     // Category fairness (new / promo / original-price) and overall workload both matter.
+     // Keep total minutes as a strong factor so long body treatments are not counted as just one order.
+     const xLoad=x.categoryMinutes*0.6+x.minutes*0.4;
+     const yLoad=y.categoryMinutes*0.6+y.minutes*0.4;
+     return xLoad-yLoad||x.minutes-y.minutes||x.categoryMinutes-y.categoryMinutes||x.total-y.total||String(a).localeCompare(String(b));
+   });
+ }
  function fillWorkerOptions(sel,index){
    const chosen=sel.value;sel.replaceChildren(new Option('请选择空闲技师',''));
    const chosenByOthers=new Set(guestWorkers().filter(x=>x!==sel).map(x=>x.value).filter(Boolean));
@@ -41668,7 +41768,8 @@ let guestCount=1;
      for(const member of members){
        const id=String(member.id);
        const opt=new Option(member.nickname||member.name||id,id);
-       opt.disabled=bookedWorkerIds.has(id)||chosenByOthers.has(id);
+       const service=index===1?form.elements.service.value:(otherGuestServices.get(index-1)?.service||form.elements.service.value);
+       opt.disabled=bookedWorkerIds.has(id)||chosenByOthers.has(id)||ndExcluded(id,service);
        group.appendChild(opt);
      }
      if(members.length)sel.appendChild(group);
@@ -41735,14 +41836,15 @@ let guestCount=1;
      // A manual selection is never overwritten by auto-assignment.
      if(existing[i]&&Array.from(sel.options).some(o=>o.value===existing[i]&&!o.disabled))sel.value=existing[i];
    });
-   if(autoAssign){for(const sel of guestWorkers()){
+   if(autoAssign){for(const [index,sel] of guestWorkers().entries()){
      if(sel.value)continue;
      const used=new Set(guestWorkers().map(x=>x.value).filter(Boolean));
-     const candidate=Array.from(sel.options).find(o=>o.value&&!o.disabled&&!used.has(o.value));
-     if(candidate)sel.value=candidate.value;
+     const possible=Array.from(sel.options).filter(o=>o.value&&!o.disabled&&!used.has(o.value)).map(o=>o.value);
+     const candidate=ndAutoRank(possible,index)[0];
+     if(candidate)sel.value=candidate;
    }}
    // Keep non-selected options disabled when another guest uses the same therapist.
-   guestWorkers().forEach(sel=>{const current=sel.value;const used=new Set(guestWorkers().filter(x=>x!==sel).map(x=>x.value).filter(Boolean));for(const option of sel.options){if(option.value)option.disabled=bookedWorkerIds.has(option.value)||used.has(option.value);}
+   guestWorkers().forEach((sel,i)=>{const current=sel.value;const used=new Set(guestWorkers().filter(x=>x!==sel).map(x=>x.value).filter(Boolean));const service=i===0?form.elements.service.value:(otherGuestServices.get(i)?.service||form.elements.service.value);for(const option of sel.options){if(option.value)option.disabled=bookedWorkerIds.has(option.value)||used.has(option.value)||ndExcluded(option.value,service);}
      if(current&&sel.selectedOptions[0]?.disabled)sel.value='';
    });
    const status=document.getElementById('ndGuestTherapistStatus');
@@ -41757,7 +41859,7 @@ let guestCount=1;
  (remarksRow||actions||details.lastElementChild)?.before(ownerPanel);
  const bookingExtras=document.createElement('section');
  bookingExtras.className='nd-booking-extra-fields-v33';
- bookingExtras.innerHTML='<div class="nd-booking-color-caption">顾客颜色注明</div><div class="nd-booking-color-options" role="group" aria-label="顾客类型"><label><input type="radio" name="nd_customer_color" value="" checked> 不注明</label><label class="new"><input type="radio" name="nd_customer_color" value="新顾客"> 新顾客</label><label class="returning"><input type="radio" name="nd_customer_color" value="老顾客"> 老顾客</label></div><label class="nd-booking-notes-label">备注<textarea name="nd_booking_notes" rows="2" placeholder="填写预约备注"></textarea></label>';
+ bookingExtras.innerHTML='<label class="nd-booking-notes-label">备注<textarea name="nd_booking_notes" rows="3" placeholder="填写预约备注"></textarea></label>';
  (actions||details.lastElementChild)?.before(bookingExtras);
 
  // Touch-friendly therapist toggles. Keep the existing native selects as the
@@ -41793,9 +41895,9 @@ let guestCount=1;
      button.className='nd-touch-worker'+(chosen?' is-active':'');
      button.setAttribute('aria-pressed',String(chosen));
      button.textContent=(chosen?'✓ ':'')+(member.nickname||member.name||id)+(member.outlet!==currentBranch?' · '+member.outlet:'');
-     button.disabled=!chosen&&bookedWorkerIds.has(id);
+     button.disabled=!chosen&&(bookedWorkerIds.has(id)||ndExcluded(id,form.elements.service.value));
      button.onclick=()=>{
-       if(!chosen&&bookedWorkerIds.has(id))return;
+       if(!chosen&&(bookedWorkerIds.has(id)||ndExcluded(id,form.elements.service.value)))return;
        const newIds=chosen?ndWorkerIds().filter(x=>x!==id):[...ndWorkerIds(),id];
        ndSetWorkerIds(newIds);
        void updateAvailability();
@@ -41862,7 +41964,6 @@ host.querySelectorAll('[data-slot]').forEach(b=>{
   b.onclick=(event)=>{
     event.preventDefault();
     event.stopPropagation();
-    if(b.hasAttribute('data-rest-blocked')){stat(tr('This therapist is off during this period.','该技师在此时段休息。'),true);return;}
     try{
       reset();
       const f=form.elements;
@@ -42270,6 +42371,8 @@ el('proQuickSave').onclick=async()=>{
      return false;
    });return availPromise;
  }
+ ndGenderRequest.querySelector('select').onchange=()=>{guestWorkers().forEach(sel=>sel.value='');void updateAvailability()};
+ form.elements.service.addEventListener('change',()=>{guestWorkers().forEach(sel=>{if(ndExcluded(sel.value,form.elements.service.value))sel.value=''});void updateAvailability()});
  for(const key of ['branch','date','time','duration'])form.elements[key]?.addEventListener('change',()=>{
    if(key==='branch'){
      const old=form.elements.room_id.value;
@@ -42301,13 +42404,13 @@ form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries
      if(r.error)throw r.error;
      groupCreated++;
      const createdId=typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data;
-     if(createdId){if(ndLoginEmployeeId){const stored=await db.from('nd_pro_beta_booking_staff_meta').upsert({appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]},{onConflict:'appointment_id'});if(stored.error)stat('预约已建立，但预约员工记录未同步：'+stored.error.message,true);}const groupNote=[x.nd_customer_color?'【'+x.nd_customer_color+'】':'',String(x.nd_booking_notes||'').trim()].filter(Boolean).join(' ');if(groupNote){const nr=await db.from('nd_pro_beta_appointments').update({notes:groupNote}).eq('id',createdId);if(nr.error)stat('预约已建立，但备注同步失败：'+nr.error.message,true);}}
+     if(createdId){if(ndLoginEmployeeId){const stored=await db.from('nd_pro_beta_booking_staff_meta').upsert({appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]},{onConflict:'appointment_id'});if(stored.error)stat('预约已建立，但预约员工记录未同步：'+stored.error.message,true);}const groupNote=String(x.nd_booking_notes||'').trim();if(groupNote){const nr=await db.from('nd_pro_beta_appointments').update({notes:groupNote}).eq('id',createdId);if(nr.error)stat('预约已建立，但备注同步失败：'+nr.error.message,true);}}
    }
    date=x.date;branch=x.branch;closeBooking();await load();stat('已新增 '+groupCreated+' 位顾客的关联预约。');return;
  }
  const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
  const createdId=editing?x.appointment_id:(typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data);
- const bookingNote=[x.nd_customer_color?'【'+x.nd_customer_color+'】':'',String(x.nd_booking_notes||'').trim()].filter(Boolean).join(' ');
+ const bookingNote=String(x.nd_booking_notes||'').trim();
  if(createdId){const noteResult=await db.from('nd_pro_beta_appointments').update({notes:bookingNote}).eq('id',createdId);if(noteResult.error)stat('预约已保存，但备注未同步：'+noteResult.error.message,true);}
  if(createdId&&!editing&&ndLoginEmployeeId){
    // Booking staff is always the signed-in employee and cannot be manually picked.
@@ -43811,17 +43914,30 @@ body > #ndProHamburger.nd-pro-portal-menu {
  .nd-order-note{font-size:12px;color:#888;line-height:1.5;margin:8px 0}
 }
 </style>
+<style id="nd-order-gender-counts-v45">
+.nd-order-gender-counts{background:#fff;border-radius:16px;padding:12px;margin:0 0 14px;font-size:14px}
+.nd-order-gender-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;color:#293142}
+.nd-order-gender-heading strong{color:#3476f5}
+.nd-order-gender-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.nd-order-gender-control{min-width:0;border-radius:12px;padding:10px;background:#eaf2ff;color:#2865cb;display:flex;flex-direction:column;gap:8px}
+.nd-order-gender-control.female{background:#fff0f6;color:#bd4b86}
+.nd-order-gender-control>div{display:flex;align-items:center;justify-content:space-between;gap:5px}
+.nd-order-gender-control button{border:0;background:#fff;border-radius:50%;width:34px;height:34px;font-size:22px;color:inherit;line-height:1}
+.nd-order-gender-control strong{font-size:18px;font-variant-numeric:tabular-nums}
+</style>
 <script id="nd-order-mobile-flow-behaviour-20261125">
 (()=>{'use strict';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
 window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branch='all'}){
  let stage='list',member=null,search='',category='全部',method='',items=[];
+ let maleGuests=0,femaleGuests=1;
  const products=services.flatMap(s=>prices.filter(p=>String(p.service_id)===String(s.id)&&(branch==='all'||p.branch===branch)).map(p=>({id:String(s.id)+':'+String(p.id),name:s.name_zh||s.name_en||'护理',price:Number(p.price)||0,branch:p.branch||'',duration:s.duration_minutes||0,type:s.item_type||'服务'})));
  const total=()=>items.reduce((n,x)=>n+x.price*x.qty,0);
  const count=()=>items.reduce((n,x)=>n+x.qty,0);
  const header=(title,back)=>`<header class="nd-order-head"><button type="button" data-go="${back}" aria-label="返回">‹</button><h2>${esc(title)}</h2><button type="button" data-go="list" aria-label="返回挂单">⋯</button></header>`;
  const card=()=>`<section class="nd-order-client"><strong>👩🏻 ${esc(member.full_name||member.name||'会员')}</strong><p>${esc(String(member.phone||'').replace(/\d(?=\d{4})/g,'•'))}</p><div class="nd-order-tags"><span>会员</span><span>${esc(branch==='all'?'Nature’s Dao':branch)}</span></div><div class="nd-order-balances"><div>储值<b>—</b></div><div>积分<b>—</b></div><div>优惠券<b>—</b></div><div>礼品卡<b>—</b></div></div></section>`;
+ const genderCounts=()=>`<section class="nd-order-gender-counts"><div class="nd-order-gender-heading">👥 顾客人数 <strong>共 ${maleGuests+femaleGuests} 位</strong></div><div class="nd-order-gender-grid"><div class="nd-order-gender-control male"><span>♂ 男生</span><div><button type="button" data-guest-sex="male" data-guest-delta="-1" aria-label="减少男生">−</button><strong>${maleGuests}</strong><button type="button" data-guest-sex="male" data-guest-delta="1" aria-label="增加男生">＋</button></div></div><div class="nd-order-gender-control female"><span>♀ 女生</span><div><button type="button" data-guest-sex="female" data-guest-delta="-1" aria-label="减少女生">−</button><strong>${femaleGuests}</strong><button type="button" data-guest-sex="female" data-guest-delta="1" aria-label="增加女生">＋</button></div></div></div></section>`;
  const render=()=>{
   const categories=['全部','PROMOTION','会员卡专享',...new Set(products.map(p=>p.type))];
   let html='';
@@ -43830,7 +43946,9 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
   if(stage==='products')html=header(member.full_name||member.name||'选择护理','members')+card()+`<nav class="nd-order-filter">${categories.map(c=>`<button data-category="${esc(c)}" aria-pressed="${category===c}">${esc(c)}</button>`).join('')}</nav><div class="nd-order-products">${products.filter(p=>category==='全部'||(category==='PROMOTION'?/promo|促销|优惠/i.test(p.name):category==='会员卡专享'?/会员|member/i.test(p.name):p.type===category)).map(p=>`<button class="nd-order-product" data-add="${esc(p.id)}" aria-pressed="${items.some(x=>x.id===p.id)}"><i>⭐</i><strong>${esc(p.name)}</strong><small>RM ${money(p.price)}</small></button>`).join('')||'<p>此分类暂时没有项目</p>'}</div><button class="nd-order-cartbar" data-go="detail" ${!items.length?'disabled':''}>${count()} 项目 ｜ RM ${money(total())}</button>`;
   if(stage==='detail')html=header(member.full_name||member.name||'订单明细','products')+`<div class="nd-order-detail"><div>服务</div>${items.map((x,i)=>`<div class="nd-order-line"><div><strong>${esc(x.name)}</strong><small>RM ${money(x.price)} × ${x.qty}</small></div><div><strong>RM ${money(x.price*x.qty)}</strong><div class="nd-order-qty"><button data-qty="${i}" data-delta="-1">−</button>${x.qty}<button data-qty="${i}" data-delta="1">＋</button></div></div></div>`).join('')}<section class="nd-order-summary"><div>数量 <strong>${count()}</strong></div><div>小计 <strong>RM ${money(total())}</strong></div><button data-go="payment">付款：RM ${money(total())}</button></section></div>`;
   if(stage==='payment')html=header('付款','detail')+`<section class="nd-order-due"><span>余额支付</span><strong>${money(total())}</strong></section><div class="nd-order-methods"><h3>现金</h3><div class="nd-order-cash">${['自定义',money(total()),money(Math.ceil(total()/10)*10),money(Math.ceil(total()/100)*100)].map(x=>`<button data-method="现金 ${x}" aria-pressed="${method==='现金 '+x}">${esc(x)}</button>`).join('')}</div><h3>卡</h3><div>${['Credit卡','Debit卡'].map(x=>`<button data-method="${x}" aria-pressed="${method===x}">▰ ${x}</button>`).join('')}</div><h3>在线</h3><div><button data-method="Online" aria-pressed="${method==='Online'}">◎ Online</button></div><h3>其他</h3><div>${['TNG PAYMENT','3 MONTH INSTALLMENT','6 MONTH INSTALLMENT','12 MONTH INSTALLMENT','ALIPAY','Online-credit card','BANK TRANSFER','床位费'].map(x=>`<button data-method="${x}" aria-pressed="${method===x}">▣ ${x}</button>`).join('')}</div></div><p class="nd-order-note">付款方式仅供界面核对；正式付款、储值扣减及奖励审批尚未连接，不会自动发放或入账。</p><button class="nd-order-confirm" disabled>确认付款（尚未连接）</button>`;
+  if(stage==='products'||stage==='detail')html=html.replace('</header>','</header>'+genderCounts());
   host.innerHTML=`<main class="nd-order-flow" data-order-stage="${stage}">${html}</main>`;
+  host.querySelectorAll('[data-guest-sex]').forEach(b=>b.onclick=()=>{const field=b.dataset.guestSex,delta=Number(b.dataset.guestDelta);if(field==='male')maleGuests=Math.max(0,Math.min(30,maleGuests+delta));else femaleGuests=Math.max(0,Math.min(30,femaleGuests+delta));if(maleGuests+femaleGuests===0){if(field==='male')maleGuests=1;else femaleGuests=1;}render();});
   host.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{const target=b.dataset.go;if(target==='home'){document.getElementById('ndProHomeButton')?.click();return;}stage=target;search='';render();});
   host.querySelector('#ndOrderSearch')?.addEventListener('input',e=>{search=e.target.value;if(stage==='members')host.querySelector('#ndOrderMemberResults').innerHTML=customerMatches();});
   host.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{category=b.dataset.category;render();});
@@ -43840,8 +43958,8 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
   bindMembers();
  };
  const customerMatches=()=>customers.filter(c=>(String(c.full_name||c.name||'')+' '+String(c.phone||'')).toLowerCase().includes(search.trim().toLowerCase())).slice(0,80).map(c=>`<button type="button" data-member="${esc(c.id)}" class="nd-order-client" style="width:100%;text-align:left;border:0;margin-top:9px"><strong>${esc(c.full_name||c.name||'未命名会员')}</strong><p>${esc(c.phone||'')}</p></button>`).join('')||'<p class="nd-order-today">找不到匹配会员，请先在会员页面核对资料。</p>';
- const bindMembers=()=>host.querySelectorAll('[data-member]').forEach(b=>b.onclick=()=>{member=customers.find(c=>String(c.id)===b.dataset.member);if(!member)return;items=[];category='全部';stage='products';render();});
- host.addEventListener('click',e=>{if(stage==='members'&&e.target.closest('[data-member]')){const id=e.target.closest('[data-member]').dataset.member;member=customers.find(c=>String(c.id)===id);if(member){items=[];stage='products';render();}}},{once:false});
+ const bindMembers=()=>host.querySelectorAll('[data-member]').forEach(b=>b.onclick=()=>{member=customers.find(c=>String(c.id)===b.dataset.member);if(!member)return;items=[];maleGuests=0;femaleGuests=1;category='全部';stage='products';render();});
+ host.addEventListener('click',e=>{if(stage==='members'&&e.target.closest('[data-member]')){const id=e.target.closest('[data-member]').dataset.member;member=customers.find(c=>String(c.id)===id);if(member){items=[];maleGuests=0;femaleGuests=1;stage='products';render();}}},{once:false});
  render();
 };
 })();
@@ -44944,7 +45062,7 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  pointer-events:none!important;cursor:default!important;-webkit-appearance:none!important;
  appearance:none!important;background-image:none!important;padding-right:8px!important;
 }
-#ndProBookingModal .pro-field[data-ref-kind="duration"] select{background-color:#f5f6fa!important}
+#ndProBookingModal .pro-field[data-ref-kind="duration"] select{background-color:transparent!important}
 #ndProBookingModal .nd-ref-customer[hidden]{display:none!important}
 #ndProBookingModal .nd-ref-customer:not([hidden]){cursor:pointer!important}
 #ndProBookingModal .nd-ref-customer:not([hidden]) strong{text-decoration:underline;text-decoration-color:#bdd4ff;text-underline-offset:3px}
@@ -44979,6 +45097,32 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
   const style=document.getElementById('nd-booking-locked-duration-v37');if(style&&document.body)document.body.appendChild(style);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+<style id="nd-booking-duration-plain-v41">
+/* Duration is a fixed service-derived value, without a grey input capsule. */
+#ndProBookingModal #proAppointmentForm .pro-field[data-ref-kind="duration"] select,
+#ndProBookingModal #proAppointmentForm .nd-ref-tab-body .pro-field[data-ref-kind="duration"] select,
+#ndProBookingModal #proAppointmentForm .nd-guest-service-panel select[aria-label$="位时长"]{
+ background:transparent!important;background-color:transparent!important;
+ border:0!important;box-shadow:none!important;border-radius:0!important;
+ -webkit-appearance:none!important;appearance:none!important;
+}
+</style>
+<script id="nd-booking-duration-plain-v41-js">
+(()=>{'use strict';
+ const apply=()=>{
+  const modal=document.getElementById('ndProBookingModal');
+  const field=modal?.querySelector('#proAppointmentForm .pro-field[data-ref-kind="duration"]');
+  if(field){
+   const label=field.querySelector('label');
+   if(label){for(const node of [...label.childNodes])if(node.nodeType===Node.TEXT_NODE&&/服务时长|Duration \(minutes\)/.test(node.textContent))node.textContent=node.textContent.replace(/服务时长|Duration \(minutes\)/g,'时长');}
+   for(const node of [...field.childNodes])if(node.nodeType===Node.TEXT_NODE&&/服务时长|Duration \(minutes\)/.test(node.textContent))node.textContent=node.textContent.replace(/服务时长|Duration \(minutes\)/g,'时长');
+  }
+  const style=document.getElementById('nd-booking-duration-plain-v41');if(style&&document.body&&style.parentElement!==document.body)document.body.appendChild(style);
+ };
+ document.addEventListener('click',()=>requestAnimationFrame(apply),true);
+ document.addEventListener('DOMContentLoaded',apply,{once:true});if(document.readyState!=='loading')apply();
 })();
 </script>
 <style id="nd-booking-small-five-font-v38">
