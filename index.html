@@ -118,6 +118,11 @@ html.nd-network-offline #ndOfflineLogoScreen{display:flex!important}
 })();
 </script>
 <style id="nd-detail-image-two-layout-v48">
+/* Fixed AUTO column is a separate scheduling action, not a therapist. */
+#ndProBetaPage .proref-calendar-grid .nd-cal-auto-head{background:#dceaff!important;color:#1767d8!important;border:2px solid #7aaffb!important}
+#ndProBetaPage .proref-calendar-grid .nd-cal-auto-head span{font-weight:900!important}
+#ndProBetaPage .proref-calendar-grid .nd-calendar-auto-slot{background:#f0f7ff!important;border:1px dashed #b8d8ff!important}
+#ndProBetaPage .proref-calendar-grid .nd-calendar-auto-slot:active{background:#cfe3ff!important}
 /* Appointment detail: grouped native-style cards, matching the requested second screenshot. */
 .nd-booking-detail .nd-booking-detail-sheet{background:#f0eff5!important;border-radius:24px 24px 0 0!important;max-width:540px!important;width:100%!important;padding:0 0 25px!important;box-sizing:border-box!important;overflow-y:auto!important;max-height:95dvh!important}
 .nd-booking-detail .nd-booking-detail-sheet>.nd-compact-detail-head{height:65px!important;min-height:65px!important;display:flex!important;align-items:center!important;gap:8px!important;padding:0 18px!important;background:transparent!important;margin:0 0 6px!important;position:sticky!important;top:0!important;z-index:5!important}
@@ -38238,6 +38243,7 @@ function revealFromCell(cell){
  const modal=byId('ndProBookingModal'), mount=byId('ndProBookingMount'), card=byId('proAppointmentCard'), form=byId('proAppointmentForm');
  if(!modal||!mount||!card||!form)throw Error('Appointment form has not finished loading. Open the calendar again.');
  const f=form.elements;
+ form.dataset.ndCalendarAuto=cell.dataset.auto==='1'?'1':'0';
  if(form.dataset.ndRescueEditing==='1')delete form.dataset.ndRescueEditing;
  form.reset();
  if(f.appointment_id)f.appointment_id.value='';
@@ -38261,7 +38267,15 @@ function revealFromCell(cell){
  card.hidden=false;mount.appendChild(card);modal.hidden=false;modal.removeAttribute('hidden');modal.style.display='flex';modal.style.zIndex='2147483000';
  const close=byId('ndProBookingClose');if(close){close.onclick=()=>{modal.hidden=true;modal.style.display='none';card.hidden=true;const home=byId('ndProContent');if(home)home.appendChild(card);};}
  if(phone){try{phone.focus({preventScroll:true})}catch(_){}}
+ if(form.dataset.ndCalendarAuto==='1')setTimeout(()=>document.querySelector('#ndProBookingModal .nd-touch-worker-auto')?.click(),60);
 }
+document.addEventListener('change',event=>{
+ const form=byId('proAppointmentForm');
+ if(form?.dataset.ndCalendarAuto!=='1')return;
+ if(event.target===form.elements.service||event.target===form.elements.date||event.target===form.elements.time){
+   setTimeout(()=>{if(form.dataset.ndCalendarAuto==='1')document.querySelector('#ndProBookingModal .nd-touch-worker-auto')?.click();},80);
+ }
+},true);
 document.addEventListener('click',event=>{
  const cell=event.target instanceof Element?event.target.closest('#ndProBetaPage .proref-calendar-grid [data-slot]'):null;
  if(!cell)return;
@@ -41442,7 +41456,9 @@ const list=appointments.filter(a=>tzDate(a.starts_at)===date&&a.branch===branch)
 const genderOrder={male:0,other:1,female:2};
 const staffs=activeStaff().filter(s=>s.outlet===branch&&ndStaffVisibleOnCalendar(s.id)).sort((a,b)=>genderOrder[ndStaffGender(a)]-genderOrder[ndStaffGender(b)]);
 const roomCols=calendarMode==='room';
-const columns=roomCols?roomsFor(branch).filter(r=>r.branch===branch):staffs;
+// AUTO is a fixed virtual first column, never an employee record and never hideable.
+const ndAutoColumn={id:'__auto__',nickname:'AUTO',name:'AUTO',outlet:branch};
+const columns=roomCols?roomsFor(branch).filter(r=>r.branch===branch):[ndAutoColumn,...staffs];
 const assigned=id=>links.filter(l=>l.appointment_id===id).map(l=>String(l.employee_id));
 const staffBookingCount=id=>list.filter(a=>!['cancelled','no_show'].includes(a.status)&&assigned(a.id).includes(String(id))).length;
 const mins=v=>{const d=new Date(v);return tzTime(d)};
@@ -41453,15 +41469,16 @@ const weekStart=new Date(dayObj);weekStart.setDate(dayObj.getDate()-((dayObj.get
 const weekdayNames=lang==='zh'?['一','二','三','四','五','六','日']:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const weekButtons=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);const ymd=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const n=appointments.filter(a=>tzDate(a.starts_at)===ymd&&(branch==='all'||a.branch===branch)&&a.status!=='cancelled').length;return `<button type="button" class="proref-weekday ${ymd===date?'selected':''}" data-pro-date="${ymd}"><span>${weekdayNames[i]}</span><b>${d.getDate()}</b><small>${n}</small></button>`;}).join('');
 const ccount=Math.max(1,columns.length);
-let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="Business Hours">⚙</button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${ndStaffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
+let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="Business Hours">⚙</button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:String(s.id)==='__auto__'?`<div class="pro-calhead pro-employee-head nd-cal-auto-head" style="grid-column:${i+2};grid-row:1"><span>⚡ AUTO</span><small>自动公平排单</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${ndStaffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
 const toMinutes=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 for(let ri=0;ri<slots.length;ri++){
  const t=slots[ri];const row=ri+2;
  grid+=`<div class="pro-time" style="grid-column:1;grid-row:${row}">${clock12(t)}</div>`;
  for(let ci=0;ci<columns.length;ci++){
   const person=columns[ci],col=ci+2;
-  const booking=list.find(a=>a.status!=='cancelled'&&a.status!=='no_show'&&(roomCols?String(a.room_id||'')===String(person.id):assigned(a.id).includes(String(person.id)))&&toMinutes(mins(a.starts_at))<=toMinutes(t)&&toMinutes(mins(a.ends_at))>toMinutes(t));
-  const rest=!roomCols?restInfo(person.id,t):{rest:false};const resting=rest.rest;
+  const isAuto=!roomCols&&String(person.id)==='__auto__';
+  const booking=isAuto?null:list.find(a=>a.status!=='cancelled'&&a.status!=='no_show'&&(roomCols?String(a.room_id||'')===String(person.id):assigned(a.id).includes(String(person.id)))&&toMinutes(mins(a.starts_at))<=toMinutes(t)&&toMinutes(mins(a.ends_at))>toMinutes(t));
+  const rest=!roomCols&&!isAuto?restInfo(person.id,t):{rest:false};const resting=rest.rest;
   if(booking){
    const first=ri===0||toMinutes(mins(booking.starts_at))>=toMinutes(t);
    if(!first)continue;
@@ -41475,7 +41492,7 @@ for(let ri=0;ri<slots.length;ri++){
    const bookingDay=Date.parse(booking.starts_at);
    const newCustomer=Number.isFinite(registered)?(Number.isFinite(bookedAt)?bookedAt-registered>=0&&bookedAt-registered<=86400000:Number.isFinite(bookingDay)&&bookingDay-registered>=-86400000&&bookingDay-registered<=86400000):firstBooking;
    grid+=`<button type="button" class="pro-cell pro-booked proref-booking nd-cal-status-${esc(booking.status)} ${newCustomer?'nd-customer-new':'nd-customer-returning'}" style="grid-column:${col};grid-row:${row}/span ${span}" data-edit="${esc(booking.id)}"><strong>${esc(customer?.full_name||'Customer')}</strong><span>${esc(booking.service_name)}</span><small>${clock12(mins(booking.starts_at))} · ${esc(booking.status)}</small></button>`;
-  }else grid+=`<button type="button" class="pro-cell proref-empty ${roomCols?'':'nd-gender-'+ndStaffGender(person)} ${resting?'pro-resting pro-resting-'+rest.kind:''}" style="grid-column:${col};grid-row:${row}" data-slot="${t}" ${roomCols?`data-room="${person.id}"`:`data-staff="${person.id}"`} aria-label="Add appointment ${t}"></button>`;
+  }else grid+=`<button type="button" class="pro-cell proref-empty ${isAuto?'nd-calendar-auto-slot':roomCols?'':'nd-gender-'+ndStaffGender(person)} ${resting?'pro-resting pro-resting-'+rest.kind:''}" style="grid-column:${col};grid-row:${row}" data-slot="${t}" ${roomCols?`data-room="${person.id}"`:isAuto?'data-auto="1"':`data-staff="${person.id}"`} aria-label="${isAuto?'AUTO appointment':'Add appointment'} ${t}"></button>`;
  }
 }
 if(!roomCols)for(const record of ndBreakRows){
