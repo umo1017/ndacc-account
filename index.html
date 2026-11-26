@@ -117,6 +117,34 @@ html.nd-network-offline #ndOfflineLogoScreen{display:flex!important}
  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&sheet?.classList.contains('nd-open'))close()});
 })();
 </script>
+<style id="nd-multi-detail-small-five-v51">
+/* 多人预约与预约详情：统一小五号文字，缩短过高的卡片。 */
+@media(max-width:1024px){
+ .nd-multi-booking .nd-multi-sheet>header{height:52px!important;font-size:12px!important}
+ .nd-multi-booking .nd-multi-sheet>header strong{font-size:12px!important;line-height:1.45!important}
+ .nd-multi-booking .nd-multi-sheet>header button{font-size:24px!important}
+ .nd-multi-booking .nd-multi-sheet>header span{font-size:20px!important}
+ .nd-multi-booking .nd-multi-sheet{min-height:0!important;max-height:88dvh!important;padding:0 14px 12px!important}
+ .nd-multi-booking .nd-multi-list{padding-bottom:5px!important}
+ .nd-multi-booking .nd-multi-entry{gap:5px!important;padding:11px 12px!important;margin-bottom:9px!important;border-radius:14px!important;min-height:0!important}
+ .nd-multi-booking .nd-multi-entry :is(strong,b,span,small){font-size:12px!important;line-height:1.45!important;letter-spacing:0!important}
+ .nd-multi-booking .nd-multi-sheet footer button{font-size:12px!important;min-height:44px!important}
+ .nd-booking-detail .nd-booking-detail-sheet>.nd-compact-detail-head{height:51px!important;min-height:51px!important}
+ .nd-booking-detail .nd-compact-detail-head>strong,.nd-booking-detail .nd-booking-detail-sheet>header>strong{font-size:12px!important;line-height:1.45!important}
+ .nd-booking-detail .nd-detail-card{margin-bottom:9px!important;padding:0 12px!important}
+ .nd-booking-detail .nd-detail-card .nd-detail-line{min-height:50px!important;padding:9px 0!important;gap:10px!important}
+ .nd-booking-detail .nd-detail-card .nd-detail-line :is(strong,small),
+ .nd-booking-detail .nd-detail-member-open :is(strong,small),
+ .nd-booking-detail .nd-detail-note-title,.nd-booking-detail .nd-detail-note-content,
+ .nd-booking-detail .nd-detail-chips span{font-size:12px!important;line-height:1.45!important}
+ .nd-booking-detail .nd-detail-note-card{min-height:92px!important;padding:12px!important}
+ .nd-booking-detail .nd-detail-note-content{min-height:58px!important}
+ .nd-booking-detail .nd-detail-main-edit{font-size:12px!important;min-height:43px!important;padding:10px!important}
+}
+</style>
+<script id="nd-multi-detail-small-five-v51-order">
+(()=>{const apply=()=>{const s=document.getElementById('nd-multi-detail-small-five-v51');if(s&&document.body)document.body.appendChild(s)};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(apply,0),{once:true});else setTimeout(apply,0)})();
+</script>
 <style id="nd-detail-image-two-layout-v48">
 /* Fixed AUTO column is a separate scheduling action, not a therapist. */
 #ndProBetaPage .proref-calendar-grid .nd-cal-auto-head{background:#dceaff!important;color:#1767d8!important;border:2px solid #7aaffb!important}
@@ -38265,6 +38293,7 @@ function revealFromCell(cell){
  const reset=byId('proAppointmentReset');if(reset)reset.hidden=true;
  const cancel=byId('proAppointmentCancel');if(cancel)cancel.hidden=true;
  card.hidden=false;mount.appendChild(card);modal.hidden=false;modal.removeAttribute('hidden');modal.style.display='flex';modal.style.zIndex='2147483000';
+ document.dispatchEvent(new Event('nd-auto-booking-open'));
  const close=byId('ndProBookingClose');if(close){close.onclick=()=>{modal.hidden=true;modal.style.display='none';card.hidden=true;const home=byId('ndProContent');if(home)home.appendChild(card);};}
  if(phone){try{phone.focus({preventScroll:true})}catch(_){}}
  if(form.dataset.ndCalendarAuto==='1')setTimeout(()=>document.querySelector('#ndProBookingModal .nd-touch-worker-auto')?.click(),60);
@@ -38375,6 +38404,12 @@ document.addEventListener('click',event=>{
 #ndProBetaPage .nd-rotation-services label span{flex:1;min-width:0;overflow-wrap:anywhere}
 #ndProBetaPage .nd-rotation-services label input{width:20px;height:20px;accent-color:#e45555}
 #ndProBetaPage .nd-rotation-services label b{color:#e45555;font-size:12px}
+#ndProBetaPage .nd-rotation-auto-toggle{display:flex;align-items:center;gap:10px;background:#ecf4ff;border:1px solid #bbd3fc;border-radius:12px;padding:10px 12px;margin:10px 0;font-size:12px;font-weight:700}
+#ndProBetaPage .nd-rotation-auto-toggle input{width:19px;height:19px;accent-color:#3675ef}
+#ndProBetaPage .nd-rotation-auto-toggle small{color:#697789;font-size:11px}
+#ndStaffCalendarManager .nd-calendar-setting-pair{display:flex;gap:12px;align-items:center;flex-shrink:0}
+#ndStaffCalendarManager .nd-calendar-setting-pair>span{display:flex;align-items:center;gap:4px;font-size:11px;color:#4972b6}
+#ndStaffCalendarManager .nd-calendar-setting-pair input{width:17px;height:17px;accent-color:#3675ef}
 #ndProBetaPage .nd-rotation-storage-note{display:block;font-size:11px;color:#8993a3;margin-top:12px}
 #ndProBookingModal .nd-rotation-gender-choice{display:flex!important;align-items:center;gap:8px;font-size:12px!important;margin:5px 0 10px}
 #ndProBookingModal .nd-rotation-gender-choice select{min-height:32px!important;font-size:12px!important;padding:4px 10px!important;width:auto!important;flex:1}
@@ -41340,19 +41375,36 @@ function ndStaffGender(s){
  return 'other';
 }
 function ndSetStaffGender(id,gender){const values=ndGenderOverrides();values[String(id)]=gender;localStorage.setItem(ndGenderKey,JSON.stringify(values));}
+const ndAutoParticipationKey='nd_pro_staff_auto_participation_v1';
+function ndAutoParticipation(){try{return JSON.parse(localStorage.getItem(ndAutoParticipationKey)||'{}')||{}}catch(_){return {}}}
+function ndAutoEnabled(id){return ndAutoParticipation()[String(id)]!==false}
+function ndSetAutoEnabled(id,enabled){const values=ndAutoParticipation();values[String(id)]=Boolean(enabled);try{localStorage.setItem(ndAutoParticipationKey,JSON.stringify(values));return true}catch(_){stat('无法保存 AUTO 排灯开关。',true);return false}}
 const ndServiceExclusionKey='nd_pro_staff_service_exclusions_v1';
 function ndExclusions(){try{return JSON.parse(localStorage.getItem(ndServiceExclusionKey)||'{}')||{}}catch(_){return {}}}
 function ndExcluded(employeeId,service){return (ndExclusions()[String(employeeId)]||[]).includes(String(service||''))}
 function ndSetExcluded(employeeId,service,excluded){const settings=ndExclusions(),id=String(employeeId),items=new Set(settings[id]||[]);if(excluded)items.add(service);else items.delete(service);settings[id]=[...items];try{localStorage.setItem(ndServiceExclusionKey,JSON.stringify(settings));return true}catch(_){stat('无法储存排除规则。',true);return false}}
+const ndSpecialCreditKey='nd_pro_auto_special_service_credits_v1';
+function ndSpecialCredits(){try{return JSON.parse(localStorage.getItem(ndSpecialCreditKey)||'{}')||{}}catch(_){return {}}}
+function ndCreditForService(service){return ndSpecialCredits()[String(service||'')]===1.5?1.5:1}
+function ndSetSpecialCredit(service,special){const data=ndSpecialCredits();if(special)data[String(service)]=1.5;else delete data[String(service)];try{localStorage.setItem(ndSpecialCreditKey,JSON.stringify(data));return true}catch(_){stat('无法储存特殊护理灯数。',true);return false}}
+function ndStaffOnDate(member,day){
+ if(!member||member.nd_archived_at)return false;
+ const started=member.hire_date||member.join_date||member.start_date||member.employment_start_date||member.date_joined||member.joined_at;
+ const ended=member.last_working_date||member.resignation_date||member.termination_date||member.employment_end_date;
+ return (!started||String(started).slice(0,10)<=day)&&(!ended||String(ended).slice(0,10)>=day);
+}
 function ndServicesForRotation(){const names=services.filter(s=>s.is_active!==false&&s.available_for_booking!==false).map(s=>String(s.name_zh||s.name_en||s.name||'').trim());return [...new Set(names.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh'))}
 function ndRenderStaffRotation(host){
  const roster=staff.filter(s=>branch==='all'||s.outlet===branch),allServices=ndServicesForRotation();let selected=roster[0]?.id,search='';
- host.innerHTML='<section class="nd-rotation-page"><header><button type="button" data-back>‹</button><h2>自动排单 · 护理排除</h2></header><p>选择员工，把该员工<strong>不能做</strong>的护理标记为「排除」。未排除的护理可参与 AUTO 推荐。男、女技师独立轮流，已预约时段不会重复安排。</p><div class="nd-rotation-roster"></div><label class="nd-rotation-search-label">查找护理<input type="search" placeholder="输入护理名称"></label><div class="nd-rotation-services"></div><small class="nd-rotation-storage-note">当前排除设置保存在此设备浏览器中；跨设备同步需连接数据库规则表。</small></section>';
+ host.innerHTML='<section class="nd-rotation-page"><header><button type="button" data-back>‹</button><h2>自动排单 · 护理排除</h2></header><p>排除员工不能做的护理；特殊原价护理可设置为 1.5 灯。新员工从入职日起参与，离职员工不再参与；男女分开公平排单。</p><div class="nd-rotation-roster"></div><label class="nd-rotation-search-label">查找护理<input type="search" placeholder="输入护理名称"></label><div class="nd-rotation-services"></div><small class="nd-rotation-storage-note">排除与 1.5 灯设置保存在此设备；跨设备同步需要数据库规则表。</small></section>';
  host.querySelector('[data-back]').onclick=()=>{active='appointments';render()};
  const rosterEl=host.querySelector('.nd-rotation-roster'),listEl=host.querySelector('.nd-rotation-services');
  function draw(){rosterEl.innerHTML=roster.map(s=>`<button type="button" class="${String(s.id)===String(selected)?'active':''}" data-employee="${esc(s.id)}">${esc(s.nickname||s.name)} <small>${ndStaffGender(s)==='male'?'♂ 男':ndStaffGender(s)==='female'?'♀ 女':'未设置'}</small></button>`).join('');rosterEl.querySelectorAll('[data-employee]').forEach(b=>b.onclick=()=>{selected=b.dataset.employee;draw()});
-  const names=allServices.filter(n=>n.toLowerCase().includes(search));listEl.innerHTML=names.map(name=>`<label><span>${esc(name)}</span><input type="checkbox" data-service="${esc(name)}" ${ndExcluded(selected,name)?'checked':''}><b>排除</b></label>`).join('')||'<p>没有匹配的护理</p>';
+  let autoSwitch=host.querySelector('.nd-rotation-auto-toggle');if(!autoSwitch){autoSwitch=document.createElement('label');autoSwitch.className='nd-rotation-auto-toggle';rosterEl.after(autoSwitch)}autoSwitch.innerHTML=`<span>⚡ ${esc(staff.find(s=>String(s.id)===String(selected))?.nickname||'员工')} · 参与 AUTO 排灯</span><input type="checkbox" ${ndAutoEnabled(selected)?'checked':''}><small>${ndAutoEnabled(selected)?'开启 · 自动安排':'关闭 · 仅人工安排'}</small>`;
+  autoSwitch.querySelector('input').onchange=e=>{if(!ndSetAutoEnabled(selected,e.target.checked))e.target.checked=!e.target.checked;draw()};
+  const names=allServices.filter(n=>n.toLowerCase().includes(search));listEl.innerHTML=names.map(name=>`<label><span>${esc(name)}</span><input type="checkbox" data-service="${esc(name)}" ${ndExcluded(selected,name)?'checked':''}><b>排除</b><input type="checkbox" data-special-credit="${esc(name)}" ${ndCreditForService(name)===1.5?'checked':''}><b>1.5 灯</b></label>`).join('')||'<p>没有匹配的护理</p>';
   listEl.querySelectorAll('[data-service]').forEach(input=>input.onchange=()=>{if(!ndSetExcluded(selected,input.dataset.service,input.checked))input.checked=!input.checked;});
+  listEl.querySelectorAll('[data-special-credit]').forEach(input=>input.onchange=()=>{if(!ndSetSpecialCredit(input.dataset.specialCredit,input.checked))input.checked=!input.checked;});
  }
  host.querySelector('input[type="search"]').oninput=e=>{search=e.target.value.trim().toLowerCase();draw()};draw();
 }
@@ -41376,9 +41428,10 @@ function ndOpenStaffCalendarManager(){
  document.getElementById('ndStaffCalendarManager')?.remove();
  const overlay=document.createElement('div');overlay.id='ndStaffCalendarManager';overlay.className='nd-calendar-staff-overlay';
  const members=activeStaff().filter(s=>branch==='all'||s.outlet===branch);
- overlay.innerHTML=`<div class="nd-calendar-staff-sheet" role="dialog" aria-modal="true" aria-label="预约表员工显示"><header><strong>预约表员工显示</strong><button type="button" data-dismiss aria-label="关闭">×</button></header><p>关闭后，这名员工不会出现在预约表的员工列；已有预约不会删除。随时可以在这里重新开启。</p><div class="nd-calendar-staff-list">${members.map(s=>`<label><span>${esc(s.nickname||s.name)}<small>${esc(s.outlet||'')} · ${ndStaffGender(s)==='male'?'男 · 蓝色':ndStaffGender(s)==='female'?'女 · 粉色':'未设置'}</small></span><input type="checkbox" data-calendar-staff-id="${esc(s.id)}" ${ndStaffVisibleOnCalendar(s.id)?'checked':''} aria-label="显示 ${esc(s.nickname||s.name)}"></label>`).join('')||'<p>当前分行没有员工</p>'}</div><button type="button" data-dismiss class="nd-calendar-staff-done">完成</button></div>`;
+ overlay.innerHTML=`<div class="nd-calendar-staff-sheet" role="dialog" aria-modal="true" aria-label="预约表员工显示"><header><strong>员工显示与 AUTO 排灯</strong><button type="button" data-dismiss aria-label="关闭">×</button></header><p>「显示」控制预约表员工列；「AUTO」独立控制是否自动分配。关闭 AUTO 后仍可人工预约，重新开启当天即可参与。</p><div class="nd-calendar-staff-list">${members.map(s=>`<label><span>${esc(s.nickname||s.name)}<small>${esc(s.outlet||'')} · ${ndStaffGender(s)==='male'?'男 · 蓝色':ndStaffGender(s)==='female'?'女 · 粉色':'未设置'}</small></span><span class="nd-calendar-setting-pair"><span>显示 <input type="checkbox" data-calendar-staff-id="${esc(s.id)}" ${ndStaffVisibleOnCalendar(s.id)?'checked':''} aria-label="显示 ${esc(s.nickname||s.name)}"></span><span>AUTO <input type="checkbox" data-auto-staff-id="${esc(s.id)}" ${ndAutoEnabled(s.id)?'checked':''} aria-label="${esc(s.nickname||s.name)} 参与 AUTO"></span></span></label>`).join('')||'<p>当前分行没有员工</p>'}</div><button type="button" data-dismiss class="nd-calendar-staff-done">完成</button></div>`;
  overlay.addEventListener('click',e=>{if(e.target===overlay||e.target.closest('[data-dismiss]'))overlay.remove()});
  overlay.querySelectorAll('[data-calendar-staff-id]').forEach(input=>input.addEventListener('change',()=>{if(ndSetStaffCalendarVisible(input.dataset.calendarStaffId,input.checked)){render();}else input.checked=!input.checked}));
+ overlay.querySelectorAll('[data-auto-staff-id]').forEach(input=>input.addEventListener('change',()=>{if(!ndSetAutoEnabled(input.dataset.autoStaffId,input.checked))input.checked=!input.checked}));
  document.body.appendChild(overlay);
 }
 const timeSlots=()=>{const {start,end}=visibleTimes(),a=[];for(let m=start;m<end;m+=15)a.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));return a;};
@@ -41760,6 +41813,30 @@ el('proRefCustomerClose').onclick=closeCustomer;el('proRefCustomerShade').onclic
 const displayCustomer=()=>{const id=form.elements.customer.value,c=customers.find(x=>String(x.id)===String(id));el('proRefCustomerName').textContent=c?.full_name||'—';if(c){phoneSearch.value=c.phone||c.full_name;selection.hidden=true;details.hidden=false}else{details.hidden=true}};
 const showCustomerModal=()=>{customerModal.hidden=false;el('proQuickPhone').value=/[0-9]{6}/.test(phoneSearch.value)?phoneSearch.value:'';el('proQuickName').value=/[0-9]{6}/.test(phoneSearch.value)?'':phoneSearch.value;el('proQuickPhone').focus()};
 let guestCount=1;
+ let ndMaleGuests=0,ndFemaleGuests=1;
+ const ndGenderCounts=document.createElement('div');ndGenderCounts.className='nd-auto-gender-counts';
+ ndGenderCounts.innerHTML='<div class="nd-auto-gender-line"><span>♂ 男技师人数</span><button type="button" data-gender="male" data-step="-1">−</button><output data-count="male">0</output><button type="button" data-gender="male" data-step="1">＋</button></div><div class="nd-auto-gender-line"><span>♀ 女技师人数</span><button type="button" data-gender="female" data-step="-1">−</button><output data-count="female">0</output><button type="button" data-gender="female" data-step="1">＋</button></div>';
+ guestsField?.appendChild(ndGenderCounts);
+ function ndIsAutoBooking(){return form.dataset.ndCalendarAuto==='1'&&!form.elements.appointment_id.value}
+ function ndUpdateGenderCounts(){
+   const auto=ndIsAutoBooking();ndGenderCounts.hidden=!auto;
+   guestsField?.classList.toggle('nd-auto-gender-mode',auto);
+   ndGenderRequest.hidden=auto;
+   if(auto){guestCount=Math.max(1,ndMaleGuests+ndFemaleGuests);ndGenderCounts.querySelector('[data-count="male"]').textContent=String(ndMaleGuests);ndGenderCounts.querySelector('[data-count="female"]').textContent=String(ndFemaleGuests);}
+ }
+ ndGenderCounts.addEventListener('click',e=>{
+   const btn=e.target.closest('button[data-gender]');if(!btn)return;
+   const delta=Number(btn.dataset.step),male=btn.dataset.gender==='male';
+   const total=ndMaleGuests+ndFemaleGuests;
+   if(delta>0&&total>=20)return;
+   if(delta<0&&total<=1)return;
+   if(male)ndMaleGuests=Math.max(0,ndMaleGuests+delta);else ndFemaleGuests=Math.max(0,ndFemaleGuests+delta);
+   ndUpdateGenderCounts();guestWorkers().forEach(sel=>sel.value='');updateGuests();void updateAvailability();
+ });
+ document.addEventListener('nd-auto-booking-open',()=>{
+   if(ndIsAutoBooking()){ndMaleGuests=0;ndFemaleGuests=1;guestCount=1;updateGuests();ndPaintWorkers();}
+   else ndUpdateGenderCounts();
+ });
  const mainWorker=form.elements.employee;
  const ndGenderRequest=document.createElement('label');ndGenderRequest.className='nd-rotation-gender-choice';ndGenderRequest.innerHTML='<span>技师分组</span><select aria-label="技师男女分组"><option value="any">自动 · 不限男女</option><option value="male">男技师队列</option><option value="female">女技师队列</option></select>';
  bookingFields.employee?.prepend(ndGenderRequest);
@@ -41767,9 +41844,28 @@ let guestCount=1;
  bookingFields.employee?.appendChild(guestWorkerWrap);
  const guestWorkers=()=>[mainWorker,...guestWorkerWrap.querySelectorAll('select[data-guest-worker]')];
  const bookedWorkerIds=new Set();
+ // Rest days and scheduled breaks block AUTO only. Manual bookings made from
+ // the employee/rest calendar remain possible and still undergo clash checks.
+ function ndAutoWorkerResting(id,index){
+   const day=form.elements.date.value;
+   if(day!==date)return true; // Never guess rest availability for another date.
+   const employee=staff.find(s=>String(s.id)===String(id));
+   if(!employee)return true;
+   const start=minsOf(form.elements.time.value);
+   const duration=index===0?Number(form.elements.duration.value)||60:Number(otherGuestServices.get(index)?.duration)||Number(form.elements.duration.value)||60;
+   const end=start+duration;
+   const restDays=Number(restById.get(String(id))||0);
+   if(restDays>=1)return true;
+   if(restDays>0){
+     const b=employee.outlet||form.elements.branch.value;
+     const period=restPeriod(b),half=restHalfGet(day,b,id);
+     if(half==='second' ? end>period.mid : start<period.mid)return true;
+   }
+   return ndBreakRows.some(row=>String(row.employee_id)===String(id)&&(!row.branch||row.branch===employee.outlet)&&start<minsOf(String(row.end_time||'').slice(0,5))&&end>minsOf(String(row.start_time||'').slice(0,5)));
+ }
  function ndAutoRank(available,index){
    const chosenService=index===0?form.elements.service.value:(otherGuestServices.get(index)?.service||form.elements.service.value);
-   const wantedGender=ndGenderRequest.querySelector('select').value;
+   const wantedGender=ndIsAutoBooking()?(index<ndMaleGuests?'male':index<ndMaleGuests+ndFemaleGuests?'female':'any'):ndGenderRequest.querySelector('select').value;
    const promo=/promo|promotion|优惠|体验|特价|促销/i.test(chosenService);
    const day=form.elements.date.value;
    const customer=customers.find(c=>String(c.id)===String(form.elements.customer.value));
@@ -41782,7 +41878,7 @@ let guestCount=1;
      const isNew=customer?.created_at&&String(customer.created_at).slice(0,10)===day;
      const isPromo=/promo|promotion|优惠|体验|特价|促销/i.test(String(a.service_name||''));
      for(const id of assignedTo(a.id)){
-       const current=stats.get(id)||{total:0,minutes:0,rotationMinutes:0,category:0,categoryMinutes:0};current.total++;
+       const current=stats.get(id)||{total:0,minutes:0,rotationMinutes:0,category:0,categoryMinutes:0};current.total+=ndCreditForService(a.service_name);
        // Balance treatment time, not the number of customers: 120 MIN equals two 60 MIN bookings.
        const workedMinutes=Math.max(0,(Date.parse(a.ends_at)-Date.parse(a.starts_at))/60000)||60;
        current.minutes+=workedMinutes;
@@ -41792,10 +41888,11 @@ let guestCount=1;
        stats.set(id,current);
      }
    });
-   return available.filter(id=>{const member=staff.find(s=>String(s.id)===id);return member&&!bookedWorkerIds.has(String(id))&&!ndExcluded(id,chosenService)&&(wantedGender==='any'||ndStaffGender(member)===wantedGender)}).sort((a,b)=>{
+   return available.filter(id=>{const member=staff.find(s=>String(s.id)===id);return member&&ndAutoEnabled(id)&&ndStaffOnDate(member,day)&&!bookedWorkerIds.has(String(id))&&!ndAutoWorkerResting(id,index)&&!ndExcluded(id,chosenService)&&(wantedGender==='any'||ndStaffGender(member)===wantedGender)}).sort((a,b)=>{
      const x=stats.get(a)||{total:0,minutes:0,rotationMinutes:0,category:0,categoryMinutes:0},y=stats.get(b)||{total:0,minutes:0,rotationMinutes:0,category:0,categoryMinutes:0};
      // Balance new/promo/original-price minutes, then all actual work.
-     return x.rotationMinutes-y.rotationMinutes||x.categoryMinutes-y.categoryMinutes||x.minutes-y.minutes||x.total-y.total||String(a).localeCompare(String(b));
+     // Weighted lamp credits are a tie-breaker after actual work minutes.
+     return x.rotationMinutes-y.rotationMinutes||x.total-y.total||x.categoryMinutes-y.categoryMinutes||x.minutes-y.minutes||String(a).localeCompare(String(b));
    });
  }
  function fillWorkerOptions(sel,index){
@@ -41822,6 +41919,7 @@ let guestCount=1;
    sel.dataset.guestIndex=String(index);
  }
  function updateGuests(){
+   ndUpdateGenderCounts();
    el('proGuestsCount').textContent=String(guestCount);
    const previously=guestWorkers().map(s=>s.value);
    guestWorkerWrap.replaceChildren();
@@ -41933,7 +42031,7 @@ let guestCount=1;
    const choices=[...staff].sort((a,b)=>(a.outlet===currentBranch?-1:1)-(b.outlet===currentBranch?-1:1));
    wrap.replaceChildren();
    const autoButton=document.createElement('button');autoButton.type='button';autoButton.className='nd-touch-worker nd-touch-worker-auto';
-   autoButton.textContent='AUTO · 自动安排';autoButton.title='按护理排除、男女队列及服务时长平衡安排';
+   autoButton.textContent='AUTO · 自动安排';autoButton.title='跳过休息员工，按护理排除、男女队列及服务时长平衡安排';
    autoButton.onclick=()=>{guestWorkers().forEach(sel=>{sel.value=''});refreshGuestWorkers(true);ndPaintWorkers();void updateAvailability();};
    wrap.append(autoButton);
    choices.forEach(member=>{
@@ -45239,6 +45337,24 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
 (()=>{const apply=()=>{const s=document.getElementById('nd-booking-small-five-font-v38');if(s&&document.body)document.body.appendChild(s)};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply()})();
 </script>
 <style id="nd-booking-save-response-v39">
+ /* AUTO mode: replace the one-dimensional guest counter with male/female counts. */
+ #ndProBookingModal .nd-auto-gender-counts[hidden],#ndProBookingModal .nd-rotation-gender-choice[hidden]{display:none!important}
+ #ndProBookingModal .pro-field.nd-auto-gender-mode .probooking-counter{display:none!important}
+ #ndProBookingModal .nd-auto-gender-counts{display:flex;flex-direction:column;gap:7px;width:100%;margin:7px 0}
+ #ndProBookingModal .nd-auto-gender-line{display:flex;align-items:center;gap:9px;justify-content:flex-end;min-height:40px;background:#f5f7fc;border-radius:11px;padding:4px 9px}
+ #ndProBookingModal .nd-auto-gender-line>span{margin-right:auto;font-size:11px!important;color:#2b4b75;font-weight:700}
+ #ndProBookingModal .nd-auto-gender-line button{border:0;border-radius:50%;width:31px;height:31px;min-width:31px;background:#3179f5;color:white;font-size:17px!important;font-weight:700;padding:0;line-height:1}
+ #ndProBookingModal .nd-auto-gender-line output{min-width:22px;text-align:center;color:#3179f5;font-size:12px!important;font-weight:800}
+ @media(max-width:1024px){
+  #ndProBookingModal .pro-booking-panel,
+  #ndProBookingModal .pro-booking-panel :is(label,small,strong,span,p,div,button,input,select,textarea,option),
+  #ndProBookingModal .nd-ref-customer strong,
+  #ndProBookingModal .nd-ref-tab-body .pro-field select,
+  #ndProBookingModal .nd-booking-extra-fields-v33 textarea,
+  #ndProBookingModal #proAppointmentSave{font-size:11px!important;line-height:1.4!important}
+  #ndProBookingModal #proAppointmentHeading{font-size:12px!important}
+  #ndProBookingModal .proref-icon,#ndProBookingModal .pro-field[data-ref-kind]::before{font-size:18px!important}
+ }
  #ndProBookingModal .proref-details .proref-actions{flex-direction:column!important;align-items:stretch!important}
  #ndProBookingModal .nd-booking-save-feedback-v39{display:block!important;color:#b33434!important;font-size:12px!important;line-height:1.5!important;margin:7px 5px!important;white-space:normal!important}
  #ndProBookingModal .nd-booking-save-feedback-v39[data-state="working"]{color:#246ad3!important}
