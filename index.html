@@ -41702,6 +41702,10 @@ let guestCount=1;
  const remarksTarget=form.querySelector('[name="remarks"], [name="notes"], [name="remark"], [name="note"], #proBookingRemarks, .proref-remarks');
  const remarksRow=remarksTarget?.closest('.pro-field, .proref-remarks, .probooking-remarks')||remarksTarget;
  (remarksRow||actions||details.lastElementChild)?.before(ownerPanel);
+ const bookingExtras=document.createElement('section');
+ bookingExtras.className='nd-booking-extra-fields-v33';
+ bookingExtras.innerHTML='<div class="nd-booking-color-caption">顾客颜色注明</div><div class="nd-booking-color-options" role="group" aria-label="顾客类型"><label><input type="radio" name="nd_customer_color" value="" checked> 不注明</label><label class="new"><input type="radio" name="nd_customer_color" value="新顾客"> 新顾客</label><label class="returning"><input type="radio" name="nd_customer_color" value="老顾客"> 老顾客</label></div><label class="nd-booking-notes-label">备注<textarea name="nd_booking_notes" rows="2" placeholder="填写预约备注"></textarea></label>';
+ (actions||details.lastElementChild)?.before(bookingExtras);
 
  // Touch-friendly therapist toggles. Keep the existing native selects as the
  // source of truth so the appointment RPC and overlap validation still work.
@@ -41796,7 +41800,7 @@ const appointmentCard=el('proAppointmentCard'), bookingHome=appointmentCard.pare
 function showBooking(){if(!form.elements.appointment_id.value && branch!=='all')form.elements.branch.value=branch;if(guestWorkers().length!==guestCount)updateGuests();displayCustomer();ndPaintWorkers();ndUpdateVisualSummary();appointmentCard.hidden=false;bookingMount.appendChild(appointmentCard);el('ndProBookingModal').hidden=false;el('ndProBookingClose').focus();void ndReloadBookingServices();}
 function closeBooking(){lookupClose();closeCustomer();el('ndProBookingModal').hidden=true;bookingHome.appendChild(appointmentCard);appointmentCard.hidden=true;el('proQuickCustomer').hidden=true;}
 function reset(){form.reset();el('ndProBookingModal')?.classList.remove('nd-break-mode');ndDrawBookers(ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]);guestCount=1;activeGuestService=0;otherGuestServices.clear();mainWorker.value='';updateGuests();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
-function choose(a){ndSyncBookersForBooking(a.id);el('ndProBookingModal')?.classList.remove('nd-break-mode');form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=mins(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}if(a.service_name&&!Array.from(form.elements.service.options).some(o=>o.value===a.service_name)){
+function choose(a){ndSyncBookersForBooking(a.id);el('ndProBookingModal')?.classList.remove('nd-break-mode');form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=mins(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));const priorNotes=String(a.notes||'');const colorMatch=priorNotes.match(/^【(新顾客|老顾客)】\s*/);const colorRadio=form.querySelector('input[name="nd_customer_color"][value="'+(colorMatch?.[1]||'')+'"]');if(colorRadio)colorRadio.checked=true;const noteInput=form.elements.nd_booking_notes;if(noteInput)noteInput.value=priorNotes.replace(/^【(?:新顾客|老顾客)】\s*/,'');if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}if(a.service_name&&!Array.from(form.elements.service.options).some(o=>o.value===a.service_name)){
   form.elements.service.add(new Option(a.service_name,a.service_name));
 }form.elements.service.value=a.service_name;guestCount=Math.max(1,assigned(a.id).length);updateGuests();guestWorkers().forEach((sel,i)=>{const id=assigned(a.id)[i]||'';if(id&&Array.from(sel.options).some(o=>o.value===id))sel.value=id;});refreshGuestWorkers(false);ndPaintWorkers();form.elements.room_id.value=a.room_id||'';displayCustomer();el('proAppointmentHeading').textContent=tr('Edit Appointment','编辑预约');el('proAppointmentSave').textContent=tr('Save Changes','保存修改');el('proAppointmentReset').hidden=false;el('proAppointmentCancel').hidden=a.status==='cancelled'||a.status==='completed';showBooking();}
 host.querySelectorAll('[data-slot]').forEach(b=>{
@@ -42243,12 +42247,14 @@ form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries
      if(r.error)throw r.error;
      groupCreated++;
      const createdId=typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data;
-     if(createdId){const stored=await db.from('nd_pro_beta_booking_staff_meta').upsert({appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]},{onConflict:'appointment_id'});if(stored.error)throw Error('已创建预约，但保存预约员工失败：'+stored.error.message);}
+     if(createdId){const stored=await db.from('nd_pro_beta_booking_staff_meta').upsert({appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]},{onConflict:'appointment_id'});if(stored.error)throw Error('已创建预约，但保存预约员工失败：'+stored.error.message);const groupNote=[x.nd_customer_color?'【'+x.nd_customer_color+'】':'',String(x.nd_booking_notes||'').trim()].filter(Boolean).join(' ');if(groupNote){const nr=await db.from('nd_pro_beta_appointments').update({notes:groupNote}).eq('id',createdId);if(nr.error)stat('预约已建立，但备注同步失败：'+nr.error.message,true);}}
    }
    date=x.date;branch=x.branch;closeBooking();await load();stat('已新增 '+groupCreated+' 位顾客的关联预约。');return;
  }
  const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
  const createdId=editing?x.appointment_id:(typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data);
+ const bookingNote=[x.nd_customer_color?'【'+x.nd_customer_color+'】':'',String(x.nd_booking_notes||'').trim()].filter(Boolean).join(' ');
+ if(createdId){const noteResult=await db.from('nd_pro_beta_appointments').update({notes:bookingNote}).eq('id',createdId);if(noteResult.error)stat('预约已保存，但备注未同步：'+noteResult.error.message,true);}
  if(createdId&&!editing){
    // Booking staff is always the signed-in employee and cannot be manually picked.
    const record={appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]};
@@ -44788,5 +44794,39 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
 (()=>{
  const apply=()=>{const style=document.getElementById('nd-compact-pickers-v32');if(style&&document.body)document.body.appendChild(style)};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
+})();
+</script>
+<style id="nd-booking-edit-details-v33">
+@media(max-width:760px){
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"]{display:flex!important;align-items:center!important;gap:8px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"]>label{display:none!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"]:before{content:'●'!important;display:grid!important;place-items:center!important;position:static!important;flex:0 0 33px!important;width:33px!important;height:33px!important;border-radius:8px!important;background:#4999e8!important;color:white!important;font-size:15px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"] .nd-appointment-staff-toggle{flex:1!important;min-width:0!important;margin:0!important;padding:0!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"] .nd-staff-compact{width:100%!important;min-height:40px!important;padding:5px 0!important;font-size:12px!important}
+ #ndProBookingModal .nd-ref-tab-body .pro-field[data-ref-kind="employee"] .nd-staff-compact:before{display:none!important}
+ #ndProBookingModal .proref-datetime .pro-field input{pointer-events:auto!important;touch-action:manipulation!important}
+ #ndProBookingModal .nd-service-launch{pointer-events:auto!important;cursor:pointer!important}
+ #ndProBookingModal .nd-booking-extra-fields-v33{background:#fff!important;padding:10px 13px!important;border-radius:13px!important;display:grid!important;gap:9px!important}
+ #ndProBookingModal .nd-booking-color-caption,#ndProBookingModal .nd-booking-notes-label{font-size:12px!important;font-weight:700!important;color:#252a31!important}
+ #ndProBookingModal .nd-booking-color-options{display:flex!important;flex-wrap:wrap!important;gap:7px!important}
+ #ndProBookingModal .nd-booking-color-options label{display:flex!important;align-items:center!important;gap:4px!important;padding:7px 9px!important;border-radius:9px!important;background:#f1f2f5!important;font-size:12px!important}
+ #ndProBookingModal .nd-booking-color-options .new{background:#e7f1ff!important;color:#176ae2!important}
+ #ndProBookingModal .nd-booking-color-options .returning{background:#ffeaf2!important;color:#b94472!important}
+ #ndProBookingModal .nd-booking-color-options input{accent-color:#287cf6!important;width:15px!important;height:15px!important}
+ #ndProBookingModal .nd-booking-notes-label textarea{display:block!important;width:100%!important;min-height:64px!important;box-sizing:border-box!important;margin-top:6px!important;padding:9px!important;border:1px solid #dde3ed!important;border-radius:9px!important;background:#f7f8fb!important;color:#222!important;font-size:16px!important;font-weight:400!important;resize:vertical!important}
+}
+</style>
+<script id="nd-booking-edit-details-v33-js">
+(()=>{
+ const setup=()=>{
+  const modal=document.getElementById('ndProBookingModal');if(!modal)return;
+  modal.addEventListener('click',e=>{
+   const dateText=e.target.closest('.nd-date-render,.nd-time-render');
+   if(dateText){const input=dateText.parentElement?.querySelector('input[type="date"],input[type="time"]');if(input){try{input.showPicker()}catch(_){input.focus();input.click()}}return;}
+   const dateRow=e.target.closest('.proref-datetime .pro-field');
+   if(dateRow&&!e.target.closest('input')){const input=dateRow.querySelector('input[type="date"],input[type="time"]');if(input){try{input.showPicker()}catch(_){input.focus();input.click()}}}
+  });
+ };
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
 })();
 </script>
