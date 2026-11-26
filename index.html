@@ -41351,8 +41351,36 @@ document.addEventListener('click',e=>{if(e.target?.closest?.('#ndProRestClose'))
 const ndRotationNav=document.createElement('button');ndRotationNav.type='button';ndRotationNav.dataset.proPage='staff_rotation';ndRotationNav.textContent='⚖ 自动排单 · 护理排除';el('ndProSideNav')?.appendChild(ndRotationNav);
 el('ndProSideNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-pro-page]');if(!b||!ready)return;active=b.dataset.proPage;if(active==='appointments'){calendarMode='staff';showTherapists=true;}else if(active==='room_calendar'){calendarMode='room';}drawerToggle(false);render();});
 
-async function read(table,select='*'){const r=await db.from(table).select(select);if(r.error)throw new Error(`${table}: ${r.error.message}`);return r.data||[];}
-async function load(){stat(tr('Loading beta data…','正在读取测试数据…'));try{const out=await Promise.all([read('nd_pro_beta_customers'),read('nd_pro_beta_services'),read('nd_pro_beta_service_prices'),read('nd_pro_beta_appointments'),read('nd_pro_beta_appointment_staff'),read('employees','*')]);[customers,services,prices,appointments,links,staff]=out;await ndRefreshCloudCatalog();ndBenefitCacheKey='';staff=staff.filter(x=>!x.nd_archived_at&&!x.last_working_date);if(window.ndBetaAutoPrefs){window.ndBetaAutoPrefs.staffList=staff;try{await window.ndBetaAutoPrefs.loadAll()}catch(error){console.warn('AUTO preferences not yet available:',error.message)}}const roomRes=await db.from('nd_pro_beta_rooms').select('id,branch,room_name,is_active').order('room_name');rooms=roomRes.error?[]:(roomRes.data||[]);await refreshRest();await ndFetchBookingExtras();await ndFetchBookingBenefits();stat(roomRes.error?tr('Room list unavailable. Check Beta SQL.','房间资料无法读取，请检查 Beta SQL。'):'');render();}catch(e){
+// A stalled auxiliary request must not freeze the entire Beta navigation.
+function ndBetaDeadline(promise,ms,label){let timer;return Promise.race([Promise.resolve(promise),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(label+' timeout')),ms);})]).finally(()=>clearTimeout(timer));}
+async function read(table,select='*'){const r=await ndBetaDeadline(db.from(table).select(select),12000,table);if(r.error)throw new Error(`${table}: ${r.error.message}`);return r.data||[];}
+let ndBetaLoadSerial=0;
+async function load(){
+ const serial=++ndBetaLoadSerial;
+ stat(tr('Loading beta data…','正在读取测试数据…'));
+ try{
+  const out=await Promise.all([read('nd_pro_beta_customers'),read('nd_pro_beta_services'),read('nd_pro_beta_service_prices'),read('nd_pro_beta_appointments'),read('nd_pro_beta_appointment_staff'),read('employees','*')]);
+  if(serial!==ndBetaLoadSerial||!page?.classList.contains('nd-pro-shown'))return;
+  [customers,services,prices,appointments,links,staff]=out;
+  staff=staff.filter(x=>!x.nd_archived_at&&!x.last_working_date);
+  ndBenefitCacheKey='';stat('');render();
+  // Supplementary tables update independently, without holding the main page hostage.
+  const extras=[
+   ndBetaDeadline(ndRefreshCloudCatalog(),8000,'catalog'),
+   (async()=>{const result=await ndBetaDeadline(db.from('nd_pro_beta_rooms').select('id,branch,room_name,is_active').order('room_name'),8000,'rooms');if(!result.error&&serial===ndBetaLoadSerial)rooms=result.data||[];})(),
+   ndBetaDeadline(refreshRest(),8000,'rest'),
+   ndBetaDeadline(ndFetchBookingExtras(),8000,'booking extras'),
+   ndBetaDeadline(ndFetchBookingBenefits(),8000,'benefits')
+  ];
+  if(window.ndBetaAutoPrefs){window.ndBetaAutoPrefs.staffList=staff;extras.push(ndBetaDeadline(window.ndBetaAutoPrefs.loadAll(),8000,'AUTO preferences'));}
+  void Promise.allSettled(extras).then(results=>{
+   for(const result of results)if(result.status==='rejected')console.warn('Beta supplementary data:',result.reason?.message||result.reason);
+   if(serial!==ndBetaLoadSerial||!ready||!page?.classList.contains('nd-pro-shown'))return;
+   const focused=document.activeElement;
+   const typing=focused&&page.contains(focused)&&focused.matches('input,textarea,select,[contenteditable="true"]');
+   if(!typing&&!document.querySelector('#ndProBookingModal:not([hidden]),#ndProRestModal:not([hidden]),#ndProProfileOverlay:not([hidden])'))render();
+  });
+ }catch(e){
   const message=String(e?.message||e||'Unknown error');
   stat(tr('Beta data loading failed: ','测试数据读取失败：')+message,true);
   const host=el('ndProContent');
@@ -44026,8 +44054,10 @@ if(tab==='settings'){
 }
 }
 async function authorize(){db=window.salaryDb||null;if(!db)throw Error('Supabase is not ready');const a=await db.auth.getUser();if(a.error)throw a.error;if(String(a.data?.user?.email||'').toLowerCase()!=='umo1017@gmail.com')throw Error('UMO only');const ok=await db.rpc('nd_pro_beta_is_umo');if(ok.error)throw ok.error;if(ok.data!==true)throw Error('UMO permission required')}
-async function open(id){overlay.hidden=false;document.body.style.overflow='hidden';customer=null;ext={};$('ndProProfileError').textContent='';tab='info';render();try{await authorize();const c=await db.from('nd_pro_beta_customers').select('id,full_name,phone,email').eq('id',id).single();if(c.error)throw c.error;customer=c.data;const x=await db.from('nd_pro_beta_customer_profiles').select('*').eq('customer_id',id).maybeSingle();if(x.error&&x.error.code!=='42P01'&&x.error.code!=='PGRST205')throw x.error;ext=x.data||{};render()}catch(e){$('ndProProfileError').textContent=e.message||String(e)}}
-function close(){overlay.hidden=true;document.body.style.overflow='';if(window.ndProMemberHomeReturn)window.ndProMemberHomeReturn();}
+let ndProfileOpenSerial=0;
+function profileDeadline(p,ms){let timer;return Promise.race([Promise.resolve(p),new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('资料读取超时，请重试')),ms))]).finally(()=>clearTimeout(timer));}
+async function open(id){const serial=++ndProfileOpenSerial;overlay.hidden=false;document.body.style.overflow='hidden';customer=null;ext={};$('ndProProfileError').textContent='';tab='info';render();try{await profileDeadline(authorize(),8000);const c=await profileDeadline(db.from('nd_pro_beta_customers').select('id,full_name,phone,email').eq('id',id).single(),8000);if(c.error)throw c.error;if(serial!==ndProfileOpenSerial||overlay.hidden)return;customer=c.data;render();const x=await profileDeadline(db.from('nd_pro_beta_customer_profiles').select('*').eq('customer_id',id).maybeSingle(),8000);if(x.error&&x.error.code!=='42P01'&&x.error.code!=='PGRST205')throw x.error;if(serial!==ndProfileOpenSerial||overlay.hidden)return;ext=x.data||{};render()}catch(e){if(serial===ndProfileOpenSerial&&!overlay.hidden){$('ndProProfileError').textContent=e.message||String(e);$('ndProProfileError').style.color='#d14343'}}}
+function close(){ndProfileOpenSerial++;overlay.hidden=true;document.body.style.overflow='';if(window.ndProMemberHomeReturn)window.ndProMemberHomeReturn();}
 async function saveInfo(e){e.preventDefault();$('ndProProfileError').textContent='';let form=new FormData(e.currentTarget);const full_name=String(form.get('full_name')||'').trim();if(!full_name){$('ndProProfileError').textContent='Name is required';return;}const changes={full_name,phone:String(form.get('phone')||'').trim()||null,email:String(form.get('email')||'').trim()||null};const extraKeys=['member_code','id_document','birthday','nationality','source','marital_status','gender'];for(const k of extraKeys)ext[k]=String(form.get(k)||'').trim()||null;try{await authorize();const r=await db.from('nd_pro_beta_customers').update(changes).eq('id',customer.id).select('id').single();if(r.error)throw r.error;customer={...customer,...changes};await saveExtra(true);render();$('ndProProfileError').textContent='Saved';$('ndProProfileError').style.color='#16804f';}catch(err){$('ndProProfileError').textContent=err.message||String(err);$('ndProProfileError').style.color='#d14343'}}
 async function saveExtra(silent=false){try{await authorize();const keys=['member_code','id_document','birthday','nationality','source','marital_status','gender','membership_level','tags','address_line1','address_line2','city','state','postcode','country'];const data={customer_id:customer.id};for(const k of keys)if(Object.hasOwn(ext,k))data[k]=ext[k]||null;const r=await db.from('nd_pro_beta_customer_profiles').upsert(data,{onConflict:'customer_id'});if(r.error)throw r.error;if(!silent){$('ndProProfileError').textContent='Saved';$('ndProProfileError').style.color='#16804f';}}catch(e){$('ndProProfileError').textContent='Profile SQL required: '+(e.message||e);$('ndProProfileError').style.color='#d14343';if(silent)throw e}}
 window.ndProOpenCustomerProfile=open;$('ndProProfileBack').onclick=close;$('ndProProfileClose').onclick=close;overlay.addEventListener('click',e=>{const b=e.target.closest('[data-profile-tab]');if(b){tab=b.dataset.profileTab;render()}});
