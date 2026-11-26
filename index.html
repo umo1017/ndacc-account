@@ -41855,18 +41855,17 @@ let guestCount=1;
  const ndGenderCounts=document.createElement('div');ndGenderCounts.className='nd-auto-gender-counts';
  ndGenderCounts.innerHTML='<div class="nd-auto-gender-line"><span aria-label="男技师人数" title="男技师人数">♂</span><button type="button" data-gender="male" data-step="-1">−</button><output data-count="male">0</output><button type="button" data-gender="male" data-step="1">＋</button></div><div class="nd-auto-gender-line"><span aria-label="女技师人数" title="女技师人数">♀</span><button type="button" data-gender="female" data-step="-1">−</button><output data-count="female">0</output><button type="button" data-gender="female" data-step="1">＋</button></div>';
  guestsField?.appendChild(ndGenderCounts);
- let ndStrongGuests=0,ndSkilledGuests=0;
- const ndExtraTraits=new Set();
+ const ndGenderRequirements={male:{strong:0,skilled:0,traits:new Set()},female:{strong:0,skilled:0,traits:new Set()}};
  const ndReqToggle=document.createElement('button');ndReqToggle.type='button';ndReqToggle.className='nd-auto-req-toggle';ndReqToggle.textContent='要求 ▾';ndReqToggle.setAttribute('aria-expanded','false');
  const ndReqPanel=document.createElement('div');ndReqPanel.className='nd-auto-req-panel';ndReqPanel.hidden=true;
- ndReqPanel.innerHTML='<div class="nd-auto-req-line"><span>💪 有力</span><button type="button" data-req="strong" data-delta="-1">−</button><output data-req-count="strong">0</output><button type="button" data-req="strong" data-delta="1">＋</button></div><div class="nd-auto-req-line"><span>⭐ 技术好</span><button type="button" data-req="skilled" data-delta="-1">−</button><output data-req-count="skilled">0</output><button type="button" data-req="skilled" data-delta="1">＋</button></div><small class="nd-auto-req-summary">没有指定要求的顾客按普通 AUTO 公平排灯。</small>';
- ndReqPanel.insertAdjacentHTML('beforeend',`<div class="nd-auto-req-extra" style="display:flex;flex-wrap:wrap;gap:9px;padding:9px 3px;font-size:13px">${[['strong','大力'],['gentle','轻柔'],['skilled','技术好'],['chinese','会华语'],['english','会英语'],['malay','会马来语'],['young','年轻'],['experienced','有经验']].map(([k,v])=>`<label style="white-space:nowrap"><input type="checkbox" data-extra-trait="${k}"> ${v}</label>`).join('')}</div>`);
- ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(input=>input.onchange=()=>{input.checked?ndExtraTraits.add(input.dataset.extraTrait):ndExtraTraits.delete(input.dataset.extraTrait);void updateAvailability()});
+ ndReqPanel.innerHTML=['male','female'].map(gender=>`<section class="nd-auto-req-gender" data-req-gender="${gender}"><strong>${gender==='male'?'♂ 男技师要求':'♀ 女技师要求'}</strong><div class="nd-auto-req-line"><span>💪 有力</span><button type="button" data-req="strong" data-delta="-1">−</button><output data-req-count="strong">0</output><button type="button" data-req="strong" data-delta="1">＋</button></div><div class="nd-auto-req-line"><span>⭐ 技术好</span><button type="button" data-req="skilled" data-delta="-1">−</button><output data-req-count="skilled">0</output><button type="button" data-req="skilled" data-delta="1">＋</button></div><small class="nd-auto-req-summary"></small><div class="nd-auto-req-extra">${[['gentle','轻柔'],['chinese','会华语'],['english','会英语'],['malay','会马来语'],['young','年轻'],['experienced','有经验']].map(([k,v])=>`<label><input type="checkbox" data-extra-trait="${k}"> ${v}</label>`).join('')}</div></section>`).join('');
+ ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(input=>input.onchange=()=>{const group=input.closest('[data-req-gender]')?.dataset.reqGender;if(!group)return;const traits=ndGenderRequirements[group].traits;input.checked?traits.add(input.dataset.extraTrait):traits.delete(input.dataset.extraTrait);guestWorkers().forEach(sel=>sel.value='');refreshGuestWorkers(true);ndPaintWorkers();void updateAvailability()});
  guestsField?.append(ndReqToggle,ndReqPanel);
  ndReqToggle.onclick=()=>{ndReqPanel.hidden=!ndReqPanel.hidden;ndReqToggle.setAttribute('aria-expanded',String(!ndReqPanel.hidden));ndReqToggle.textContent=ndReqPanel.hidden?'要求 ▾':'要求 ▴'};
- const ndGuestRequirement=index=>!ndIsAutoBooking()?'':index<ndStrongGuests?'strong':index<ndStrongGuests+ndSkilledGuests?'skilled':'';
- function ndSyncRequirements(){const max=Math.max(1,ndMaleGuests+ndFemaleGuests);ndStrongGuests=Math.min(ndStrongGuests,max);ndSkilledGuests=Math.min(ndSkilledGuests,max-ndStrongGuests);ndReqPanel.querySelector('[data-req-count="strong"]').textContent=String(ndStrongGuests);ndReqPanel.querySelector('[data-req-count="skilled"]').textContent=String(ndSkilledGuests);ndReqPanel.querySelector('.nd-auto-req-summary').textContent=`有力 ${ndStrongGuests} 位 · 技术好 ${ndSkilledGuests} 位 · 不限 ${Math.max(0,max-ndStrongGuests-ndSkilledGuests)} 位`;}
- ndReqPanel.onclick=e=>{const btn=e.target.closest('button[data-req]');if(!btn)return;const step=Number(btn.dataset.delta),count=ndMaleGuests+ndFemaleGuests;if(step>0&&ndStrongGuests+ndSkilledGuests>=count)return;if(btn.dataset.req==='strong')ndStrongGuests=Math.max(0,ndStrongGuests+step);else ndSkilledGuests=Math.max(0,ndSkilledGuests+step);ndSyncRequirements();guestWorkers().forEach(sel=>sel.value='');refreshGuestWorkers(true);drawGuestServiceTabs();ndPaintWorkers();void updateAvailability()};
+ const ndGuestGender=index=>index<ndMaleGuests?'male':'female';
+ const ndGuestRequirement=index=>{if(!ndIsAutoBooking())return '';const gender=ndGuestGender(index),offset=gender==='male'?index:index-ndMaleGuests,req=ndGenderRequirements[gender];return offset<req.strong?'strong':offset<req.strong+req.skilled?'skilled':''};
+ function ndSyncRequirements(){for(const gender of ['male','female']){const count=gender==='male'?ndMaleGuests:ndFemaleGuests,req=ndGenderRequirements[gender],group=ndReqPanel.querySelector(`[data-req-gender="${gender}"]`);req.strong=Math.min(req.strong,count);req.skilled=Math.min(req.skilled,Math.max(0,count-req.strong));group.hidden=count===0;group.querySelector('[data-req-count="strong"]').textContent=String(req.strong);group.querySelector('[data-req-count="skilled"]').textContent=String(req.skilled);group.querySelector('.nd-auto-req-summary').textContent=`${count} 位${gender==='male'?'男':'女'}技师：有力 ${req.strong} · 技术好 ${req.skilled} · 不限 ${count-req.strong-req.skilled}`;}}
+ ndReqPanel.onclick=e=>{const btn=e.target.closest('button[data-req]');if(!btn)return;const gender=btn.closest('[data-req-gender]')?.dataset.reqGender,req=ndGenderRequirements[gender];if(!req)return;const step=Number(btn.dataset.delta),count=gender==='male'?ndMaleGuests:ndFemaleGuests;if(step>0&&req.strong+req.skilled>=count)return;req[btn.dataset.req]=Math.max(0,req[btn.dataset.req]+step);ndSyncRequirements();guestWorkers().forEach(sel=>sel.value='');refreshGuestWorkers(true);drawGuestServiceTabs();ndPaintWorkers();void updateAvailability()};
  function ndIsAutoBooking(){return form.dataset.ndCalendarAuto==='1'&&!form.elements.appointment_id.value}
  function ndUpdateGenderCounts(){
    const auto=ndIsAutoBooking();ndGenderCounts.hidden=!auto;
@@ -41885,7 +41884,7 @@ let guestCount=1;
    ndUpdateGenderCounts();guestWorkers().forEach(sel=>sel.value='');updateGuests();void updateAvailability();
  });
  document.addEventListener('nd-auto-booking-open',()=>{
-   if(ndIsAutoBooking()){ndMaleGuests=0;ndFemaleGuests=1;ndStrongGuests=0;ndSkilledGuests=0;ndExtraTraits.clear();ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(x=>x.checked=false);guestCount=1;ndReqPanel.hidden=true;ndReqToggle.textContent='要求 ▾';updateGuests();ndPaintWorkers();}
+   if(ndIsAutoBooking()){ndMaleGuests=0;ndFemaleGuests=1;for(const gender of ['male','female']){const req=ndGenderRequirements[gender];req.strong=0;req.skilled=0;req.traits.clear();}ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(x=>x.checked=false);guestCount=1;ndReqPanel.hidden=true;ndReqToggle.textContent='要求 ▾';updateGuests();ndPaintWorkers();}
    else ndUpdateGenderCounts();
  });
  const mainWorker=form.elements.employee;
@@ -41924,8 +41923,8 @@ let guestCount=1;
    const profilePrefs=window.ndBetaAutoPrefs?.customers?.[String(form.elements.customer.value)]||{};
    const blacklisted=new Set((profilePrefs.blacklist||[]).map(String));
    const returningCustomer=appointments.some(a=>String(a.customer_id)===String(customer?.id)&&a.status!=='cancelled'&&tzDate(a.starts_at)<day);
-   const fixed=returningCustomer?(profilePrefs.fixed||[]).map(String):[];
-   const wantedTraits=[...(Array.isArray(profilePrefs.traits)?profilePrefs.traits:[]),...ndExtraTraits];
+   const fixed=returningCustomer?(Array.isArray(profilePrefs.fixedPriority)&&profilePrefs.fixedPriority.length?profilePrefs.fixedPriority.slice().sort((a,b)=>Number(a.rank)-Number(b.rank)).map(x=>String(x.employee_id)):(profilePrefs.fixed||[]).map(String)):[];
+   const wantedTraits=[...(Array.isArray(profilePrefs.traits)?profilePrefs.traits:[]),...(ndIsAutoBooking()?[...ndGenderRequirements[ndGuestGender(index)].traits]:[])];
    const currentNew=!!(customer?.created_at&&String(customer.created_at).slice(0,10)===day);
    const category=currentNew?'new':promo?'promo':'regular';
    const stats=new Map();
@@ -41950,7 +41949,7 @@ let guestCount=1;
      }
    });
    return available.filter(id=>{const member=staff.find(s=>String(s.id)===id);return member&&!blacklisted.has(String(id))&&ndAutoEnabled(id)&&ndStaffOnDate(member,day)&&!bookedWorkerIds.has(String(id))&&!ndAutoWorkerResting(id,index)&&!ndExcluded(id,chosenService)&&(wantedGender==='any'||ndStaffGender(member)===wantedGender)&&(!requiredAbility||ndAutoHasAbility(id,requiredAbility))}).sort((a,b)=>{
-     // Returning customers: available fixed staff take priority 1, then 2.
+     // Returning customers: try all available preferred staff in the customer's saved rank order.
      const fixedA=fixed.indexOf(String(a)),fixedB=fixed.indexOf(String(b));
      if(fixedA!==fixedB){if(fixedA>=0)return -1;if(fixedB>=0)return 1;}
      if(fixedA>=0&&fixedB>=0)return fixedA-fixedB;
@@ -43435,6 +43434,51 @@ $('ndProProfileInfoForm').onsubmit=saveInfo;
 }else if(tab==='details'){let tags=Array.isArray(ext.tags)?ext.tags:[];const taglist=['VIP','VVIP','Discount 20%','Discount 25%','Discount 30%','Eco Botanic','Nusa Bestari','Referral','Regular','First Visit'];root.innerHTML=`<div class="npc-title">Membership Level</div><div class="npc-card npc-tags" id="npcLevels">${['Standard','VIP','VVIP'].map(t=>`<button type="button" class="npc-tag ${ext.membership_level===t?'on':''}" data-level="${esc(t)}">${esc(t)}</button>`).join('')}</div><div class="npc-title">Member Tags</div><div class="npc-card npc-tags" id="npcTagList">${taglist.map(t=>`<button type="button" class="npc-tag ${tags.includes(t)?'on':''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div><button class="npc-save" type="button" id="npcSaveDetail">Save Details</button>`;root.querySelectorAll('[data-level]').forEach(b=>b.onclick=()=>{ext.membership_level=b.dataset.level;render()});root.querySelectorAll('[data-tag]').forEach(b=>b.onclick=()=>{const set=new Set(ext.tags||[]);set.has(b.dataset.tag)?set.delete(b.dataset.tag):set.add(b.dataset.tag);ext.tags=[...set];render()});$('npcSaveDetail').onclick=()=>saveExtra();
 }else if(tab==='address'){root.innerHTML=`<form id="npcAddressForm" class="npc-card">${field('Address Line 1','address_line1',ext.address_line1||'')}${field('Address Line 2','address_line2',ext.address_line2||'')}${field('City','city',ext.city||'')}${field('State','state',ext.state||'')}${field('Postcode','postcode',ext.postcode||'')}${field('Country','country',ext.country||'Malaysia')}<button class="npc-save" type="submit">Save Address</button></form>`;$('npcAddressForm').onsubmit=e=>{e.preventDefault();Object.assign(ext,Object.fromEntries(new FormData(e.currentTarget)));saveExtra()};
 }else{const prefs=window.ndBetaAutoPrefs?.customers?.[String(customer.id)]||{};const roster=(window.ndBetaAutoPrefs?.staffList||[]).filter(s=>!s.nd_archived_at&&!s.termination_date&&!s.resignation_date&&!s.employment_end_date);const fixed=prefs.fixed||[],blocked=prefs.blacklist||[],traits=prefs.traits||[];root.innerHTML=`<div class="npc-title">固定优先技师 · AUTO 按 1、2 顺序找空档</div><div class="npc-card" style="padding:14px"><label class="npc-field"><span>优先 1</span><select id="npcFixed1"><option value="">不指定</option>${roster.map(s=>`<option value="${esc(s.id)}" ${String(fixed[0])===String(s.id)?'selected':''}>${esc(s.nickname||s.name)}</option>`).join('')}</select></label><label class="npc-field"><span>优先 2</span><select id="npcFixed2"><option value="">不指定</option>${roster.map(s=>`<option value="${esc(s.id)}" ${String(fixed[1])===String(s.id)?'selected':''}>${esc(s.nickname||s.name)}</option>`).join('')}</select></label></div><div class="npc-title">黑名单技师 · 可多选（离职员工不显示）</div><div class="npc-card npc-tags">${roster.map(s=>`<label class="npc-tag"><input type="checkbox" data-npc-black="${esc(s.id)}" ${blocked.map(String).includes(String(s.id))?'checked':''}> ${esc(s.nickname||s.name)}</label>`).join('')}</div><div class="npc-title">顾客要求 · 可多选</div><div class="npc-card npc-tags">${[['strong','大力'],['gentle','轻柔'],['skilled','技术好'],['chinese','会华语'],['english','会英语'],['malay','会马来语'],['young','年轻'],['experienced','有经验']].map(([k,v])=>`<label class="npc-tag"><input type="checkbox" data-npc-trait="${k}" ${traits.includes(k)?'checked':''}> ${v}</label>`).join('')}</div><button class="npc-save" id="npcSaveAutoPrefs" type="button">保存固定技师 / 黑名单 / 要求</button>`;$('npcSaveAutoPrefs').onclick=async()=>{const f1=$('npcFixed1').value,f2=$('npcFixed2').value;if(f1&&f1===f2){$('ndProProfileError').textContent='优先 1 和优先 2 不可相同';return;}const payload={fixed:[f1,f2].filter(Boolean),blacklist:[...root.querySelectorAll('[data-npc-black]:checked')].map(x=>x.dataset.npcBlack),traits:[...root.querySelectorAll('[data-npc-trait]:checked')].map(x=>x.dataset.npcTrait)};try{await window.ndBetaAutoPrefs.save('customer',customer.id,payload);$('ndProProfileError').textContent='已同步所有授权设备';$('ndProProfileError').style.color='#16804f';}catch(err){$('ndProProfileError').textContent='无法同步：'+(err.message||err);$('ndProProfileError').style.color='#d14343';}};}
+// Settings: expandable, explicitly ranked preferred therapists. Keep the existing
+// blacklist and customer requirements separate and compatible with older records.
+if(tab==='settings'){
+  const prefs=window.ndBetaAutoPrefs?.customers?.[String(customer.id)]||{};
+  const roster=(window.ndBetaAutoPrefs?.staffList||[]).filter(s=>!s.nd_archived_at&&!s.termination_date&&!s.resignation_date&&!s.employment_end_date);
+  const oldFixed=Array.isArray(prefs.fixed)?prefs.fixed:[];
+  const savedRanks=Array.isArray(prefs.fixedPriority)&&prefs.fixedPriority.length?prefs.fixedPriority:oldFixed.map((id,i)=>({employee_id:id,rank:i+1}));
+  const ranks=savedRanks.map(item=>({employee_id:String(item.employee_id||''),rank:Number(item.rank)||1})).sort((a,b)=>a.rank-b.rank);
+  const blocked=(prefs.blacklist||[]).map(String),traits=prefs.traits||[];
+  root.innerHTML=`<div class="npc-title">固定优先技师 · AUTO 依自订顺序找有空档的技师</div>
+   <div class="npc-card" style="padding:12px 14px"><div id="npcPriorityRows"></div>
+   <button type="button" id="npcAddPriority" style="padding:9px 12px;color:#3678ec;background:#edf3ff;border:1px solid #d5e0f5;border-radius:9px;font-size:12px;font-weight:700">＋ 添加优先技师</button>
+   <div style="font-size:11px;color:#7b8492;padding-top:9px">可设优先 1、2、4、5 等不同顺序；无空档则找下一位。</div></div>
+   <div class="npc-title">黑名单技师 · 永不参与 AUTO（离职员工不显示）</div>
+   <div class="npc-card npc-tags">${roster.map(s=>`<label class="npc-tag"><input type="checkbox" data-npc-black="${esc(s.id)}" ${blocked.includes(String(s.id))?'checked':''}> ${esc(s.nickname||s.name)}</label>`).join('')}</div>
+   <div class="npc-title">顾客要求 · 可多选</div>
+   <div class="npc-card npc-tags">${[['strong','大力'],['gentle','轻柔'],['skilled','技术好'],['chinese','会华语'],['english','会英语'],['malay','会马来语'],['young','年轻'],['experienced','有经验']].map(([k,v])=>`<label class="npc-tag"><input type="checkbox" data-npc-trait="${k}" ${traits.includes(k)?'checked':''}> ${v}</label>`).join('')}</div>
+   <button class="npc-save" id="npcSaveAutoPrefs" type="button">保存优先顺序 / 黑名单 / 要求</button>`;
+  const drawRanks=()=>{
+    $('npcPriorityRows').innerHTML=ranks.map((item,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eef0f4">
+      <label style="display:flex;align-items:center;gap:5px;flex:0 0 85px;font-size:12px;font-weight:700">优先 <input data-npc-priority-rank="${i}" type="number" min="1" max="99" step="1" value="${item.rank}" style="width:45px;font-size:12px;padding:7px 3px;text-align:center;border:1px solid #d4ddec;border-radius:8px"></label>
+      <select data-npc-priority-staff="${i}" style="min-width:0;flex:1;font-size:12px;padding:9px 3px;border:1px solid #d4ddec;border-radius:8px;background:#f7f9ff"><option value="">请选择技师</option>${roster.map(s=>`<option value="${esc(s.id)}" ${String(item.employee_id)===String(s.id)?'selected':''}>${esc(s.nickname||s.name)}</option>`).join('')}</select>
+      <button data-npc-priority-remove="${i}" type="button" style="font-size:12px;border:0;background:transparent;color:#be4f57;padding:5px">删除</button>
+      </div>`).join('');
+    root.querySelectorAll('[data-npc-priority-rank]').forEach(el=>el.onchange=()=>{ranks[Number(el.dataset.npcPriorityRank)].rank=Number(el.value)});
+    root.querySelectorAll('[data-npc-priority-staff]').forEach(el=>el.onchange=()=>{ranks[Number(el.dataset.npcPriorityStaff)].employee_id=el.value});
+    root.querySelectorAll('[data-npc-priority-remove]').forEach(el=>el.onclick=()=>{ranks.splice(Number(el.dataset.npcPriorityRemove),1);drawRanks()});
+  };
+  drawRanks();
+  $('npcAddPriority').onclick=()=>{ranks.push({employee_id:'',rank:Math.max(0,...ranks.map(x=>Number(x.rank)||0))+1});drawRanks()};
+  $('npcSaveAutoPrefs').onclick=async()=>{
+    const error=$('ndProProfileError');
+    const picked=ranks.filter(x=>x.employee_id);
+    const rankSet=new Set(picked.map(x=>x.rank)),staffSet=new Set(picked.map(x=>x.employee_id));
+    const blacklist=[...root.querySelectorAll('[data-npc-black]:checked')].map(x=>x.dataset.npcBlack);
+    if(picked.some(x=>!Number.isInteger(x.rank)||x.rank<1||x.rank>99)||rankSet.size!==picked.length||staffSet.size!==picked.length){
+      error.textContent='优先顺序必须是 1–99 的不同数字，每位技师只能出现一次';error.style.color='#d14343';return;
+    }
+    if(picked.some(x=>blacklist.includes(x.employee_id))){error.textContent='同一位技师不能同时设为优先与黑名单';error.style.color='#d14343';return;}
+    const fixedPriority=picked.map(x=>({employee_id:x.employee_id,rank:x.rank})).sort((a,b)=>a.rank-b.rank);
+    const payload={fixedPriority,fixed:fixedPriority.map(x=>x.employee_id),blacklist,traits:[...root.querySelectorAll('[data-npc-trait]:checked')].map(x=>x.dataset.npcTrait)};
+    try{await window.ndBetaAutoPrefs.save('customer',customer.id,payload);error.textContent='已同步所有授权设备';error.style.color='#16804f';}
+    catch(err){error.textContent='无法同步：'+(err.message||err);error.style.color='#d14343';}
+  };
+}
 }
 async function authorize(){db=window.salaryDb||null;if(!db)throw Error('Supabase is not ready');const a=await db.auth.getUser();if(a.error)throw a.error;if(String(a.data?.user?.email||'').toLowerCase()!=='umo1017@gmail.com')throw Error('UMO only');const ok=await db.rpc('nd_pro_beta_is_umo');if(ok.error)throw ok.error;if(ok.data!==true)throw Error('UMO permission required')}
 async function open(id){overlay.hidden=false;document.body.style.overflow='hidden';customer=null;ext={};$('ndProProfileError').textContent='';tab='info';render();try{await authorize();const c=await db.from('nd_pro_beta_customers').select('id,full_name,phone,email').eq('id',id).single();if(c.error)throw c.error;customer=c.data;const x=await db.from('nd_pro_beta_customer_profiles').select('*').eq('customer_id',id).maybeSingle();if(x.error&&x.error.code!=='42P01'&&x.error.code!=='PGRST205')throw x.error;ext=x.data||{};render()}catch(e){$('ndProProfileError').textContent=e.message||String(e)}}
@@ -45442,6 +45486,12 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  #ndProBookingModal .nd-auto-req-line button{border:0;border-radius:50%;width:27px;height:27px;background:#397cf5;color:#fff;font-size:17px!important;padding:0}
  #ndProBookingModal .nd-auto-req-line output{min-width:22px;text-align:center;font-weight:800;color:#397cf5;font-size:12px!important}
  #ndProBookingModal .nd-auto-req-summary{font-size:10px!important;color:#667789}
+ /* V64: gender-specific AUTO requirements, never share preferences between groups. */
+ #ndProBookingModal .nd-auto-req-gender{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:6px!important;min-width:0!important;padding:8px!important;border:1px solid #d9e6f8!important;border-radius:10px!important;background:white!important}
+ #ndProBookingModal .nd-auto-req-gender[hidden]{display:none!important}
+ #ndProBookingModal .nd-auto-req-gender>strong{font-size:12px!important;color:#31527e!important}
+ #ndProBookingModal .nd-auto-req-gender[data-req-gender="female"]{border-color:#f2d7e3!important;background:#fffafd!important}
+ #ndProBookingModal .nd-auto-req-gender[data-req-gender="female"]>strong{color:#b54f80!important}
  /* V63: keep every requirement checkbox beside its own label on narrow phones. */
  #ndProBookingModal .nd-auto-req-extra{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;padding:10px 2px!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;align-items:start!important}
  #ndProBookingModal .nd-auto-req-extra>label{display:flex!important;position:static!important;float:none!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;padding:7px 5px!important;box-sizing:border-box!important;white-space:normal!important;word-break:keep-all!important;line-height:1.35!important;font-size:11px!important;letter-spacing:0!important;text-align:left!important}
