@@ -40880,12 +40880,37 @@ const clock12=t=>{const parts=String(t).split(':');const h=Number(parts[0]);retu
 const minsOf=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 function visibleTimes(){const h=hours[branch==='all'?'Eco Botanic':branch]||defaultHours['Eco Botanic'];const b=hours[branch==='all'?'Nusa Bestari':branch]||defaultHours['Nusa Bestari'];return branch==='all'?{start:Math.min(minsOf(h.open),minsOf(b.open)),end:Math.max(minsOf(h.close),minsOf(b.close))}:{start:minsOf(h.open),end:minsOf(h.close)}}
 // UMO-only customer save shared by booking and CRM.
+ const proPhoneKey=value=>{
+  let digits=String(value||'').replace(/\D/g,'');
+  if(digits.startsWith('0060'))digits=digits.slice(2);
+  if(digits.startsWith('60')&&digits[2]==='1')digits='0'+digits.slice(2);
+  if(digits.startsWith('60')&&digits[2]==='0')digits=digits.slice(2);
+  return digits;
+ };
+ async function proFindExistingPhone(phone){
+  const key=proPhoneKey(phone);if(key.length<8)return null;
+  let rows=customers.slice();
+  // Check the shared customer table as well as locally loaded customers.
+  if(db){
+   for(let offset=0;offset<10000;offset+=1000){
+    const response=await db.from('nd_pro_beta_customers').select('id,full_name,phone,email').range(offset,offset+999);
+    if(response.error)throw response.error;
+    const batch=response.data||[];rows.push(...batch);if(batch.length<1000)break;
+   }
+  }
+  const matches=new Map();
+  for(const c of rows)if(proPhoneKey(c.phone)===key)matches.set(String(c.id),c);
+  if(matches.size>1)throw Error('此电话号码已有多份会员资料，请先合并重复会员。');
+  return matches.values().next().value||null;
+ }
  async function proSaveCustomerSafe(rawName,rawPhone,rawEmail){
   const name=String(rawName||'').trim(), phone=String(rawPhone||'').trim(), email=String(rawEmail||'').trim();
-  if(!name)throw Error(tr('Customer name is required.','请输入顾客姓名。'));
   if(phone && !/^\+?[\d\s()-]{8,25}$/.test(phone))throw Error(tr('Enter a valid phone number.','请输入正确电话号码。'));
   if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error(tr('Enter a valid email.','请输入正确电邮。'));
   if(!db)throw Error('Supabase is not connected.');
+  const existingPhone=phone?await proFindExistingPhone(phone):null;
+  if(existingPhone){if(!customers.some(c=>String(c.id)===String(existingPhone.id)))customers.unshift(existingPhone);return {customer:existingPhone,existed:true};}
+  if(!name)throw Error(tr('Customer name is required.','请输入顾客姓名。'));
   const authResult=await db.auth.getUser();
   if(authResult.error)throw authResult.error;
   if(!authResult.data?.user?.id)throw Error(tr('Please sign in before saving.','请先登入再保存。'));
@@ -41850,7 +41875,19 @@ const quick=el('proQuickCustomer');quick.hidden=false;customerModal.querySelecto
 const countryRow=document.createElement('label');countryRow.className='nd-ref-country-picker';
 countryRow.innerHTML='<span>国家区号</span><select id="ndRefCustomerCountry" aria-label="选择国家区号"><option value="60">🇲🇾 Malaysia (+60)</option><option value="65">🇸🇬 Singapore (+65)</option><option value="673">🇧🇳 Brunei (+673)</option><option value="62">🇮🇩 Indonesia (+62)</option><option value="63">🇵🇭 Philippines (+63)</option><option value="852">🇭🇰 Hong Kong (+852)</option><option value="91">🇮🇳 India (+91)</option><option value="94">🇱🇰 Sri Lanka (+94)</option><option value="66">🇹🇭 Thailand (+66)</option><option value="86">🇨🇳 China (+86)</option><option value="44">🇬🇧 England (+44)</option></select>';
 quick.prepend(countryRow);
-const countryStyles=document.createElement('style');countryStyles.textContent='.nd-ref-country-picker{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;font-size:14px;font-weight:650;color:#303845}.nd-ref-country-picker select{min-width:0;max-width:70%;font-size:14px;border:1px solid #dce3ef;border-radius:11px;background:#f7f8fc;color:#3977df;padding:11px}.proref-customer-sheet #proQuickCustomer input{font-size:16px!important}';document.head.append(countryStyles);
+const countrySelect=el('ndRefCustomerCountry');
+const countryButton=document.createElement('button');countryButton.type='button';countryButton.className='nd-country-trigger';countryButton.setAttribute('aria-haspopup','listbox');countryButton.setAttribute('aria-expanded','false');
+const countryMenu=document.createElement('div');countryMenu.className='nd-country-menu';countryMenu.hidden=true;countryMenu.innerHTML='<input type="search" class="nd-country-search" placeholder="⌕ Search 国家或区号" aria-label="搜索国家区号"><div class="nd-country-options" role="listbox"></div>';
+countryRow.append(countryButton,countryMenu);
+const countryChoices=Array.from(countrySelect.options).map(o=>({value:o.value,label:o.textContent}));
+const renderCountry=()=>{countryButton.textContent=countrySelect.selectedOptions[0]?.textContent||'🇲🇾 Malaysia (+60)';countryButton.insertAdjacentHTML('beforeend','<span aria-hidden="true">⌄</span>');};
+const closeCountry=()=>{countryMenu.hidden=true;countryButton.setAttribute('aria-expanded','false');};
+const drawCountry=()=>{const query=countryMenu.querySelector('input').value.trim().toLowerCase();const list=countryMenu.querySelector('.nd-country-options');list.replaceChildren();for(const c of countryChoices.filter(c=>c.label.toLowerCase().includes(query)||c.value.includes(query))){const b=document.createElement('button');b.type='button';b.className='nd-country-item';b.setAttribute('role','option');b.setAttribute('aria-selected',String(c.value===countrySelect.value));b.innerHTML='<span class="nd-country-check">'+(c.value===countrySelect.value?'✓':'')+'</span><span></span>';b.lastElementChild.textContent=c.label;b.onclick=()=>{countrySelect.value=c.value;renderCountry();closeCountry();};list.append(b);}};
+countryButton.onclick=()=>{countryMenu.hidden=!countryMenu.hidden;countryButton.setAttribute('aria-expanded',String(!countryMenu.hidden));if(!countryMenu.hidden){countryMenu.querySelector('input').value='';drawCountry();countryMenu.querySelector('input').focus();}};
+countryMenu.querySelector('input').oninput=drawCountry;
+countryMenu.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCountry();countryButton.focus();}});
+renderCountry();
+const countryStyles=document.createElement('style');countryStyles.textContent='.nd-ref-country-picker{display:flex;position:relative;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;font-size:14px;font-weight:650;color:#303845}.nd-ref-country-picker>select{display:none!important}.nd-country-trigger{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0;max-width:72%;border:1px solid #dce3ef;border-radius:11px;background:#f7f8fc;color:#3977df;padding:11px;font:650 14px system-ui}.nd-country-trigger span{color:#151c27}.nd-country-menu[hidden]{display:none!important}.nd-country-menu{position:absolute;z-index:2147483400;right:0;top:calc(100% + 6px);width:min(310px,85vw);max-height:min(55dvh,450px);display:flex;flex-direction:column;background:#f0f2f8;border:1px solid white;border-radius:20px;box-shadow:0 16px 45px #15233b4d;padding:10px;box-sizing:border-box}.nd-country-search{flex:none!important;width:100%!important;min-height:44px!important;font-size:15px!important;border:0!important;border-bottom:1px solid #d8dce6!important;background:transparent!important}.nd-country-options{overflow-y:auto;overscroll-behavior:contain}.nd-country-item{width:100%;display:flex;align-items:center;text-align:left;gap:10px;min-height:47px;border:0;background:transparent;color:#1d232d;font:650 15px system-ui;border-radius:9px}.nd-country-item[aria-selected="true"]{background:#e4edff}.nd-country-check{width:20px;font-size:19px;color:#2778ff}.proref-customer-sheet #proQuickCustomer input{font-size:16px!important}';document.head.append(countryStyles);
 const closeCustomer=()=>{customerModal.hidden=true};
 el('proRefCustomerClose').onclick=closeCustomer;el('proRefCustomerShade').onclick=closeCustomer;
 const displayCustomer=()=>{const id=form.elements.customer.value,c=customers.find(x=>String(x.id)===String(id));el('proRefCustomerName').textContent=c?.full_name||'—';if(c){phoneSearch.value=c.phone||c.full_name;selection.hidden=true;details.hidden=false}else{details.hidden=true}};
@@ -41858,18 +41895,20 @@ const showCustomerModal=()=>{customerModal.hidden=false;el('proQuickPhone').valu
 let guestCount=1;
  let ndMaleGuests=0,ndFemaleGuests=1;
  const ndGenderCounts=document.createElement('div');ndGenderCounts.className='nd-auto-gender-counts';
- ndGenderCounts.innerHTML='<div class="nd-auto-gender-line"><span aria-label="男技师人数" title="男技师人数">♂</span><button type="button" data-gender="male" data-step="-1">−</button><output data-count="male">0</output><button type="button" data-gender="male" data-step="1">＋</button></div><div class="nd-auto-gender-line"><span aria-label="女技师人数" title="女技师人数">♀</span><button type="button" data-gender="female" data-step="-1">−</button><output data-count="female">0</output><button type="button" data-gender="female" data-step="1">＋</button></div>';
+ ndGenderCounts.innerHTML='<div class="nd-auto-gender-line"><span aria-label="男技师人数" title="男技师人数">♂</span><button type="button" data-gender="male" data-step="-1">−</button><output data-count="male">0</output><button type="button" data-gender="male" data-step="1">＋</button><button type="button" class="nd-gender-req-btn" data-req-open="male" aria-expanded="false">要求 ▾</button></div><div class="nd-auto-gender-line"><span aria-label="女技师人数" title="女技师人数">♀</span><button type="button" data-gender="female" data-step="-1">−</button><output data-count="female">0</output><button type="button" data-gender="female" data-step="1">＋</button><button type="button" class="nd-gender-req-btn" data-req-open="female" aria-expanded="false">要求 ▾</button></div>';
  guestsField?.appendChild(ndGenderCounts);
  const ndGenderRequirements={male:{strong:0,skilled:0,traits:new Set()},female:{strong:0,skilled:0,traits:new Set()}};
  const ndReqToggle=document.createElement('button');ndReqToggle.type='button';ndReqToggle.className='nd-auto-req-toggle';ndReqToggle.textContent='要求 ▾';ndReqToggle.setAttribute('aria-expanded','false');
  const ndReqPanel=document.createElement('div');ndReqPanel.className='nd-auto-req-panel';ndReqPanel.hidden=true;
  ndReqPanel.innerHTML=['male','female'].map(gender=>`<section class="nd-auto-req-gender" data-req-gender="${gender}"><strong>${gender==='male'?'♂ 男技师要求':'♀ 女技师要求'}</strong><div class="nd-auto-req-line"><span>💪 有力</span><button type="button" data-req="strong" data-delta="-1">−</button><output data-req-count="strong">0</output><button type="button" data-req="strong" data-delta="1">＋</button></div><div class="nd-auto-req-line"><span>⭐ 技术好</span><button type="button" data-req="skilled" data-delta="-1">−</button><output data-req-count="skilled">0</output><button type="button" data-req="skilled" data-delta="1">＋</button></div><small class="nd-auto-req-summary"></small><div class="nd-auto-req-extra">${[['gentle','轻柔'],['chinese','会华语'],['english','会英语'],['malay','会马来语'],['young','年轻'],['experienced','有经验']].map(([k,v])=>`<label><input type="checkbox" data-extra-trait="${k}"> ${v}</label>`).join('')}</div></section>`).join('');
  ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(input=>input.onchange=()=>{const group=input.closest('[data-req-gender]')?.dataset.reqGender;if(!group)return;const traits=ndGenderRequirements[group].traits;input.checked?traits.add(input.dataset.extraTrait):traits.delete(input.dataset.extraTrait);guestWorkers().forEach(sel=>sel.value='');refreshGuestWorkers(true);ndPaintWorkers();void updateAvailability()});
- guestsField?.append(ndReqToggle,ndReqPanel);
- ndReqToggle.onclick=()=>{ndReqPanel.hidden=!ndReqPanel.hidden;ndReqToggle.setAttribute('aria-expanded',String(!ndReqPanel.hidden));ndReqToggle.textContent=ndReqPanel.hidden?'要求 ▾':'要求 ▴'};
+ guestsField?.append(ndReqPanel);
+ let ndOpenReqGender=null;
+ function ndSetOpenReqGender(gender){ndOpenReqGender=gender;ndReqPanel.hidden=!gender;ndGenderCounts.querySelectorAll('[data-req-open]').forEach(btn=>{const active=btn.dataset.reqOpen===gender;btn.setAttribute('aria-expanded',String(active));btn.textContent=active?'要求 ▴':'要求 ▾'});ndSyncRequirements();}
+ ndGenderCounts.addEventListener('click',e=>{const btn=e.target.closest('button[data-req-open]');if(!btn)return;ndSetOpenReqGender(ndOpenReqGender===btn.dataset.reqOpen?null:btn.dataset.reqOpen)});
  const ndGuestGender=index=>index<ndMaleGuests?'male':'female';
  const ndGuestRequirement=index=>{if(!ndIsAutoBooking())return '';const gender=ndGuestGender(index),offset=gender==='male'?index:index-ndMaleGuests,req=ndGenderRequirements[gender];return offset<req.strong?'strong':offset<req.strong+req.skilled?'skilled':''};
- function ndSyncRequirements(){for(const gender of ['male','female']){const count=gender==='male'?ndMaleGuests:ndFemaleGuests,req=ndGenderRequirements[gender],group=ndReqPanel.querySelector(`[data-req-gender="${gender}"]`);req.strong=Math.min(req.strong,count);req.skilled=Math.min(req.skilled,Math.max(0,count-req.strong));group.hidden=count===0;group.querySelector('[data-req-count="strong"]').textContent=String(req.strong);group.querySelector('[data-req-count="skilled"]').textContent=String(req.skilled);group.querySelector('.nd-auto-req-summary').textContent=`${count} 位${gender==='male'?'男':'女'}技师：有力 ${req.strong} · 技术好 ${req.skilled} · 不限 ${count-req.strong-req.skilled}`;}}
+ function ndSyncRequirements(){for(const gender of ['male','female']){const count=gender==='male'?ndMaleGuests:ndFemaleGuests,req=ndGenderRequirements[gender],group=ndReqPanel.querySelector(`[data-req-gender="${gender}"]`);req.strong=Math.min(req.strong,count);req.skilled=Math.min(req.skilled,Math.max(0,count-req.strong));group.hidden=count===0||ndOpenReqGender!==gender;group.querySelector('[data-req-count="strong"]').textContent=String(req.strong);group.querySelector('[data-req-count="skilled"]').textContent=String(req.skilled);group.querySelector('.nd-auto-req-summary').textContent=`${count} 位${gender==='male'?'男':'女'}技师：有力 ${req.strong} · 技术好 ${req.skilled} · 不限 ${count-req.strong-req.skilled}`;}}
  ndReqPanel.onclick=e=>{const btn=e.target.closest('button[data-req]');if(!btn)return;const gender=btn.closest('[data-req-gender]')?.dataset.reqGender,req=ndGenderRequirements[gender];if(!req)return;const step=Number(btn.dataset.delta),count=gender==='male'?ndMaleGuests:ndFemaleGuests;if(step>0&&req.strong+req.skilled>=count)return;req[btn.dataset.req]=Math.max(0,req[btn.dataset.req]+step);ndSyncRequirements();guestWorkers().forEach(sel=>sel.value='');refreshGuestWorkers(true);drawGuestServiceTabs();ndPaintWorkers();void updateAvailability()};
  function ndIsAutoBooking(){return form.dataset.ndCalendarAuto==='1'&&!form.elements.appointment_id.value}
  function ndUpdateGenderCounts(){
@@ -41877,7 +41916,7 @@ let guestCount=1;
    guestsField?.classList.toggle('nd-auto-gender-mode',auto);
    ndGenderRequest.hidden=auto;
    if(auto){guestCount=Math.max(1,ndMaleGuests+ndFemaleGuests);ndGenderCounts.querySelector('[data-count="male"]').textContent=String(ndMaleGuests);ndGenderCounts.querySelector('[data-count="female"]').textContent=String(ndFemaleGuests);}
-   ndReqToggle.hidden=!auto;ndReqPanel.hidden=!auto?true:ndReqPanel.hidden;if(!auto)ndReqToggle.setAttribute('aria-expanded','false');ndSyncRequirements();
+   if(!auto)ndSetOpenReqGender(null);else ndSyncRequirements();
  }
  ndGenderCounts.addEventListener('click',e=>{
    const btn=e.target.closest('button[data-gender]');if(!btn)return;
@@ -41889,7 +41928,7 @@ let guestCount=1;
    ndUpdateGenderCounts();guestWorkers().forEach(sel=>sel.value='');updateGuests();void updateAvailability();
  });
  document.addEventListener('nd-auto-booking-open',()=>{
-   if(ndIsAutoBooking()){ndMaleGuests=0;ndFemaleGuests=1;for(const gender of ['male','female']){const req=ndGenderRequirements[gender];req.strong=0;req.skilled=0;req.traits.clear();}ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(x=>x.checked=false);guestCount=1;ndReqPanel.hidden=true;ndReqToggle.textContent='要求 ▾';updateGuests();ndPaintWorkers();}
+   if(ndIsAutoBooking()){ndMaleGuests=0;ndFemaleGuests=1;for(const gender of ['male','female']){const req=ndGenderRequirements[gender];req.strong=0;req.skilled=0;req.traits.clear();}ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(x=>x.checked=false);guestCount=1;ndSetOpenReqGender(null);updateGuests();ndPaintWorkers();}
    else ndUpdateGenderCounts();
  });
  const mainWorker=form.elements.employee;
@@ -42588,8 +42627,8 @@ el('proQuickSave').onclick=async()=>{
    const saved=await proSaveCustomerSafe(nameEl.value,number,'');const customer=saved.customer;
    if(!Array.from(form.elements.customer.options).some(o=>o.value===customer.id))
     form.elements.customer.add(new Option(customer.full_name+' · '+(customer.phone||''),customer.id));
-   form.elements.customer.value=customer.id;closeCustomer();displayCustomer();
-   stat(saved.existed?tr('Existing customer selected.','已选择现有顾客。'):tr('Customer saved.','顾客已保存。'));
+   form.elements.customer.value=String(customer.id);form.elements.customer.dispatchEvent(new Event('change',{bubbles:true}));closeCustomer();displayCustomer();
+   stat(saved.existed?'电话号码已登记，已自动切换为现有会员：'+customer.full_name:tr('Customer saved.','顾客已保存。'));
   }catch(err){
    const msg=err?.message||String(err);
    stat(msg,true);alert(tr('Customer could not be saved: ','顾客保存失败：')+msg);
@@ -45484,6 +45523,10 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  #ndProBookingModal .nd-auto-gender-line>span{font-size:17px!important;min-width:25px!important;white-space:nowrap!important}
  #ndProBookingModal .nd-auto-gender-line button{flex:0 0 29px!important;width:29px!important;min-width:29px!important;height:29px!important}
  #ndProBookingModal .nd-auto-gender-line output{flex:0 0 22px!important}
+ /* Each gender has its own compact requirements trigger beside its count. */
+ #ndProBookingModal .nd-auto-gender-line .nd-gender-req-btn{flex:0 0 auto!important;width:auto!important;min-width:0!important;height:29px!important;padding:0 8px!important;border:1px solid #a8c7f8!important;border-radius:8px!important;background:#eaf3ff!important;color:#2873df!important;font-size:11px!important;line-height:1!important;white-space:nowrap!important}
+ #ndProBookingModal .nd-auto-gender-line:has([data-req-open="female"]) .nd-gender-req-btn{background:#fff0f7!important;border-color:#e9c1d6!important;color:#b64e7f!important}
+ #ndProBookingModal .nd-gender-req-btn[aria-expanded="true"]{box-shadow:inset 0 0 0 1px currentColor}
  #ndProBookingModal .nd-ref-guests:has(.nd-auto-gender-mode)>.pro-field{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:6px!important}
  #ndProBookingModal .nd-ref-guests .nd-auto-gender-counts{grid-column:1;grid-row:1}
  #ndProBookingModal .nd-auto-req-toggle{grid-column:2;grid-row:1;align-self:center;border:1px solid #b9d2fa;background:#eaf3ff;color:#2674df;border-radius:9px;padding:7px 8px;white-space:nowrap;font-size:11px!important;font-weight:800}
