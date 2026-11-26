@@ -39228,10 +39228,25 @@ function hide(){root.hidden=true;document.body.style.overflow=previousOverflow;}
 function metric(label,value){return `<div class="nmh-metric"><small>${label}</small><b>${esc(value)}</b></div>`}
 function draw(c,profile,balances,error){const tags=Array.isArray(profile?.tags)?profile.tags:[];const level=profile?.membership_level;
 const val=k=>balances&&Object.hasOwn(balances,k)?balances[k]:'—';
-body.innerHTML=`<section class="nmh-card"><button type="button" class="nmh-person" id="nmhOpenDetails"><span class="nmh-avatar">${esc((c.full_name||'会').slice(0,1).toUpperCase())}</span><span class="nmh-identity"><strong>${esc(c.full_name||'未命名会员')}</strong><small>${esc(c.phone||'未登记电话号码')} · 点击查看详细资料</small></span><span class="nmh-arrow">›</span></button><div class="nmh-tags">${level?`<span class="nmh-tag">${esc(level)}</span>`:''}${tags.map(t=>`<span class="nmh-tag">${esc(t)}</span>`).join('')||'<span class="nmh-small">暂无会员标签</span>'}</div><div class="nmh-money">${metric('储值 RM',val('credit'))}${metric('积分',val('points'))}${metric('优惠券',val('vouchers'))}${metric('礼品卡 RM',val('gift'))}${metric('欠款 RM',val('outstanding'))}${metric('押金 RM',val('deposit'))}</div></section><section class="nmh-card"><button class="nmh-link" data-nmh-view="recent"><span>▢</span>近期<em>›</em></button><button class="nmh-link" data-nmh-view="sales"><span>🛒</span>销售记录<em>›</em></button><button class="nmh-link" data-nmh-view="appointments"><span>▦</span>预约记录<em>›</em></button><button class="nmh-link" data-nmh-view="referral"><span>☆</span>介绍记录<em>›</em></button></section><button type="button" id="nmhCustomLayoutBtn" class="nmh-link" style="background:white;border-radius:15px;padding:13px;margin-bottom:12px">⚙ 自定义布局 <em>›</em></button><div id="nmhCustomWidgets"></div><p class="nmh-info">余额仅显示已从云端核实的数据。— 表示尚未连接或无法核实，不代表余额为零。</p>${error?`<p class="nmh-error">${esc(error)}</p>`:''}`;
+body.innerHTML=`<section class="nmh-card"><button type="button" class="nmh-person" id="nmhOpenDetails"><span class="nmh-avatar">${esc((c.full_name||'会').slice(0,1).toUpperCase())}</span><span class="nmh-identity"><strong>${esc(c.full_name||'未命名会员')}</strong><small>${esc(c.phone||'未登记电话号码')} · 点击查看详细资料</small></span><span class="nmh-arrow">›</span></button><div class="nmh-tags">${level?`<span class="nmh-tag">${esc(level)}</span>`:''}${tags.map(t=>`<span class="nmh-tag">${esc(t)}</span>`).join('')||'<span class="nmh-small">暂无会员标签</span>'}</div><div class="nmh-money">${metric('储值 RM',val('credit'))}${metric('积分',val('points'))}${metric('优惠券',val('vouchers'))}${metric('礼品卡 RM',val('gift'))}${metric('欠款 RM',val('outstanding'))}${metric('押金 RM',val('deposit'))}</div></section><section class="nmh-card"><button class="nmh-link" data-nmh-view="recent"><span>▢</span>近期<em>›</em></button><button class="nmh-link" data-nmh-view="sales"><span>🛒</span>销售记录<em>›</em></button><button class="nmh-link" data-nmh-view="appointments"><span>▦</span>预约记录<em>›</em></button><button class="nmh-link" data-nmh-view="referral"><span>☆</span>介绍记录<em>›</em></button></section><section class="nmh-card" id="nmhLiveActivity" aria-live="polite"><strong>活动</strong><p class="nmh-small">正在同步预约与销售…</p></section><button type="button" id="nmhCustomLayoutBtn" class="nmh-link" style="background:white;border-radius:15px;padding:13px;margin-bottom:12px">⚙ 自定义布局 <em>›</em></button><div id="nmhCustomWidgets"></div><p class="nmh-info">余额仅显示已从云端核实的数据。— 表示尚未连接或无法核实，不代表余额为零。</p>${error?`<p class="nmh-error">${esc(error)}</p>`:''}`;
 body.querySelector('#nmhCustomLayoutBtn').onclick=()=>window.ndMemberLayoutOpen?.(c.id);window.ndMemberLayoutRender?.(c.id);
-body.querySelector('#nmhOpenDetails').onclick=()=>{if(typeof window.ndProOpenCustomerProfile!=='function'){alert('完整会员资料模块尚未就绪');return;}hide();window.ndProMemberHomeReturn=()=>{window.ndProMemberHomeReturn=null;root.hidden=false;document.body.style.overflow='hidden'};window.ndProOpenCustomerProfile(c.id)};
+body.querySelector('#nmhOpenDetails').onclick=()=>{if(typeof window.ndProOpenCustomerProfile!=='function'){alert('完整会员资料模块尚未就绪');return;}hide();window.ndProMemberHomeReturn=()=>{window.ndProMemberHomeReturn=null;void window.ndProOpenMemberHome(c.id)};window.ndProOpenCustomerProfile(c.id)};
 body.querySelectorAll('[data-nmh-view]').forEach(b=>b.onclick=()=>{const kind=b.dataset.nmhView;if(kind==='appointments'){showHistory(c,'appointments');return;}showHistory(c,kind)});
+void loadMemberActivity(c.id);
+}
+async function loadMemberActivity(id){
+ const node=document.getElementById('nmhLiveActivity');if(!node||!db())return;
+ const [sales,bookings]=await Promise.all([
+  db().from('nd_pro_beta_orders').select('id,total_amount,order_status,created_at').eq('customer_id',id).limit(1000),
+  db().from('nd_pro_beta_appointments').select('id,starts_at,status,service_name').eq('customer_id',id).limit(1000)
+ ]);
+ if(!node.isConnected||selected!==id)return;
+ if(sales.error||bookings.error){node.innerHTML=`<strong>活动</strong><p class="nmh-error">${esc((sales.error||bookings.error).message)}</p>`;return;}
+ const paid=(sales.data||[]).filter(x=>['paid','completed'].includes(String(x.order_status||'').toLowerCase()));
+ const valid=(bookings.data||[]).filter(x=>!['cancelled','no_show'].includes(String(x.status||'').toLowerCase()));
+ const amount=paid.reduce((n,x)=>n+Number(x.total_amount||0),0),last=valid.slice().sort((a,b)=>String(b.starts_at||'').localeCompare(String(a.starts_at||'')))[0];
+ node.innerHTML=`<strong>活动</strong><div class="nmh-money" style="margin-top:12px">${metric('已完成销售 RM',amount.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}))}${metric('销售单数',paid.length+(sales.data.length===1000?'+':''))}${metric('有效预约',valid.length+(bookings.data.length===1000?'+':''))}</div>${last?`<button type="button" class="nmh-link" data-nmh-view="appointments"><span>▦</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(last.service_name||'最近预约')}</span><em>›</em></button>`:''}`;
+ node.querySelector('[data-nmh-view]')?.addEventListener('click',()=>showHistory({id},'appointments'));
 }
 async function showHistory(c,kind){const label={recent:'近期',sales:'销售记录',appointments:'预约记录',referral:'介绍记录'}[kind];body.innerHTML=`<section class="nmh-card"><button class="nmh-link" id="nmhHistoryBack">‹ 返回会员首页</button><h3>${label}</h3><div id="nmhHistoryData" class="nmh-small">正在读取云端数据…</div></section>`;document.getElementById('nmhHistoryBack').onclick=()=>window.ndProOpenMemberHome(c.id);
 const target=document.getElementById('nmhHistoryData');if(!db()){target.textContent='云端连接未就绪';return;}
@@ -41947,19 +41962,19 @@ let guestCount=1;
  const ndGenderCounts=document.createElement('div');ndGenderCounts.className='nd-auto-gender-counts';
  ndGenderCounts.innerHTML='<div class="nd-auto-gender-line"><span aria-label="男技师人数" title="男技师人数">♂ 男技师</span><button type="button" data-gender="male" data-step="-1">−</button><output data-count="male">0</output><button type="button" data-gender="male" data-step="1">＋</button><button type="button" class="nd-gender-req-btn" data-req-open="male" aria-expanded="false">要求 ▾</button></div><div class="nd-auto-gender-line"><span aria-label="女技师人数" title="女技师人数">♀ 女技师</span><button type="button" data-gender="female" data-step="-1">−</button><output data-count="female">0</output><button type="button" data-gender="female" data-step="1">＋</button><button type="button" class="nd-gender-req-btn" data-req-open="female" aria-expanded="false">要求 ▾</button></div>';
  guestsField?.appendChild(ndGenderCounts);
- const ndGenderRequirements={male:{strong:0,skilled:0,traits:new Set()},female:{strong:0,skilled:0,traits:new Set()}};
+ const ndGenderRequirements={male:{slots:[]},female:{slots:[]}};
  const ndReqToggle=document.createElement('button');ndReqToggle.type='button';ndReqToggle.className='nd-auto-req-toggle';ndReqToggle.textContent='要求 ▾';ndReqToggle.setAttribute('aria-expanded','false');
  const ndReqPanel=document.createElement('div');ndReqPanel.className='nd-auto-req-panel';ndReqPanel.hidden=true;
- ndReqPanel.innerHTML=['male','female'].map(gender=>`<section class="nd-auto-req-gender" data-req-gender="${gender}"><strong>${gender==='male'?'♂ 男技师要求':'♀ 女技师要求'}</strong><div class="nd-auto-req-line"><span>💪 有力</span><button type="button" data-req="strong" data-delta="-1">−</button><output data-req-count="strong">0</output><button type="button" data-req="strong" data-delta="1">＋</button></div><div class="nd-auto-req-line"><span>⭐ 技术好</span><button type="button" data-req="skilled" data-delta="-1">−</button><output data-req-count="skilled">0</output><button type="button" data-req="skilled" data-delta="1">＋</button></div><small class="nd-auto-req-summary"></small><div class="nd-auto-req-extra">${[['gentle','轻柔'],['chinese','会华语'],['english','会英语'],['malay','会马来语'],['young','年轻'],['experienced','有经验'],...(window.ndBetaAutoPrefs?.traitCatalog||[]).map(o=>[o.key,o.label])].map(([k,v])=>`<label><input type="checkbox" data-extra-trait="${esc(k)}"> ${esc(v)}</label>`).join('')}</div></section>`).join('');
- ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(input=>input.onchange=()=>{const group=input.closest('[data-req-gender]')?.dataset.reqGender;if(!group)return;const traits=ndGenderRequirements[group].traits;input.checked?traits.add(input.dataset.extraTrait):traits.delete(input.dataset.extraTrait);guestWorkers().forEach(sel=>sel.value='');refreshGuestWorkers(true);ndPaintWorkers();void updateAvailability()});
+ ndReqPanel.innerHTML=['male','female'].map(gender=>`<section class="nd-auto-req-gender" data-req-gender="${gender}"><strong>${gender==='male'?'♂ 男技师要求':'♀ 女技师要求'}</strong><div data-req-slots></div><small class="nd-auto-req-summary"></small></section>`).join('');
  guestsField?.append(ndReqPanel);
  let ndOpenReqGender=null;
  function ndSetOpenReqGender(gender){ndOpenReqGender=gender;ndReqPanel.hidden=!gender;ndGenderCounts.querySelectorAll('[data-req-open]').forEach(btn=>{const active=btn.dataset.reqOpen===gender;btn.setAttribute('aria-expanded',String(active));btn.textContent=active?'要求 ▴':'要求 ▾'});ndSyncRequirements();}
  ndGenderCounts.addEventListener('click',e=>{const btn=e.target.closest('button[data-req-open]');if(!btn)return;ndSetOpenReqGender(ndOpenReqGender===btn.dataset.reqOpen?null:btn.dataset.reqOpen)});
  const ndGuestGender=index=>index<ndMaleGuests?'male':'female';
- const ndGuestRequirement=index=>{if(!ndIsAutoBooking())return '';const gender=ndGuestGender(index),offset=gender==='male'?index:index-ndMaleGuests,req=ndGenderRequirements[gender];return offset<req.strong?'strong':offset<req.strong+req.skilled?'skilled':''};
- function ndSyncRequirements(){for(const gender of ['male','female']){const count=gender==='male'?ndMaleGuests:ndFemaleGuests,req=ndGenderRequirements[gender],group=ndReqPanel.querySelector(`[data-req-gender="${gender}"]`);req.strong=Math.min(req.strong,count);req.skilled=Math.min(req.skilled,Math.max(0,count-req.strong));group.hidden=count===0||ndOpenReqGender!==gender;group.querySelector('[data-req-count="strong"]').textContent=String(req.strong);group.querySelector('[data-req-count="skilled"]').textContent=String(req.skilled);group.querySelector('.nd-auto-req-summary').textContent=`${count} 位${gender==='male'?'男':'女'}技师：有力 ${req.strong} · 技术好 ${req.skilled} · 不限 ${count-req.strong-req.skilled}`;}}
- ndReqPanel.onclick=e=>{const btn=e.target.closest('button[data-req]');if(!btn)return;const gender=btn.closest('[data-req-gender]')?.dataset.reqGender,req=ndGenderRequirements[gender];if(!req)return;const step=Number(btn.dataset.delta),count=gender==='male'?ndMaleGuests:ndFemaleGuests;if(step>0&&req.strong+req.skilled>=count)return;req[btn.dataset.req]=Math.max(0,req[btn.dataset.req]+step);ndSyncRequirements();guestWorkers().forEach(sel=>sel.value='');refreshGuestWorkers(true);drawGuestServiceTabs();ndPaintWorkers();void updateAvailability()};
+ const ndGuestRequirement=index=>'';
+ const ndGuestTraits=index=>{const gender=ndGuestGender(index),offset=gender==='male'?index:index-ndMaleGuests;return [...(ndGenderRequirements[gender].slots[offset]||[])];};
+ function ndSyncRequirements(){const options=[['strong','💪 有力'],['gentle','🌿 轻柔'],['skilled','⭐ 技术好'],['chinese','会华语'],['malay','会马来语'],['english','会英语'],['young','年轻'],['experienced','有经验'],...(window.ndBetaAutoPrefs?.traitCatalog||[]).map(o=>[o.key,o.label])];for(const gender of ['male','female']){const count=gender==='male'?ndMaleGuests:ndFemaleGuests,req=ndGenderRequirements[gender],group=ndReqPanel.querySelector(`[data-req-gender="${gender}"]`);while(req.slots.length<count)req.slots.push(new Set(req.slots[req.slots.length-1]||[]));req.slots.length=count;group.hidden=count===0||ndOpenReqGender!==gender;group.querySelector('[data-req-slots]').innerHTML=req.slots.map((selected,i)=>`<div class="nd-auto-person-requirement"><b>第 ${gender==='male'?i+1:ndMaleGuests+i+1} 位 · ${gender==='male'?'男技师':'女技师'}</b><div class="nd-auto-person-traits">${options.map(([key,label])=>`<label><input type="checkbox" data-slot="${i}" data-trait="${esc(key)}" ${selected.has(key)?'checked':''}>${esc(label)}</label>`).join('')}</div></div>`).join('');const counts=options.map(([key,label])=>`${label} ${req.slots.filter(s=>s.has(key)).length}`).filter(s=>!s.endsWith(' 0'));group.querySelector('.nd-auto-req-summary').textContent=counts.join(' · ');}}
+ ndReqPanel.onchange=e=>{const input=e.target.closest('input[data-slot][data-trait]');if(!input)return;const gender=input.closest('[data-req-gender]')?.dataset.reqGender,slot=ndGenderRequirements[gender]?.slots[Number(input.dataset.slot)];if(!slot)return;input.checked?slot.add(input.dataset.trait):slot.delete(input.dataset.trait);ndSyncRequirements();guestWorkers().forEach(sel=>sel.value='');refreshGuestWorkers(true);ndPaintWorkers();void updateAvailability()};
  function ndIsAutoBooking(){return form.dataset.ndCalendarAuto==='1'&&!form.elements.appointment_id.value}
  function ndUpdateGenderCounts(){
    const auto=ndIsAutoBooking();ndGenderCounts.hidden=!auto;
@@ -41978,7 +41993,7 @@ let guestCount=1;
    ndUpdateGenderCounts();guestWorkers().forEach(sel=>sel.value='');updateGuests();void updateAvailability();
  });
  document.addEventListener('nd-auto-booking-open',()=>{
-   if(ndIsAutoBooking()){ndMaleGuests=0;ndFemaleGuests=1;for(const gender of ['male','female']){const req=ndGenderRequirements[gender];req.strong=0;req.skilled=0;req.traits.clear();}ndReqPanel.querySelectorAll('[data-extra-trait]').forEach(x=>x.checked=false);guestCount=1;ndSetOpenReqGender(null);updateGuests();ndPaintWorkers();}
+   if(ndIsAutoBooking()){ndMaleGuests=0;ndFemaleGuests=1;for(const gender of ['male','female'])ndGenderRequirements[gender].slots=[];guestCount=1;ndSetOpenReqGender(null);updateGuests();ndPaintWorkers();}
    else ndUpdateGenderCounts();
  });
  const mainWorker=form.elements.employee;
@@ -42018,7 +42033,7 @@ let guestCount=1;
    const blacklisted=new Set((profilePrefs.blacklist||[]).map(String));
    const returningCustomer=appointments.some(a=>String(a.customer_id)===String(customer?.id)&&a.status!=='cancelled'&&tzDate(a.starts_at)<day);
    const fixed=returningCustomer?(Array.isArray(profilePrefs.fixedPriority)&&profilePrefs.fixedPriority.length?profilePrefs.fixedPriority.slice().sort((a,b)=>Number(a.rank)-Number(b.rank)).map(x=>String(x.employee_id)):(profilePrefs.fixed||[]).map(String)):[];
-   const wantedTraits=[...(Array.isArray(profilePrefs.traits)?profilePrefs.traits:[]),...(ndIsAutoBooking()?[...ndGenderRequirements[ndGuestGender(index)].traits]:[])];
+   const wantedTraits=[...(Array.isArray(profilePrefs.traits)?profilePrefs.traits:[]),...(ndIsAutoBooking()?ndGuestTraits(index):[])];
    const currentNew=!!(customer?.created_at&&String(customer.created_at).slice(0,10)===day);
    const category=currentNew?'new':promo?'promo':'regular';
    const stats=new Map();
@@ -42699,6 +42714,44 @@ el('proQuickSave').onclick=async()=>{
  const availabilityMessage=document.createElement('p');availabilityMessage.id='ndProBookingAvailability';availabilityMessage.className='pro-muted';availabilityMessage.setAttribute('role','status');
  bookingFields.employee?.appendChild(availabilityMessage);
  const busyStatuses=new Set(['cancelled','no_show']);
+ const ndAutoAvailabilityNotice=document.createElement('div');ndAutoAvailabilityNotice.className='nd-auto-availability-notice';ndAutoAvailabilityNotice.hidden=true;ndAutoAvailabilityNotice.setAttribute('role','status');bookingFields.employee?.appendChild(ndAutoAvailabilityNotice);
+ const ndAutoAvailabilityStyles=document.createElement('style');ndAutoAvailabilityStyles.textContent='.nd-auto-availability-notice[hidden]{display:none!important}.nd-auto-availability-notice{margin:12px 0;padding:14px;border:1px solid #f3b0a5;border-radius:14px;background:#fff2ef;color:#8b3430;font-size:14px;line-height:1.55}.nd-auto-availability-notice strong{display:block;font-size:15px;margin-bottom:8px}.nd-auto-availability-notice button{margin:9px 7px 0 0;border:1px solid #8cb4ff;border-radius:11px;padding:10px 15px;background:#eaf1ff;color:#2169d5;font-weight:750;cursor:pointer}';document.head.appendChild(ndAutoAvailabilityStyles);
+ function ndAutoAvailabilityAt(data,startMinute){
+   const f=form.elements,day=f.date.value,branchName=f.branch.value,editing=String(f.appointment_id.value||'');
+   const startMs=Date.parse(localIso(day,`${String(Math.floor(startMinute/60)).padStart(2,'0')}:${String(startMinute%60).padStart(2,'0')}`));
+   const occupied=(id,duration)=>data.bookings.some(a=>!busyStatuses.has(a.status)&&String(a.id)!==editing&&Date.parse(a.starts_at)<startMs+duration*60000&&Date.parse(a.ends_at)>startMs&&data.assignments.some(link=>String(link.appointment_id)===String(a.id)&&String(link.employee_id)===String(id)));
+   const oldTime=f.time.value;f.time.value=`${String(Math.floor(startMinute/60)).padStart(2,'0')}:${String(startMinute%60).padStart(2,'0')}`;
+   const lists=[];
+   for(let i=0;i<guestCount;i++){
+     const gender=ndGuestGender(i),service=i===0?f.service.value:(otherGuestServices.get(i)?.service||f.service.value),duration=i===0?Number(f.duration.value)||60:Number(otherGuestServices.get(i)?.duration)||Number(f.duration.value)||60;
+     lists.push(staff.filter(member=>{
+       const id=String(member.id),profile=window.ndBetaAutoPrefs?.customers?.[String(f.customer.value)]||{};
+       return member.outlet===branchName&&ndStaffGender(member)===gender&&ndAutoEnabled(id)&&ndStaffOnDate(member,day)&&!(profile.blacklist||[]).map(String).includes(id)&&!ndExcluded(id,service)&&!ndAutoWorkerResting(id,i)&&!occupied(id,duration);
+     }).map(member=>String(member.id)));
+   }
+   f.time.value=oldTime;
+   const counts={male:new Set(lists.filter((_,i)=>ndGuestGender(i)==='male').flat()).size,female:new Set(lists.filter((_,i)=>ndGuestGender(i)==='female').flat()).size};
+   const order=lists.map((ids,i)=>({ids,i})).sort((a,b)=>a.ids.length-b.ids.length);
+   const match=(position,used)=>position===order.length||order[position].ids.some(id=>{if(used.has(id))return false;used.add(id);if(match(position+1,used))return true;used.delete(id);return false;});
+   return {counts,canFit:match(0,new Set())};
+ }
+ function ndShowAutoAvailability(data){
+   ndAutoAvailabilityNotice.hidden=true;ndAutoAvailabilityNotice.replaceChildren();
+   if(!ndIsAutoBooking()||!form.elements.date.value||!form.elements.time.value)return true;
+   const chosen=minsOf(form.elements.time.value),availability=ndAutoAvailabilityAt(data,chosen);
+   if(availability.canFit)return true;
+   const header=document.createElement('strong');header.textContent=`这个时间只剩男技师 ${availability.counts.male} 位、女技师 ${availability.counts.female} 位（需要男 ${ndMaleGuests} 位、女 ${ndFemaleGuests} 位）`;ndAutoAvailabilityNotice.append(header);
+   const businessHours=hours[form.elements.branch.value]||defaultHours[form.elements.branch.value]||{open:'10:00',close:'22:00'};
+   const open=minsOf(businessHours.open||'10:00'),close=minsOf(businessHours.close||'22:00');
+   const maxDuration=Math.max(...Array.from({length:guestCount},(_,i)=>i===0?Number(form.elements.duration.value)||60:Number(otherGuestServices.get(i)?.duration)||Number(form.elements.duration.value)||60));
+   const now=new Date(),today=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+   const soonest=form.elements.date.value===today?now.getHours()*60+now.getMinutes():0;
+   const times=[];for(let t=Math.ceil(Math.max(open,soonest)/15)*15;t+maxDuration<=close;t+=15){if(t!==chosen&&ndAutoAvailabilityAt(data,t).canFit)times.push(t);}
+   times.sort((a,b)=>Math.abs(a-chosen)-Math.abs(b-chosen)||a-b);
+   const options=times.slice(0,2),note=document.createElement('div');note.textContent=options.length?'当天最接近的可预约时间：':'当天没有找到符合人数的空档。';ndAutoAvailabilityNotice.append(note);
+   for(const t of options){const button=document.createElement('button');button.type='button';button.textContent=`${Math.floor(t/60)%12||12}:${String(t%60).padStart(2,'0')} ${t>=720?'PM':'AM'}`;button.onclick=()=>{form.elements.time.value=`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;form.elements.time.dispatchEvent(new Event('change',{bubbles:true}));};ndAutoAvailabilityNotice.append(button);}
+   ndAutoAvailabilityNotice.hidden=false;return false;
+ }
  const fetchAvailability=async()=>{
    const b=form.elements.branch.value,d=form.elements.date.value;
    if(!b||!d)return {bookings:[],assignments:[]};
@@ -42720,7 +42773,7 @@ el('proQuickSave').onclick=async()=>{
    bookedWorkerIds.clear();for(const id of occupiedStaff)bookedWorkerIds.add(id);const worker=f.employee,room=f.room_id;
    for(const o of worker.options){if(!o.value)continue;const member=staff.find(x=>String(x.id)===o.value);const otherBranch=member?.outlet!==f.branch.value;const busy=occupiedStaff.has(o.value);o.disabled=busy;o.textContent=(member?.nickname||member?.name||o.value)+(busy?' · Booked':otherBranch?' · Transfer':'');}
    for(const o of room.options){if(!o.value)continue;const busy=occupiedRooms.has(o.value);o.disabled=busy;const r=rooms.find(x=>String(x.id)===o.value);o.textContent=(r?.room_name||o.value)+(busy?' · 已预约 / Booked':'');}
-   refreshGuestWorkers(true);const invalid=(guestWorkers().some(sel=>sel.value&&sel.selectedOptions[0]?.disabled))||(room.value&&room.selectedOptions[0]?.disabled);
+   refreshGuestWorkers(true);ndShowAutoAvailability(data);const invalid=(guestWorkers().some(sel=>sel.value&&sel.selectedOptions[0]?.disabled))||(room.value&&room.selectedOptions[0]?.disabled);
    availabilityMessage.textContent=invalid?'所选技师或房间已占用，请选择其他选项。':'';
    return !invalid;
  }
@@ -42758,6 +42811,10 @@ el('proAppointmentCancel').onclick=async()=>{const id=form.elements.appointment_
 form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries(new FormData(f));
  const saveFeedback=(message,isError=false)=>{let node=document.getElementById('ndBookingSaveFeedbackV39');if(!node){node=document.createElement('div');node.id='ndBookingSaveFeedbackV39';node.className='nd-booking-save-feedback-v39';node.setAttribute('role','status');el('proAppointmentSave')?.insertAdjacentElement('afterend',node);}if(node){node.textContent=message;node.dataset.state=isError?'error':'working';}if(isError)stat(message,true);};
  if(!x.appointment_id && f.elements.service?.selectedOptions[0]?.dataset.existingOnly==='true'){saveFeedback('请选择已启用的服务。',true);return;}if(!x.customer){phoneSearch.focus();phoneSearch.classList.add('proref-invalid');saveFeedback('请选择或新增顾客。',true);return;}if(!x.service){saveFeedback('请先选择护理项目。',true);return;}if(!x.date||!x.time){saveFeedback('请选择预约日期和时间。',true);return;}const selectedWorkers=guestWorkers().map(sel=>sel.value);if(selectedWorkers.length!==guestCount||selectedWorkers.some(id=>!id)||new Set(selectedWorkers).size!==guestCount){saveFeedback('请为每位顾客选择不同的空闲技师。',true);return;}const duration=Number(x.duration);if(!Number.isFinite(duration)||duration<=0){saveFeedback('护理时长无效，请重新选择护理。',true);return;}const start=localIso(x.date,x.time),startMs=Date.parse(start);if(!Number.isFinite(startMs)){saveFeedback('预约时间格式不正确。',true);return;}const end=new Date(startMs+duration*60000).toISOString();const editing=Boolean(x.appointment_id);const payload={p_branch:x.branch,p_starts_at:start,p_ends_at:end,p_service_name:x.service,p_employee_ids:selectedWorkers.map(Number),p_room_id:x.room_id||null};if(editing)payload.p_appointment_id=x.appointment_id;else payload.p_customer_id=x.customer;const button=el('proAppointmentSave');button.disabled=true;saveFeedback('正在保存预约…');let groupCreated=0;try{
+ if(!editing&&ndIsAutoBooking()){
+   const latestAvailability=await fetchAvailability();
+   if(!ndShowAutoAvailability(latestAvailability))throw Error('所选时间的男女技师空位不足，请选择建议时间。');
+ }
  if(!editing&&guestCount>1){
    const selections=selectedWorkers.map((workerId,i)=>i===0?{employee_id:workerId,service:x.service,duration:Number(x.duration)}:{employee_id:workerId,...otherGuestServices.get(i)});
    if(selections.some(s=>!s.service||!Number.isFinite(Number(s.duration))||Number(s.duration)<5))throw Error('请为每一位顾客选择护理和时长。');
@@ -45638,6 +45695,13 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  #ndProBookingModal .nd-auto-req-gender>strong{font-size:12px!important;color:#31527e!important}
  #ndProBookingModal .nd-auto-req-gender[data-req-gender="female"]{border-color:#f2d7e3!important;background:#fffafd!important}
  #ndProBookingModal .nd-auto-req-gender[data-req-gender="female"]>strong{color:#b54f80!important}
+ #ndProBookingModal .nd-auto-person-requirement{padding:10px 4px;border-top:1px solid #e5e9f1}
+ #ndProBookingModal .nd-auto-person-requirement>b{display:block;font-size:12px!important;color:#294b7f;margin-bottom:9px}
+ #ndProBookingModal .nd-auto-req-gender[data-req-gender="female"] .nd-auto-person-requirement>b{color:#ad477b}
+ #ndProBookingModal .nd-auto-person-traits{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px}
+ #ndProBookingModal .nd-auto-person-traits label{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;padding:7px 5px!important;font-size:12px!important;line-height:1.35!important;font-weight:700!important;white-space:normal!important}
+ #ndProBookingModal .nd-auto-person-traits input[type="checkbox"]{appearance:auto!important;-webkit-appearance:checkbox!important;position:static!important;flex:0 0 18px!important;width:18px!important;height:18px!important;min-width:18px!important;min-height:18px!important;max-width:18px!important;max-height:18px!important;margin:0!important;padding:0!important;accent-color:#3678ef!important}
+ #ndProBookingModal .nd-auto-req-gender[data-req-gender="female"] .nd-auto-person-traits input[type="checkbox"]{accent-color:#cf6ca4!important}
  /* V63: keep every requirement checkbox beside its own label on narrow phones. */
  #ndProBookingModal .nd-auto-req-extra{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;padding:10px 2px!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;align-items:start!important}
  #ndProBookingModal .nd-auto-req-extra>label{display:flex!important;position:static!important;float:none!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;padding:7px 5px!important;box-sizing:border-box!important;white-space:normal!important;word-break:keep-all!important;line-height:1.35!important;font-size:11px!important;letter-spacing:0!important;text-align:left!important}
