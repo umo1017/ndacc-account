@@ -41776,7 +41776,6 @@ let guestCount=1;
    const currentNew=!!(customer?.created_at&&String(customer.created_at).slice(0,10)===day);
    const category=currentNew?'new':promo?'promo':'regular';
    const stats=new Map();
-   const isDesignated=a=>/(?:^|\n)【指定顾客】(?:\s|$)/.test(String(a.notes??a.note??a.remarks??''));
    const assignedTo=id=>links.filter(l=>String(l.appointment_id)===String(id)).map(l=>String(l.employee_id));
    appointments.filter(a=>tzDate(a.starts_at)===day&&a.status!=='cancelled'&&a.status!=='no_show').forEach(a=>{
      const customer=customers.find(c=>String(c.id)===String(a.customer_id));
@@ -41787,18 +41786,15 @@ let guestCount=1;
        // Balance treatment time, not the number of customers: 120 MIN equals two 60 MIN bookings.
        const workedMinutes=Math.max(0,(Date.parse(a.ends_at)-Date.parse(a.starts_at))/60000)||60;
        current.minutes+=workedMinutes;
-       // A designated customer's booking occupies the therapist's time, but does not use their AUTO turn.
-       if(!isDesignated(a)){
-         current.rotationMinutes+=workedMinutes;
-         if((isNew?'new':isPromo?'promo':'regular')===category){current.category++;current.categoryMinutes+=workedMinutes;}
-       }
+       // Every actual appointment contributes its treatment minutes to the fair AUTO rotation.
+       current.rotationMinutes+=workedMinutes;
+       if((isNew?'new':isPromo?'promo':'regular')===category){current.category++;current.categoryMinutes+=workedMinutes;}
        stats.set(id,current);
      }
    });
-   return available.filter(id=>{const member=staff.find(s=>String(s.id)===id);return member&&!ndExcluded(id,chosenService)&&(wantedGender==='any'||ndStaffGender(member)===wantedGender)}).sort((a,b)=>{
+   return available.filter(id=>{const member=staff.find(s=>String(s.id)===id);return member&&!bookedWorkerIds.has(String(id))&&!ndExcluded(id,chosenService)&&(wantedGender==='any'||ndStaffGender(member)===wantedGender)}).sort((a,b)=>{
      const x=stats.get(a)||{total:0,minutes:0,rotationMinutes:0,category:0,categoryMinutes:0},y=stats.get(b)||{total:0,minutes:0,rotationMinutes:0,category:0,categoryMinutes:0};
-     // Preserve skipped AUTO turns: designated work never increases rotationMinutes.
-     // Within equal AUTO loads, balance new/promo/original-price minutes, then all actual work.
+     // Balance new/promo/original-price minutes, then all actual work.
      return x.rotationMinutes-y.rotationMinutes||x.categoryMinutes-y.categoryMinutes||x.minutes-y.minutes||x.total-y.total||String(a).localeCompare(String(b));
    });
  }
@@ -41906,7 +41902,7 @@ let guestCount=1;
  (remarksRow||actions||details.lastElementChild)?.before(ownerPanel);
  const bookingExtras=document.createElement('section');
  bookingExtras.className='nd-booking-extra-fields-v33';
- bookingExtras.innerHTML='<label class="nd-designated-booking-label"><input type="checkbox" name="nd_designated_customer" value="1"> 指定顾客 · 保留 AUTO 灯位（指定单不扣灯）</label><label class="nd-booking-notes-label">备注<textarea name="nd_booking_notes" rows="3" placeholder="填写预约备注"></textarea></label>';
+ bookingExtras.innerHTML='<label class="nd-booking-notes-label">备注<textarea name="nd_booking_notes" rows="3" placeholder="填写预约备注"></textarea></label>';
  (actions||details.lastElementChild)?.before(bookingExtras);
 
  // Touch-friendly therapist toggles. Keep the existing native selects as the
@@ -42003,7 +41999,7 @@ let guestCount=1;
  el('proGuestsPlus').onclick=()=>{guestCount=Math.min(20,guestCount+1);updateGuests();ndPaintWorkers();};
 
 const appointmentCard=el('proAppointmentCard'), bookingHome=appointmentCard.parentElement,bookingMount=el('ndProBookingMount');
-function showBooking(){if(!form.elements.appointment_id.value && branch!=='all')form.elements.branch.value=branch;if(guestWorkers().length!==guestCount)updateGuests();const edited=appointments.find(a=>String(a.id)===String(form.elements.appointment_id.value));const designated=form.elements.nd_designated_customer;if(designated)designated.checked=!!(edited&&/(?:^|\n)【指定顾客】(?:\s|$)/.test(String(edited.notes||'')));const notes=form.elements.nd_booking_notes;if(notes&&edited)notes.value=String(edited.notes||'').replace(/(?:\n|^)【指定顾客】\s*$/,'').replace(/^【(?:新顾客|老顾客)】\s*/,'');displayCustomer();ndPaintWorkers();ndUpdateVisualSummary();appointmentCard.hidden=false;bookingMount.appendChild(appointmentCard);el('ndProBookingModal').hidden=false;el('ndProBookingClose').focus();void ndReloadBookingServices();}
+function showBooking(){if(!form.elements.appointment_id.value && branch!=='all')form.elements.branch.value=branch;if(guestWorkers().length!==guestCount)updateGuests();const edited=appointments.find(a=>String(a.id)===String(form.elements.appointment_id.value));const notes=form.elements.nd_booking_notes;if(notes&&edited)notes.value=String(edited.notes||'').replace(/(?:\n|^)【指定顾客】\s*$/,'').replace(/^【(?:新顾客|老顾客)】\s*/,'');displayCustomer();ndPaintWorkers();ndUpdateVisualSummary();appointmentCard.hidden=false;bookingMount.appendChild(appointmentCard);el('ndProBookingModal').hidden=false;el('ndProBookingClose').focus();void ndReloadBookingServices();}
 function closeBooking(){lookupClose();closeCustomer();el('ndProBookingModal').hidden=true;bookingHome.appendChild(appointmentCard);appointmentCard.hidden=true;el('proQuickCustomer').hidden=true;}
 function reset(){form.reset();el('ndProBookingModal')?.classList.remove('nd-break-mode');ndDrawBookers(ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]);guestCount=1;activeGuestService=0;otherGuestServices.clear();mainWorker.value='';updateGuests();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
 function choose(a){ndSyncBookersForBooking(a.id);el('ndProBookingModal')?.classList.remove('nd-break-mode');form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=mins(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));const priorNotes=String(a.notes||'');const colorMatch=priorNotes.match(/^【(新顾客|老顾客)】\s*/);const colorRadio=form.querySelector('input[name="nd_customer_color"][value="'+(colorMatch?.[1]||'')+'"]');if(colorRadio)colorRadio.checked=true;const noteInput=form.elements.nd_booking_notes;if(noteInput)noteInput.value=priorNotes.replace(/^【(?:新顾客|老顾客)】\s*/,'');if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}if(a.service_name&&!Array.from(form.elements.service.options).some(o=>o.value===a.service_name)){
@@ -42498,13 +42494,13 @@ form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries
      if(r.error)throw r.error;
      groupCreated++;
      const createdId=typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data;
-     if(createdId){if(ndLoginEmployeeId){const stored=await db.from('nd_pro_beta_booking_staff_meta').upsert({appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]},{onConflict:'appointment_id'});if(stored.error)stat('预约已建立，但预约员工记录未同步：'+stored.error.message,true);}const groupNote=[String(x.nd_booking_notes||'').trim(),x.nd_designated_customer==='1'?'【指定顾客】':''].filter(Boolean).join('\n');if(groupNote){const nr=await db.from('nd_pro_beta_appointments').update({notes:groupNote}).eq('id',createdId);if(nr.error)stat('预约已建立，但备注同步失败：'+nr.error.message,true);}}
+     if(createdId){if(ndLoginEmployeeId){const stored=await db.from('nd_pro_beta_booking_staff_meta').upsert({appointment_id:String(createdId),booking_employee_ids:[Number(ndLoginEmployeeId)]},{onConflict:'appointment_id'});if(stored.error)stat('预约已建立，但预约员工记录未同步：'+stored.error.message,true);}const groupNote=String(x.nd_booking_notes||'').trim();if(groupNote){const nr=await db.from('nd_pro_beta_appointments').update({notes:groupNote}).eq('id',createdId);if(nr.error)stat('预约已建立，但备注同步失败：'+nr.error.message,true);}}
    }
    date=x.date;branch=x.branch;closeBooking();await load();stat('已新增 '+groupCreated+' 位顾客的关联预约。');return;
  }
  const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
  const createdId=editing?x.appointment_id:(typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data);
- const bookingNote=[String(x.nd_booking_notes||'').trim(),x.nd_designated_customer==='1'?'【指定顾客】':''].filter(Boolean).join('\n');
+ const bookingNote=String(x.nd_booking_notes||'').trim();
  if(createdId){const noteResult=await db.from('nd_pro_beta_appointments').update({notes:bookingNote}).eq('id',createdId);if(noteResult.error)stat('预约已保存，但备注未同步：'+noteResult.error.message,true);}
  if(createdId&&!editing&&ndLoginEmployeeId){
    // Booking staff is always the signed-in employee and cannot be manually picked.
@@ -44009,8 +44005,6 @@ body > #ndProHamburger.nd-pro-portal-menu {
 }
 </style>
 <style id="nd-designated-booking-v47">
-.nd-designated-booking-label{display:flex;align-items:center;gap:8px;background:#eef5ff;border-radius:12px;padding:12px;margin-bottom:12px;color:#2c5fac;font-size:14px;font-weight:650}
-.nd-designated-booking-label input{width:19px;height:19px;flex:0 0 19px;accent-color:#3178ff}
 </style>
 <style id="nd-order-gender-counts-v45">
 .nd-order-gender-counts{background:#fff;border-radius:16px;padding:12px;margin:0 0 14px;font-size:14px}
