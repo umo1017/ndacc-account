@@ -42699,7 +42699,7 @@ el('proBranch').value=branch;el('proBranch').onchange=e=>ndCalendarChange(null,e
 
 
 host.querySelectorAll('[data-staff-rest]').forEach(b=>b.onclick=()=>void openRestPanel(Number(b.dataset.staffRest)));
-host.querySelector('#proCalendarGear')?.addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();document.getElementById('ndCalendarGearMenu')?.remove();const menu=document.createElement('div');menu.id='ndCalendarGearMenu';menu.innerHTML=`<section role="dialog" aria-label="预约表设置"><header>设置</header><button type="button" data-hours>营业时间设置</button><button type="button" data-staff>员工管理</button><button type="button" data-close>取消</button></section>`;document.body.append(menu);menu.style.setProperty('z-index','2147483647','important');menu.querySelector('[data-hours]').onclick=()=>{menu.remove();active='hours';render();};menu.querySelector('[data-staff]').onclick=()=>{menu.remove();ndOpenStaffCalendarManager();};menu.querySelector('[data-close]').onclick=()=>menu.remove();menu.onclick=e=>{if(e.target===menu)menu.remove();};});
+window.ndOpenCalendarGearMenu=(event)=>{event.preventDefault();event.stopPropagation();document.getElementById('ndCalendarGearMenu')?.remove();const menu=document.createElement('div');menu.id='ndCalendarGearMenu';menu.innerHTML=`<section role="dialog" aria-label="预约表设置"><header>设置</header><button type="button" data-hours>营业时间设置</button><button type="button" data-staff>员工管理</button><button type="button" data-close>取消</button></section>`;document.body.append(menu);menu.style.setProperty('z-index','2147483647','important');menu.querySelector('[data-hours]').onclick=()=>{menu.remove();active='hours';render();};menu.querySelector('[data-staff]').onclick=()=>{menu.remove();ndOpenStaffCalendarManager();};menu.querySelector('[data-close]').onclick=()=>menu.remove();menu.onclick=e=>{if(e.target===menu)menu.remove();};};
 
 const form=el('proAppointmentForm');
 // Use a consistent visible MIN suffix in every booking duration picker.
@@ -43745,16 +43745,17 @@ function openCalendarBooking(a){
  return `${index===1?'<div class="nd-multi-related">关联预约</div>':''}<div class="nd-multi-entry" data-multi-id="${esc(item.id)}"><button type="button" class="nd-multi-pick" aria-label="选择预约" aria-pressed="true">✓</button><strong>${displayName}</strong><b>${esc(item.service_name||'预约')}</b><span>◷ ${esc(clock12(mins(item.starts_at)))} – ${esc(clock12(mins(item.ends_at)))}</span><span>♙ ${esc(workerNames)}</span></div>`;
  }).join('');
  const checkout=groupShell.querySelector('[data-multi-checkout]'),del=groupShell.querySelector('[data-multi-delete]');
- let editing=false,canPay=false,ready=false;
+ let editing=true,canPay=false,ready=false;
  let localPaid=new Set(); const statusOf=id=>localPaid.has(String(id))?'paid':window.ndCalendarOrderStatus?.(id)||'';
  const eligible=id=>ready&&statusOf(id)!=='paid';
  chosen.clear();
+ const selectAll=()=>{chosen.clear();ordered.forEach(x=>{const id=String(x.id);if(eligible(id))chosen.add(id);});};
  const update=()=>{checkout.textContent=`立即付款 (${chosen.size})`;checkout.disabled=del.disabled=!chosen.size;checkout.hidden=!editing||!canPay;del.hidden=!editing;groupShell.querySelector('footer').hidden=!editing;const toggle=groupShell.querySelector('[data-multi-all]');toggle.setAttribute('aria-pressed',String(editing));toggle.setAttribute('aria-label',editing?'退出多选':'进入多选');list.querySelectorAll('[data-multi-id]').forEach(row=>{const id=row.dataset.multiId,on=chosen.has(id),btn=row.querySelector('.nd-multi-pick'),state=statusOf(id);btn.hidden=!editing||!eligible(id);btn.setAttribute('aria-pressed',String(on));btn.textContent=on?'✓':'';let badge=row.querySelector('.nd-multi-status');if(!badge){badge=document.createElement('i');badge.className='nd-multi-status';row.append(badge)}badge.hidden=(!state)||(editing&&eligible(id));badge.dataset.state=state;badge.textContent=state==='paid'?'✓':'!';});};
  const pick=id=>{if(!editing||!eligible(id))return;chosen.has(id)?chosen.delete(id):chosen.add(id);update();};
  list.querySelectorAll('[data-multi-id]').forEach(row=>{row.onclick=()=>{if(editing){pick(row.dataset.multiId);return}const item=ordered.find(x=>String(x.id)===row.dataset.multiId);if(item){closeGroup();detailOpen(item);}};row.querySelector('.nd-multi-pick').onclick=e=>{e.stopPropagation();pick(row.dataset.multiId);};});
- groupShell.querySelector('[data-multi-all]').onclick=()=>{editing=!editing;chosen.clear();update();};
+ groupShell.querySelector('[data-multi-all]').onclick=()=>{editing=!editing;chosen.clear();if(editing)selectAll();update();};
  void ndCanViewBookingCart().then(ok=>{canPay=ok;update();});
- void (async()=>{try{const r=await db.from('nd_pro_beta_orders').select('appointment_id,order_status').in('appointment_id',ordered.map(x=>x.id));if(r.error)throw r.error;const paidIds=new Set((r.data||[]).filter(x=>['paid','completed'].includes(String(x.order_status).toLowerCase())).map(x=>String(x.appointment_id)));localPaid=paidIds;ready=true;update();}catch(e){console.warn('Multi booking payment verification failed',e);}})();
+ void (async()=>{try{const r=await db.from('nd_pro_beta_orders').select('appointment_id,order_status').in('appointment_id',ordered.map(x=>x.id));if(r.error)throw r.error;const paidIds=new Set((r.data||[]).filter(x=>['paid','completed'].includes(String(x.order_status).toLowerCase())).map(x=>String(x.appointment_id)));localPaid=paidIds;ready=true;if(editing)selectAll();update();}catch(e){console.warn('Multi booking payment verification failed',e);}})();
  checkout.onclick=()=>{const selected=ordered.filter(x=>chosen.has(String(x.id))&&eligible(String(x.id)));if(selected.length){closeGroup();openBookingSale(selected[0],selected);}};
  del.onclick=async()=>{if(detailBusy||!chosen.size||!confirm(`确定取消选中的 ${chosen.size} 个预约？历史记录将保留。`))return;detailBusy=true;try{for(const item of ordered.filter(x=>chosen.has(String(x.id))&&eligible(String(x.id)))){const r=await db.rpc('nd_pro_beta_cancel_appointment',{p_appointment_id:item.id});if(r.error)throw r.error;chosen.delete(String(item.id));}closeGroup();await load();}catch(e){closeGroup();await load();alert('取消未全部完成：'+e.message);}finally{detailBusy=false;}};
  update();
@@ -47727,3 +47728,13 @@ body .nd-multi-booking .nd-multi-sheet>footer>button[hidden]{display:none!import
 </style>
 
 <style id="nd-multi-view-mode-final">body .nd-multi-booking .nd-multi-sheet>footer[hidden],body .nd-multi-booking .nd-multi-sheet .nd-multi-entry>button.nd-multi-pick[hidden],body .nd-multi-status[hidden]{display:none!important}body .nd-multi-status{position:absolute;right:12px;top:12px;width:19px;height:19px;border-radius:50%;background:#ff9800;color:white;display:grid;place-items:center;font:700 13px/1 Arial;font-style:normal}body .nd-multi-status[data-state="paid"]{background:#62ad57}body .nd-multi-booking [data-multi-all]{border-radius:50%!important} </style>
+<style id="nd-calendar-gear-count-v2">
+body #ndProBetaPage .proref-calendar-grid button.pro-calhead.pro-employee-head[data-staff-rest]>span{padding:0 12px 0 2px!important;font-size:10px!important;line-height:13px!important;}
+body #ndProBetaPage .proref-calendar-grid button.pro-calhead.pro-employee-head[data-staff-rest]>span>.nd-cal-count{width:11px!important;min-width:11px!important;max-width:11px!important;height:11px!important;min-height:11px!important;max-height:11px!important;font:700 8px/1 Arial!important;top:3px!important;right:3px!important;}
+body #ndProBetaPage #proCalendarGear{pointer-events:auto!important;touch-action:manipulation!important;z-index:120!important;}
+body #ndProBetaPage #proCalendarGear svg,body #ndProBetaPage #proCalendarGear svg *{pointer-events:none!important;}
+body #ndCalendarGearMenu{position:fixed!important;inset:0!important;display:flex!important;align-items:center!important;justify-content:center!important;background:#0005!important;z-index:2147483647!important;pointer-events:auto!important;}
+</style>
+<script id="nd-calendar-gear-capture-v2">
+ document.addEventListener('click',function(e){const b=e.target.closest?.('#proCalendarGear');if(!b)return;if(typeof window.ndOpenCalendarGearMenu==='function'){e.preventDefault();e.stopImmediatePropagation();window.ndOpenCalendarGearMenu(e);}},true);
+</script>
