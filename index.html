@@ -39539,11 +39539,27 @@ function hide(){loadingId++;root.hidden=true;document.body.style.overflow=previo
 function metric(label,value){return `<div class="nmh-metric"><small>${label}</small><b>${esc(value)}</b></div>`}
 function draw(c,profile,balances,error){const tags=Array.isArray(profile?.tags)?profile.tags:[];const level=profile?.membership_level;
 const val=k=>balances&&Object.hasOwn(balances,k)?balances[k]:'—';
-body.innerHTML=`<section class="nmh-card"><button type="button" class="nmh-person" id="nmhOpenDetails"><span class="nmh-avatar">${esc((c.full_name||'会').slice(0,1).toUpperCase())}</span><span class="nmh-identity"><strong>${esc(c.full_name||'未命名会员')}</strong><small>${esc(c.phone||'未登记电话号码')} · 点击查看详细资料</small></span><span class="nmh-arrow">›</span></button><div class="nmh-tags">${level?`<span class="nmh-tag">${esc(level)}</span>`:''}${tags.map(t=>`<span class="nmh-tag">${esc(t)}</span>`).join('')||'<span class="nmh-small">暂无会员标签</span>'}</div><div class="nmh-money">${metric('储值 RM',val('credit'))}${metric('积分',val('points'))}${metric('优惠券',val('vouchers'))}${metric('礼品卡 RM',val('gift'))}${metric('欠款 RM',val('outstanding'))}${metric('押金 RM',val('deposit'))}</div></section><section class="nmh-card"><button class="nmh-link" data-nmh-view="recent"><span>▢</span>近期<em>›</em></button><button class="nmh-link" data-nmh-view="sales"><span>🛒</span>销售记录<em>›</em></button><button class="nmh-link" data-nmh-view="appointments"><span>▦</span>预约记录<em>›</em></button><button class="nmh-link" data-nmh-view="referral"><span>☆</span>介绍记录<em>›</em></button></section><section class="nmh-card" id="nmhLiveActivity" aria-live="polite"><strong>活动</strong><p class="nmh-small">正在同步预约与销售…</p></section><button type="button" id="nmhCustomLayoutBtn" class="nmh-link" style="background:white;border-radius:15px;padding:13px;margin-bottom:12px">⚙ 自定义布局 <em>›</em></button><div id="nmhCustomWidgets"></div><p class="nmh-info">余额仅显示已从云端核实的数据。— 表示尚未连接或无法核实，不代表余额为零。</p>${error?`<p class="nmh-error">${esc(error)}</p>`:''}`;
+body.innerHTML=`<section class="nmh-card nmh-main-card"><button type="button" class="nmh-person" id="nmhOpenDetails"><span class="nmh-avatar">${esc((c.full_name||'会').slice(0,1).toUpperCase())}</span><span class="nmh-identity"><strong>${esc(c.full_name||'未命名会员')} ${String(profile?.gender||'').toLowerCase()==='female'?'♀':String(profile?.gender||'').toLowerCase()==='male'?'♂':''}</strong><small>${esc(c.phone||'未登记电话号码')}${profile?.birthday?' · '+esc(profile.birthday):''} · 查看详细资料</small></span><span class="nmh-arrow">›</span></button><div class="nmh-tags">${level?`<span class="nmh-tag">${esc(level)}</span>`:''}${tags.map(t=>`<span class="nmh-tag">${esc(t)}</span>`).join('')||'<span class="nmh-small">暂无会员标签</span>'}</div><div class="nmh-money">${metric('储值 RM',val('credit'))}${metric('积分',val('points'))}${metric('优惠券',val('vouchers'))}${metric('礼品卡 RM',val('gift'))}${metric('欠款 RM',val('outstanding'))}${metric('押金 RM',val('deposit'))}</div></section><section class="nmh-card nmh-history-links"><button class="nmh-link" data-nmh-view="recent"><span class="nmh-icon">◷</span>近期<em id="nmhRecentSummary">›</em></button><button class="nmh-link" data-nmh-view="sales"><span class="nmh-icon">▤</span>销售<em id="nmhSalesSummary">›</em></button><button class="nmh-link" data-nmh-view="appointments"><span class="nmh-icon">▦</span>预约<em id="nmhBookingSummary">›</em></button><button class="nmh-link" data-nmh-view="referral"><span class="nmh-icon">☆</span>介绍记录<em>›</em></button></section><section class="nmh-card" id="nmhLiveActivity" aria-live="polite"><strong>活动</strong><p class="nmh-small">正在同步预约与销售记录…</p></section><button type="button" id="nmhCustomLayoutBtn" class="nmh-link" style="background:white;border-radius:15px;padding:13px;margin-bottom:12px">自定义布局 <em>›</em></button><div id="nmhCustomWidgets"></div><p class="nmh-info">余额仅显示已从云端核实的数据。— 表示尚未连接或无法核实，不代表余额为零。</p>${error?`<p class="nmh-error">${esc(error)}</p>`:''}`;
 body.querySelector('#nmhCustomLayoutBtn').onclick=()=>window.ndMemberLayoutOpen?.(c.id);window.ndMemberLayoutRender?.(c.id);
 body.querySelector('#nmhOpenDetails').onclick=()=>{if(typeof window.ndProOpenCustomerProfile!=='function'){alert('完整会员资料模块尚未就绪');return;}hide();window.ndProMemberHomeReturn=()=>{window.ndProMemberHomeReturn=null;void window.ndProOpenMemberHome(c.id)};window.ndProOpenCustomerProfile(c.id)};
 body.querySelectorAll('[data-nmh-view]').forEach(b=>b.onclick=()=>{const kind=b.dataset.nmhView;if(kind==='appointments'){showHistory(c,'appointments');return;}showHistory(c,kind)});
 void loadMemberActivity(c.id);
+}
+async function loadMemberBalances(c,profile,key){
+ if(!db())return;
+ try{
+  const r=await within(db().from('nd_pro_beta_wallet_ledger').select('*').eq('customer_id',c.id).order('created_at',{ascending:false}).limit(100),5500);
+  if(r.error||key!==loadingId||root.hidden)return;
+  const balances={};
+  for(const row of r.data||[]){
+   const type=String(row.wallet_type||row.type||'').toLowerCase();
+   const amount=row.available_balance??row.balance_after;
+   if(amount==null||!Number.isFinite(Number(amount)))continue;
+   const field=type.includes('credit')?'credit':type.includes('point')?'points':type.includes('gift')?'gift':type.includes('deposit')?'deposit':null;
+   if(field&&!Object.hasOwn(balances,field))balances[field]=Number(amount).toLocaleString('en-MY',{minimumFractionDigits:field==='points'?0:2,maximumFractionDigits:2});
+  }
+  if(Object.keys(balances).length&&key===loadingId){draw(c,profile,balances,'');}
+ }catch(_){/* Keep unverifiable balances blank. */}
 }
 async function loadMemberActivity(id){
  const node=document.getElementById('nmhLiveActivity');if(!node||!db())return;
@@ -39556,15 +39572,22 @@ async function loadMemberActivity(id){
  const paid=(sales.data||[]).filter(x=>['paid','completed'].includes(String(x.order_status||'').toLowerCase()));
  const valid=(bookings.data||[]).filter(x=>!['cancelled','no_show'].includes(String(x.status||'').toLowerCase()));
  const amount=paid.reduce((n,x)=>n+Number(x.total_amount||0),0),last=valid.slice().sort((a,b)=>String(b.starts_at||'').localeCompare(String(a.starts_at||'')))[0];
- node.innerHTML=`<strong>活动</strong><div class="nmh-money" style="margin-top:12px">${metric('已完成销售 RM',amount.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}))}${metric('销售单数',paid.length+(sales.data.length===1000?'+':''))}${metric('有效预约',valid.length+(bookings.data.length===1000?'+':''))}</div>${last?`<button type="button" class="nmh-link" data-nmh-view="appointments"><span>▦</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(last.service_name||'最近预约')}</span><em>›</em></button>`:''}`;
+ const recent=document.getElementById('nmhRecentSummary'),salesSummary=document.getElementById('nmhSalesSummary'),bookingSummary=document.getElementById('nmhBookingSummary');
+ if(recent)recent.textContent=esc(last?.service_name||'查看记录')+' ›';
+ if(salesSummary)salesSummary.textContent=paid.length+' 单 ›';
+ if(bookingSummary)bookingSummary.textContent=valid.length+' 次 ›';
+ node.innerHTML=`<div class="nmh-activity-heading"><strong>活动</strong><button type="button" class="nmh-activity-all">查看所有活动 ›</button></div><div class="nmh-activity-stats">${metric('已完成销售 RM',amount.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}))}${metric('销售单数',paid.length+(sales.data.length===1000?'+':''))}${metric('有效预约',valid.length+(bookings.data.length===1000?'+':''))}</div>${last?`<button type="button" class="nmh-link" data-nmh-view="appointments"><span class="nmh-icon">▦</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(last.service_name||'最近预约')}</span><em>›</em></button>`:''}<p class="nmh-small">记录来源：Beta 预约与已完成订单。统计仅包含成功同步的数据。</p>`;
  node.querySelector('[data-nmh-view]')?.addEventListener('click',()=>showHistory({id},'appointments'));
+ node.querySelector('.nmh-activity-all')?.addEventListener('click',()=>showHistory({id},'recent'));
 }
 async function showHistory(c,kind){const label={recent:'近期',sales:'销售记录',appointments:'预约记录',referral:'介绍记录'}[kind];body.innerHTML=`<section class="nmh-card"><button class="nmh-link" id="nmhHistoryBack">‹ 返回会员首页</button><h3>${label}</h3><div id="nmhHistoryData" class="nmh-small">正在读取云端数据…</div></section>`;document.getElementById('nmhHistoryBack').onclick=()=>window.ndProOpenMemberHome(c.id);
 const target=document.getElementById('nmhHistoryData');if(!db()){target.textContent='云端连接未就绪';return;}
 try{if(kind==='referral'){target.textContent='介绍记录尚未配置可核实的云端查询接口。';return;}
-const table=kind==='appointments'?'nd_pro_beta_appointments':'nd_pro_beta_orders';const r=await db().from(table).select('*').eq('customer_id',c.id).limit(50);if(r.error)throw r.error;
-if(!target.isConnected)return;const records=(r.data||[]).sort((a,b)=>String(b.created_at||b.starts_at||'').localeCompare(String(a.created_at||a.starts_at||'')));
-target.innerHTML=records.length?records.map(x=>`<div style="border-bottom:1px solid #eee;padding:12px 0"><strong>${esc(x.service_name||x.order_status||x.status||'记录')}</strong><div>${esc(x.starts_at||x.created_at||'')} ${x.total_amount!=null?' · RM '+esc(x.total_amount):''}</div></div>`).join(''):'暂无记录';
+const tables=kind==='recent'?['nd_pro_beta_appointments','nd_pro_beta_orders']:[kind==='appointments'?'nd_pro_beta_appointments':'nd_pro_beta_orders'];
+const responses=await Promise.all(tables.map(table=>within(db().from(table).select('*').eq('customer_id',c.id).limit(50),6500)));
+for(const r of responses)if(r.error)throw r.error;
+if(!target.isConnected)return;const records=responses.flatMap((r,i)=>(r.data||[]).map(x=>({...x,_kind:tables[i]==='nd_pro_beta_appointments'?'预约':'销售'}))).sort((a,b)=>String(b.created_at||b.starts_at||'').localeCompare(String(a.created_at||a.starts_at||'')));
+target.innerHTML=records.length?records.map(x=>`<div style="border-bottom:1px solid #eee;padding:12px 0"><strong>${esc(x._kind)} · ${esc(x.service_name||x.order_status||x.status||'记录')}</strong><div>${esc(x.starts_at||x.created_at||'')} ${x.total_amount!=null?' · RM '+esc(x.total_amount):''}</div></div>`).join(''):'暂无记录';
 }catch(e){if(target.isConnected)target.textContent='无法读取：'+(e.message||e)}
 }
 window.ndProOpenMemberHome=async id=>{
@@ -39572,7 +39595,7 @@ window.ndProOpenMemberHome=async id=>{
  if(root.hidden)previousOverflow=document.body.style.overflow;
  root.hidden=false;document.body.style.overflow='hidden';
  const cached=memberCache.get(String(id));
- if(cached&&Date.now()-cached.time<60000)draw(cached.customer,cached.profile,null,'');
+  if(cached&&Date.now()-cached.time<60000)draw(cached.customer,cached.profile,null,'');
  else body.innerHTML='<div class="nmh-card nmh-small">正在读取会员资料…</div>';
  try{
   if(!db())throw Error('云端连接未就绪');
@@ -39582,10 +39605,10 @@ window.ndProOpenMemberHome=async id=>{
   const c=a.data;draw(c,cached?.profile||null,null,'');
   memberCache.set(String(id),{customer:c,profile:cached?.profile||null,time:Date.now()});
   try{
-   const p=await within(db().from('nd_pro_beta_customer_profiles').select('membership_level,tags').eq('customer_id',id).maybeSingle(),4000);
+   const p=await within(db().from('nd_pro_beta_customer_profiles').select('membership_level,tags,gender,birthday').eq('customer_id',id).maybeSingle(),4000);
    if(key!==loadingId)return;
    if(p.error){draw(c,null,null,'会员等级及标签读取失败：'+p.error.message);return;}
-   memberCache.set(String(id),{customer:c,profile:p.data,time:Date.now()});draw(c,p.data,null,'');
+   memberCache.set(String(id),{customer:c,profile:p.data,time:Date.now()});draw(c,p.data,null,'');void loadMemberBalances(c,p.data,key);
   }catch(e){if(key===loadingId&&!(cached&&Date.now()-cached.time<60000))draw(c,null,null,'会员标签暂时无法读取');}
  }catch(e){if(key===loadingId){if(cached){draw(cached.customer,cached.profile,null,'');return;}
   body.innerHTML=`<section class="nmh-card nmh-error">${esc(e.message||'读取失败')}<button type="button" class="nmh-link nmh-action" id="nmhRetry">重新读取 ›</button></section>`;
@@ -46717,3 +46740,30 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
 })();
 </script>
+<style id="nd-beta-member-sync-layout-v122">
+/* One compact member card shared by all Beta appointment/member entry points. */
+#ndProMemberHome{padding-left:10px!important;padding-right:10px!important;background:#f1f0f6!important}
+#ndProMemberHome .nmh-top{height:51px!important;margin-bottom:9px!important}
+#ndProMemberHome .nmh-top strong{font-size:16px!important}
+#ndProMemberHome .nmh-card{border-radius:20px!important;padding:15px!important;margin-bottom:12px!important;box-shadow:none!important}
+#ndProMemberHome .nmh-person{gap:10px!important;padding-bottom:12px!important}
+#ndProMemberHome .nmh-avatar{width:49px!important;height:49px!important;background:#f4c5ab!important;color:#783757!important;font-size:19px!important}
+#ndProMemberHome .nmh-identity strong{font-size:16px!important}
+#ndProMemberHome .nmh-identity small{font-size:11px!important;line-height:1.5!important}
+#ndProMemberHome .nmh-tags{padding-bottom:11px!important;gap:5px!important}
+#ndProMemberHome .nmh-tag{background:#e8eafa!important;color:#4765ba!important;border-radius:6px!important;font-size:10px!important}
+#ndProMemberHome .nmh-money{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:14px 10px!important;padding-top:14px!important}
+#ndProMemberHome .nmh-metric small{font-size:10px!important;color:#9298a3!important}
+#ndProMemberHome .nmh-metric b{font-size:15px!important;color:#222833!important}
+#ndProMemberHome .nmh-history-links{padding:0 15px!important}
+#ndProMemberHome .nmh-link{font-size:12px!important;min-height:47px!important;gap:9px!important;padding:11px 0!important}
+#ndProMemberHome .nmh-icon{width:23px!important;flex:none!important;color:#3f80ec!important;font-size:18px!important;font-family:system-ui!important}
+#ndProMemberHome .nmh-link em{font-size:11px!important;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#ndProMemberHome .nmh-activity-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:14px}
+#ndProMemberHome .nmh-activity-all{border:0;background:none;color:#778192;font-size:11px;font-weight:700;padding:6px 0}
+#ndProMemberHome .nmh-activity-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:14px 0 6px}
+#ndProMemberHome .nmh-activity-stats .nmh-metric b{font-size:15px}
+#ndProMemberHome .nmh-small{font-size:11px!important}
+#ndProMemberHome .nmh-info{font-size:10px!important;padding:0 4px!important}
+@media(max-width:390px){#ndProMemberHome .nmh-card{padding:12px!important}#ndProMemberHome .nmh-money{gap:12px 6px!important}}
+</style>
