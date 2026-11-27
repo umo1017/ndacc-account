@@ -6731,9 +6731,9 @@ window.ndBindSwipeDelete=function(root,selector,remove){
  const front=document.createElement('div');front.className='nd-swipe-front';while(row.firstChild)front.append(row.firstChild);
  const trash=document.createElement('button');trash.type='button';trash.className='nd-swipe-trash';trash.setAttribute('aria-label','删除');trash.tabIndex=-1;trash.innerHTML='<svg viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg>';row.append(trash,front);
  let start=null,blockedUntil=0;const open=()=>row.classList.contains('nd-swipe-open');
- function set(v){if(v)root.querySelectorAll('.nd-swipe-open').forEach(r=>{if(r!==row){r.classList.remove('nd-swipe-open');r.querySelector('.nd-swipe-trash').tabIndex=-1;}});row.classList.toggle('nd-swipe-open',v);trash.tabIndex=v?0:-1;front.style.transform='';}
+ function set(v){if(v)root.querySelectorAll('.nd-swipe-open').forEach(r=>{if(r!==row){r.classList.remove('nd-swipe-open');r.querySelector('.nd-swipe-trash').tabIndex=-1;}});row.classList.remove('nd-swipe-revealing');row.classList.toggle('nd-swipe-open',v);trash.tabIndex=v?0:-1;front.style.transform='';}
  front.addEventListener('pointerdown',e=>{if(!e.isPrimary||e.button!==0||e.target.closest('input,textarea,select'))return;start={x:e.clientX,y:e.clientY,id:e.pointerId,drag:false,base:open()?-72:0};});
- front.addEventListener('pointermove',e=>{if(!start||e.pointerId!==start.id)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(!start.drag){if(Math.abs(dy)>12&&Math.abs(dy)>Math.abs(dx)){start=null;return;}if(Math.abs(dx)<10||Math.abs(dx)<Math.abs(dy))return;start.drag=true;front.setPointerCapture(e.pointerId);}front.style.transform='translateX('+Math.max(-72,Math.min(0,start.base+(start.base===0?-Math.abs(dx):dx)))+'px)';});
+ front.addEventListener('pointermove',e=>{if(!start||e.pointerId!==start.id)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(!start.drag){if(Math.abs(dy)>12&&Math.abs(dy)>Math.abs(dx)){start=null;return;}if(Math.abs(dx)<10||Math.abs(dx)<Math.abs(dy))return;start.drag=true;front.setPointerCapture(e.pointerId);}const offset=Math.max(-72,Math.min(0,start.base+(start.base===0?-Math.abs(dx):dx)));front.style.transform='translateX('+offset+'px)';row.classList.toggle('nd-swipe-revealing',offset<0);});
  function end(e,cancel){if(!start||e.pointerId!==start.id)return;const a=start;start=null;if(a.drag){blockedUntil=Date.now()+400;set(cancel?open():a.base+(a.base===0?-Math.abs(e.clientX-a.x):e.clientX-a.x) < -35);}}
  front.addEventListener('pointerup',e=>end(e,false));front.addEventListener('pointercancel',e=>end(e,true));
  front.addEventListener('click',e=>{if(Date.now()<blockedUntil||open()){e.preventDefault();e.stopImmediatePropagation();set(false);}},true);
@@ -41759,20 +41759,23 @@ body[data-nd-visible-page="pro-beta"] #appView,body[data-nd-visible-page="pro-be
 (()=>{'use strict';
 const el=id=>document.getElementById(id),page=el('ndProBetaPage'),nav=el('ndProBetaNav');
 const valid=['Eco Botanic','Nusa Bestari'];
-const defaultHours={'Eco Botanic':{open:'10:00',close:'22:00',enabled:true},'Nusa Bestari':{open:'13:00',close:'23:45',enabled:true}};
-function getHours(){try{return {...defaultHours,...JSON.parse(localStorage.getItem('ndProBusinessHoursV1')||'{}')}}catch(_e){return {...defaultHours}}}
+const defaultHours={'Eco Botanic':{open:'10:00',close:'22:00',enabled:true},'Nusa Bestari':{open:'13:00',close:'01:00',enabled:true}};
+function getHours(){try{const saved=JSON.parse(localStorage.getItem('ndProBusinessHoursV1')||'{}');if(saved['Nusa Bestari']?.close==='23:45'&&!saved['Nusa Bestari'].custom)saved['Nusa Bestari'].close='01:00';return {...defaultHours,...saved}}catch(_e){return {...defaultHours}}}
 let hours=getHours();
 // Distinguish first / second half visually. Existing Today Off Day stores 0.5 for either.
 const restHalfKey=(d,b,id)=>'ndProRestHalfV2:'+d+':'+b+':'+id;
 function restHalfGet(d,b,id){try{return localStorage.getItem(restHalfKey(d,b,id))||'first'}catch(_){return 'first'}}
 function restHalfSet(d,b,id,half){try{if(half)localStorage.setItem(restHalfKey(d,b,id),half);else localStorage.removeItem(restHalfKey(d,b,id))}catch(_){}}
-function restPeriod(b){const h=hours[b]||defaultHours[b]||defaultHours['Eco Botanic'];const start=minsOf(h.open),end=minsOf(h.close);return {start,end,mid:start+(end-start)/2};}
+function restPeriod(b){const h=hours[b]||defaultHours[b]||defaultHours['Eco Botanic'];const start=minsOf(h.open),end=closeMinutes(h);return {start,end,mid:start+(end-start)/2};}
 function restInfo(employeeId,slot){const e=staff.find(x=>String(x.id)===String(employeeId));if(!e)return {rest:false};const days=Number(restById.get(String(employeeId))||0);if(days===0)return {rest:false};if(days>=1)return {rest:true,kind:ndMcIds.has(String(employeeId))?'mc':'full'};const b=(branch==='all'?e.outlet:branch),r=restPeriod(b),m=minsOf(slot),half=restHalfGet(date,b,employeeId);return {rest:half==='second'?m>=r.mid:m<r.mid,kind:half};}
 
-const clock12=t=>{const parts=String(t).split(':'),h=Number(parts[0]);if(!Number.isFinite(h))return String(t);const period=h<6?'凌晨':h<12?'早上':h<18?'下午':'晚上';return `${String(h%12||12).padStart(2,'0')}:${parts[1]||'00'} ${period}`};
-const railClock12=t=>{const parts=String(t).split(':'),h=Number(parts[0]);if(!Number.isFinite(h))return String(t);const hour=h%12||12,minute=parts[1]||'00';return `${hour}:${minute}${h<12?'am':'pm'}`};
+const clock12=t=>{const parts=String(t).split(':'),h=Number(parts[0])%24;if(!Number.isFinite(h))return String(t);const period=h<6?'凌晨':h<12?'早上':h<18?'下午':'晚上';return `${String(h%12||12).padStart(2,'0')}:${parts[1]||'00'} ${period}`};
+const railClock12=t=>{const parts=String(t).split(':'),h=Number(parts[0])%24;if(!Number.isFinite(h))return String(t);const hour=h%12||12,minute=parts[1]||'00';return `${hour}:${minute}${h%24<12?'am':'pm'}`};
 const minsOf=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
-function visibleTimes(){const h=hours[branch==='all'?'Eco Botanic':branch]||defaultHours['Eco Botanic'];const b=hours[branch==='all'?'Nusa Bestari':branch]||defaultHours['Nusa Bestari'];return branch==='all'?{start:Math.min(minsOf(h.open),minsOf(b.open)),end:Math.max(minsOf(h.close),minsOf(b.close))}:{start:minsOf(h.open),end:minsOf(h.close)}}
+const closeMinutes=h=>minsOf(h.close)+(minsOf(h.close)<=minsOf(h.open)?1440:0);
+const nextDay=d=>{const x=new Date(d+'T12:00:00Z');x.setUTCDate(x.getUTCDate()+1);return x.toISOString().slice(0,10)};
+const businessDate=(v,b)=>{const d=tzDate(v),h=hours[b]||defaultHours[b];if(h&&closeMinutes(h)>1440&&minsOf(tzTime(v))<minsOf(h.close)){const x=new Date(d+'T12:00:00Z');x.setUTCDate(x.getUTCDate()-1);return x.toISOString().slice(0,10)}return d};
+function visibleTimes(){const h=hours[branch==='all'?'Eco Botanic':branch]||defaultHours['Eco Botanic'];const b=hours[branch==='all'?'Nusa Bestari':branch]||defaultHours['Nusa Bestari'];return branch==='all'?{start:Math.min(minsOf(h.open),minsOf(b.open)),end:Math.max(closeMinutes(h),closeMinutes(b))}:{start:minsOf(h.open),end:closeMinutes(h)}}
 // UMO-only customer save shared by booking and CRM.
  const proPhoneKey=value=>{
   let digits=String(value||'').replace(/\D/g,'');
@@ -42458,8 +42461,8 @@ function ndOpenStaffCalendarManager(){
 const timeSlots=()=>{const {start,end}=visibleTimes(),a=[];for(let m=start;m<end;m+=15)a.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));return a;};
 function ndPlaceNowLine(){
  const line=document.querySelector('#ndProBetaPage .nd-calendar-now-line');if(!line)return;
- const now=new Date();if(date!==tzDate(now)){line.hidden=true;return;}
- const current=tzTime(now),minutes=Number(current.slice(0,2))*60+Number(current.slice(3,5));
+ const now=new Date();if(date!==businessDate(now,branch)){line.hidden=true;return;}
+ const current=tzTime(now),minutes=(tzDate(now)>date?1440:0)+Number(current.slice(0,2))*60+Number(current.slice(3,5));
  const {start,end}=visibleTimes();if(minutes<start||minutes>=end){line.hidden=true;return;}
  const grid=line.closest('.proref-calendar-grid'),cell=grid?.querySelector('.pro-time');if(!grid||!cell)return;
  const size=cell.getBoundingClientRect().height+(parseFloat(getComputedStyle(grid).rowGap)||0);
@@ -42553,32 +42556,33 @@ async function openRestPanel(employeeId){
 let ndCalendarChangeSerial=0;
 function renderAppointments(host){
 if(branch==='all'||!valid.includes(branch))branch=valid.includes('Eco Botanic')?'Eco Botanic':valid[0];
-const list=appointments.filter(a=>tzDate(a.starts_at)===date&&a.branch===branch);
+const list=appointments.filter(a=>businessDate(a.starts_at,a.branch)===date&&a.branch===branch);
 const genderOrder={male:0,other:1,female:2};
 const staffs=activeStaff().filter(s=>s.outlet===branch&&ndStaffVisibleOnCalendar(s.id)).sort((a,b)=>genderOrder[ndStaffGender(a)]-genderOrder[ndStaffGender(b)]);
 const roomCols=calendarMode==='room';
 // AUTO is a fixed virtual first column, never an employee record and never hideable.
 const ndAutoColumn={id:'__auto__',nickname:'AUTO',name:'AUTO',outlet:branch};
-const columns=roomCols?roomsFor(branch).filter(r=>r.branch===branch):[ndAutoColumn,...staffs];
+const ndOtherColumn={id:'__other__',name:'OTHER',outlet:branch};
+const columns=roomCols?roomsFor(branch).filter(r=>r.branch===branch):[ndAutoColumn,...staffs.filter(s=>ndStaffGender(s)!=='female'),ndOtherColumn,...staffs.filter(s=>ndStaffGender(s)==='female')];
 const linksByAppointment=new Map();
 for(const link of links){const id=String(link.appointment_id);if(!linksByAppointment.has(id))linksByAppointment.set(id,[]);linksByAppointment.get(id).push(String(link.employee_id));}
 const assigned=id=>linksByAppointment.get(String(id))||[];
 const bookingsByColumn=new Map();
 for(const booking of list){
  if(booking.status==='cancelled'||booking.status==='no_show')continue;
- const ids=roomCols?[booking.room_id]:assigned(booking.id);
+ const ids=roomCols?[booking.room_id]:(assigned(booking.id).length?assigned(booking.id):["__other__"]);
  for(const id of ids){if(id==null||id==='')continue;const key=String(id);if(!bookingsByColumn.has(key))bookingsByColumn.set(key,[]);bookingsByColumn.get(key).push(booking);}
 }
 const staffBookingCount=id=>list.filter(a=>!['cancelled','no_show'].includes(a.status)&&assigned(a.id).includes(String(id))).length;
-const mins=v=>{const d=new Date(v);return tzTime(d)};
+const mins=v=>{const t=tzTime(v);return tzDate(v)>date?String(Number(t.slice(0,2))+24)+t.slice(2):t};
 const toLocalDate=v=>tzDate(v);
 const slots=timeSlots();
 const dayObj=new Date(date+'T12:00:00');
 const weekStart=new Date(dayObj);weekStart.setDate(dayObj.getDate()-((dayObj.getDay()+6)%7));
 const weekdayNames=lang==='zh'?['一','二','三','四','五','六','日']:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const weekButtons=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);const ymd=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const n=appointments.filter(a=>tzDate(a.starts_at)===ymd&&(branch==='all'||a.branch===branch)&&a.status!=='cancelled').length;return `<button type="button" class="proref-weekday ${ymd===date?'selected':''}" data-pro-date="${ymd}"><span>${weekdayNames[i]}</span><b>${d.getDate()}</b><small>${n}</small></button>`;}).join('');
+const weekButtons=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);const ymd=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const n=appointments.filter(a=>businessDate(a.starts_at,a.branch)===ymd&&(branch==='all'||a.branch===branch)&&a.status!=='cancelled').length;return `<button type="button" class="proref-weekday ${ymd===date?'selected':''}" data-pro-date="${ymd}"><span>${weekdayNames[i]}</span><b>${d.getDate()}</b><small>${n}</small></button>`;}).join('');
 const ccount=Math.max(1,columns.length);
-let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="预约表设置" title="预约表设置"><svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto;flex:none"><path d="M4 6h7m4 0h5M4 12h3m4 0h9M4 18h11m4 0h1"/><circle cx="13" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:String(s.id)==='__auto__'?`<div class="pro-calhead pro-employee-head nd-cal-auto-head" style="grid-column:${i+2};grid-row:1"><span>⚡ AUTO</span><small>自动公平排单</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${ndStaffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
+let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="预约表设置" title="预约表设置"><svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto;flex:none"><path d="M4 6h7m4 0h5M4 12h3m4 0h9M4 18h11m4 0h1"/><circle cx="13" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:String(s.id)==='__other__'?`<div class="pro-calhead pro-employee-head nd-special-head" style="grid-column:${i+2};grid-row:1"><span>OTHER</span><small>特别护理</small></div>`:String(s.id)==='__auto__'?`<div class="pro-calhead pro-employee-head nd-cal-auto-head" style="grid-column:${i+2};grid-row:1"><span>⚡ AUTO</span><small>自动公平排单</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${ndStaffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
 const toMinutes=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 for(let ri=0;ri<slots.length;ri++){
  const t=slots[ri];const row=ri+2;
@@ -42586,6 +42590,10 @@ for(let ri=0;ri<slots.length;ri++){
  for(let ci=0;ci<columns.length;ci++){
   const person=columns[ci],col=ci+2;
   const isAuto=!roomCols&&String(person.id)==='__auto__';
+  if(!roomCols&&String(person.id)==='__other__'){
+   const items=(bookingsByColumn.get('__other__')||[]).filter(a=>toMinutes(mins(a.starts_at))<=toMinutes(t)&&toMinutes(mins(a.ends_at))>toMinutes(t));
+   grid+=`<button type="button" class="pro-cell nd-special-slot" style="grid-column:${col};grid-row:${row}" data-other-time="${t}">${items.length?esc(items.length+' 位')+' · +':'+'}</button>`;continue;
+  }
   const booking=isAuto?null:(bookingsByColumn.get(String(person.id))||[]).find(a=>toMinutes(mins(a.starts_at))<=toMinutes(t)&&toMinutes(mins(a.ends_at))>toMinutes(t));
   const rest=!roomCols&&!isAuto?restInfo(person.id,t):{rest:false};const resting=rest.rest;
   if(booking){
@@ -42612,7 +42620,7 @@ if(!roomCols)for(const record of ndBreakRows){
  grid+=`<div class="pro-cell nd-staff-break" style="grid-column:${ci+2};grid-row:${startIndex+2}/span ${length}" title="中途休息">中途休息<small>${esc(from)}–${esc(to)}</small></div>`;
 }
 // The current-time marker is a single solid line across the selected day's calendar.
-if(date===tzDate(new Date())){
+if(date===businessDate(new Date(),branch)){
  grid+='<div class="nd-calendar-now-line" aria-label="现在时间" style="grid-column:1/-1;grid-row:2"><span class="nd-calendar-now-clock" aria-live="off"></span></div>';
 }
 grid+='</div>';
@@ -42699,7 +42707,7 @@ el('proBranch').value=branch;el('proBranch').onchange=e=>ndCalendarChange(null,e
 
 
 host.querySelectorAll('[data-staff-rest]').forEach(b=>b.onclick=()=>void openRestPanel(Number(b.dataset.staffRest)));
-window.ndOpenCalendarGearMenu=(event)=>{event.preventDefault();event.stopPropagation();document.getElementById('ndCalendarGearMenu')?.remove();const menu=document.createElement('div');menu.id='ndCalendarGearMenu';menu.innerHTML=`<section role="dialog" aria-label="预约表设置"><header>设置</header><button type="button" data-hours>营业时间设置</button><button type="button" data-staff>员工管理</button><button type="button" data-close>取消</button></section>`;document.body.append(menu);menu.style.setProperty('z-index','2147483647','important');menu.querySelector('[data-hours]').onclick=()=>{menu.remove();active='hours';render();};menu.querySelector('[data-staff]').onclick=()=>{menu.remove();ndOpenStaffCalendarManager();};menu.querySelector('[data-close]').onclick=()=>menu.remove();menu.onclick=e=>{if(e.target===menu)menu.remove();};};
+window.ndOpenCalendarGearMenu=(event)=>{event?.preventDefault();event?.stopPropagation();document.getElementById('ndCalendarGearMenu')?.remove();const menu=document.createElement('dialog');menu.id='ndCalendarGearMenu';menu.innerHTML=`<section aria-label="预约表设置"><header>设置</header><button type="button" data-hours>营业时间设置</button><button type="button" data-staff>员工管理</button><button type="button" data-close>取消</button></section>`;document.body.append(menu);const close=()=>{menu.close();menu.remove()};menu.addEventListener('cancel',e=>{e.preventDefault();close()});menu.querySelector('[data-hours]').onclick=()=>{const panel=menu.querySelector('section');panel.innerHTML=`<header>营业时间设置</header><div class="nd-hours-fields"><label>分行<select data-branch>${opt(valid.map(x=>[x,x]),branch==='all'?'Eco Botanic':branch)}</select></label><label>开始<input data-open type="time"></label><label>结束<input data-end type="time"></label><div data-preview></div></div><button type="button" data-save>保存</button><button type="button" data-cancel>取消</button>`;const q=x=>panel.querySelector(x),br=q('[data-branch]'),op=q('[data-open]'),end=q('[data-end]');const preview=()=>{if(!op.value||!end.value)return;const h={open:op.value,close:end.value};const duration=closeMinutes(h)-minsOf(h.open);q('[data-preview]').textContent=(duration===1440?'24小时营业':clock12(h.open)+' – '+(minsOf(h.close)<=minsOf(h.open)?'次日 ':'')+clock12(h.close))};const load=()=>{const h=hours[br.value]||defaultHours[br.value];op.value=h.open;end.value=h.close;preview()};br.onchange=load;op.oninput=end.oninput=preview;load();q('[data-save]').onclick=()=>{if(!op.value||!end.value)return;const updated={...hours,[br.value]:{open:op.value,close:end.value,enabled:true,custom:true}};try{localStorage.setItem('ndProBusinessHoursV1',JSON.stringify(updated))}catch(e){alert('无法保存营业时间');return}hours=updated;close();render()};q('[data-cancel]').onclick=close};menu.querySelector('[data-staff]').onclick=()=>{close();ndOpenStaffCalendarManager()};menu.querySelector('[data-close]').onclick=close;menu.onclick=e=>{if(e.target===menu)close()};menu.showModal();};
 
 const form=el('proAppointmentForm');
 // Use a consistent visible MIN suffix in every booking duration picker.
@@ -43250,10 +43258,16 @@ let guestCount=1;
 const appointmentCard=el('proAppointmentCard'), bookingHome=appointmentCard.parentElement,bookingMount=el('ndProBookingMount');
 function showBooking(){if(!form.elements.appointment_id.value && branch!=='all')form.elements.branch.value=branch;if(guestWorkers().length!==guestCount)updateGuests();const edited=appointments.find(a=>String(a.id)===String(form.elements.appointment_id.value));const notes=form.elements.nd_booking_notes;if(notes&&edited)notes.value=String(edited.notes||'').replace(/(?:\n|^)【指定顾客】\s*$/,'').replace(/^【(?:新顾客|老顾客)】\s*/,'');displayCustomer();ndPaintWorkers();ndUpdateVisualSummary();appointmentCard.hidden=false;bookingMount.appendChild(appointmentCard);el('ndProBookingModal').hidden=false;el('ndProBookingClose').focus();void ndReloadBookingServices();}
 function closeBooking(){lookupClose();closeCustomer();el('ndProBookingModal').hidden=true;bookingHome.appendChild(appointmentCard);appointmentCard.hidden=true;el('proQuickCustomer').hidden=true;}
-function reset(){form.reset();el('ndProBookingModal')?.classList.remove('nd-break-mode');ndDrawBookers(ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]);guestCount=1;activeGuestService=0;otherGuestServices.clear();mainWorker.value='';updateGuests();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
-function choose(a){ndSyncBookersForBooking(a.id);el('ndProBookingModal')?.classList.remove('nd-break-mode');form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=mins(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));const priorNotes=String(a.notes||'');const colorMatch=priorNotes.match(/^【(新顾客|老顾客)】\s*/);const colorRadio=form.querySelector('input[name="nd_customer_color"][value="'+(colorMatch?.[1]||'')+'"]');if(colorRadio)colorRadio.checked=true;const noteInput=form.elements.nd_booking_notes;if(noteInput)noteInput.value=priorNotes.replace(/^【(?:新顾客|老顾客)】\s*/,'');if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}if(a.service_name&&!Array.from(form.elements.service.options).some(o=>o.value===a.service_name)){
+function reset(){delete form.dataset.ndSpecial;form.reset();if(form.elements.employee)form.elements.employee.required=true;el('ndProBookingModal')?.classList.remove('nd-break-mode');ndDrawBookers(ndLoginEmployeeId?[String(ndLoginEmployeeId)]:[]);guestCount=1;activeGuestService=0;otherGuestServices.clear();mainWorker.value='';updateGuests();selection.hidden=true;details.hidden=true;el('proRefCustomerName').textContent='—';form.elements.appointment_id.value='';form.elements.date.value=date;form.elements.branch.value=branch==='all'?'Eco Botanic':branch;form.elements.customer.disabled=false;el('proAppointmentHeading').textContent=tr('New Appointment','新增预约');el('proAppointmentSave').textContent=tr('Create Appointment','新增预约');el('proAppointmentReset').hidden=true;el('proAppointmentCancel').hidden=true;}
+function choose(a){ndSyncBookersForBooking(a.id);el('ndProBookingModal')?.classList.remove('nd-break-mode');form.elements.appointment_id.value=a.id;form.elements.branch.value=a.branch;form.elements.customer.value=a.customer_id;form.elements.customer.disabled=true;form.elements.date.value=toLocalDate(a.starts_at);form.elements.time.value=tzTime(a.starts_at);form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));const priorNotes=String(a.notes||'');const colorMatch=priorNotes.match(/^【(新顾客|老顾客)】\s*/);const colorRadio=form.querySelector('input[name="nd_customer_color"][value="'+(colorMatch?.[1]||'')+'"]');if(colorRadio)colorRadio.checked=true;const noteInput=form.elements.nd_booking_notes;if(noteInput)noteInput.value=priorNotes.replace(/^【(?:新顾客|老顾客)】\s*/,'');if(!form.elements.duration.value){form.elements.duration.add(new Option(String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000)),String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000))));form.elements.duration.value=String(Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));}if(a.service_name&&!Array.from(form.elements.service.options).some(o=>o.value===a.service_name)){
   form.elements.service.add(new Option(a.service_name,a.service_name));
 }form.elements.service.value=a.service_name;guestCount=Math.max(1,assigned(a.id).length);updateGuests();guestWorkers().forEach((sel,i)=>{const id=assigned(a.id)[i]||'';if(id&&Array.from(sel.options).some(o=>o.value===id))sel.value=id;});refreshGuestWorkers(false);ndPaintWorkers();form.elements.room_id.value=a.room_id||'';displayCustomer();el('proAppointmentHeading').textContent=tr('Edit Appointment','编辑预约');el('proAppointmentSave').textContent=tr('Save Changes','保存修改');el('proAppointmentReset').hidden=false;el('proAppointmentCancel').hidden=a.status==='cancelled'||a.status==='completed';showBooking();}
+host.querySelectorAll('[data-other-time]').forEach(b=>b.onclick=()=>{
+ const t=b.dataset.otherTime;const items=(bookingsByColumn.get('__other__')||[]).filter(a=>toMinutes(mins(a.starts_at))<=toMinutes(t)&&toMinutes(mins(a.ends_at))>toMinutes(t));
+ const menu=document.createElement('div');menu.id='ndOtherMenu';menu.innerHTML=`<section><header>OTHER · ${esc(t)}</header>${items.map(a=>`<button type="button" data-other-edit="${esc(a.id)}">${esc(customers.find(c=>c.id===a.customer_id)?.full_name||'Customer')} · ${esc(a.service_name)}</button>`).join('')}<button type="button" data-other-add>＋ 新增预约</button><button type="button" data-other-close>关闭</button></section>`;document.body.append(menu);
+ menu.querySelector('[data-other-close]').onclick=()=>menu.remove();menu.querySelectorAll('[data-other-edit]').forEach(x=>x.onclick=()=>{menu.remove();const a=appointments.find(a=>String(a.id)===x.dataset.otherEdit);if(a)detailOpen(a);});
+ menu.querySelector('[data-other-add]').onclick=()=>{menu.remove();reset();form.dataset.ndSpecial='1';form.dataset.ndCalendarAuto='0';if(minsOf(t)>=1440){form.elements.date.value=nextDay(date);form.elements.time.value=String(Number(t.slice(0,2))-24).padStart(2,'0')+t.slice(2);}else form.elements.time.value=t;ndSetWorkerIds([]);showBooking();form.querySelectorAll('[required]').forEach(x=>{if(x.name==='employee')x.required=false;});};
+});
 host.querySelectorAll('[data-slot]').forEach(b=>{
   b.style.pointerEvents='auto';
   b.style.touchAction='manipulation';
@@ -43264,7 +43278,7 @@ host.querySelectorAll('[data-slot]').forEach(b=>{
       reset();
       const f=form.elements;
       if(!f.time||!f.branch||!f.date)throw Error('Appointment form is missing a required field');
-      f.time.value=b.dataset.slot||'';
+      const slot=b.dataset.slot||'';if(minsOf(slot)>=1440){f.date.value=nextDay(date);f.time.value=String(Number(slot.slice(0,2))-24).padStart(2,'0')+slot.slice(2);}else f.time.value=slot;
       const employeeId=b.dataset.staff||'';
       if(f.employee&&employeeId)f.employee.value=employeeId;
       const member=staff.find(s=>String(s.id)===employeeId);
@@ -44014,13 +44028,13 @@ form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries
    }catch(err){saveFeedback(err?.message||'无法读取当前空位，请稍后重试。',true);}
    return;
  }
- if(!x.appointment_id && f.elements.service?.selectedOptions[0]?.dataset.existingOnly==='true'){saveFeedback('请选择已启用的服务。',true);return;}if(!x.customer){phoneSearch.focus();phoneSearch.classList.add('proref-invalid');saveFeedback('请选择或新增顾客。',true);return;}if(!x.service){saveFeedback('请先选择护理项目。',true);return;}if(!x.date||!x.time){saveFeedback('请选择预约日期和时间。',true);return;}const selectedWorkers=guestWorkers().map(sel=>sel.value);if(selectedWorkers.length!==guestCount||selectedWorkers.some(id=>!id)||new Set(selectedWorkers).size!==guestCount){saveFeedback('请为每位顾客选择不同的空闲技师。',true);return;}const duration=Number(x.duration);if(!Number.isFinite(duration)||duration<=0){saveFeedback('护理时长无效，请重新选择护理。',true);return;}const start=localIso(x.date,x.time),startMs=Date.parse(start);if(!Number.isFinite(startMs)){saveFeedback('预约时间格式不正确。',true);return;}const end=new Date(startMs+duration*60000).toISOString();const editing=Boolean(x.appointment_id);const payload={p_branch:x.branch,p_starts_at:start,p_ends_at:end,p_service_name:x.service,p_employee_ids:selectedWorkers.map(Number),p_room_id:x.room_id||null};if(editing)payload.p_appointment_id=x.appointment_id;else payload.p_customer_id=x.customer;const button=el('proAppointmentSave');button.disabled=true;saveFeedback('正在保存预约…');let groupCreated=0;try{
+ if(!x.appointment_id && f.elements.service?.selectedOptions[0]?.dataset.existingOnly==='true'){saveFeedback('请选择已启用的服务。',true);return;}if(!x.customer){phoneSearch.focus();phoneSearch.classList.add('proref-invalid');saveFeedback('请选择或新增顾客。',true);return;}if(!x.service){saveFeedback('请先选择护理项目。',true);return;}if(!x.date||!x.time){saveFeedback('请选择预约日期和时间。',true);return;}const special=form.dataset.ndSpecial==='1';const selectedWorkers=special?[]:guestWorkers().map(sel=>sel.value);if(!special&&(selectedWorkers.length!==guestCount||selectedWorkers.some(id=>!id)||new Set(selectedWorkers).size!==guestCount)){saveFeedback('请为每位顾客选择不同的空闲技师。',true);return;}const duration=Number(x.duration);if(!Number.isFinite(duration)||duration<=0){saveFeedback('护理时长无效，请重新选择护理。',true);return;}const start=localIso(x.date,x.time),startMs=Date.parse(start);if(!Number.isFinite(startMs)){saveFeedback('预约时间格式不正确。',true);return;}const end=new Date(startMs+duration*60000).toISOString();const editing=Boolean(x.appointment_id);const payload={p_branch:x.branch,p_starts_at:start,p_ends_at:end,p_service_name:x.service,p_employee_ids:selectedWorkers.map(Number),p_room_id:x.room_id||null};if(editing)payload.p_appointment_id=x.appointment_id;else payload.p_customer_id=x.customer;const button=el('proAppointmentSave');button.disabled=true;saveFeedback('正在保存预约…');let groupCreated=0;try{
  if(ndIsAutoBooking()&&selectedWorkers.some(id=>staff.find(s=>String(s.id)===String(id))?.outlet!==x.branch))throw Error('AUTO 只能安排当前分店的技师。');
  if(!editing&&ndIsAutoBooking()){
    const latestAvailability=await fetchAvailability();
    if(!ndShowAutoAvailability(latestAvailability))throw Error('所选时间的男女技师空位不足，请手动调整预约时间。');
  }
- if(!editing&&guestCount>1){
+ if(!editing&&guestCount>1&&!special){
    const selections=selectedWorkers.map((workerId,i)=>i===0?{employee_id:workerId,service:x.service,duration:Number(x.duration)}:{employee_id:workerId,...otherGuestServices.get(i)});
    if(selections.some(s=>!s.service||!Number.isFinite(Number(s.duration))||Number(s.duration)<5))throw Error('请为每一位顾客选择护理和时长。');
    // Each person is a real appointment with its own service and therapist.
@@ -44036,7 +44050,7 @@ form.onsubmit=async e=>{e.preventDefault();const f=e.target,x=Object.fromEntries
    }
    date=x.date;branch=x.branch;closeBooking();await load();stat('已新增 '+groupCreated+' 位顾客的关联预约。');return;
  }
- const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
+ if(!special){const check=await fetchAvailability();if(!applyAvailability(check))throw Error('所选技师或房间已被预约。');}const r=await db.rpc(editing?'nd_pro_beta_update_booking_with_room':'nd_pro_beta_create_booking_with_room',payload);if(r.error)throw r.error;
  const createdId=editing?x.appointment_id:(typeof r.data==='object'?(r.data?.id??r.data?.appointment_id):r.data);
  if(!editing&&ndIsAutoBooking())await ndRecordAutoBooking(createdId,x.branch,x.service);
  if(editing&&selectedWorkers.slice().sort().join(',')!==assigned(x.appointment_id).map(String).sort().join(','))await db.from('nd_pro_beta_auto_assignment_meta').update({assignment_mode:'manual',auto_enabled:false,needs_reassignment:false}).eq('appointment_id',String(createdId));
@@ -44066,7 +44080,7 @@ function renderHours(host){
  host.innerHTML=`<div class="pro-card"><h2>${tr('Business Hours','营业时间')}</h2><div class="pro-grid">${field(tr('Branch','分行'),`<select id="proHoursBranch">${opt(valid.map(x=>[x,x]),b)}</select>`)}</div><div class="pro-hours-list"><div class="pro-hours-row"><strong>${tr('Every day','每日')}</strong><label>${tr('Open','开始')}<input id="proHoursOpen" type="time" value="${esc(h.open)}"></label><label>${tr('Close','结束')}<input id="proHoursClose" type="time" value="${esc(h.close)}"></label><label><input id="proHoursEnabled" type="checkbox" ${h.enabled?'checked':''}> ${tr('Enabled','营业')}</label></div></div><div class="pro-line" style="margin-top:16px"><button class="pro-action" type="button" id="proHoursSave">${tr('Save Hours','保存时间')}</button><strong id="proHoursPreview">${clock12(h.open)} – ${clock12(h.close)}</strong></div></div>`;
  el('proHoursBranch').onchange=e=>{branch=e.target.value;render()};
  for(const id of ['proHoursOpen','proHoursClose'])el(id).oninput=()=>el('proHoursPreview').textContent=clock12(el('proHoursOpen').value)+' – '+clock12(el('proHoursClose').value);
- el('proHoursSave').onclick=()=>{const op=el('proHoursOpen').value,cl=el('proHoursClose').value;if(!op||!cl||minsOf(cl)<=minsOf(op)){stat(tr('Closing time must be after opening time.','结束时间必须晚于开始时间。'),true);return;}hours[b]={open:op,close:cl,enabled:el('proHoursEnabled').checked};localStorage.setItem('ndProBusinessHoursV1',JSON.stringify(hours));active='appointments';render();stat(tr('Hours updated on this browser and calendar.','营业时间已更新到当前浏览器日历。'));};
+ el('proHoursSave').onclick=()=>{const op=el('proHoursOpen').value,cl=el('proHoursClose').value;if(!op||!cl){stat(tr('Closing time must be after opening time.','结束时间必须晚于开始时间。'),true);return;}hours[b]={open:op,close:cl,custom:true,enabled:el('proHoursEnabled').checked};localStorage.setItem('ndProBusinessHoursV1',JSON.stringify(hours));active='appointments';render();stat(tr('Hours updated on this browser and calendar.','营业时间已更新到当前浏览器日历。'));};
 }
 /* Tunai history lookup: report snapshot, never a spendable balance. */
 const ndTunaiReportDate='2026-11-09';
@@ -47738,3 +47752,28 @@ body #ndCalendarGearMenu{position:fixed!important;inset:0!important;display:flex
 <script id="nd-calendar-gear-capture-v2">
  document.addEventListener('click',function(e){const b=e.target.closest?.('#proCalendarGear');if(!b)return;if(typeof window.ndOpenCalendarGearMenu==='function'){e.preventDefault();e.stopImmediatePropagation();window.ndOpenCalendarGearMenu(e);}},true);
 </script>
+<style id="nd-solid-special-calendar">
+#ndProBetaPage .proref-calendar-grid .pro-calhead{position:sticky!important;top:0!important;z-index:25!important;opacity:1!important;box-shadow:0 0 0 2px #fff!important;isolation:isolate!important;background:#f2f3f5!important}
+#ndProBetaPage .proref-calendar-grid .pro-calhead.nd-gender-male{background:#d6e5fa!important}#ndProBetaPage .proref-calendar-grid .pro-calhead.nd-gender-female{background:#f2d9e6!important}#ndProBetaPage .proref-calendar-grid .nd-cal-auto-head{background:#e4efff!important}
+#ndProBetaPage .proref-calendar-grid .pro-time{position:sticky!important;left:0!important;z-index:30!important;opacity:1!important;background:#dceaf9!important;box-shadow:0 0 0 2px #fff!important;isolation:isolate!important}
+#ndProBetaPage .proref-calendar-grid #proCalendarGear{position:sticky!important;left:0!important;top:0!important;z-index:40!important;background:#dce8fa!important;opacity:1!important;box-shadow:0 0 0 2px #fff!important}
+#ndProBetaPage .proref-calendar-top{padding:8px 12px!important;gap:8px!important;min-height:52px!important;box-sizing:border-box!important;align-items:center!important}#ndProBetaPage .proref-weekstrip{padding:5px 6px 9px!important;gap:3px!important}
+#ndProBetaPage .proref-calendar-grid .nd-special-head{background:#e5e0f6!important;color:#66549c!important}#ndProBetaPage .proref-calendar-grid .nd-special-slot{background:#f0edf8!important;color:#66549c!important;font-size:10px!important;padding:0!important;border:0!important;min-width:0!important}
+#ndOtherMenu{position:fixed;inset:0;background:#0006;z-index:2147483647;display:grid;place-items:center;padding:18px}#ndOtherMenu section{background:white;border-radius:14px;width:min(340px,100%);padding:12px;max-height:80vh;overflow:auto}#ndOtherMenu button,#ndOtherMenu header{display:block;width:100%;padding:12px;font-size:13px;border:0;background:white;color:#3478ef;text-align:center}#ndOtherMenu header{color:#222;font-weight:700}
+</style>
+<style id="nd-hours-dialog-final">body dialog#ndCalendarGearMenu{margin:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border:0!important;box-sizing:border-box!important;background:transparent!important;padding:20px!important}body dialog#ndCalendarGearMenu::backdrop{background:#0006}body dialog#ndCalendarGearMenu section{width:min(320px,100%);background:#fff!important;border-radius:14px;overflow:hidden}body dialog#ndCalendarGearMenu header,body dialog#ndCalendarGearMenu button{font-size:14px!important;min-height:44px!important}#ndCalendarGearMenu .nd-hours-fields{padding:12px;display:grid;gap:12px;font-size:13px}#ndCalendarGearMenu .nd-hours-fields label{display:flex;align-items:center;justify-content:space-between;gap:12px}#ndCalendarGearMenu .nd-hours-fields input,#ndCalendarGearMenu .nd-hours-fields select{width:65%;min-height:36px;font-size:16px}#ndCalendarGearMenu [data-preview]{color:#3478f6;text-align:center}</style>
+<style id="nd-cart-swipe-clean-final">
+body #ndProAppointmentSale .nd-sale-stage-cart .nd-order-line.nd-swipe-row,body #ndProBetaPage .nd-order-line.nd-swipe-row{background:#f4f4f4!important;border-radius:12px!important;overflow:hidden!important;isolation:isolate;clip-path:inset(0 round 12px);padding:0!important;min-height:0!important;height:auto!important;}
+body #ndProAppointmentSale .nd-sale-stage-cart .nd-order-line.nd-swipe-row>.nd-swipe-front,body #ndProBetaPage .nd-order-line.nd-swipe-row>.nd-swipe-front{display:block!important;width:100%!important;max-width:none!important;margin:0!important;border:0!important;border-radius:0!important;background:#f4f4f4!important;padding:11px!important;box-sizing:border-box!important;}
+body #ndProAppointmentSale .nd-sale-stage-cart .nd-order-line.nd-swipe-row>.nd-swipe-trash,body #ndProBetaPage .nd-order-line.nd-swipe-row>.nd-swipe-trash{visibility:hidden!important;pointer-events:none!important;opacity:0!important;position:absolute!important;inset:0 0 0 auto!important;height:100%!important;width:72px!important;border-radius:0!important;margin:0!important;}
+body #ndProAppointmentSale .nd-sale-stage-cart .nd-order-line.nd-swipe-open>.nd-swipe-trash,body #ndProBetaPage .nd-order-line.nd-swipe-open>.nd-swipe-trash{visibility:visible!important;pointer-events:auto!important;opacity:1!important;}
+body #ndProAppointmentSale .nd-sale-stage-cart .nd-order-line.nd-swipe-row:has(>.nd-swipe-front[style*="translateX(-"] )>.nd-swipe-trash,body #ndProBetaPage .nd-order-line.nd-swipe-row:has(>.nd-swipe-front[style*="translateX(-"] )>.nd-swipe-trash{visibility:visible!important;opacity:1!important;}
+</style>
+<style id="nd-all-swipe-clean-final">
+body :is(#ndProBetaPage,#ndProAppointmentSale) .nd-swipe-row.nd-swipe-row{overflow:hidden!important;isolation:isolate;position:relative!important;border-radius:12px!important;clip-path:inset(0 round 12px);padding:0!important;background:#fff!important;display:block!important;}
+body :is(#ndProBetaPage,#ndProAppointmentSale) .nd-swipe-row.nd-swipe-row>.nd-swipe-front{display:block!important;position:relative!important;z-index:2!important;width:100%!important;max-width:none!important;margin:0!important;border:0!important;border-radius:0!important;box-sizing:border-box!important;background:#fff!important;}
+body :is(#ndProBetaPage,#ndProAppointmentSale) .nd-order-line.nd-swipe-row.nd-swipe-row>.nd-swipe-front{background:#f4f4f4!important;}
+body :is(#ndProBetaPage,#ndProAppointmentSale) .nd-swipe-row.nd-swipe-row>.nd-swipe-trash{position:absolute!important;inset:0 0 0 auto!important;width:72px!important;height:100%!important;margin:0!important;border-radius:0!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}
+body :is(#ndProBetaPage,#ndProAppointmentSale) .nd-swipe-row.nd-swipe-row:is(.nd-swipe-open,.nd-swipe-revealing)>.nd-swipe-trash{visibility:visible!important;opacity:1!important;}
+body :is(#ndProBetaPage,#ndProAppointmentSale) .nd-swipe-row.nd-swipe-row.nd-swipe-open>.nd-swipe-trash{pointer-events:auto!important;}
+</style>
