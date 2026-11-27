@@ -41644,7 +41644,26 @@ function renderSyncCenter(host){
  };
 }
 
-function render(){ndProCartQuickAccess();if(active!=='customers'&&active!=='members_csv')document.getElementById('ndIntegratedMemberOverlay')?.classList.remove('nd-open');el('ndProTabs').querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('selected',b.dataset.tab===active));const host=el('ndProContent');if(!host)return;menuLabels();el('ndProHomeButton').hidden=active==='home';if(active==='home')renderHome(host);else if(active==='daily_report')renderDailyReport(host);else if(active==='customer_history')renderCustomerHistory(host);else if(active==='appointments'||active==='room_calendar')renderAppointments(host);else if(active==='staff_rotation')ndRenderStaffRotation(host);else if(active==='customers')renderCustomers(host);else if(active==='catalog')renderCatalog(host);else if(active==='products')renderProducts(host);else if(active==='packages')ndDrawCommercialCatalog(host,'packages');else if(active==='gift_cards')ndDrawCommercialCatalog(host,'gift_cards');else if(active==='members_csv'){active='customers';ndCombinedCustomerTab='members';renderCustomers(host)}else if(active==='commission_rules')ndDrawCommissionCsv(host);else if(active==='hours')renderHours(host);else if(active==='settings')renderProSettings(host);else if(active==='imports')renderImportCenter(host);else if(active==='sync_center')renderSyncCenter(host);else if(active==='vouchers')ndUnifiedVoucherInfo(host);else renderPos(host);ndUnifiedCatalogTabs(host);}
+function render(){
+ const host=el('ndProContent');if(!host)return;
+ try{
+  ndProCartQuickAccess();
+  if(active!=='customers'&&active!=='members_csv')document.getElementById('ndIntegratedMemberOverlay')?.classList.remove('nd-open');
+  el('ndProTabs')?.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('selected',b.dataset.tab===active));
+  menuLabels();el('ndProHomeButton').hidden=active==='home';
+  if(active==='home')renderHome(host);else if(active==='daily_report')renderDailyReport(host);else if(active==='customer_history')renderCustomerHistory(host);else if(active==='appointments'||active==='room_calendar')renderAppointments(host);else if(active==='staff_rotation')ndRenderStaffRotation(host);else if(active==='customers')renderCustomers(host);else if(active==='catalog')renderCatalog(host);else if(active==='products')renderProducts(host);else if(active==='packages')ndDrawCommercialCatalog(host,'packages');else if(active==='gift_cards')ndDrawCommercialCatalog(host,'gift_cards');else if(active==='members_csv'){active='customers';ndCombinedCustomerTab='members';renderCustomers(host)}else if(active==='commission_rules')ndDrawCommissionCsv(host);else if(active==='hours')renderHours(host);else if(active==='settings')renderProSettings(host);else if(active==='imports')renderImportCenter(host);else if(active==='sync_center')renderSyncCenter(host);else if(active==='vouchers')ndUnifiedVoucherInfo(host);else renderPos(host);
+  ndUnifiedCatalogTabs(host);
+ }catch(error){
+  console.error('Pro Beta page render failed:',active,error);
+  stat('页面打开失败：'+String(error?.message||error),true);
+  host.replaceChildren();
+  const panel=document.createElement('div');panel.className='pro-card';
+  const message=document.createElement('p');message.textContent='页面打开失败：'+String(error?.message||error);
+  const retry=document.createElement('button');retry.type='button';retry.className='btn';retry.textContent='重试';retry.onclick=()=>render();
+  const back=document.createElement('button');back.type='button';back.className='pro-tab';back.textContent='返回首页';back.onclick=()=>{active='home';render()};
+  panel.append(message,retry,back);host.append(panel);
+ }
+}
 /* Unified product navigation. Read-only catalog pages retain their original data handlers. */
 function ndUnifiedCatalogTabs(host){
   if(!host||!['catalog','products','packages','gift_cards','vouchers'].includes(active))return;
@@ -41860,7 +41879,15 @@ const roomCols=calendarMode==='room';
 // AUTO is a fixed virtual first column, never an employee record and never hideable.
 const ndAutoColumn={id:'__auto__',nickname:'AUTO',name:'AUTO',outlet:branch};
 const columns=roomCols?roomsFor(branch).filter(r=>r.branch===branch):[ndAutoColumn,...staffs];
-const assigned=id=>links.filter(l=>l.appointment_id===id).map(l=>String(l.employee_id));
+const linksByAppointment=new Map();
+for(const link of links){const id=String(link.appointment_id);if(!linksByAppointment.has(id))linksByAppointment.set(id,[]);linksByAppointment.get(id).push(String(link.employee_id));}
+const assigned=id=>linksByAppointment.get(String(id))||[];
+const bookingsByColumn=new Map();
+for(const booking of list){
+ if(booking.status==='cancelled'||booking.status==='no_show')continue;
+ const ids=roomCols?[booking.room_id]:assigned(booking.id);
+ for(const id of ids){if(id==null||id==='')continue;const key=String(id);if(!bookingsByColumn.has(key))bookingsByColumn.set(key,[]);bookingsByColumn.get(key).push(booking);}
+}
 const staffBookingCount=id=>list.filter(a=>!['cancelled','no_show'].includes(a.status)&&assigned(a.id).includes(String(id))).length;
 const mins=v=>{const d=new Date(v);return tzTime(d)};
 const toLocalDate=v=>tzDate(v);
@@ -41878,7 +41905,7 @@ for(let ri=0;ri<slots.length;ri++){
  for(let ci=0;ci<columns.length;ci++){
   const person=columns[ci],col=ci+2;
   const isAuto=!roomCols&&String(person.id)==='__auto__';
-  const booking=isAuto?null:list.find(a=>a.status!=='cancelled'&&a.status!=='no_show'&&(roomCols?String(a.room_id||'')===String(person.id):assigned(a.id).includes(String(person.id)))&&toMinutes(mins(a.starts_at))<=toMinutes(t)&&toMinutes(mins(a.ends_at))>toMinutes(t));
+  const booking=isAuto?null:(bookingsByColumn.get(String(person.id))||[]).find(a=>toMinutes(mins(a.starts_at))<=toMinutes(t)&&toMinutes(mins(a.ends_at))>toMinutes(t));
   const rest=!roomCols&&!isAuto?restInfo(person.id,t):{rest:false};const resting=rest.rest;
   if(booking){
    const first=ri===0||toMinutes(mins(booking.starts_at))>=toMinutes(t);
