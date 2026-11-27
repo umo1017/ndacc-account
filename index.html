@@ -42024,6 +42024,7 @@ function renderHome(host){
  </section>`;
  host.querySelectorAll('[data-quick]').forEach(btn=>btn.onclick=()=>{
   const key=btn.dataset.quick;
+  if(key==='customers'){window.ndOpenAppointmentMembers();return;}
   if(key==='report'){
    // Both History and Shift Report enter through the daily summary first.
    // Receipt details are only opened after the user taps a summary statistic.
@@ -42850,7 +42851,7 @@ countryMenu.querySelector('input').oninput=drawCountry;
 countryMenu.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCountry();countryButton.focus();}});
 renderCountry();
 const countryStyles=document.createElement('style');countryStyles.textContent='.nd-ref-country-picker{display:flex;position:relative;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;font-size:14px;font-weight:650;color:#303845}.nd-ref-country-picker>select{display:none!important}.nd-country-trigger{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0;max-width:72%;border:1px solid #dce3ef;border-radius:11px;background:#f7f8fc;color:#3977df;padding:11px;font:650 14px system-ui}.nd-country-trigger span{color:#151c27}.nd-country-menu[hidden]{display:none!important}.nd-country-menu{position:absolute;z-index:2147483400;right:0;top:calc(100% + 6px);width:min(310px,85vw);max-height:min(55dvh,450px);display:flex;flex-direction:column;background:#f0f2f8;border:1px solid white;border-radius:20px;box-shadow:0 16px 45px #15233b4d;padding:10px;box-sizing:border-box}.nd-country-search{flex:none!important;width:100%!important;min-height:44px!important;font-size:15px!important;border:0!important;border-bottom:1px solid #d8dce6!important;background:transparent!important}.nd-country-options{overflow-y:auto;overscroll-behavior:contain}.nd-country-item{width:100%;display:flex;align-items:center;text-align:left;gap:10px;min-height:47px;border:0;background:transparent;color:#1d232d;font:650 15px system-ui;border-radius:9px}.nd-country-item[aria-selected="true"]{background:#e4edff}.nd-country-check{width:20px;font-size:19px;color:#2778ff}.proref-customer-sheet #proQuickCustomer input{font-size:16px!important}';document.head.append(countryStyles);
-const closeCustomer=()=>{customerModal.hidden=true};
+const closeCustomer=()=>{customerModal.hidden=true;if(lookupStandalone){lookupModal.hidden=false;lookupDraw();}};
 el('proRefCustomerClose').onclick=closeCustomer;el('proRefCustomerShade').onclick=closeCustomer;
 const displayCustomer=()=>{const id=form.elements.customer.value,c=customers.find(x=>String(x.id)===String(id));el('proRefCustomerName').textContent=c?.full_name||'—';if(c){phoneSearch.value=c.phone||c.full_name;selection.hidden=true;details.hidden=false}else{details.hidden=true}};
 const showCustomerModal=()=>{customerModal.hidden=false;el('proQuickPhone').value=/[0-9]{6}/.test(phoneSearch.value)?phoneSearch.value:'';el('proQuickName').value=/[0-9]{6}/.test(phoneSearch.value)?'':phoneSearch.value;el('proQuickPhone').focus()};
@@ -43676,7 +43677,7 @@ const lookupModal=document.createElement('div');
 lookupModal.id='proRefLookupModal';lookupModal.className='proref-lookup-modal';lookupModal.hidden=true;
 lookupModal.innerHTML=`<section class="proref-lookup-sheet" role="dialog" aria-modal="true" aria-label="会员搜索"><header><button type="button" data-lookup-close aria-label="关闭">×</button><strong>会员</strong><button type="button" data-lookup-add aria-label="注册会员">＋</button></header><div class="proref-lookup-search"><span>⌕</span><input type="search" data-lookup-input autocomplete="off" placeholder="搜索姓名或电话号码"></div><div class="proref-lookup-tabs"><button type="button" data-lookup-tab="recent" class="active">近期</button><button type="button" data-lookup-tab="new">新</button><button type="button" data-lookup-tab="birthday">生日</button><button type="button" data-lookup-tab="name">名字</button><button type="button" data-lookup-tab="credit">Credits+Vouchers</button></div><div class="proref-lookup-list" data-lookup-results></div></section>`;
 document.body.append(lookupModal);
-let lookupTab='recent';
+let lookupTab='recent', lookupStandalone=false;
 const lookupInput=lookupModal.querySelector('[data-lookup-input]');
 const lookupResults=lookupModal.querySelector('[data-lookup-results]');
 const lookupClose=()=>{lookupModal.hidden=true;};
@@ -43695,6 +43696,7 @@ function lookupDraw(){
   const phone=document.createElement('span');const raw=String(c.phone||'');phone.textContent=raw.length>4?'••••••'+raw.slice(-4):(raw||'无电话号码');
   card.append(name,phone);
   card.onclick=()=>{
+   if(lookupStandalone){openLookupProfile(c.id);return;}
    const sel=form.elements.customer;
    if(!Array.from(sel.options).some(o=>o.value===String(c.id)))sel.add(new Option(c.full_name+' · '+(c.phone||''),c.id));
    sel.value=String(c.id);lookupClose();displayCustomer();
@@ -43723,6 +43725,7 @@ function lookupDraw(){
      card.onclick=async()=>{card.disabled=true;try{
        const saved=await proSaveCustomerSafe(String(m.Name),phone,String(m.Email||''));
        const c=saved.customer;
+       if(lookupStandalone){openLookupProfile(c.id);return;}
        const sel=form.elements.customer;
        if(!Array.from(sel.options).some(o=>o.value===String(c.id)))sel.add(new Option(c.full_name+' · '+(c.phone||''),c.id));
        sel.value=String(c.id);lookupClose();displayCustomer();
@@ -43732,15 +43735,17 @@ function lookupDraw(){
  }
  if(!lookupResults.children.length){const empty=document.createElement('p');empty.className='proref-lookup-empty';empty.textContent='没有找到会员';lookupResults.append(empty);}
 }
-lookupModal.querySelector('[data-lookup-close]').onclick=lookupClose;
-lookupModal.querySelector('[data-lookup-add]').onclick=()=>{lookupClose();showCustomerModal();};
+lookupModal.querySelector('[data-lookup-close]').onclick=()=>{lookupClose();lookupStandalone=false;};
+lookupModal.querySelector('[data-lookup-add]').onclick=()=>{lookupClose();showCustomerModal();if(lookupStandalone){el('proQuickPhone').value='';el('proQuickName').value='';}};
 lookupInput.addEventListener('input',lookupDraw);
 lookupModal.querySelectorAll('[data-lookup-tab]').forEach(btn=>btn.onclick=()=>{lookupTab=btn.dataset.lookupTab;lookupModal.querySelectorAll('[data-lookup-tab]').forEach(x=>x.classList.toggle('active',x===btn));lookupDraw();});
-function openLookup(){lookupTab='recent';lookupModal.querySelectorAll('[data-lookup-tab]').forEach(x=>x.classList.toggle('active',x.dataset.lookupTab==='recent'));lookupInput.value=phoneSearch.value.trim();lookupModal.hidden=false;lookupDraw();lookupInput.focus();}
+function openLookup(standalone=false){lookupStandalone=standalone===true;lookupTab='recent';lookupModal.querySelectorAll('[data-lookup-tab]').forEach(x=>x.classList.toggle('active',x.dataset.lookupTab==='recent'));lookupInput.value=lookupStandalone?'':phoneSearch.value.trim();lookupModal.hidden=false;lookupDraw();lookupInput.focus();}
+window.ndOpenAppointmentMembers=()=>openLookup(true);
+function openLookupProfile(id){lookupClose();window.ndMemberHomeReturn=()=>{lookupStandalone=true;lookupModal.hidden=false;lookupDraw();};if(typeof window.ndProOpenMemberHome==='function')void window.ndProOpenMemberHome(id);}
 phoneSearch.oninput=()=>{ /* Do not open, select, or autofill while typing. */ };
 phoneSearch.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();openLookup();}};
 el('proRefSearch').onclick=openLookup;
-el('proAddCustomer').onclick=showCustomerModal;
+el('proAddCustomer').onclick=()=>{lookupStandalone=false;showCustomerModal();};
 form.elements.customer.onchange=()=>{form.elements.customer.size=0;displayCustomer();selection.hidden=true;void window.ndBetaAutoPrefs?.loadCustomer(form.elements.customer.value)};
 el('proQuickSave').onclick=async()=>{
   const button=el('proQuickSave'),nameEl=el('proQuickName'),phoneEl=el('proQuickPhone');
@@ -43749,6 +43754,7 @@ el('proQuickSave').onclick=async()=>{
    const code=el('ndRefCustomerCountry')?.value||'60';let number=phoneEl.value.trim();
    if(code!=='60'&&number&&!number.startsWith('+'))number='+'+code+number.replace(/^0+/,'').replace(new RegExp('^'+code),'');
    const saved=await proSaveCustomerSafe(nameEl.value,number,'');const customer=saved.customer;
+   if(lookupStandalone){customerModal.hidden=true;openLookupProfile(customer.id);return;}
    if(!Array.from(form.elements.customer.options).some(o=>o.value===customer.id))
     form.elements.customer.add(new Option(customer.full_name+' · '+(customer.phone||''),customer.id));
    form.elements.customer.value=String(customer.id);form.elements.customer.dispatchEvent(new Event('change',{bubbles:true}));closeCustomer();displayCustomer();
