@@ -40420,7 +40420,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 .nd-booking-detail .nd-mini-tag{display:inline-flex;align-items:center;padding:8px 10px;border-radius:10px;background:#eef5ff;color:#226de4;font-size:12px;font-weight:800;margin-top:8px}
 #ndProBetaPage .proref-calendar-grid .nd-calendar-now-line{position:relative;z-index:15;align-self:start;justify-self:stretch;height:0;min-height:0;border-top:3px solid #f04444;pointer-events:none;box-sizing:border-box;filter:drop-shadow(0 1px 1px #ffffffaa)}
 #ndProBetaPage .proref-calendar-grid .nd-calendar-now-line[hidden]{display:none!important}
-#ndProBetaPage .proref-calendar-grid .nd-calendar-now-line .nd-calendar-now-clock{position:sticky;left:0;z-index:18;display:flex;align-items:center;justify-content:center;width:var(--nd-time-rail-width,64px);min-width:var(--nd-time-rail-width,64px);height:27px;margin-top:-14px;border-radius:15px;background:#3977f5;color:#fff;font-size:12px;font-weight:850;line-height:1;white-space:nowrap;box-shadow:0 1px 4px #3977f533}
+#ndProBetaPage .proref-calendar-grid .nd-calendar-now-line .nd-calendar-now-clock{position:sticky;left:0;z-index:18;display:flex;align-items:center;justify-content:center;width:93px;min-width:93px;height:27px;margin-top:-14px;border-radius:15px;background:#3977f5;color:#fff;font-size:11px;font-weight:850;line-height:1;white-space:nowrap;box-shadow:0 1px 4px #3977f533}
 .nd-field-sheet:not([hidden]){position:fixed;inset:0;z-index:2147483600;display:flex;align-items:flex-end;justify-content:center}
 .nd-field-sheet .nd-field-shade{position:absolute;inset:0;background:rgba(22,28,48,.38)}
 .nd-field-sheet .nd-field-dialog{position:relative;display:flex;flex-direction:column;width:min(520px,100%);max-height:82dvh;background:#f0f0f6;border-radius:20px 20px 0 0;padding:0 14px max(12px,env(safe-area-inset-bottom));box-sizing:border-box;box-shadow:0 -8px 40px #18244020}
@@ -40451,7 +40451,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  const monthZh=['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
  const maskPhone=v=>{const raw=String(v||'').trim(); return raw&&raw.length>4?('••••••'+raw.slice(-4)):(raw||'未登记电话');};
  const zhDate=iso=>{const d=new Date(iso); if(Number.isNaN(d.getTime())) return '—'; return d.getDate()+' '+monthZh[d.getMonth()]+', '+d.getFullYear();};
- const zhTime=iso=>{const d=new Date(iso); if(Number.isNaN(d.getTime())) return '—'; let h=d.getHours(), m=String(d.getMinutes()).padStart(2,'0'); const ap=h>=12?'下午':'上午'; let h12=h%12; if(!h12) h12=12; return String(h12).padStart(2,'0')+':'+m+' '+ap;};
+ const zhTime=iso=>{const d=new Date(iso);if(Number.isNaN(d.getTime()))return '—';const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',hour12:false}).format(d).split(':');const h=Number(parts[0]),period=h<6?'凌晨':h<12?'早上':h<18?'下午':'晚上';return String(h%12||12).padStart(2,'0')+':'+parts[1]+' '+period;};
  const zhDuration=min=>{const m=Math.max(0,Number(min)||0), h=Math.floor(m/60), r=m%60; if(h&&r) return h+' 小时 '+r+' 分钟'; if(h) return h+' 小时'; return r+' 分钟';};
  const bookingPrice=a=>{ try{ const name=String(a?.service_name||'').trim().toLowerCase(); const svc=(services||[]).find(s=>[s.name_en,s.name_zh].some(n=>String(n||'').trim().toLowerCase()===name)); const match=svc?(prices||[]).find(p=>String(p.service_id)===String(svc.id)&&p.branch===a.branch):null; const v=Number(match?.price); return Number.isFinite(v)&&v>=0?v:null; }catch(_){ return null; } };
  const statusLabel=s=>{ const v=String(s||'booked').toLowerCase(); return v==='completed'?'已完成':v==='cancelled'?'已取消':v==='no_show'?'未到场':v==='confirmed'?'已确认':'已预约'; };
@@ -41427,7 +41427,8 @@ function restHalfSet(d,b,id,half){try{if(half)localStorage.setItem(restHalfKey(d
 function restPeriod(b){const h=hours[b]||defaultHours[b]||defaultHours['Eco Botanic'];const start=minsOf(h.open),end=minsOf(h.close);return {start,end,mid:start+(end-start)/2};}
 function restInfo(employeeId,slot){const e=staff.find(x=>String(x.id)===String(employeeId));if(!e)return {rest:false};const days=Number(restById.get(String(employeeId))||0);if(days===0)return {rest:false};if(days>=1)return {rest:true,kind:ndMcIds.has(String(employeeId))?'mc':'full'};const b=(branch==='all'?e.outlet:branch),r=restPeriod(b),m=minsOf(slot),half=restHalfGet(date,b,employeeId);return {rest:half==='second'?m>=r.mid:m<r.mid,kind:half};}
 
-const clock12=t=>{const parts=String(t).split(':');const h=Number(parts[0]);return `${h%12||12}:${parts[1]||'00'} ${h<12?'AM':'PM'}`};
+const clock12=t=>{const parts=String(t).split(':'),h=Number(parts[0]);if(!Number.isFinite(h))return String(t);const period=h<6?'凌晨':h<12?'早上':h<18?'下午':'晚上';return `${String(h%12||12).padStart(2,'0')}:${parts[1]||'00'} ${period}`};
+const railClock12=t=>{const parts=String(t).split(':'),h=Number(parts[0]);if(!Number.isFinite(h))return String(t);const hour=h%12||12,minute=parts[1]||'00';return `${hour}${minute==='00'?'':':'+minute} ${h<12?'AM':'PM'}`};
 const minsOf=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 function visibleTimes(){const h=hours[branch==='all'?'Eco Botanic':branch]||defaultHours['Eco Botanic'];const b=hours[branch==='all'?'Nusa Bestari':branch]||defaultHours['Nusa Bestari'];return branch==='all'?{start:Math.min(minsOf(h.open),minsOf(b.open)),end:Math.max(minsOf(h.close),minsOf(b.close))}:{start:minsOf(h.open),end:minsOf(h.close)}}
 // UMO-only customer save shared by booking and CRM.
@@ -42119,7 +42120,7 @@ function ndPlaceNowLine(){
  const {start,end}=visibleTimes();if(minutes<start||minutes>=end){line.hidden=true;return;}
  const grid=line.closest('.proref-calendar-grid'),cell=grid?.querySelector('.pro-time');if(!grid||!cell)return;
  const size=cell.getBoundingClientRect().height+(parseFloat(getComputedStyle(grid).rowGap)||0);
- const clock=line.querySelector('.nd-calendar-now-clock');if(clock){clock.textContent=current;line.style.setProperty('--nd-time-rail-width',cell.getBoundingClientRect().width+'px')}
+ const clock=line.querySelector('.nd-calendar-now-clock');if(clock){clock.textContent=clock12(current);line.style.setProperty('--nd-time-rail-width',cell.getBoundingClientRect().width+'px')}
  line.hidden=false;line.style.gridRow=String(2+Math.floor((minutes-start)/15));
  line.style.transform='translateY('+(((minutes-start)%15)/15*size)+'px)';
 }
@@ -42234,11 +42235,11 @@ const weekStart=new Date(dayObj);weekStart.setDate(dayObj.getDate()-((dayObj.get
 const weekdayNames=lang==='zh'?['一','二','三','四','五','六','日']:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const weekButtons=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);const ymd=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const n=appointments.filter(a=>tzDate(a.starts_at)===ymd&&(branch==='all'||a.branch===branch)&&a.status!=='cancelled').length;return `<button type="button" class="proref-weekday ${ymd===date?'selected':''}" data-pro-date="${ymd}"><span>${weekdayNames[i]}</span><b>${d.getDate()}</b><small>${n}</small></button>`;}).join('');
 const ccount=Math.max(1,columns.length);
-let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="Business Hours">⚙</button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:String(s.id)==='__auto__'?`<div class="pro-calhead pro-employee-head nd-cal-auto-head" style="grid-column:${i+2};grid-row:1"><span>⚡ AUTO</span><small>自动公平排单</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${ndStaffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
+let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="营业时间设置" title="营业时间设置"><svg aria-hidden="true" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06-1.8 1.8-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.5V21h-2.55v-.09a1.65 1.65 0 0 0-1-1.5 1.65 1.65 0 0 0-1.82.33l-.06.06-1.8-1.8.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.5-1H6v-2.55h.09a1.65 1.65 0 0 0 1.5-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06 1.8-1.8.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.5V5h2.55v.09a1.65 1.65 0 0 0 1 1.5 1.65 1.65 0 0 0 1.82-.33l.06-.06 1.8 1.8-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.5 1H21v2.55h-.09a1.65 1.65 0 0 0-1.5 1Z" transform="translate(-1 -1)"/></svg></button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:String(s.id)==='__auto__'?`<div class="pro-calhead pro-employee-head nd-cal-auto-head" style="grid-column:${i+2};grid-row:1"><span>⚡ AUTO</span><small>自动公平排单</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${ndStaffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
 const toMinutes=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 for(let ri=0;ri<slots.length;ri++){
  const t=slots[ri];const row=ri+2;
- grid+=`<div class="pro-time" style="grid-column:1;grid-row:${row}">${clock12(t)}</div>`;
+ grid+=`<div class="pro-time" style="grid-column:1;grid-row:${row}">${railClock12(t)}</div>`;
  for(let ci=0;ci<columns.length;ci++){
   const person=columns[ci],col=ci+2;
   const isAuto=!roomCols&&String(person.id)==='__auto__';
@@ -44767,7 +44768,10 @@ body > #ndProHamburger.nd-pro-portal-menu {
 #ndProBetaPage .proref-scroll-x .pro-calendar{display:block!important;overflow:visible!important;height:auto!important;max-height:none!important;min-height:0!important;width:max-content!important;min-width:100%!important;margin:0!important;padding:0!important;border:0!important;background:#fff!important}
 #ndProBetaPage .proref-calendar-grid{display:grid!important;grid-template-columns:67px repeat(var(--cols),minmax(116px,130px))!important;grid-template-rows:66px repeat(var(--rows),48px)!important;grid-auto-flow:row!important;gap:3px!important;width:max-content!important;min-width:100%!important;padding:3px!important;box-sizing:border-box!important}
 #ndProBetaPage .proref-calendar-grid .pro-calhead{position:sticky!important;top:0!important;z-index:8!important;min-width:0!important;max-width:none!important;overflow:hidden!important}
-#ndProBetaPage .proref-calendar-grid .proref-time-head{left:0!important;z-index:12!important}
+#ndProBetaPage .proref-calendar-grid .pro-calhead{z-index:30!important;opacity:1!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:0 0 0 2px #fff!important}
+#ndProBetaPage .proref-calendar-grid .pro-employee-head:not(.nd-gender-male):not(.nd-gender-female),#ndProBetaPage .proref-calendar-grid .pro-room-head{background:#f1f2f5!important}
+#ndProBetaPage .proref-calendar-grid .pro-gear-hours svg{display:block!important;flex:none;fill:none!important;stroke:#176be5!important}
+#ndProBetaPage .proref-calendar-grid .proref-time-head{left:0!important;z-index:40!important}
 #ndProBetaPage .proref-calendar-grid .pro-time{position:sticky!important;left:0!important;z-index:6!important;min-height:0!important;max-width:67px!important;white-space:normal!important;font-size:12px!important}
 #ndProBetaPage .proref-calendar-grid .pro-cell{display:block!important;min-height:0!important;min-width:0!important;width:100%!important;margin:0!important;box-sizing:border-box!important}
 #ndProBetaPage .proref-calendar-grid .proref-booking{display:flex!important;flex-direction:column!important;align-items:flex-start!important}
@@ -45721,11 +45725,21 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
    const win=iframe.contentWindow;
    const doc=iframe.contentDocument;
    if(!win||!doc)return;
-   // Keep the import control on the directory only; it must not cover detail navigation.
+   // Keep legacy synchronization available to authorized administrators in Settings,
+   // without placing an extra button over the reference member-list header.
+   const fly=doc.getElementById('fly');
+   const importMenuEntry=doc.createElement('button');
+   importMenuEntry.type='button';
+   importMenuEntry.id='ndFlyImportLegacy';
+   importMenuEntry.textContent='↻　同步旧会员　›';
+   importMenuEntry.style.display='none';
+   importMenuEntry.addEventListener('click',()=>{if(fly)fly.hidden=true;importButton.click()});
+   fly?.appendChild(importMenuEntry);
    const syncImportVisibility=()=>{
      const section=doc.querySelector('.page.active')?.id;
-     if(section!=='members')importButton.style.display='none';
-     else void checkImportAuthority().then(ok=>{if(overlay.classList.contains('nd-open')&&doc.querySelector('.page.active')?.id==='members')importButton.style.display=ok?'block':'none'});
+     importButton.style.display='none';
+     if(section!=='members'){importMenuEntry.style.display='none';return;}
+     void checkImportAuthority().then(ok=>{importMenuEntry.style.display=ok&&overlay.classList.contains('nd-open')&&doc.querySelector('.page.active')?.id==='members'?'flex':'none'}).catch(()=>{importMenuEntry.style.display='none'});
    };
    doc.addEventListener('click',()=>setTimeout(syncImportVisibility,0));
    syncImportVisibility();
@@ -45821,13 +45835,11 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
      html=html.replace(/<span class="tag">Nusa Bestari<\/span><span class="tag">ANAN<\/span><span class="tag purple">DISCOUNT 20%<\/span>/g,'');
      // The embedded prototype's 'Recent' tab should show directory rows rather
      // than claim real transaction ordering.
-     html=html.replace("const labels=['近期','新','生日','名字'", "const labels=['全部','新','生日','名字'");
-     html=html.replace("let activeTab='近期'", "let activeTab='全部'");
-     html=html.replace("let groups=['近期','新','生日','名字'", "let groups=['全部','新','生日','名字'");
+     // Keep the reference's Recent-first navigation; legacy rows remain searchable
+     // even where reliable transaction timestamps are not yet available.
      // Match the full-width member directory reference while keeping the
      // directory and canonical member-profile behavior intact.
-     html=html.replace('<section class="page active" id="members"><header class="bar">',
-       '<section class="page active" id="members"><button class="nd-directory-menu" type="button" aria-label="会员菜单" onclick="document.getElementById(\'fly\').hidden=!document.getElementById(\'fly\').hidden">☰</button><header class="bar">');
+     // Preserve the reference's simple back / title / add header.
      const directoryStyle=`<style id="nd-member-directory-reference">
        #members{background:#f2f1f7!important;padding-top:65px!important;padding-left:10px!important;padding-right:10px!important}
        #members .nd-directory-menu{position:absolute;top:8px;left:10px;width:44px;height:44px;border:1px solid #e3e2df;border-radius:14px;background:#fff;color:#3977f5;font-size:26px;display:grid;place-items:center;z-index:4;cursor:pointer}
@@ -45858,6 +45870,33 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
        @media(max-width:440px){#members{padding-left:10px!important;padding-right:10px!important}#members .member{padding:17px 14px!important}#members .personname{font-size:19px!important}#members .small{font-size:15px!important}}
      </style>`;
      html=html.replace('</head>',directoryStyle+'</head>');
+     const memberExactStyle=`<style id="nd-member-list-exact-20261127">
+       #members{padding-top:0!important;padding-left:12px!important;padding-right:12px!important;background:#f2f1f7!important}
+       #members .bar{height:76px!important;min-height:76px!important;background:#fff!important;margin:0 -12px!important;padding:0 14px!important}
+       #members .bar strong{font-size:21px!important;font-weight:800!important}
+       #members .bar .ic{font-size:34px!important;padding:8px!important}
+       #members .searchwrap{background:#fff!important;margin:0 -12px!important;padding:0 12px 14px!important}
+       #members .search{height:61px!important;border-radius:14px!important;background:#f6f6f6!important;font-size:18px!important;font-weight:600!important}
+       #members .tabs{background:#fff!important;margin:0 -12px!important;padding:0 12px!important;gap:25px!important;min-height:55px!important}
+       #members .tabs button{font-size:17px!important;font-weight:800!important;padding:12px 0!important;border-bottom-width:3px!important}
+       #members .memberslist{padding-top:14px!important}
+       #members .member{margin:0 0 10px!important;padding:15px!important;border-radius:16px!important;min-height:116px!important;box-shadow:none!important;overflow:hidden!important}
+       #members .person{gap:11px!important;min-height:55px!important}
+       #members .avatar{width:52px!important;height:52px!important;font-size:28px!important;background:#ffaa8b!important}
+       #members .personname{font-size:18px!important;line-height:1.2!important;font-weight:850!important;color:#202227!important;overflow-wrap:anywhere}
+       #members .gender{font-size:18px!important;margin-left:4px!important}
+       #members .small{font-size:15px!important;line-height:1.4!important;font-weight:750!important;color:#596474!important;overflow-wrap:anywhere}
+       #members .pin{font-size:0!important;top:15px!important;right:14px!important;width:24px!important;height:27px!important}
+       #members .pin::after{content:''!important;display:block!important;width:24px!important;height:27px!important;background:center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 30' fill='none' stroke='%231677ff' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M8 3h8l-1 7 4 6v2H5v-2l4-6-1-7Z'/%3E%3Cpath d='M12 18v10'/%3E%3C/svg%3E")!important}
+       #members .tags{margin:9px 0 0!important;display:flex!important;gap:5px!important;flex-wrap:wrap!important}
+       #members .tag{font-size:12px!important;font-weight:850!important}
+       #members .membermeta,#members .last{display:flex!important}
+       #members .membermeta:empty,#members .last:empty{display:none!important}
+       #members .last:has(span:empty + span:empty){display:none!important}
+       #members .last{color:#8c8d94!important;font-size:12px!important}
+       #members .footpage{background:#fff!important}
+     </style>`;
+     html=html.replace('</head>',memberExactStyle+'</head>');
      // Resolve imported directory selections against the live member record.
      // Keep the existing embedded profile as a fallback for unmatched legacy rows.
      html=html.replace('</body>',`<script>(function(){
@@ -45922,7 +45961,6 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
    overlay.classList.add('nd-open');
    overlay.setAttribute('aria-hidden','false');
    importButton.style.display='none';
-   void checkImportAuthority().then(ok=>{if(overlay.classList.contains('nd-open'))importButton.style.display=ok?'block':'none'}).catch(()=>{});
    // The original Beta content should never remain stuck on 'Opening Members…'.
    const waiting=document.querySelector('.nd-member-opening');
    if(waiting)waiting.textContent='';
