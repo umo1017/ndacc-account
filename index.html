@@ -41841,7 +41841,10 @@ const activeStaff=()=>staff.filter(s=>!/^global$/i.test(String(s.outlet||'').tri
 const ndGenderKey='nd_pro_staff_calendar_gender_v1';
 function ndGenderOverrides(){try{return JSON.parse(localStorage.getItem(ndGenderKey)||'{}')||{}}catch(_){return {}}}
 function ndStaffGender(s){
- const raw=String(ndGenderOverrides()[String(s.id)]||s.gender||s.sex||s.employee_gender||s.profile?.gender||'').trim().toLowerCase();
+ // Salary `employees` is authoritative; a local legacy choice is only fallback
+ // for older employee records where Salary has not recorded a gender yet.
+ const salaryGender=[s.gender,s.sex,s.employee_gender,s.profile?.gender].find(v=>v!=null&&String(v).trim()!=='');
+ const raw=String(salaryGender??ndGenderOverrides()[String(s.id)]??'').trim().toLowerCase();
  if(['male','m','男','男性','man','boy'].includes(raw))return 'male';
  if(['female','f','女','女性','woman','girl'].includes(raw))return 'female';
  return 'other';
@@ -46492,5 +46495,16 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  #ndProBetaPage .proref-calendar-grid .proref-booking span{font-size:10px!important;line-height:1.22!important;display:-webkit-box!important;-webkit-line-clamp:3!important;-webkit-box-orient:vertical!important;overflow:hidden!important}
  #ndProBetaPage .proref-calendar-grid .proref-booking small{font-size:9px!important;line-height:1.2!important}
  #ndProBetaPage .proref-calendar-grid .nd-calendar-now-line{border-top:2px solid #b9d4fc!important;filter:none!important}
+}
+</style>
+<style id="nd-beta-salary-gender-color-v109">
+/* Staff calendar gender follows Salary employee records. */
+@media(max-width:760px){
+ #ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-male{background:#d6e8ff!important;color:#205eac!important}
+ #ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-female{background:#f8dbe9!important;color:#97456f!important}
+ #ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-male:not(.pro-resting){background:#e7f2ff!important}
+ #ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-female:not(.pro-resting){background:#fbedf4!important}
+ #ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-other,
+ #ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-other:not(.pro-resting){background:#f3f3f4!important}
 }
 </style>
