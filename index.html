@@ -34782,7 +34782,7 @@ const db=()=>window.salaryDb||null;
 const staffList=()=>performanceStaffLoaded?performanceEmployees:(()=>{try{return typeof salaryEmployees!=='undefined'&&Array.isArray(salaryEmployees)?salaryEmployees:[]}catch(_){return []}})();
 const isCurrentStaff=e=>window.ndStaffSelectableForNewEntry(e);
 const selectableStaff=()=>staffList().filter(isCurrentStaff);
-function applyPendingPerformanceSelection(){const p=window.ndPendingPerformanceStaff;if(!p||!$('spBranch'))return;const available=[...$('spBranch').options].map(o=>o.value);if(available.includes(p.branch))$('spBranch').value=p.branch;if(p.date&&$('spDate'))$('spDate').value=p.date;fillStaff();const choice=$('spStaff'),found=choice&&[...choice.options].some(o=>o.value===String(p.staffId));if(found)choice.value=String(p.staffId);const filter=$('spFilterStaff');if(filter&&[...filter.options].some(o=>o.value===String(p.staffId)))filter.value=String(p.staffId);if(found)window.ndPendingPerformanceStaff=null;render();}
+function applyPendingPerformanceSelection(){const p=window.ndPendingPerformanceStaff;if(!p||!$('spBranch'))return;const available=[...$('spBranch').options].map(o=>o.value);if(available.includes(p.branch))$('spBranch').value=p.branch;if(p.date&&$('spDate'))$('spDate').value=p.date;if(p.feedbackType==='compliment'||p.feedbackType==='complaint'){type=p.feedbackType;root.querySelectorAll('[data-sp-type]').forEach(b=>b.classList.toggle('active',b.dataset.spType===type));choices();}fillStaff();const choice=$('spStaff'),found=choice&&[...choice.options].some(o=>o.value===String(p.staffId));if(found)choice.value=String(p.staffId);const filter=$('spFilterStaff');if(filter&&[...filter.options].some(o=>o.value===String(p.staffId)))filter.value=String(p.staffId);if(found)window.ndPendingPerformanceStaff=null;render();}
 async function fetchPerformanceStaff(){const client=db();if(!client)return;try{const {data,error}=await client.from('employees').select('*').order('name',{ascending:true}).limit(1000);if(error)throw error;performanceEmployees=(data||[]).filter(e=>e.id!=null&&String(e.name||'').trim());performanceStaffLoaded=true;fillStaff();applyPendingPerformanceSelection();render();if(!performanceEmployees.length)status('No employees found in employees table.',true)}catch(e){status('Unable to load staff: '+(e.message||e),true)}}
 const currentEmail=()=>{try{return String(currentSalaryUserEmail||'').trim().toLowerCase()}catch(_){return ''}};
 const isAdmin=()=>currentEmail()==='umo1017@gmail.com';
@@ -39568,7 +39568,7 @@ window.ndProOpenMemberHome=async id=>{
   body.querySelector('#nmhRetry').onclick=()=>void window.ndProOpenMemberHome(id);
  }}
 };
-document.getElementById('nmhBack').onclick=()=>{window.ndProMemberHomeReturn=null;hide()};
+document.getElementById('nmhBack').onclick=()=>{window.ndProMemberHomeReturn=null;hide();if(typeof window.ndMemberHomeReturn==='function'){const back=window.ndMemberHomeReturn;window.ndMemberHomeReturn=null;back();}};
 })();</script>
 
 <style id="nd-booking-reference-20261112">
@@ -41911,10 +41911,10 @@ const ndStaffCalendarVisibilityKey='nd_pro_calendar_hidden_staff_v1';
 function ndHiddenCalendarStaff(){try{return JSON.parse(localStorage.getItem(ndStaffCalendarVisibilityKey)||'{}')||{}}catch(_){return {}}}
 function ndStaffVisibleOnCalendar(id){return !ndHiddenCalendarStaff()[String(id)];}
 function ndSetStaffCalendarVisible(id,visible){const values=ndHiddenCalendarStaff();if(visible)delete values[String(id)];else values[String(id)]=true;try{localStorage.setItem(ndStaffCalendarVisibilityKey,JSON.stringify(values));return true}catch(_){stat('无法保存员工显示设置，请检查浏览器储存权限。',true);return false}}
-function ndOpenStaffPerformanceFromCalendar(employee){
+function ndOpenStaffPerformanceFromCalendar(employee,feedbackType){
  if(!employee)return;
  window.ndPerformanceRecordOnly=true;
- window.ndPendingPerformanceStaff={staffId:String(employee.id),branch:String(employee.outlet||branch),date};
+ window.ndPendingPerformanceStaff={staffId:String(employee.id),branch:String(employee.outlet||branch),date,feedbackType:feedbackType==='compliment'?'compliment':'complaint'};
  const modal=el('ndProRestModal');if(modal)modal.hidden=true;
  const recordsButton=document.getElementById('sidebarRecords');
  if(!recordsButton){stat('找不到 Records 页面，请从主菜单进入。',true);return;}
@@ -41973,14 +41973,14 @@ async function openRestPanel(employeeId){
   const savedValue=saved>=1?'full':saved===.5?half:'work';
   const opts=[['work',tr('Working','上班'),'✓'],['first',tr('First Half Off','上半时段休息'),'☀'],['second',tr('Second Half Off','下半时段休息'),'☾'],['full',tr('Full Day Off','全天休息'),'⊘']];
   body.innerHTML=`<div class="prostaff-tabs"><button type="button" class="chosen" data-staff-tab="bookings">${tr('Appointments','预约')}</button><button type="button" data-staff-tab="rest">${tr('Rest Time','休息时间')}</button></div><button type="button" class="prostaff-add" aria-label="${tr('New Appointment','新增预约')}" title="${tr('New Appointment','新增预约')}">＋</button><header class="prostaff-title"><span class="prostaff-avatar">${esc((emp.nickname||emp.name||'S').slice(0,1).toUpperCase())}</span><div><h3>${esc(emp.nickname||emp.name)}</h3><small>${esc(b)} · ${esc(date)}</small></div><span class="prostaff-pill ${saved?'is-off':'is-working'}">${esc(label(saved,half))}</span></header><section id="proStaffBookingTab" class="prostaff-tab-body">${booked.length?booked.map(a=>`<button type="button" class="prostaff-booking" data-staff-booking="${esc(a.id)}"><strong>${esc(customers.find(c=>String(c.id)===String(a.customer_id))?.full_name||tr('Customer','顾客'))}</strong><span class="prostaff-service">${esc(a.service_name||'')}</span><span class="prostaff-time">◷ ${clock12(tzTime(a.starts_at))} · ${esc(a.duration_minutes||60)} ${tr('min','分钟')}</span><span class="prostaff-status">${esc(a.status||'')}</span></button>`).join(''):`<div class="prostaff-empty"><span>▦</span><strong>${tr('No appointments today','当天没有预约')}</strong></div>`}</section><section id="proStaffRestTab" class="prostaff-tab-body" hidden><div class="prostaff-choices">${opts.map(([v,n,ico])=>`<label class="prostaff-choice opt-${v}"><input type="radio" name="restDays" value="${v}" ${savedValue===v?'checked':''} ${today?'':'disabled'}><span class="prostaff-symbol">${ico}</span><span>${n}</span><span class="prostaff-check">✓</span></label>`).join('')}</div>${today?`<button id="ndProRestSave" type="button" class="pro-action prostaff-save">${tr('Save','保存')}</button>`:''}</section>`;
-  const genderControls=document.createElement('div');genderControls.className='nd-staff-gender-controls';
-  genderControls.innerHTML=`<span>日历分组 / Gender</span><div>${[['male','♂ 男 · 蓝色'],['other','— 未设置'],['female','♀ 女 · 粉色']].map(([v,t])=>`<button type="button" data-choose-gender="${v}" class="${ndStaffGender(emp)===v?'selected':''}">${t}</button>`).join('')}</div>`;
-  body.querySelector('.prostaff-title')?.after(genderControls);
-  genderControls.querySelectorAll('[data-choose-gender]').forEach(button=>button.onclick=()=>{ndSetStaffGender(employeeId,button.dataset.chooseGender);el('ndProRestModal').hidden=true;render();stat('已保存技师日历分组：男左、未设置居中、女右');});
   const visibilityControl=document.createElement('label');visibilityControl.className='nd-staff-calendar-toggle';visibilityControl.innerHTML=`<span>显示在预约表<small>关闭后隐藏员工列，可从预约表「员工管理」恢复</small></span><input type="checkbox" ${ndStaffVisibleOnCalendar(employeeId)?'checked':''}>`;
-  genderControls.after(visibilityControl);
+  body.querySelector('.prostaff-title')?.after(visibilityControl);
   visibilityControl.querySelector('input').onchange=e=>{if(ndSetStaffCalendarVisible(employeeId,e.target.checked)){el('ndProRestModal').hidden=true;render();stat(e.target.checked?'已在预约表显示员工':'已从预约表隐藏员工列，原有预约保留');}else e.target.checked=!e.target.checked;};
-  const performanceLink=document.createElement('button');performanceLink.type='button';performanceLink.className='nd-staff-records-link';performanceLink.textContent='📋 记录员工表现';performanceLink.onclick=()=>ndOpenStaffPerformanceFromCalendar(emp);visibilityControl.after(performanceLink);
+  const performanceActions=document.createElement('div');performanceActions.className='nd-staff-records-actions';
+  performanceActions.innerHTML='<button type="button" class="nd-staff-records-link nd-staff-compliment">好评</button><button type="button" class="nd-staff-records-link nd-staff-complaint">投诉</button>';
+  performanceActions.querySelector('.nd-staff-compliment').onclick=()=>ndOpenStaffPerformanceFromCalendar(emp,'compliment');
+  performanceActions.querySelector('.nd-staff-complaint').onclick=()=>ndOpenStaffPerformanceFromCalendar(emp,'complaint');
+  visibilityControl.after(performanceActions);
   const employeeName=body.querySelector('.prostaff-title h3');if(employeeName){employeeName.tabIndex=0;employeeName.setAttribute('role','button');employeeName.title='点击设置员工评分';employeeName.onclick=()=>ndShowCalendarRating(emp,body);employeeName.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();ndShowCalendarRating(emp,body)}}}
   body.querySelector('.prostaff-add').onclick=()=>{
    el('ndProRestModal').hidden=true;
@@ -45420,6 +45420,30 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  importStatus.style.cssText='position:fixed;top:calc(env(safe-area-inset-top) + 60px);right:12px;z-index:2147483643;max-width:min(330px,80vw);border-radius:12px;background:#fff;color:#263248;padding:9px 12px;box-shadow:0 5px 20px #0002;font:12px system-ui;display:none';
  document.body.appendChild(importStatus);
  const normalizePhone=value=>{let d=String(value||'').replace(/\D/g,'');if(d.startsWith('60')&&d.length>=10)d='0'+d.slice(2);else if(d.startsWith('1')&&d.length>=9)d='0'+d;return d.length>=9?d:'';};
+ // The booking screen and the outside Members directory must open the same
+ // canonical customer card, identified by the online customer ID.
+ window.addEventListener('message',async event=>{
+   if(event.source!==iframe.contentWindow||event.data?.type!=='nd-member-canonical-profile')return;
+   const person=event.data.member||{},phone=normalizePhone(person.fullPhone),name=String(person.name||'').trim().toLowerCase();
+   if(!phone||!name||!window.salaryDb)return;
+   try{
+     const client=window.salaryDb;
+     const link=await client.from('nd_legacy_member_imports').select('customer_id,source_name').eq('phone_normalized',phone).in('import_status',['linked','created']).limit(10);
+     let ids=[];
+     if(!link.error)ids=[...new Set((link.data||[]).filter(x=>String(x.source_name||'').trim().toLowerCase()===name).map(x=>String(x.customer_id||'')).filter(Boolean))];
+     if(ids.length!==1){
+       const candidates=[phone,'60'+phone.replace(/^0/,'')];
+       const result=await client.from('nd_pro_beta_customers').select('id,full_name,phone').in('phone',candidates).limit(20);
+       if(result.error)throw result.error;
+       ids=[...new Set((result.data||[]).filter(x=>normalizePhone(x.phone)===phone&&String(x.full_name||'').trim().toLowerCase()===name).map(x=>String(x.id)))];
+     }
+     if(ids.length!==1)return;
+     if(typeof window.ndProOpenMemberHome==='function'){
+       closeMember();window.ndMemberHomeReturn=showMember;
+       void window.ndProOpenMemberHome(ids[0]);
+     }
+   }catch(error){console.warn('[Members] Canonical profile lookup failed',error);}
+ });
  iframe.addEventListener('load',()=>{
    const win=iframe.contentWindow;
    const doc=iframe.contentDocument;
@@ -45527,6 +45551,17 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
      html=html.replace("const labels=['近期','新','生日','名字'", "const labels=['全部','新','生日','名字'");
      html=html.replace("let activeTab='近期'", "let activeTab='全部'");
      html=html.replace("let groups=['近期','新','生日','名字'", "let groups=['全部','新','生日','名字'");
+     // Resolve imported directory selections against the live member record.
+     // Keep the existing embedded profile as a fallback for unmatched legacy rows.
+     html=html.replace('</body>',`<script>(function(){
+       const original=window.openProfile;
+       if(typeof original!=='function')return;
+       window.openProfile=function(name){
+         const person=people.find(x=>x.name===name);
+         if(person?.fullPhone)parent.postMessage({type:'nd-member-canonical-profile',member:{name:person.name,fullPhone:person.fullPhone}},'*');
+         return original.apply(this,arguments);
+       };
+     })();<\/script></body>`);
      // Mobile member profile: keep the page scrollable above its fixed toolbar.
      const mobileFix=`<style id="nd-member-mobile-safe-layout">
        html,body{width:100%;max-width:100%;overflow-x:hidden;height:auto!important;min-height:100%;-webkit-text-size-adjust:100%}
@@ -45737,6 +45772,10 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
 #ndProBetaPage #ndProCalendarBranch{max-width:104px!important}
 @media(max-width:390px){#ndProBetaPage .proref-calendar-top .proref-current-date{max-width:132px!important}#ndProBetaPage #ndProCalendarBranch{max-width:88px!important}}
 .nd-staff-records-link{display:block;width:100%;margin:8px 0 12px;padding:11px 12px;border:1px solid #c7d9f7;border-radius:11px;background:#eaf3ff;color:#226ae0;font:700 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;cursor:pointer}
+.nd-staff-records-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:9px 0 12px}
+.nd-staff-records-actions .nd-staff-records-link{margin:0;min-width:0;font-size:13px;line-height:18px}
+.nd-staff-records-actions .nd-staff-compliment{background:#eaf7f0;border-color:#b9e4cc;color:#167047}
+.nd-staff-records-actions .nd-staff-complaint{background:#fff0f1;border-color:#f1c7cd;color:#b84050}
 #ndStaffPerformancePanel.nd-performance-record-only>.sp-card:not(:first-child){display:none!important}
 </style>
 <style id="nd-second-booking-final-20261126">
