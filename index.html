@@ -9,6 +9,30 @@ html.nd-network-offline #ndOfflineLogoScreen{display:flex!important}
 #ndOfflineLogoScreen img{display:block;width:min(82vw,430px);height:auto;max-height:80dvh;object-fit:contain}
 @media (prefers-reduced-motion:no-preference){#ndOfflineLogoScreen{transition:opacity .2s ease}}
 </style>
+<style id="nd-beta-detail-visible-actions-v112">
+/* Mobile appointment detail: scroll the fields, never the action strip. */
+@media(max-width:1024px){
+ .nd-booking-detail:not([hidden]){align-items:flex-end!important}
+ .nd-booking-detail .nd-booking-detail-sheet{
+   display:flex!important;flex-direction:column!important;
+   height:min(770px,calc(100dvh - 70px))!important;
+   min-height:0!important;max-height:calc(100dvh - 70px)!important;
+   overflow:hidden!important;padding-bottom:0!important;
+ }
+ .nd-booking-detail .nd-booking-detail-sheet>.nd-compact-detail-head{flex:none!important;position:relative!important;top:auto!important;z-index:2!important}
+ .nd-booking-detail [data-detail-body]{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;padding-bottom:10px!important}
+ .nd-booking-detail .nd-booking-detail-sheet>.nd-detail-bottom-bar{
+   position:relative!important;bottom:auto!important;left:auto!important;right:auto!important;
+   display:flex!important;justify-content:space-between!important;align-items:center!important;
+   width:100%!important;flex:none!important;box-sizing:border-box!important;
+   padding:8px 28px max(13px,env(safe-area-inset-bottom))!important;
+   margin:0!important;background:#f7f7fa!important;border:0!important;border-top:1px solid #eceef3!important;border-radius:0!important;
+ }
+ .nd-booking-detail .nd-booking-detail-sheet>.nd-detail-bottom-bar button{display:grid!important;place-items:center!important;width:42px!important;height:42px!important;padding:8px!important;color:#3975df!important;border-radius:10px!important;background:transparent!important}
+ .nd-booking-detail .nd-booking-detail-sheet>.nd-detail-bottom-bar button[hidden]{display:none!important}
+ .nd-booking-detail .nd-booking-detail-sheet>.nd-detail-bottom-bar .nd-detail-svg{width:25px!important;height:25px!important}
+}
+</style>
 <style id="nd-beta-no-emoji-design-v103">
 #ndProBetaPage .nd-beta-line-icon,.nd-booking-detail .nd-beta-line-icon,#ndProBookingModal .nd-beta-line-icon{width:1.2em;height:1.2em;display:inline-block;vertical-align:-.18em;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 #ndProBetaPage .nd-pro-home-tile .nd-beta-line-icon,#ndProBetaPage .nd-pro-home-mini .nd-beta-line-icon{width:22px;height:22px}
@@ -43083,7 +43107,7 @@ detailOpen=function(a){
  <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="service"><span class="nd-detail-square nd-orange">${detailIcon('service')}</span><div><strong>${esc(a.service_name||'—')}</strong><small>${esc(priceLabel)}</small></div><i>›</i></button><div class="nd-detail-line"><span class="nd-detail-square">${detailIcon('clock')}</span><div><strong>${esc(lengthText)}</strong></div></div></div>
  <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="employee"><span class="nd-detail-square">${detailIcon('employee')}</span><div><strong>${esc(names)}</strong></div><i>›</i></button></div>
  <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="room_id"><span class="nd-detail-square">${detailIcon('room')}</span><div><strong>${esc(a.room_id?roomLabel(a.room_id):'不指定房间')}</strong></div><i>›</i></button></div>
- <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="reminder"><span class="nd-detail-square">${detailIcon('bell')}</span><div><strong>不提醒</strong></div><i>›</i></button><div class="nd-detail-line"><span class="nd-detail-square nd-color-${customerCount===0?'new':'old'}"></span><div><strong>${esc(customerColor)}</strong></div></div></div>
+ <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="reminder"><span class="nd-detail-square">${detailIcon('bell')}</span><div><strong>不提醒</strong></div><i>›</i></button></div>
  <div class="nd-detail-card nd-detail-note-card"><button type="button" class="nd-detail-note-edit" data-detail-edit-field="nd_booking_notes"><span>备注</span><span>${esc(notes||'暂无备注')}</span><i>›</i></button></div>
  <button type="button" class="nd-detail-main-edit" data-detail-edit>编辑预约</button>
  <div class="nd-detail-bottom-bar"><button type="button" data-detail-cart aria-label="开单" hidden>${detailIcon('cart')}</button><button type="button" data-detail-quick aria-label="快捷操作">${detailIcon('bolt')}</button></div>`;
@@ -43095,6 +43119,9 @@ detailOpen=function(a){
  cart.onclick=()=>openBookingSale(a);
  void ndCanViewBookingCart().then(ok=>{if(cart.isConnected)cart.hidden=!ok;});
  body.querySelector('[data-detail-quick]').onclick=()=>{const menu=detailShell.querySelector('[data-detail-actions]');const quick=detailShell.querySelector('[data-detail-quick-actions]');menu.hidden=true;quick.hidden=!quick.hidden;};
+ // Keep checkout and quick actions outside the scrolling appointment fields.
+ const detailFooter=body.querySelector('.nd-detail-bottom-bar');
+ if(detailFooter)detailShell.querySelector('.nd-booking-detail-sheet').appendChild(detailFooter);
  detailShell.querySelector('[data-detail-actions]').hidden=true;
  detailShell.querySelector('[data-detail-quick-actions]').hidden=true;
  detailShell.hidden=false;
@@ -46545,5 +46572,23 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  #ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-female:not(.pro-resting){background:#fbedf4!important}
  #ndProBetaPage .proref-calendar-grid .pro-employee-head.nd-gender-other,
  #ndProBetaPage .proref-calendar-grid .proref-empty.nd-gender-other:not(.pro-resting){background:#f3f3f4!important}
+}
+</style>
+<script id="nd-beta-detail-visible-actions-order-v112">
+(()=>{
+ const prioritize=()=>{
+  const style=document.getElementById('nd-beta-detail-visible-actions-v112');
+  if(style&&document.body)document.body.appendChild(style);
+ };
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',prioritize,{once:true});
+ else prioritize();
+})();
+</script>
+<style id="nd-beta-detail-side-gutters-v113">
+@media(max-width:760px){
+ .nd-booking-detail:not([hidden]){padding-left:18px!important;padding-right:18px!important;box-sizing:border-box!important}
+ .nd-booking-detail .nd-booking-detail-sheet{width:100%!important;max-width:500px!important;margin-left:auto!important;margin-right:auto!important}
+ .nd-booking-detail [data-detail-body]{padding-left:12px!important;padding-right:12px!important}
+ .nd-booking-detail .nd-booking-detail-sheet>.nd-detail-bottom-bar{padding-left:22px!important;padding-right:22px!important}
 }
 </style>
