@@ -45689,7 +45689,7 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  const importButton=document.createElement('button');
  importButton.type='button';importButton.id='ndLegacyMemberImportButton';
  importButton.textContent='同步旧会员';
- importButton.style.cssText='position:fixed;right:12px;top:calc(env(safe-area-inset-top) + 10px);z-index:2147483643;border:0;border-radius:11px;background:#1677ff;color:#fff;padding:10px 12px;font:700 12px system-ui;display:none;max-width:130px';
+ importButton.style.cssText='position:fixed;right:12px;top:calc(env(safe-area-inset-top) + 10px);z-index:2147483643;border:0;border-radius:13px;background:#3977f5;color:#fff;padding:12px 15px;font:800 15px system-ui;display:none;max-width:150px;box-shadow:0 2px 8px #3977f51c';
  document.body.appendChild(importButton);
  const importStatus=document.createElement('div');
  importStatus.id='ndLegacyImportStatus';importStatus.setAttribute('role','status');
@@ -45827,6 +45827,40 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
      html=html.replace("const labels=['近期','新','生日','名字'", "const labels=['全部','新','生日','名字'");
      html=html.replace("let activeTab='近期'", "let activeTab='全部'");
      html=html.replace("let groups=['近期','新','生日','名字'", "let groups=['全部','新','生日','名字'");
+     // Match the full-width member directory reference while keeping the
+     // directory and canonical member-profile behavior intact.
+     html=html.replace('<section class="page active" id="members"><header class="bar">',
+       '<section class="page active" id="members"><button class="nd-directory-menu" type="button" aria-label="会员菜单" onclick="document.getElementById(\'fly\').hidden=!document.getElementById(\'fly\').hidden">☰</button><header class="bar">');
+     const directoryStyle=`<style id="nd-member-directory-reference">
+       #members{background:#f2f1f7!important;padding-top:65px!important;padding-left:10px!important;padding-right:10px!important}
+       #members .nd-directory-menu{position:absolute;top:8px;left:10px;width:44px;height:44px;border:1px solid #e3e2df;border-radius:14px;background:#fff;color:#3977f5;font-size:26px;display:grid;place-items:center;z-index:4;cursor:pointer}
+       #members .bar{height:86px!important;min-height:86px!important;padding:0 8px!important}
+       #members .bar strong{font-size:22px!important;font-weight:800!important}
+       #members .bar .ic{font-size:36px!important;padding:8px!important;font-weight:400!important}
+       #members .searchwrap{margin:0 0 12px!important}
+       #members .search{height:62px!important;border-radius:17px!important;background:#f8f8f8!important;font-size:20px!important;font-weight:600!important}
+       #members .tabs{margin:0 -10px!important;padding:0 14px!important;gap:26px!important;min-height:54px!important}
+       #members .tabs button{font-size:18px!important;font-weight:800!important;padding:13px 0 12px!important;border-bottom-width:3px!important}
+       #members .memberslist{padding-top:15px!important}
+       #members .member{margin:0 0 11px!important;padding:18px 16px!important;border-radius:18px!important;min-height:95px!important;box-shadow:none!important;overflow:hidden!important}
+       #members .person{gap:13px!important;min-height:60px!important}
+       #members .avatar{width:53px!important;height:53px!important;font-size:26px!important;background:#f5cdb7!important}
+       #members .personname{font-size:20px!important;line-height:1.2!important;font-weight:800!important;color:#202227!important;overflow-wrap:anywhere}
+       #members .gender{font-size:19px!important;margin-left:4px!important}
+       #members .small{font-size:16px!important;line-height:1.4!important;font-weight:700!important;color:#697080!important;overflow-wrap:anywhere}
+       #members .pin{font-size:0!important;top:16px!important;right:16px!important}
+       #members .pin::after{content:'♧';font-size:28px!important;color:#3977f5!important}
+       #members .tags{margin:8px 0 0!important}
+       #members .tag{font-size:12px!important}
+       #members .membermeta,#members .last{display:none!important}
+       #members .footpage{max-width:none!important;min-height:74px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;padding:10px 20px calc(10px + env(safe-area-inset-bottom))!important;box-shadow:0 -3px 18px #00000008!important}
+       #members .footpage>span{font-size:12px!important;line-height:1.1!important;font-weight:800!important}
+       #members .footpage #memberCount{font-size:23px!important;white-space:nowrap!important}
+       #members .footpage button{font-size:29px!important;line-height:1!important}
+       #members .fly{bottom:76px!important;left:10px!important}
+       @media(max-width:440px){#members{padding-left:10px!important;padding-right:10px!important}#members .member{padding:17px 14px!important}#members .personname{font-size:19px!important}#members .small{font-size:15px!important}}
+     </style>`;
+     html=html.replace('</head>',directoryStyle+'</head>');
      // Resolve imported directory selections against the live member record.
      // Keep the existing embedded profile as a fallback for unmatched legacy rows.
      html=html.replace('</body>',`<script>(function(){
