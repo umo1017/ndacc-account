@@ -9,6 +9,41 @@ html.nd-network-offline #ndOfflineLogoScreen{display:flex!important}
 #ndOfflineLogoScreen img{display:block;width:min(82vw,430px);height:auto;max-height:80dvh;object-fit:contain}
 @media (prefers-reduced-motion:no-preference){#ndOfflineLogoScreen{transition:opacity .2s ease}}
 </style>
+<style>
+/* Member presentation: omit non-data helper copy while preserving real fields and errors. */
+#ndProMemberHome .nmh-tags:empty{display:none!important}
+#ndProMemberHome .nmh-main-card:has(.nmh-tags:empty) .nmh-person{padding-bottom:14px}
+#ndProMemberHome .nmh-photo-empty:empty{display:none!important}
+#ndProMemberHome .nmh-photos:has(.nmh-photo-list:empty){display:none!important}
+</style>
+<script>
+/* Remove explanatory placeholders, never operational notes, values, or error feedback. */
+(()=>{
+ const unwanted=new Set([
+  '暂无会员标签',
+  '统计仅包含成功同步的数据。',
+  '余额仅显示已从云端核实的数据。— 表示尚未连接或无法核实，不代表余额为零。',
+  '会员相片尚未连接',
+  '正在同步预约与销售记录…',
+  '正在读取云端数据…',
+  '正在读取会员资料…'
+ ]);
+ function clean(root){
+  if(root.nodeType!==1)return;
+  const items=[root,...root.querySelectorAll('p,span,div')];
+  for(const item of items){
+   if(!item.closest('#ndProMemberHome'))continue;
+   if(item.children.length===0&&unwanted.has(item.textContent.trim()))item.remove();
+   else if(item.classList.contains('nml-muted')&&item.textContent.startsWith('此处保存会员专属的'))item.remove();
+  }
+ }
+ const observer=new MutationObserver(records=>{
+  for(const record of records)for(const node of record.addedNodes)clean(node);
+ });
+ const start=()=>{clean(document.body);observer.observe(document.body,{subtree:true,childList:true});};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
+</script>
 <style id="nd-staff-appointment-uniform-type-v135">
 /* Keep the staff appointment sheet on one consistent text scale. */
 @media(max-width:760px){
