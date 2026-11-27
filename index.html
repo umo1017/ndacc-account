@@ -40420,6 +40420,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 .nd-booking-detail .nd-mini-tag{display:inline-flex;align-items:center;padding:8px 10px;border-radius:10px;background:#eef5ff;color:#226de4;font-size:12px;font-weight:800;margin-top:8px}
 #ndProBetaPage .proref-calendar-grid .nd-calendar-now-line{position:relative;z-index:15;align-self:start;justify-self:stretch;height:0;min-height:0;border-top:3px solid #f04444;pointer-events:none;box-sizing:border-box;filter:drop-shadow(0 1px 1px #ffffffaa)}
 #ndProBetaPage .proref-calendar-grid .nd-calendar-now-line[hidden]{display:none!important}
+#ndProBetaPage .proref-calendar-grid .nd-calendar-now-line .nd-calendar-now-clock{position:sticky;left:0;z-index:18;display:flex;align-items:center;justify-content:center;width:var(--nd-time-rail-width,64px);min-width:var(--nd-time-rail-width,64px);height:27px;margin-top:-14px;border-radius:15px;background:#3977f5;color:#fff;font-size:12px;font-weight:850;line-height:1;white-space:nowrap;box-shadow:0 1px 4px #3977f533}
 .nd-field-sheet:not([hidden]){position:fixed;inset:0;z-index:2147483600;display:flex;align-items:flex-end;justify-content:center}
 .nd-field-sheet .nd-field-shade{position:absolute;inset:0;background:rgba(22,28,48,.38)}
 .nd-field-sheet .nd-field-dialog{position:relative;display:flex;flex-direction:column;width:min(520px,100%);max-height:82dvh;background:#f0f0f6;border-radius:20px 20px 0 0;padding:0 14px max(12px,env(safe-area-inset-bottom));box-sizing:border-box;box-shadow:0 -8px 40px #18244020}
@@ -40563,14 +40564,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
        <div class="nd-detail-line"><span class="nd-detail-icon">🕒</span><div><strong>${escapeHtml(zhDuration(duration))}</strong><small>${escapeHtml(a.branch||'')}</small>${statusChip(a.status||'booked')}</div></div>
      </div>
      <div class="nd-detail-card">
-       <div class="nd-detail-line nd-toggle-line"><span class="nd-detail-icon">🔒</span><div><strong>封锁预约时间段</strong><small>开启后作为独立预约时段显示</small></div><label class="nd-switch"><input type="checkbox" data-detail-lock ${a.lock_slot||a.locked||a.is_locked?'checked':''}><span></span></label></div>
-     </div>
-     <div class="nd-detail-card">
        <div class="nd-detail-line"><span class="nd-detail-icon">👤</span><div><strong>${escapeHtml(worker)}</strong><small>${a.room_id?'房间：'+escapeHtml(roomLabel(a.room_id)):'未指定房间'}</small></div></div>
      </div>
      <div class="nd-detail-card">
        <div class="nd-detail-line"><span class="nd-detail-icon">🔔</span><div><strong>当天提醒 (${escapeHtml(zhDate(a.starts_at))})</strong><small></small></div></div>
-       <div class="nd-detail-line"><span class="nd-detail-icon">🟦</span><div><strong>${escapeHtml(a.reminder_note||a.reminder_text||reminderLabel)}</strong><small>${notes?('备注：'+escapeHtml(notes)):' '}</small></div></div>
      </div>
      <div class="nd-detail-card">
        <div class="nd-detail-line"><div><strong>Notes</strong></div></div>
@@ -40580,7 +40577,6 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
    `;
    detailShell.querySelector('[data-detail-code]').textContent=String(a.booking_no||a.reference_no||a.id||'');
    body.querySelector('[data-detail-member]')?.addEventListener('click',()=>{ if(c) (window.ndProOpenMemberHome?window.ndProOpenMemberHome(c.id):ndOpenBookingMember(c)); });
-   body.querySelector('[data-detail-lock]')?.addEventListener('change',ev=>{ a.lock_slot=ev.target.checked; stat(ev.target.checked?'已开启封锁预约时间段（本地预览）。':'已取消封锁预约时间段（本地预览）。'); });
    body.querySelectorAll('[data-related-id]').forEach(b=>b.onclick=()=>{ const other=(appointments||[]).find(x=>String(x.id)===String(b.dataset.relatedId)); if(other) detailOpen(other); });
    detailShell.hidden=false;
  };
@@ -42123,10 +42119,11 @@ function ndPlaceNowLine(){
  const {start,end}=visibleTimes();if(minutes<start||minutes>=end){line.hidden=true;return;}
  const grid=line.closest('.proref-calendar-grid'),cell=grid?.querySelector('.pro-time');if(!grid||!cell)return;
  const size=cell.getBoundingClientRect().height+(parseFloat(getComputedStyle(grid).rowGap)||0);
+ const clock=line.querySelector('.nd-calendar-now-clock');if(clock){clock.textContent=current;line.style.setProperty('--nd-time-rail-width',cell.getBoundingClientRect().width+'px')}
  line.hidden=false;line.style.gridRow=String(2+Math.floor((minutes-start)/15));
  line.style.transform='translateY('+(((minutes-start)%15)/15*size)+'px)';
 }
-if(!window.ndCalendarNowTimer)window.ndCalendarNowTimer=setInterval(ndPlaceNowLine,30000);
+if(!window.ndCalendarNowTimer)window.ndCalendarNowTimer=setInterval(ndPlaceNowLine,15000);
 const tzTime=(v)=>new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(v));
 const tzDate=(v)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(v));
 const localIso=(d,t)=>new Date(`${d}T${t}:00+08:00`).toISOString();
@@ -42272,7 +42269,7 @@ if(!roomCols)for(const record of ndBreakRows){
 }
 // The current-time marker is a single solid line across the selected day's calendar.
 if(date===tzDate(new Date())){
- grid+='<div class="nd-calendar-now-line" aria-label="现在时间" style="grid-column:1/-1;grid-row:2"></div>';
+ grid+='<div class="nd-calendar-now-line" aria-label="现在时间" style="grid-column:1/-1;grid-row:2"><span class="nd-calendar-now-clock" aria-live="off"></span></div>';
 }
 grid+='</div>';
 const rows=list.slice().sort((a,b)=>a.starts_at.localeCompare(b.starts_at)).map(a=>`<div class="pro-row"><div><strong>${esc(clock12(mins(a.starts_at)))} · ${esc(a.service_name)}</strong><div class="pro-muted">${esc(customers.find(c=>c.id===a.customer_id)?.full_name||'')} · ${esc(a.branch)} · ${esc(a.status)} · ${a.room_id?'🚪 '+esc(roomLabel(a.room_id))+' · ':''}${assigned(a.id).map(id=>esc(staff.find(s=>String(s.id)===id)?.nickname||staff.find(s=>String(s.id)===id)?.name||id)).join(', ')}</div></div><button type="button" class="pro-tab" data-edit="${esc(a.id)}">${tr('Edit','编辑')}</button></div>`).join('');
