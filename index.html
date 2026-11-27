@@ -41301,6 +41301,9 @@ function switchPage(){
 }
 function leave(){
   if(!page)return;drawerToggle(false);el('ndProBookingModal').hidden=true;
+  document.getElementById('ndStaffCalendarManager')?.remove();
+  document.getElementById('ndIntegratedMemberOverlay')?.classList.remove('nd-open');
+  document.body.classList.remove('nd-service-picker-open');
   page.classList.remove('nd-pro-shown');
   page.hidden=true;page.style.removeProperty('display');page.style.removeProperty('visibility');
   ready=false;
@@ -41641,7 +41644,7 @@ function renderSyncCenter(host){
  };
 }
 
-function render(){ndProCartQuickAccess();el('ndProTabs').querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('selected',b.dataset.tab===active));const host=el('ndProContent');if(!host)return;menuLabels();el('ndProHomeButton').hidden=active==='home';if(active==='home')renderHome(host);else if(active==='daily_report')renderDailyReport(host);else if(active==='customer_history')renderCustomerHistory(host);else if(active==='appointments'||active==='room_calendar')renderAppointments(host);else if(active==='staff_rotation')ndRenderStaffRotation(host);else if(active==='customers')renderCustomers(host);else if(active==='catalog')renderCatalog(host);else if(active==='products')renderProducts(host);else if(active==='packages')ndDrawCommercialCatalog(host,'packages');else if(active==='gift_cards')ndDrawCommercialCatalog(host,'gift_cards');else if(active==='members_csv'){active='customers';ndCombinedCustomerTab='members';renderCustomers(host)}else if(active==='commission_rules')ndDrawCommissionCsv(host);else if(active==='hours')renderHours(host);else if(active==='settings')renderProSettings(host);else if(active==='imports')renderImportCenter(host);else if(active==='sync_center')renderSyncCenter(host);else if(active==='vouchers')ndUnifiedVoucherInfo(host);else renderPos(host);ndUnifiedCatalogTabs(host);}
+function render(){ndProCartQuickAccess();if(active!=='customers'&&active!=='members_csv')document.getElementById('ndIntegratedMemberOverlay')?.classList.remove('nd-open');el('ndProTabs').querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('selected',b.dataset.tab===active));const host=el('ndProContent');if(!host)return;menuLabels();el('ndProHomeButton').hidden=active==='home';if(active==='home')renderHome(host);else if(active==='daily_report')renderDailyReport(host);else if(active==='customer_history')renderCustomerHistory(host);else if(active==='appointments'||active==='room_calendar')renderAppointments(host);else if(active==='staff_rotation')ndRenderStaffRotation(host);else if(active==='customers')renderCustomers(host);else if(active==='catalog')renderCatalog(host);else if(active==='products')renderProducts(host);else if(active==='packages')ndDrawCommercialCatalog(host,'packages');else if(active==='gift_cards')ndDrawCommercialCatalog(host,'gift_cards');else if(active==='members_csv'){active='customers';ndCombinedCustomerTab='members';renderCustomers(host)}else if(active==='commission_rules')ndDrawCommissionCsv(host);else if(active==='hours')renderHours(host);else if(active==='settings')renderProSettings(host);else if(active==='imports')renderImportCenter(host);else if(active==='sync_center')renderSyncCenter(host);else if(active==='vouchers')ndUnifiedVoucherInfo(host);else renderPos(host);ndUnifiedCatalogTabs(host);}
 /* Unified product navigation. Read-only catalog pages retain their original data handlers. */
 function ndUnifiedCatalogTabs(host){
   if(!host||!['catalog','products','packages','gift_cards','vouchers'].includes(active))return;
@@ -42020,10 +42023,12 @@ async function ndReloadBookingServices(){
   const token=++ndBookingRefreshToken;
   const select=form.elements.service;
   if(!select)return;
-  const result=await Promise.all([
+  let result;
+  try{result=await ndBetaDeadline(Promise.all([
     db.from('nd_pro_beta_services').select('*'),
     db.from('nd_pro_beta_service_prices').select('*')
-  ]);
+  ]),8000,'services');}
+  catch(error){if(token===ndBookingRefreshToken)stat('服务同步失败：'+(error?.message||error),true);return;}
   if(token!==ndBookingRefreshToken||!form.isConnected)return;
   const failure=result.find(r=>r.error);
   if(failure){
@@ -42115,7 +42120,15 @@ form.elements.service?.addEventListener('change',()=>{
    });
   }
   function close(){sheet.hidden=true;document.body.classList.remove('nd-service-picker-open')}
-  launch.onclick=async()=>{chosen=select.value||'';category='PROMOTION';minutes='全部';tagMode=false;search='';searchInput.value='';searchWrap.hidden=true;sheet.querySelector('[data-tag]').classList.remove('active');sheet.hidden=false;document.body.classList.add('nd-service-picker-open');await ndReloadBookingServices();draw()};
+  let servicePickerSerial=0;
+  launch.onclick=()=>{
+   const serial=++servicePickerSerial;
+   chosen=select.value||'';category='PROMOTION';minutes='全部';tagMode=false;search='';searchInput.value='';searchWrap.hidden=true;
+   sheet.querySelector('[data-tag]').classList.remove('active');sheet.hidden=false;document.body.classList.add('nd-service-picker-open');
+   // Show the existing catalog immediately; network refresh must not make a tap look inert.
+   draw();
+   void ndReloadBookingServices().then(()=>{if(serial===servicePickerSerial&&!sheet.hidden)draw()}).catch(error=>stat('服务同步失败：'+(error?.message||error),true));
+  };
   sheet.querySelector('[data-close]').onclick=close;
   sheet.querySelector('[data-tag]').onclick=()=>{tagMode=!tagMode;category=tagMode?'会员卡专享':'PROMOTION';sheet.querySelector('[data-tag]').classList.toggle('active',tagMode);draw()};
   sheet.querySelector('[data-search]').onclick=()=>{searchWrap.hidden=!searchWrap.hidden;if(!searchWrap.hidden)searchInput.focus();else {search='';searchInput.value='';draw()}};
@@ -43916,7 +43929,9 @@ window.ndOpenCompanyFine=open;
 function mark(el){let bad=invalid(el);el.classList.toggle('nd-required-error',bad);let label=el.labels?.[0]||el.closest('label');if(label)label.classList.toggle('nd-required-error-label',bad);return bad}
 function inspect(form){let first=null;for(let el of form.querySelectorAll('input,select,textarea'))if(mark(el)&&!first)first=el;if(first){let details=first.closest('details');if(details)details.open=true;first.focus({preventScroll:true});first.scrollIntoView({behavior:'smooth',block:'center'});return false}return true}
 document.addEventListener('submit',e=>{let f=e.target;if(f instanceof HTMLFormElement&&!inspect(f)){e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('click',e=>{let b=e.target.closest('button,input[type=submit]');if(!b)return;let f=b.form;if(!f||b.type==='button'||b.matches('[formnovalidate]'))return;if(!inspect(f)){e.preventDefault();e.stopImmediatePropagation()}},true);
+// Only explicit submit controls are pre-validated. Other form buttons may open
+// pickers, switch tabs or close sheets, and must never be intercepted here.
+document.addEventListener('click',e=>{let b=e.target.closest('button[type="submit"],input[type="submit"]');if(!b)return;let f=b.form;if(!f||b.matches('[formnovalidate]'))return;if(!inspect(f)){e.preventDefault();e.stopImmediatePropagation()}},true);
 document.addEventListener('input',e=>{let x=e.target;if(x?.classList?.contains('nd-required-error'))mark(x)},true);
 document.addEventListener('change',e=>{let x=e.target;if(x?.classList?.contains('nd-required-error'))mark(x)},true);
 })();</script>
