@@ -41,6 +41,27 @@
 .nd-owner-cart-label{display:block;margin-top:6px!important;color:#3974e7;font-size:12px!important;line-height:1.5;white-space:normal;overflow-wrap:anywhere;text-align:left}
 @media(min-width:700px){.nd-benefit-owner-overlay{align-items:center;padding:20px}.nd-benefit-owner-sheet{border-radius:22px;max-height:min(90dvh,900px)}}
 </style>
+<style id="nd-benefit-owner-premium-v19">
+.nd-benefit-owner-overlay{background:rgba(18,27,45,.62)!important;align-items:stretch!important;padding:0!important;backdrop-filter:blur(7px)}
+.nd-benefit-owner-sheet{width:100%!important;max-width:600px!important;max-height:100dvh!important;min-height:100dvh!important;margin:auto!important;border-radius:0!important;padding:18px 20px max(32px,env(safe-area-inset-bottom))!important;background:#f7f8fc!important;gap:14px!important;box-shadow:0 15px 60px rgba(21,38,70,.12)!important;align-content:start!important}
+.nd-benefit-owner-sheet header{position:sticky;top:-18px;z-index:4;margin:-18px -20px 4px!important;padding:23px 20px 16px!important;background:rgba(247,248,252,.96);backdrop-filter:blur(12px);border-bottom:1px solid #e7ebf3}
+.nd-benefit-owner-sheet header strong{font-size:19px!important;font-weight:800!important;letter-spacing:.2px}
+.nd-benefit-owner-sheet header button{background:white!important;border-radius:11px!important;padding:8px 13px!important;font-weight:700!important}
+.nd-benefit-owner-sheet>p:first-of-type{padding:14px 15px!important;background:#eaf1ff!important;border-radius:15px!important;color:#4772bd!important;font-size:12px!important}
+.nd-benefit-owner-sheet label{font-size:12px!important;font-weight:700!important;color:#596579!important;gap:7px!important}
+.nd-benefit-owner-sheet input,.nd-benefit-owner-sheet select{min-height:47px!important;border:1px solid #e5eaf2!important;border-radius:13px!important;background:#fff!important;box-shadow:0 1px 3px #24324b08!important;color:#1f2d43!important}
+.nd-benefit-owner-sheet input:focus,.nd-benefit-owner-sheet select:focus{outline:2px solid #9fc1ff!important;outline-offset:1px}
+.nd-benefit-owner-sheet input[readonly]{background:#eef1f6!important;color:#69758a!important}
+.nd-benefit-owner-sheet .nd-owner-birthday{grid-template-columns:1fr 1fr 1.05fr!important}
+.nd-benefit-owner-sheet .nd-owner-birthday-title{font-weight:750!important;margin:4px 0 -7px!important}
+.nd-benefit-owner-sheet .nd-owner-preferences{background:#fff;border:1px solid #e8edf5;border-radius:18px;padding:15px!important;gap:12px!important}
+.nd-benefit-owner-sheet .nd-owner-preferences>strong{font-size:14px!important;color:#263348!important}
+.nd-benefit-owner-sheet .nd-owner-trait-list label{font-size:12px!important;border-radius:24px!important;background:#f4f6fb!important}
+.nd-benefit-owner-sheet .nd-owner-trait-list label:has(input:checked){background:#e8f0ff!important}
+.nd-benefit-owner-sheet .nd-owner-warning{background:#fff8e9!important;color:#98712d!important;border:1px solid #f3e4be;border-radius:14px!important;font-size:12px!important}
+.nd-benefit-owner-sheet .nd-owner-submit{position:sticky;bottom:0;z-index:3;min-height:52px!important;border-radius:15px!important;background:#3478ed!important;font-size:15px!important;box-shadow:0 5px 18px #3478ed33}
+@media(min-width:700px){.nd-benefit-owner-overlay{align-items:center!important;padding:20px!important}.nd-benefit-owner-sheet{min-height:0!important;max-height:min(94dvh,960px)!important;border-radius:24px!important}}
+</style>
 <style id="nd-fixed-mobile-scale">html,body{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%} @media (pointer:coarse){input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px!important}}</style>
 <script id="nd-fixed-mobile-scale-guard">(function(){function block(e){if(e.cancelable)e.preventDefault()}function multi(e){if(e.touches&&e.touches.length>1)block(e)}function install(d){if(!d||d.__ndScaleGuard)return;d.__ndScaleGuard=true;['gesturestart','gesturechange','gestureend'].forEach(function(n){d.addEventListener(n,block,{passive:false,capture:true})});d.addEventListener('touchmove',multi,{passive:false,capture:true});d.addEventListener('touchstart',multi,{passive:false,capture:true});d.addEventListener('wheel',function(e){if(e.ctrlKey)block(e)},{passive:false,capture:true});}install(document);document.addEventListener('load',function(e){if(e.target.tagName==='IFRAME'){try{install(e.target.contentDocument)}catch(_){}}},true);})();</script>
 <!-- Offline screen: Nature's Dao logo; independent of Content Studio -->
@@ -42142,6 +42163,8 @@ function visibleTimes(){const h=hours[branch==='all'?'Eco Botanic':branch]||defa
  let ndCloudCatalog=[],ndCatalogCloudStatus='not_checked';
 let db=null,ready=false,active='home',lang=(localStorage.getItem('ndProUILanguage')==='zh'?'zh':'en'),branch='all',date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'});
 let customers=[],services=[],prices=[],appointments=[],staff=[],links=[],cart=[],rooms=[];
+let ndBetaCanSeeGlobalStaff=false;
+const ndBetaIsGlobalStaff=person=>/^global$/i.test(String(person?.outlet||person?.branch||'').trim());
 let showTherapists=true, calendarMode='staff',restById=new Map();
 let ndMcIds=new Set(),ndBreakRows=[],ndBenefitCache=new Map(),ndBenefitCacheKey='',ndBookerIdsByAppointment=new Map(),ndLoginEmployeeId=null,ndBookingOwnerSelect=new Set();
 const ndIsBreakName=v=>['Midday Break','中途休息'].includes(String(v||'').trim());
@@ -42336,10 +42359,14 @@ async function load(){
  const serial=++ndBetaLoadSerial;
  stat(tr('Loading beta data…','正在读取测试数据…'));
  try{
+  // Recheck the authenticated account on each Beta load; never trust a UI toggle.
+  const identity=await ndBetaDeadline(db.auth.getUser(),12000,'account');
+  if(identity.error||!identity.data?.user)throw new Error('请先登入账号');
+  ndBetaCanSeeGlobalStaff=String(identity.data.user.email||'').trim().toLowerCase()==='umo1017@gmail.com';
   const out=await Promise.all([read('nd_pro_beta_customers'),read('nd_pro_beta_services'),read('nd_pro_beta_service_prices'),read('nd_pro_beta_appointments'),read('nd_pro_beta_appointment_staff'),read('employees','*')]);
   if(serial!==ndBetaLoadSerial||!page?.classList.contains('nd-pro-shown'))return;
   [customers,services,prices,appointments,links,staff]=out;
-  staff=staff.filter(x=>!x.nd_archived_at&&!x.last_working_date);
+  staff=staff.filter(x=>!x.nd_archived_at&&!x.last_working_date&&(ndBetaCanSeeGlobalStaff||!ndBetaIsGlobalStaff(x)));
   ndBenefitCacheKey='';stat('');render();
   // Supplementary tables update independently, without holding the main page hostage.
   const extras=[
@@ -42840,7 +42867,7 @@ function ndUnifiedVoucherInfo(host){
   host.innerHTML='<section class="nd-unified-voucher-panel"><h2>'+tr('Vouchers / Entitlements','优惠券 / 权益')+'</h2><p>'+tr('Voucher entitlements are associated with purchased packages or member accounts. This screen does not issue or redeem vouchers.','优惠券权益与已购买配套或会员账户有关。此页面仅展示说明，不会发放或核销优惠券。')+'</p><button type="button" id="ndVoucherOpenPackages">'+tr('View Packages','查看配套')+'</button></section>';
   host.querySelector('#ndVoucherOpenPackages').addEventListener('click',()=>{active='packages';render()});
 }
-const activeStaff=()=>staff.filter(s=>!/^global$/i.test(String(s.outlet||'').trim())&&(branch==='all'||s.outlet===branch));
+const activeStaff=()=>staff.filter(s=>(ndBetaCanSeeGlobalStaff||!ndBetaIsGlobalStaff(s))&&(branch==='all'||s.outlet===branch));
 const ndGenderKey='nd_pro_staff_calendar_gender_v1';
 function ndGenderOverrides(){try{return JSON.parse(localStorage.getItem(ndGenderKey)||'{}')||{}}catch(_){return {}}}
 function ndStaffGender(s){
@@ -44003,10 +44030,14 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
   const sheet=document.createElement('div');sheet.className='nd-benefit-owner-overlay';
   const staffOptions=staff.filter(w=>!w.nd_archived_at&&!w.termination_date).map(w=>`<option value="${esc(String(w.id))}">${esc(w.nickname||w.name||'员工')} · ${esc(w.outlet||w.branch||'')}</option>`).join('');
   sheet.innerHTML=`<form class="nd-benefit-owner-sheet"><header><strong>登记权益持有人</strong><button type="button" data-owner-cancel>取消</button></header><p>以电话号码识别会员权益；姓名必须填写，但可以用平时称呼的名字。</p><label>所属项目<input value="${esc(x.name)}" readonly></label><label>姓名 *<input name="name" autocomplete="name" maxlength="100" required placeholder="顾客姓名或常用称呼"></label><label>电话号码 *<input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required placeholder="例如 0123456789"></label><div class="nd-owner-birthday-title">生日（月、日必填；年份选填）</div><div class="nd-owner-birthday"><label>月份 *<select name="birthMonth" required><option value="">月</option>${Array.from({length:12},(_,i)=>`<option value="${String(i+1).padStart(2,'0')}">${i+1}月</option>`).join('')}</select></label><label>日期 *<select name="birthDay" required><option value="">日</option>${Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,'0')}">${i+1}日</option>`).join('')}</select></label><label>年份（选填）<input name="birthYear" inputmode="numeric" type="number" min="1900" max="${new Date().getFullYear()}" placeholder="年份"></label></div><label>性别 *<select name="gender" required><option value="">请选择</option><option value="female">女</option><option value="male">男</option><option value="other">其他</option></select></label><label>与预约联系人的关系 *<select name="relation" required><option value="">请选择</option><option>本人</option><option>配偶</option><option>子女</option><option>父母</option><option>兄弟姐妹</option><option>朋友</option><option>其他</option></select></label><label>优先技师（可多选）<select name="preferredStaff" multiple size="3"><option value="" disabled>选择优先技师</option>${staffOptions}</select></label><label>黑名单技师（可多选）<select name="blockedStaff" multiple size="3"><option value="" disabled>选择不安排的技师</option>${staffOptions}</select></label><label>备注（选填）<textarea name="notes" maxlength="1000" rows="2" placeholder="例如护理力度、沟通偏好"></textarea></label><p class="nd-owner-warning">20% 优惠只适用于已核实有效会员卡的持有人；到期、用完或非持有人不可自动享受。</p><button type="submit" class="nd-owner-submit">确认加入订单</button><small>本页登记为结账草稿，不会在未付款时自动建立正式会员权益。</small></form>`;
+  // Keep only the requested fields. All generic remarks, help paragraphs and
+  // explanatory footnotes are deliberately omitted from this registration UI.
+  sheet.querySelector('[name="notes"]')?.closest('label')?.remove();
+  sheet.querySelectorAll('form > p, form > small').forEach(note=>note.remove());
   const form=sheet.querySelector('form');
   const preferenceLabel=document.createElement('section');
   preferenceLabel.className='nd-owner-preferences';
-  preferenceLabel.innerHTML='<strong>顾客偏好（选填）</strong><div class="nd-owner-trait-list"></div><button type="button" class="nd-owner-trait-add">＋ 添加选项</button><label>其他偏好说明（选填）<textarea name="preferences" maxlength="1000" rows="2" placeholder="例如喜欢的按摩力度、温度、护理方式"></textarea></label>';
+  preferenceLabel.innerHTML='<strong>顾客偏好（选填）</strong><div class="nd-owner-trait-list"></div><button type="button" class="nd-owner-trait-add">＋ 添加选项</button>';
   form.elements.blockedStaff.closest('label').before(preferenceLabel);
   const baseTraits=[['strong','有力'],['gentle','轻柔'],['skilled','技术好'],['chinese','会华语'],['english','会英语'],['malay','会马来语'],['young','年轻'],['experienced','有经验']];
   const addTraitButton=preferenceLabel.querySelector('.nd-owner-trait-add');
@@ -44035,7 +44066,7 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
    const traits=[...form.querySelectorAll('input[name="trait"]:checked')].map(input=>input.value);
    if(!name||!/^(?:\+?[0-9]{8,15})$/.test(phone)||!validDate||(year&&(Number(year)<1900||Number(year)>new Date().getFullYear()||new Date(birthday)>new Date()))||!gender||!relation){alert('请填写姓名、有效电话号码、生日的月份日期、性别和关系。');return;}
    if(preferredStaff.some(id=>blockedStaff.includes(id))){alert('同一位技师不能同时列为优先和黑名单，请修改选择。');return;}
-   const owners=benefitOwners.get(x.id)||[];owners.push({name,phone,birthday,gender,relation,preferredStaff,preferences:form.elements.preferences.value.trim(),traits,blockedStaff,notes:form.elements.notes.value.trim()});benefitOwners.set(x.id,owners);
+   const owners=benefitOwners.get(x.id)||[];owners.push({name,phone,birthday,gender,relation,preferredStaff,preferences:'',traits,blockedStaff,notes:''});benefitOwners.set(x.id,owners);
    // A verified unique match is the only safe target for AUTO customer traits.
    // New beneficiaries remain drafts until the paid order creates their profile.
    const normalPhone=value=>String(value||'').replace(/\D/g,'').replace(/^60(?=1)/,'0');
