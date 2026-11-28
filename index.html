@@ -43175,7 +43175,7 @@ const weekButtons=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.se
 const ccount=Math.max(1,columns.length);
 let grid=`<div class="pro-calgrid pro-premium-calendar proref-calendar-grid" style="--cols:${ccount};--rows:${slots.length}"><button type="button" id="proCalendarGear" class="pro-calhead proref-time-head pro-gear-hours" style="grid-column:1;grid-row:1" aria-label="预约表设置" title="预约表设置"><svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto;flex:none"><path d="M4 6h7m4 0h5M4 12h3m4 0h9M4 18h11m4 0h1"/><circle cx="13" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button>${columns.map((s,i)=>roomCols?`<div class="pro-calhead pro-room-head" style="grid-column:${i+2};grid-row:1">🚪 ${esc(s.room_name)}<small>${esc(s.branch)}</small></div>`:String(s.id)==='__other__'?`<div class="pro-calhead pro-employee-head nd-special-head" style="grid-column:${i+2};grid-row:1"><span>OTHER <em class="nd-cal-count">${(bookingsByColumn.get("__other__")||[]).length}</em></span><small>${esc(branch==='all'?(s.outlet||'全部分行'):branch)}</small></div>`:String(s.id)==='__auto__'?`<div class="pro-calhead pro-employee-head nd-cal-auto-head" style="grid-column:${i+2};grid-row:1"><span>AUTO <em class="nd-cal-count">${ndAutoCountMeta===null?"—":list.filter(a=>! ["cancelled","no_show"].includes(a.status)&&ndAutoCountMeta.has(String(a.id))).length}</em></span><small>${esc(branch==='all'?'全部分行':branch)}</small></div>`:`<button type="button" class="pro-calhead pro-employee-head nd-gender-${ndStaffGender(s)}" style="grid-column:${i+2};grid-row:1" data-staff-rest="${esc(s.id)}"><span>${esc(s.nickname||s.name)} <em class="nd-cal-count">${staffBookingCount(s.id)}</em></span><small class="${restById.get(String(s.id))?'prostaff-off-badge':''}">${restById.get(String(s.id))===1?'OFF · Full Day':restById.get(String(s.id))===.5?(restHalfGet(date,branch==='all'?s.outlet:branch,s.id)==='second'?'OFF · Second Half':'OFF · First Half'):esc(s.outlet)}</small></button>`).join('')}`;
 // The Issue column is a reporting shortcut, never an employee or bookable slot.
-grid=grid.replace(/<button\b[^>]*data-staff-rest="__issue__"[^>]*>[\s\S]*?<\/button>/,`<button type="button" class="pro-calhead pro-employee-head nd-special-head nd-issue-head" data-issue-time="" style="grid-column:${columns.findIndex(x=>x.id==='__issue__')+2};grid-row:1"><span>ISSUE · 问题</span><small>点击填写问题详情</small></button>`);
+grid=grid.replace(/<button\b[^>]*data-staff-rest="__issue__"[^>]*>[\s\S]*?<\/button>/,`<button type="button" class="pro-calhead pro-employee-head nd-special-head nd-issue-head" data-issue-time="" style="grid-column:${columns.findIndex(x=>x.id==='__issue__')+2};grid-row:1"><span>ISSUE</span></button>`);
 const toMinutes=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
 for(let ri=0;ri<slots.length;ri++){
  const t=slots[ri];const row=ri+2;
@@ -43184,7 +43184,7 @@ for(let ri=0;ri<slots.length;ri++){
   const person=columns[ci],col=ci+2;
   const isAuto=!roomCols&&String(person.id)==='__auto__';
   if(!roomCols&&String(person.id)==='__issue__'){
-   grid+=`<button type="button" class="pro-cell nd-issue-slot" style="grid-column:${col};grid-row:${row}" data-issue-time="${t}" aria-label="填写 ${t} 问题详情" title="填写问题详情"></button>`;continue;
+   grid+=`<button type="button" class="pro-cell nd-issue-slot" style="grid-column:${col};grid-row:${row}" data-issue-time="${t}" aria-label="ISSUE ${t}" title="ISSUE"></button>`;continue;
   }
   if(!roomCols&&String(person.id)==='__other__'){
    const items=(bookingsByColumn.get('__other__')||[]).filter(a=>toMinutes(mins(a.starts_at))<=toMinutes(t)&&toMinutes(mins(a.ends_at))>toMinutes(t));
@@ -43249,11 +43249,31 @@ host.innerHTML=`<section class="proref-schedule"><div class="proref-calendar-top
 const ndExpenseLaunch=document.createElement('button');ndExpenseLaunch.type='button';ndExpenseLaunch.className='nd-beta-cash-expense-launch';ndExpenseLaunch.textContent='Cash Expense';
 host.querySelector('.proref-calendar-toolbar')?.appendChild(ndExpenseLaunch);
 ndExpenseLaunch.onclick=()=>{const tab=document.getElementById('sidebarDaily');if(!tab){alert('现金支出入口暂未连接');return;}leave();tab.click();ndBetaExternalReturnShow();setTimeout(()=>{const target=document.getElementById('ndExpenseActionCard');target?.querySelector('details')?.setAttribute('open','');target?.scrollIntoView({block:'start',behavior:'smooth'});},180)};
-host.querySelectorAll('[data-issue-time]').forEach(button=>button.onclick=()=>{
- const tab=document.getElementById('sidebarSalary'),issue=document.getElementById('ndAdvanceHistoryBtn');
- if(!tab||!issue){alert('Report an Issue 尚未连接');return;}
- leave();tab.click();ndBetaExternalReturnShow();issue.click();
- setTimeout(()=>{const form=document.getElementById('ndIssueForm');if(form?.hidden)document.getElementById('ndIssueNew')?.click();const branchField=form?.querySelector('#ndIssueBranch');if(branchField&&[...branchField.options].some(option=>option.value===branch)&&branchField.value!==branch){branchField.value=branch;branchField.dispatchEvent(new Event('change',{bubbles:true}));}const dateField=form?.querySelector('#ndIssueRosterDate');if(dateField){dateField.value=date;dateField.dispatchEvent(new Event('change',{bubbles:true}));}document.getElementById('ndIssuesPanel')?.scrollIntoView({block:'start',behavior:'smooth'});setTimeout(()=>form?.querySelector('#ndIssueDescription')?.focus({preventScroll:true}),130);},300);
+// Calendar ISSUE is a small note/status workflow, independent of the old Report an Issue form.
+const ndIssueKey=time=>'nd-beta-issue-note-v1:'+encodeURIComponent(branch)+':'+date+':'+(time||'day');
+const ndReadIssue=time=>{try{return JSON.parse(localStorage.getItem(ndIssueKey(time))||'null')}catch(_){return null}};
+const ndIssuePrefix='nd-beta-issue-note-v1:'+encodeURIComponent(branch)+':';
+const ndPendingIssues=()=>{const pending=[];try{for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key?.startsWith(ndIssuePrefix))continue;const origin=key.slice(ndIssuePrefix.length,ndIssuePrefix.length+10);if(origin>date)continue;const item=JSON.parse(localStorage.getItem(key)||'null');if(item?.status==='incomplete')pending.push({...item,key,origin,time:key.slice(ndIssuePrefix.length+11)});}}catch(e){console.warn('ISSUE notes unavailable',e)}return pending.sort((a,b)=>a.origin.localeCompare(b.origin)||a.time.localeCompare(b.time));};
+const ndPaintIssue=button=>{const time=button.dataset.issueTime||'',saved=ndReadIssue(time),pending=ndPendingIssues().filter(item=>!time||item.time===time);button.classList.toggle('nd-issue-done',saved?.status==='complete'&&!pending.length);button.classList.toggle('nd-issue-pending',pending.length>0);button.textContent=pending.length?String(pending.length):saved?.status==='complete'?'✓':'';button.title=pending.length?`未完成 ${pending.length} 项（包括前几天）`:saved?.status==='complete'?'已完成':'ISSUE';};
+const ndIssueButtons=[...host.querySelectorAll('[data-issue-time]')];
+ndIssueButtons.forEach(button=>{
+ ndPaintIssue(button);
+ button.onclick=()=>{
+  const time=button.dataset.issueTime||'',saved=ndReadIssue(time),pending=ndPendingIssues().filter(item=>!time||item.time===time);
+  document.getElementById('ndBetaIssueNoteDialog')?.remove();
+  const overlay=document.createElement('div');overlay.id='ndBetaIssueNoteDialog';overlay.className='nd-beta-issue-overlay';
+  overlay.innerHTML=`<section class="nd-beta-issue-sheet" role="dialog" aria-modal="true" aria-labelledby="ndBetaIssueTitle"><div class="nd-beta-issue-top"><div><strong id="ndBetaIssueTitle">ISSUE</strong><small>${esc(date)} ${time?(' · '+esc(time)):''}</small></div><button type="button" data-issue-close aria-label="关闭">×</button></div>${pending.length?`<label for="ndBetaIssueExisting">未完成 · ${pending.length} 项</label><select id="ndBetaIssueExisting"><option value="">＋ 新备注</option>${pending.map((item,i)=>`<option value="${i}">${esc(item.origin)} ${esc(item.time==='day'?'':item.time)} · ${esc((item.note||'未填写备注').slice(0,35))}</option>`).join('')}</select>`:''}<label for="ndBetaIssueNote">备注</label><textarea id="ndBetaIssueNote" rows="5" maxlength="3000" placeholder="填写备注…"></textarea><div class="nd-beta-issue-actions"><button type="button" data-issue-status="incomplete">未完成</button><button type="button" data-issue-status="complete">完成</button></div></section>`;
+  document.body.appendChild(overlay);
+  const note=overlay.querySelector('textarea'),existing=overlay.querySelector('#ndBetaIssueExisting');
+  if(existing){existing.value='0';note.value=pending[0].note||'';existing.onchange=()=>{note.value=existing.value===''?'':pending[Number(existing.value)]?.note||'';};}
+  else note.value=saved?.note||'';
+  const close=()=>overlay.remove();overlay.querySelector('[data-issue-close]').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  overlay.querySelectorAll('[data-issue-status]').forEach(action=>action.onclick=()=>{
+   try{const selected=existing?.value!==''&&existing?pending[Number(existing.value)]:null;const key=selected?.key||ndIssueKey(time);localStorage.setItem(key,JSON.stringify({note:note.value.trim(),status:action.dataset.issueStatus,updated_at:new Date().toISOString()}));ndIssueButtons.forEach(ndPaintIssue);close();}
+   catch(err){alert('暂时无法保存备注：'+err.message)}
+  });
+  note.focus();
+ };
 });
 ndPlaceNowLine();
 if(ndEnteringCalendar&&date===businessDate(new Date(),branch)){
@@ -44018,12 +44038,15 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
    const alt=String(s.name_en||'');
    return {id:'online:'+String(s.id),sku:String(s.id),name,alt,category:categoryForService(name),duration:Number(s.duration_minutes||0),price,source:'online',type:'service'};
  }).filter(Boolean);
- const rawCatalog=ndCatalogCloudStatus==='connected' && ndCloudCatalog.length ? ndCloudCatalog.map(x=>({sku:x.sku,name:x.name,price:x.price,section:x.section_name,folder:x.folder_name,duration:x.duration_minutes,status:x.is_active?'Enabled':'Disabled',type:x.item_type,source:'cloud'})) : [
+ const csvCatalog=[
    ...ndServiceCsvCatalog.map(x=>({...x,type:'service'})),
-   ...ndProProductCsv.map(x=>({...x,type:'product'})),
+   ...ndProProductCsv.map(x=>({...x,type:/赠品|礼物|gift/i.test(x.section||'')?'giftcard':'product'})),
    ...ndProPackagesCsv.map(x=>({...x,type:'package'})),
-   ...ndProGiftCardsCsv.map(x=>({...x,type:'giftcard'}))
+   ...ndProGiftCardsCsv.map(x=>({...x,type:/top\s*up|充值|储值/i.test(x.name+' '+x.section)?'recharge':'giftcard'}))
  ];
+ const cloudCatalog=ndCatalogCloudStatus==='connected'?ndCloudCatalog.map(x=>({sku:x.sku,name:x.name,price:x.price,section:x.section_name,folder:x.folder_name,duration:x.duration_minutes,status:x.is_active?'Enabled':'Disabled',type:x.item_type==='gift_card'&&/top\s*up|充值|储值/i.test(String(x.name||'')+' '+String(x.section_name||''))?'recharge':x.item_type,source:'cloud'})):[];
+ const cloudSkus=new Set(cloudCatalog.map(x=>String(x.sku)));
+ const rawCatalog=[...cloudCatalog,...csvCatalog.filter(x=>!cloudSkus.has(String(x.sku)))];
  const onlineNames=new Set(onlineMenu.map(x=>normalize(x.name)));
  const menu=[...onlineMenu,...rawCatalog.filter(x=>x.status!=='Disabled'&&x.status!=='Inactive').map(x=>{
    const name=String(x.name||'').trim(),price=Number(x.price);
@@ -44033,8 +44056,8 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
  }).filter(Boolean)];
  // Recharge is a clearly labelled draft item. Wallet credit is NEVER posted here:
  // the actual balance mutation requires a server-verified payment and wallet RPC.
- menu.push({id:'nd:recharge:draft',sku:'RECHARGE',name:'充值储值（付款预览）',alt:'充值金额可在订单明细中修改',category:'recharge',duration:0,price:0,source:'draft',type:'recharge'});
- menu.push({id:'nd:member-card:draft',sku:'MEMBER-CARD',name:'会员卡（登记持有人）',alt:'付款后绑定本人会员资料 · 20%资格需核实',category:'member_card',duration:0,price:0,source:'draft',type:'member_card'});
+ if(!menu.some(x=>x.type==='recharge'))menu.push({id:'nd:recharge:draft',sku:'RECHARGE',name:'充值储值（付款预览）',alt:'充值金额可在订单明细中修改',category:'recharge',duration:0,price:0,source:'draft',type:'recharge'});
+ if(!menu.some(x=>x.type==='member_card'))menu.push({id:'nd:member-card:draft',sku:'MEMBER-CARD',name:'会员卡（登记持有人）',alt:'付款后绑定本人会员资料 · 20%资格需核实',category:'member_card',duration:0,price:0,source:'draft',type:'member_card'});
  // The exported member list has a 'T' prefix on phone numbers.
  const normalizePhone=v=>String(v||'').replace(/[^0-9]/g,'').replace(/^60(?=1)/,'0').replace(/^65(?=[3689])/,'');
  const memberMatches=c?.phone?ndCsvMembers.filter(m=>normalizePhone(m['Phone Number'])===normalizePhone(c.phone)):[];
@@ -44093,12 +44116,18 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
  }
  const registerBenefitOwner=(x,ownerMode)=>{
   if(!ownerMode){
-   const chooser=document.createElement('div');chooser.className='nd-benefit-owner-overlay nd-owner-picker-overlay';
-   chooser.innerHTML=`<section class="nd-owner-picker"><header><strong>选择权益持有人</strong><button type="button" data-owner-close>取消</button></header><div class="nd-owner-picker-product">${esc(x.name)}</div><div class="nd-owner-picker-list"><button type="button" data-owner-mode="current"><span class="nd-owner-picker-icon">✓</span><span><strong>当前预约顾客</strong><small>${esc(c?.full_name||'当前顾客')} · ${esc(c?.phone?'••••'+String(c.phone).slice(-4):'')}</small></span><em>›</em></button><button type="button" data-owner-mode="existing"><span class="nd-owner-picker-icon">⌕</span><span><strong>其他现有会员</strong><small>输入电话号码，关联已有会员资料</small></span><em>›</em></button><button type="button" data-owner-mode="new"><span class="nd-owner-picker-icon">＋</span><span><strong>新顾客开户</strong><small>建立新的持有人资料，关联这张订单</small></span><em>›</em></button></div></section>`;
+   // Choose the beneficiary directly beneath the tapped product on the menu.
+   // No separate overlay or intermediate selection screen.
+   const prior=modal.querySelector('.nd-owner-inline-choice');
+   if(prior){const wasSame=prior.dataset.forProduct===String(x.id);prior.remove();if(wasSame)return;}
+   const card=[...modal.querySelectorAll('[data-sale-add]')].find(b=>b.dataset.saleAdd===String(x.id));
+   const grid=card?.closest('.nd-sale-products');if(!card||!grid)return;
+   const chooser=document.createElement('div');chooser.className='nd-owner-inline-choice';chooser.dataset.forProduct=String(x.id);
+   chooser.innerHTML=`<div class="nd-owner-inline-title"><strong>${esc(x.name)}</strong><button type="button" data-owner-close aria-label="收起">×</button></div><div class="nd-owner-inline-list"><button type="button" data-owner-mode="current"><span>✓</span><strong>当前预约顾客</strong><small>${esc(c?.full_name||'当前顾客')} · ${esc(c?.phone?'••••'+String(c.phone).slice(-4):'')}</small></button><button type="button" data-owner-mode="existing"><span>⌕</span><strong>其他现有会员</strong><small>通过电话关联已有资料</small></button><button type="button" data-owner-mode="new"><span>＋</span><strong>新顾客开户</strong><small>建立新的会员资料</small></button></div>`;
+   card.after(chooser);
    chooser.querySelector('[data-owner-close]').onclick=()=>chooser.remove();
-   chooser.addEventListener('click',e=>{if(e.target===chooser)chooser.remove()});
    chooser.querySelectorAll('[data-owner-mode]').forEach(button=>button.onclick=()=>{const mode=button.dataset.ownerMode;chooser.remove();registerBenefitOwner(x,mode);});
-   modal.append(chooser);return;
+   chooser.scrollIntoView({block:'nearest',behavior:'smooth'});return;
   }
   const sheet=document.createElement('div');sheet.className='nd-benefit-owner-overlay';
   const staffOptions=staff.filter(w=>!w.nd_archived_at&&!w.termination_date).map(w=>`<option value="${esc(String(w.id))}">${esc(w.nickname||w.name||'员工')} · ${esc(w.outlet||w.branch||'')}</option>`).join('');
@@ -45075,11 +45104,42 @@ function renderCustomers(host){
 let ndMenuTab='menu',ndMenuInside=false;
 function renderCatalog(host){ndMenuInside=false;ndMenuHome(host);}
 function ndMenuHome(host){
- const types=[['catalog','服务',ndServiceCsvCatalog.length,'★','#087bff'],['products','产品',ndProProductCsv.length,'◇','#897bd1'],['packages','配套',ndProPackagesCsv.length,'◆','#00b5bd'],['discount','折扣',ndCloudCatalog.filter(x=>x.item_type==='discount').length,'%','#008e80'],['gift_cards','礼品卡',ndProGiftCardsCsv.length,'▣','#6550ed'],['deposit','押金',ndCloudCatalog.filter(x=>x.item_type==='deposit').length,'＄','#6550ed']];
+ const types=[['catalog','服务',ndServiceCsvCatalog.length,'★','#087bff'],['products','产品',ndProProductCsv.length,'◇','#897bd1'],['packages','配套',ndProPackagesCsv.length,'◆','#00b5bd'],['gift_cards','充值',ndProGiftCardsCsv.length,'▣','#6550ed'],['discount','折扣',ndCloudCatalog.filter(x=>x.item_type==='discount').length,'%','#008e80'],['deposit','押金',ndCloudCatalog.filter(x=>x.item_type==='deposit').length,'＄','#6550ed']];
  const row=(k,n,c,i,b)=>`<button class="ndm-row" data-m="${k}"><i style="background:${b}">${i}</i><span>${n}</span><small>${c}</small></button>`;
+ if(ndMenuTab==='items')types.unshift(['all_edit','全部项目 · 编辑名称与价格',ndCloudCatalog.length,'✎','#3977f5']);
  host.innerHTML=`<section class="ndm"><button class="ndm-back" data-m="back">‹</button><h1>菜单</h1><input type="search" placeholder="搜索" id="ndmSearch"><div class="ndm-tabs"><button data-m="menu" class="${ndMenuTab==='menu'?'on':''}">菜单</button><button data-m="items" class="${ndMenuTab==='items'?'on':''}">项目</button></div><div class="ndm-card">${ndMenuTab==='items'?types.map(x=>row(...x)).join(''):row('default','默认','','▤','#087bff')+row('custom','自定义','⌄','▤','#ff9500')}</div>${ndMenuTab==='menu'?'<p>在线</p><div class="ndm-card">'+row('online_booking','线上预约','—','▤','#087bff')+row('online_shop','线上商城','—','◇','#897bd1')+row('online_catalog','商品目录','—','◆','#00b5bd')+'</div>':''}<footer><button data-m="custom">⚙</button></footer></section>`;
  host.querySelector('#ndmSearch').oninput=e=>host.querySelectorAll('.ndm-row').forEach(b=>b.hidden=!b.textContent.toLowerCase().includes(e.target.value.toLowerCase()));
- host.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{let k=b.dataset.m;if(k==='back'){active='home';render()}else if(k==='menu'||k==='items'){ndMenuTab=k;ndMenuHome(host)}else if(k==='custom'){ndOpenSectionSettings(host,()=>ndMenuHome(host))}else if(k==='default'||k==='catalog'){ndMenuInside=true;ndRenderCatalogBase(host)}else if(['products','packages','gift_cards'].includes(k)){active=k;render()}else if(['discount','deposit'].includes(k)){const rows=ndCloudCatalog.filter(x=>x.item_type===k);host.innerHTML=`<section class="ndm"><button class="ndm-back">‹</button><h1>${k==='discount'?'折扣':'押金'}</h1><div class="ndm-card">${rows.map(x=>`<div class="ndm-row"><span>${esc(x.name)}</span><small>${esc(x.price)}</small></div>`).join('')||'<p>暂无已读取的项目</p>'}</div></section>`;host.querySelector('button').onclick=()=>ndMenuHome(host)}else alert('线上渠道尚未连接');});
+ host.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{let k=b.dataset.m;if(k==='back'){active='home';render()}else if(k==='menu'||k==='items'){ndMenuTab=k;ndMenuHome(host)}else if(k==='all_edit'){ndMenuAllEditor(host)}else if(k==='custom'){ndOpenSectionSettings(host,()=>ndMenuHome(host))}else if(k==='default'||k==='catalog'){ndMenuInside=true;ndRenderCatalogBase(host)}else if(['products','packages','gift_cards'].includes(k)){active=k;render()}else if(['discount','deposit'].includes(k)){ndMenuAllEditor(host,k)}else alert('线上渠道尚未连接');});
+}
+function ndMenuAllEditor(host,type='all'){
+ if(!document.getElementById('nd-menu-all-editor-style')){const style=document.createElement('style');style.id='nd-menu-all-editor-style';style.textContent=`.nd-menu-all-editor{min-height:100%;padding-bottom:40px}.nd-menu-all-editor>p{font-size:13px;line-height:1.55;color:#7d899a;margin:4px 0 16px}.nd-menu-all-editor #ndMenuAllSearch{width:100%;height:48px;border:0;border-radius:15px;background:#e9ebf1;padding:0 15px;font-size:15px;outline-color:#3977f5}.nd-menu-all-types{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:15px 0}.nd-menu-all-types button{flex:none;border:0;border-radius:13px;background:#fff;color:#546177;font-size:13px;font-weight:700;padding:12px 15px}.nd-menu-all-types button.on{background:#3977f5;color:#fff}.nd-menu-all-editor .ndm-card{overflow:hidden;border-radius:18px}.nd-menu-all-editor .ndm-row{min-height:70px;gap:12px;padding:13px 16px}.nd-menu-all-editor .ndm-row>span{min-width:0;flex:1;text-align:left;overflow-wrap:anywhere}.nd-menu-all-editor .ndm-row>small{white-space:nowrap;color:#3977f5;font-size:13px}.nd-menu-edit-overlay{position:fixed;z-index:2147483000;inset:0;background:#1b29488c;display:flex;align-items:flex-end;justify-content:center}.nd-menu-edit-sheet{width:min(100%,560px);max-height:92dvh;overflow:auto;background:#f5f6fa;border-radius:26px 26px 0 0;padding:24px 22px calc(24px + env(safe-area-inset-bottom));box-shadow:0 -16px 60px #1b294822;display:grid;gap:17px}.nd-menu-edit-sheet header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:20px;color:#202b40}.nd-menu-edit-sheet header button{border:0;background:#e5eaf4;border-radius:50%;width:36px;height:36px;font-size:25px;color:#516078}.nd-menu-edit-sheet label{display:grid;gap:8px;font-size:13px;font-weight:700;color:#606d82}.nd-menu-edit-sheet input,.nd-menu-edit-sheet select{width:100%;height:52px;border:1px solid #dfe5f1;border-radius:13px;background:#fff;padding:0 15px;font-size:16px;color:#202b40;box-sizing:border-box}.nd-menu-edit-sheet [data-edit-save]{height:54px;background:#3977f5;border:0;border-radius:15px;color:white;font-weight:800;font-size:16px}.nd-menu-edit-sheet [data-edit-save]:disabled{opacity:.55}.nd-menu-edit-sheet [role=status]{color:#d14b55;font-size:13px;margin:0}`;document.head.append(style)}
+ if(!document.getElementById('nd-menu-csv-style')){const style=document.createElement('style');style.id='nd-menu-csv-style';style.textContent='.nd-menu-import-label{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:white;border-radius:14px;padding:12px 14px;color:#3977f5;font-weight:700;font-size:13px;margin-bottom:8px}.nd-menu-import-label input{max-width:100%;font-size:12px;color:#64748b}.nd-menu-all-editor #ndMenuImportStatus{font-size:12px;line-height:1.5;color:#5c7299;min-height:0}';document.head.append(style)}
+ let filter=type,search='';
+ const supported=[['all','全部'],['service','服务'],['member_card','会员卡'],['recharge','充值'],['package','配套'],['product','产品'],['giftcard','赠品'],['gift_card','礼品卡（旧分类）'],['discount','折扣'],['deposit','押金']];
+ const classify=(source,section,name)=>{if(source==='service')return 'service';if(source==='product')return /赠品|礼物|gift/i.test(section)?'giftcard':'product';if(source==='package')return 'package';return /top\s*up|充值|储值/i.test(name+' '+section)?'recharge':'gift_card'};
+ const syncCsv=async files=>{
+  if(!db)throw Error('请先登入并连接数据库');
+  const prepared=[];const stats=[];
+  for(const file of files){const filename=file.name;const source=/服务/.test(filename)?'service':/产品/.test(filename)?'product':/配套/.test(filename)?'package':/礼品卡|充值/.test(filename)?'gift_card':'';if(!source)throw Error('不认识文件类型：'+filename);
+   const rows=proParseCSV(await file.text());const header=(rows.shift()||[]).map(x=>String(x).replace(/^\uFEFF/,'').trim().toLowerCase());const idx=s=>header.indexOf(s);if(idx('skuid')<0||idx('sku name')<0||idx('selling price')<0)throw Error(filename+' 缺少 SKU、名字或售价列');
+   let count=0,lastPackage=null;for(const r of rows){const sku=String(r[idx('skuid')]||'').trim(),name=String(r[idx('sku name')]||'').trim();if(!/^\d+$/.test(sku)||!name){if(source==='package'&&lastPackage&&/^\d+$/.test(String(r[1]||'').trim())){lastPackage.attributes.vouchers.push({sku:String(r[1]).trim(),name:String(r[2]||''),unit_price:Number(String(r[3]||0).replace(/,/g,''))||0,quantity:Number(r[4])||0,expiry_id:String(r[5]||'')})}continue}const price=Number(String(r[idx('selling price')]||'0').replace(/,/g,''));if(!Number.isFinite(price)||price<0)continue;const section=String(r[idx('section name')]||'').trim(),folder=String(r[idx('folder name')]||'').trim(),item_type=classify(source,section,name);const duration=idx('duration')>=0?Number(r[idx('duration')]||0):0;const entry={item_type,sku,name,section_name:section,folder_name:folder,price,duration_minutes:Number.isFinite(duration)?duration:0,is_active:String(r[idx('status')]||'Enabled').toLowerCase()==='enabled',attributes:{csv_source:source,...(source==='package'?{vouchers:[]}:{})}};prepared.push(entry);lastPackage=source==='package'?entry:null;count++}stats.push(filename+'：'+count+' 项');
+  }
+  const duplicates=prepared.filter((x,i)=>prepared.findIndex(y=>y.sku===x.sku&&y.item_type===x.item_type)!==i);if(duplicates.length)throw Error('发现重复 SKU / 分类：'+duplicates.slice(0,5).map(x=>x.sku).join(', '));
+  if(!prepared.length)throw Error('没有读取到有效项目');
+  if(!confirm('将更新统一菜单 '+prepared.length+' 个项目（按 SKU 匹配，可能覆盖已修改价格）。\n'+stats.join('\n')+'\n\n是否确认同步？'))return;
+  for(let i=0;i<prepared.length;i+=80){const result=await db.from('nd_pro_beta_catalog_items').upsert(prepared.slice(i,i+80),{onConflict:'item_type,sku'});if(result.error)throw Error('已处理 '+i+' / '+prepared.length+' 项：'+result.error.message)}
+  const next=await db.from('nd_pro_beta_catalog_items').select('item_type,sku,name,section_name,folder_name,price,duration_minutes,is_active,attributes').order('item_type').order('sku').limit(2000);if(next.error)throw next.error;ndCloudCatalog=next.data||[];ndCatalogCloudStatus='connected';return prepared.length;
+ };
+ const draw=()=>{
+  const rows=ndCloudCatalog.filter(x=>(filter==='all'||x.item_type===filter)&&(!search||(x.name+' '+x.sku).toLowerCase().includes(search.toLowerCase())));
+  host.innerHTML=`<section class="ndm nd-menu-all-editor"><button class="ndm-back" data-all-back>‹</button><h1>菜单项目</h1><p>按 SKU 统一关联菜单与购物车。上传服务、产品、配套 CSV 后先核对数量，确认才会覆盖并同步。</p><label class="nd-menu-import-label">导入 / 同步 SKU CSV <input id="ndMenuCsvFiles" type="file" accept=".csv,.CSV,text/csv" multiple></label><p id="ndMenuImportStatus" role="status"></p><input type="search" id="ndMenuAllSearch" placeholder="搜索名字或 SKU" value="${esc(search)}"><nav class="nd-menu-all-types">${supported.map(([v,n])=>`<button type="button" data-all-type="${v}" class="${filter===v?'on':''}">${n}</button>`).join('')}</nav><div class="ndm-card">${rows.map(x=>`<button class="ndm-row" data-all-sku="${esc(x.sku)}" data-all-kind="${esc(x.item_type)}"><span><strong>${esc(x.name)}</strong><small style="display:block;margin:3px 0 0;font-size:11px;color:#8a94a5">${esc(x.item_type)} · ${esc(x.sku)}</small></span><small>RM ${Number(x.price||0).toFixed(2)}　›</small></button>`).join('')||'<p>没有匹配项目；若菜单尚未导入 Supabase，请先完成菜单数据导入。</p>'}</div></section>`;
+  host.querySelector('#ndMenuCsvFiles').onchange=async e=>{const files=[...e.target.files];const status=host.querySelector('#ndMenuImportStatus');status.textContent='检查 CSV 中…';e.target.disabled=true;try{const count=await syncCsv(files);if(count){draw();host.querySelector('#ndMenuImportStatus').textContent='已同步 '+count+' 个 SKU；请重新打开购物车查看最新价格。';}}catch(err){status.textContent='同步未完成：'+(err.message||err)}finally{const input=host.querySelector('#ndMenuCsvFiles');if(input)input.disabled=false}};
+  host.querySelector('[data-all-back]').onclick=()=>ndMenuHome(host);
+  host.querySelector('#ndMenuAllSearch').oninput=e=>{search=e.target.value;const pos=e.target.selectionStart;draw();const field=host.querySelector('#ndMenuAllSearch');field.focus();field.setSelectionRange(pos,pos)};
+  host.querySelectorAll('[data-all-type]').forEach(b=>b.onclick=()=>{filter=b.dataset.allType;draw()});
+  host.querySelectorAll('[data-all-sku]').forEach(b=>b.onclick=()=>{const x=ndCloudCatalog.find(i=>String(i.sku)===b.dataset.allSku&&i.item_type===b.dataset.allKind);if(!x)return;const overlay=document.createElement('div');overlay.className='nd-menu-edit-overlay';overlay.innerHTML=`<form class="nd-menu-edit-sheet"><header><strong>编辑菜单项目</strong><button type="button" data-edit-close>×</button></header><label>名字<input name="name" required maxlength="200" value="${esc(x.name)}"></label><label>价格 (RM)<input name="price" type="number" required min="0" step="0.01" value="${Number(x.price||0).toFixed(2)}"></label><label>分类<select name="item_type">${supported.filter(([v])=>v!=='all').map(([v,n])=>`<option value="${v}" ${x.item_type===v?'selected':''}>${n}</option>`).join('')}</select></label><button type="submit" data-edit-save>保存并同步</button><p role="status"></p></form>`;document.body.append(overlay);const close=()=>overlay.remove();overlay.querySelector('[data-edit-close]').onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};overlay.querySelector('form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('[data-edit-save]'),status=form.querySelector('[role=status]');const name=form.elements.name.value.trim(),price=Number(form.elements.price.value),item_type=form.elements.item_type.value;if(!name||!Number.isFinite(price)||price<0){status.textContent='请检查名字和价格';return;}button.disabled=true;status.textContent='保存中…';try{const result=await db.from('nd_pro_beta_catalog_items').update({name,price,item_type}).eq('sku',x.sku).eq('item_type',x.item_type).select('sku').maybeSingle();if(result.error)throw result.error;if(!result.data)throw Error('数据库没有确认更新；请检查编辑权限');const next=await db.from('nd_pro_beta_catalog_items').select('item_type,sku,name,section_name,folder_name,price,duration_minutes,is_active,attributes').order('item_type').order('sku').limit(2000);if(next.error)throw next.error;ndCloudCatalog=next.data||[];ndCatalogCloudStatus='connected';close();draw()}catch(err){status.textContent='同步失败：'+(err.message||err)}finally{button.disabled=false}};});
+ };
+ draw();
 }
 function ndRenderCustomersBase(host){
  const title=tr('Customers','会员');
@@ -49071,6 +49131,22 @@ html body #ndProBetaPage .proref-schedule{min-height:0!important}
 #ndProBetaPage .proref-calendar-grid .nd-issue-head{background:#fff0e3!important;color:#a86222!important}
 #ndProBetaPage .proref-calendar-grid .nd-issue-slot{background:#fff7ef!important;border:1px solid #f3dcc5!important;border-radius:9px!important;cursor:pointer!important}
 #ndProBetaPage .proref-calendar-grid .nd-issue-slot:active{background:#ffe6c8!important}
+#ndProBetaPage .proref-calendar-grid .nd-issue-slot.nd-issue-done{background:#e4f5ed!important;color:#159a68!important;font-weight:800!important}
+#ndProBetaPage .proref-calendar-grid .nd-issue-slot.nd-issue-pending{background:#fff1db!important;color:#d38726!important;font-weight:800!important}
+.nd-beta-issue-overlay{position:fixed;inset:0;z-index:2147483000;background:#17233877;display:flex;align-items:flex-end;justify-content:center;padding:16px 12px max(16px,env(safe-area-inset-bottom));box-sizing:border-box}
+.nd-beta-issue-sheet{width:min(100%,520px);box-sizing:border-box;background:#f8f9fd;color:#263348;border-radius:24px;padding:22px 18px 18px;box-shadow:0 20px 60px #11213b40;font:inherit}
+.nd-beta-issue-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:22px}
+.nd-beta-issue-top strong{display:block;font-size:21px;letter-spacing:.02em}
+.nd-beta-issue-top small{display:block;font-size:12px;color:#8a93a4;margin-top:3px}
+.nd-beta-issue-top button{border:0;background:#fff;color:#60708c;border-radius:12px;font-size:26px;width:38px;height:38px;line-height:1;cursor:pointer}
+.nd-beta-issue-sheet>label{display:block;font-size:14px;font-weight:750;margin-bottom:9px}
+.nd-beta-issue-sheet select{box-sizing:border-box;display:block;width:100%;min-height:46px;margin:0 0 18px;padding:10px 12px;background:#fff;color:#263348;border:1px solid #dce3f0;border-radius:13px;font:inherit;font-size:14px}
+.nd-beta-issue-sheet textarea{box-sizing:border-box;display:block;width:100%;min-height:145px;resize:vertical;background:#fff;color:#263348;border:1px solid #dce3f0;border-radius:15px;font:inherit;font-size:15px;line-height:1.6;padding:13px 14px;outline:none}
+.nd-beta-issue-sheet textarea:focus{border-color:#477cf0;box-shadow:0 0 0 3px #477cf01c}
+.nd-beta-issue-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.nd-beta-issue-actions button{min-height:50px;border-radius:14px;font:inherit;font-size:15px;font-weight:750;cursor:pointer}
+.nd-beta-issue-actions [data-issue-status="incomplete"]{background:#fff;border:1px solid #e6ba70;color:#a56c1d}
+.nd-beta-issue-actions [data-issue-status="complete"]{background:#477cf0;border:1px solid #477cf0;color:#fff}
 /* Financial entries use the existing shared ledger, presented under their Beta context. */
 #ndProBetaPage .nd-beta-daily-finance{padding:16px 14px;margin:12px 0 20px;background:#f6f7fb;border-radius:18px;font-size:13px;color:#263348}
 #ndProBetaPage .nd-beta-daily-finance h2{font-size:16px;margin:0 0 12px}
@@ -49141,6 +49217,16 @@ body .nd-benefit-owner-sheet .nd-recharge-owner-choice{gap:8px!important;padding
 #ndProBetaPage .proref-calendar-grid button.pro-cell.proref-booking>strong{font-weight:700!important}
 </style>
 <style id="nd-owner-picker-flow-v29">
+.nd-sale-products .nd-owner-inline-choice{grid-column:1/-1;min-width:0;background:#fff;border:1px solid #dce6f5;border-radius:17px;padding:13px;box-shadow:0 8px 24px #193c750c}
+.nd-owner-inline-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;color:#29364c}
+.nd-owner-inline-title strong{font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.nd-owner-inline-title button{border:0;background:#f2f5fb;color:#6b7b93;width:30px;height:30px;border-radius:9px;font-size:19px}
+.nd-owner-inline-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.nd-owner-inline-list button{min-width:0;min-height:94px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid #e2e9f5;border-radius:12px;background:#f7f9fd;color:#29374f;padding:8px 5px;cursor:pointer}
+.nd-owner-inline-list button:active{background:#e9f1ff;border-color:#83a6ef}
+.nd-owner-inline-list button>span{display:grid;place-items:center;width:27px;height:27px;border-radius:8px;background:#e7efff;color:#457aeb;font-size:17px;font-weight:800}
+.nd-owner-inline-list button strong{font-size:12px;text-align:center;line-height:1.35}
+.nd-owner-inline-list button small{font-size:10px;text-align:center;line-height:1.35;color:#8994a6;overflow-wrap:anywhere}
 body .nd-benefit-owner-sheet.nd-owner-premium [hidden]{display:none!important}
 body .nd-owner-known-summary{padding:15px 16px;border:1px solid #dce8ff;background:#f0f5ff;border-radius:17px;color:#2c436a;display:grid;gap:10px}
 body .nd-owner-known-summary>div{display:flex;align-items:center;gap:11px}
