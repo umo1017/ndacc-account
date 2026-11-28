@@ -6557,6 +6557,28 @@ body[data-nd-visible-page="salary"] #salaryPage .salary-table tbody tr.nd-paid-r
 #ndProAppointmentSale .nd-order-bottom>div{display:flex;justify-content:space-between;font-size:15px;padding:3px 0}
 #ndProAppointmentSale .nd-order-bottom>button,#ndProAppointmentSale .nd-payment-bottom>button{width:100%;border:0;border-radius:14px;padding:14px;font-weight:850;font-size:18px}
 #ndProAppointmentSale .nd-order-bottom>[data-sale-payment]{background:#3477f6;color:#fff;margin-top:10px}
+#ndProAppointmentSale .nd-payment-screen{padding:14px 16px 110px;overflow-y:auto;background:#f2f2f7}
+#ndProAppointmentSale .nd-payment-balance{background:#fff;border-radius:20px;padding:20px 22px;margin:0 0 20px}
+#ndProAppointmentSale .nd-payment-balance small{display:block;font-size:14px;color:#3477f6;font-weight:750}
+#ndProAppointmentSale .nd-payment-balance strong{display:block;font-size:40px;line-height:1.2;color:#242730;margin:8px 0}
+#ndProAppointmentSale .nd-payment-wallet-totals{color:#838997;font-size:12px;line-height:1.5;margin:8px 0}
+#ndProAppointmentSale .nd-payment-section{margin-bottom:20px}
+#ndProAppointmentSale .nd-payment-section h3{font-size:15px;color:#777e8c;margin:0 0 10px;font-weight:750}
+#ndProAppointmentSale .nd-payment-wallet-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#ndProAppointmentSale .nd-wallet-choice{background:#fff;border:1.5px solid transparent;border-radius:15px;min-height:83px;padding:11px 12px;display:flex;flex-direction:column;justify-content:space-between;align-items:stretch;text-align:left;gap:5px;color:#262b35;position:relative}
+#ndProAppointmentSale .nd-wallet-choice.active{border-color:#3477f6;background:#f8faff}
+#ndProAppointmentSale .nd-wallet-choice strong{display:block;font-size:15px}
+#ndProAppointmentSale .nd-wallet-choice small{display:block;font-size:11px;color:#8d94a1;line-height:1.4;margin-top:4px}
+#ndProAppointmentSale .nd-wallet-choice b{font-size:14px;color:#3477f6}
+#ndProAppointmentSale .nd-wallet-choice em{position:absolute;right:11px;top:10px;color:#3477f6;font-style:normal}
+#ndProAppointmentSale .nd-wallet-picker{position:fixed;z-index:2147483200;inset:10dvh 0 0;background:#f2f2f7;border-radius:22px 22px 0 0;box-shadow:0 -20px 80px #0003;padding:18px;overflow:auto;padding-bottom:max(45px,env(safe-area-inset-bottom))}
+#ndProAppointmentSale .nd-wallet-picker header{position:sticky;top:-18px;background:#f2f2f7;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0 14px;font-size:16px}
+#ndProAppointmentSale .nd-wallet-picker button{background:#fff;color:#242730;border:0;border-radius:13px;padding:15px;width:100%;margin:0 0 9px;display:flex;justify-content:space-between;align-items:center;gap:14px;text-align:left;font-size:14px}
+#ndProAppointmentSale .nd-wallet-picker header button{width:auto;color:#3477f6;background:transparent;font-weight:750}
+#ndProAppointmentSale .nd-wallet-picker button:disabled{opacity:.48}
+#ndProAppointmentSale .nd-wallet-picker [hidden]{display:none!important}
+#ndProAppointmentSale .nd-wallet-picker button small{display:block;color:#8e94a0;margin-top:5px;font-size:12px}
+#ndProAppointmentSale .nd-payment-bottom button:disabled{background:#e1e1e4;color:#888}
 #ndProAppointmentSale .nd-order-bottom .nd-order-add{background:#f0f5ff;color:#3477f6;margin-top:6px;font-size:14px;padding:9px}
 #ndProAppointmentSale .nd-sale-stage-detail .nd-sale-head{background:#f1f0f6}
 #ndProAppointmentSale .nd-sale-stage-detail .nd-sale-head strong{max-width:75%;font-size:17px}
@@ -44095,6 +44117,12 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
  // Multi-person checkout starts on the same service-picker step as a single
  // booking. Previously groups skipped the picker and jumped to the cart.
  let stage=resumeDraft&&priorDraft?.lines?.length?'cart':'menu',editingId='',cat='promotion',duration='all',query='',favoritesOnly=false,paymentMethod='',showSearch=false,customerProfile=null,memberEntitlements=null;
+ let walletCreditOn=false,walletOtherOn='',walletCouponId='',walletPickerOpen=false,walletPickerKind='优惠券';
+ const creditBalance=()=>Math.max(0,Number(customerProfile?.credit_balance??customerProfile?.stored_value_balance??customerProfile?.wallet_balance??customerProfile?.balance??0)||0);
+ const walletOtherBalance=kind=>Math.max(0,Number(kind==='邀请金'?(customerProfile?.referral_balance??customerProfile?.invitation_balance??0):kind==='积分'?(customerProfile?.points_balance??customerProfile?.points??0):0)||0);
+ const chosenCoupon=()=>Array.isArray(memberEntitlements)?memberEntitlements.find(x=>String(x.id)===walletCouponId):null;
+ const couponOrderValue=()=>{const coupon=chosenCoupon();if(!coupon||!availableCoupons().includes(coupon))return 0;const target=String(coupon.item_name||coupon.service_name||coupon.product_name||coupon.package_name||'').trim().toLowerCase();const line=items().find(x=>target&&x.name.toLowerCase()===target);return line?Math.min(total(),lineTotal(line)/Math.max(1,line.qty)):0;};
+ const walletApplied=()=>{const coupon=couponOrderValue();const credit=walletCreditOn?Math.min(creditBalance(),Math.max(0,total()-coupon)):0;const other=walletOtherOn?Math.min(walletOtherBalance(walletOtherOn),Math.max(0,total()-coupon-credit)):0;return {coupon,credit,other,remaining:Math.max(0,total()-coupon-credit-other)};};
  const availableCoupons=()=>Array.isArray(memberEntitlements)?memberEntitlements.filter(x=>{
   const state=String(x.status||x.entitlement_status||'').toLowerCase();
   return ['active','valid','available'].includes(state)&&!x.cancelled_at&&Number(x.remaining_sessions??x.remaining_quantity??x.balance??0)>0&&(!x.expires_at||Date.parse(x.expires_at)>Date.now());
@@ -44266,9 +44294,9 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
  const toolbar=()=>`<section class="nd-sale-member-top"><button type="button" class="nd-sale-member-identity" data-sale-member aria-label="打开预约表同一会员资料"><span class="nd-sale-avatar">${esc(String(c?.full_name||'G').slice(0,1).toUpperCase())}</span><div><strong>${esc(c?.full_name||'Guest')}</strong><small>${esc(c?.phone?"••••••"+String(c.phone).slice(-4):"")}</small></div></button><div class="nd-sale-member-balances"><div><small>储值</small><b>—</b></div><div><small>积分</small><b>—</b></div><button class="nd-sale-coupon-entry" type="button" data-sale-vouchers><small>优惠券</small><b>${memberEntitlements===null?'—':couponTotal()}</b>${couponTotal()>0?`<sup>${couponTotal()}</sup>`:''}</button><div><small>会员卡</small><b>${esc(customerProfile?.membership_level||"—")}</b></div><div><small>赠品</small><b>—</b></div><div><small>邀请金</small><b>—</b></div></div></section>`;
  const workerName=id=>{const w=workers.find(w=>String(w.id)===String(id));return w?.nickname||w?.name||'员工';};
  const renderCart=()=>`<main class="nd-sale-scroll nd-sale-cart-scroll nd-ref-cart"><div class="nd-ref-cart-card nd-order-summary"><h3>服务 / Services</h3>${items().map(x=>`<div class="nd-order-line"><button type="button" class="nd-ref-cart-item" data-sale-edit="${esc(x.id)}"><span class="nd-order-line-info"><span><strong>${esc(x.name)}</strong><small>RM ${money(x.detail.price)}</small></span><b>${x.qty}</b><b class="nd-order-blue">RM ${money(lineTotal(x))}</b></span><span class="nd-order-worker">${Array.from(x.detail.workerIds).map(id=>esc(workerName(id))).join('、')||'未分配员工'}</span></button><div class="nd-order-qty"><button type="button" data-sale-minus="${esc(x.id)}">−</button><b>${x.qty}</b><button type="button" data-sale-add="${esc(x.id)}">＋</button></div></div>`).join('')||'<p>未选择项目，请返回选择服务。</p>'}${missingBooking?`<p class="nd-checkout-note">预约项目在菜单中找不到：${esc(missingBooking)}，请手动选择。</p>`:''}</div></main><footer class="nd-order-bottom"><div><span>数量</span><b>${totalQty()}</b></div><div><span>小计</span><b>RM ${money(total())}</b></div><button type="button" data-sale-payment ${totalQty()?'':'disabled'}>付款：RM ${money(total())}</button></footer>`;
- const paymentChoices=[['现金','自定义','自定义'],['现金','exact','RM '+money(total())],['现金','round','RM '+money(Math.ceil(total()/10)*10)],['卡','Credit卡','Credit卡'],['卡','Debit卡','Debit卡'],['在线','Online','Online'],['其他','TNG PAYMENT','TNG PAYMENT'],['其他','3 MONTH INSTALLMENT','3 MONTH INSTALLMENT'],['其他','6 MONTH INSTALLMENT','6 MONTH INSTALLMENT'],['其他','12 MONTH INSTALLMENT','12 MONTH INSTALLMENT'],['其他','ALIPAY','ALIPAY'],['其他','Online-credit card','Online-credit card'],['其他','BANK TRANSFER','BANK TRANSFER']];
+ const paymentChoices=[['现金','自定义','自定义'],['现金','exact','应付金额'],['现金','round','现金取整'],['卡','Credit卡','Credit卡'],['卡','Debit卡','Debit卡'],['在线','Online','Online'],['其他','TNG PAYMENT','TNG PAYMENT'],['其他','3 MONTH INSTALLMENT','3 MONTH INSTALLMENT'],['其他','6 MONTH INSTALLMENT','6 MONTH INSTALLMENT'],['其他','12 MONTH INSTALLMENT','12 MONTH INSTALLMENT'],['其他','ALIPAY','ALIPAY'],['其他','Online-credit card','Online-credit card'],['其他','BANK TRANSFER','BANK TRANSFER']];
  const payIcon=group=>group==='卡'?'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>':group==='在线'?'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-4 4-4 14 0 18M12 3c4 4 4 14 0 18"/></svg>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 10h14M3 8l9-5 9 5M6 10v8M10 10v8M14 10v8M18 10v8"/></svg>';
- const renderPayment=()=>`<main class="nd-sale-scroll nd-payment-screen"><div class="nd-payment-balance"><small>余额支付</small><strong>RM ${money(total())}</strong></div>${['现金','卡','在线','其他'].map(group=>`<section class="nd-payment-section"><h3>${group}</h3><div class="nd-payment-options">${paymentChoices.filter(x=>x[0]===group).map(x=>`<button type="button" data-pay-choice="${esc(x[1])}" class="${paymentMethod===x[1]?'active':''}">${group==='现金'?'':`<span class="nd-pay-icon">${payIcon(group)}</span>`}<span>${esc(x[2])}</span></button>`).join('')}</div></section>`).join('')}<p class="nd-ref-cart-disclaimer">目前为结账预览；正式收款、余额扣减及收据尚未连接。</p></main><footer class="nd-payment-bottom"><button type="button" disabled>确认付款</button></footer>`;
+ const renderPayment=()=>{const w=walletApplied();const walletButton=(kind,balance,active,description)=>`<button type="button" class="nd-wallet-choice ${active?'active':''}" data-wallet-kind="${kind}"><span><strong>${kind}</strong><small>${description}</small></span><b>${balance===null?'查看':`RM ${money(balance)}`}</b>${active?'<em>✓</em>':''}</button>`;return `<main class="nd-sale-scroll nd-payment-screen"><div class="nd-payment-balance"><small>还需付款</small><strong>RM ${money(w.remaining)}</strong><p class="nd-payment-wallet-totals">订单 RM ${money(total())} · 钱包抵扣 RM ${money(w.credit+w.coupon+w.other)}</p></div><section class="nd-payment-section nd-payment-wallet"><h3>会员钱包 · 自选抵扣</h3><div class="nd-payment-wallet-options">${walletButton('储值',creditBalance(),walletCreditOn,'不足可使用其他方式补差额')}${walletButton('优惠券',null,!!walletCouponId,`${couponTotal()} 次可用 · 点击查看全部`)}${walletButton('配套',null,false,'查看可用服务次数')}${walletButton('会员卡',null,false,'查看会员权益')}${walletButton('赠品',null,false,'查看可领取赠品')}${walletButton('邀请金',walletOtherBalance('邀请金'),walletOtherOn==='邀请金','可用邀请奖励')}${walletButton('积分',walletOtherBalance('积分'),walletOtherOn==='积分','可用积分')}</div>${walletCouponId?`<p class="nd-payment-wallet-totals">优惠券抵扣 RM ${money(w.coupon)}${!w.coupon?' · 当前项目未匹配该优惠券':''}</p>`:''}${walletCreditOn?`<p class="nd-payment-wallet-totals">储值抵扣 RM ${money(w.credit)}</p>`:''}</section>${w.remaining>0?['现金','卡','在线','其他'].map(group=>`<section class="nd-payment-section"><h3>${group}</h3><div class="nd-payment-options">${paymentChoices.filter(x=>x[0]===group).map(x=>`<button type="button" data-pay-choice="${esc(x[1])}" class="${paymentMethod===x[1]?'active':''}">${group==='现金'?'':`<span class="nd-pay-icon">${payIcon(group)}</span>`}<span>${esc(x[2])}${x[1]==='exact'?' RM '+money(w.remaining):''}</span></button>`).join('')}</div></section>`).join(''):'<section class="nd-payment-section"><p class="nd-payment-wallet-totals">钱包已覆盖全部应付金额，无需额外付款。</p></section>'}${walletPickerOpen?`<div class="nd-wallet-picker"><header><strong>全部优惠券 · ${couponTotal()} 次可用</strong><button type="button" data-wallet-picker-close>完成</button></header><button type="button" data-wallet-coupon-clear>不使用优惠券</button>${Array.isArray(memberEntitlements)&&memberEntitlements.length?memberEntitlements.map(x=>{const usable=availableCoupons().includes(x),name=x.item_name||x.service_name||x.package_name||x.product_name||'优惠券';return `<button type="button" data-wallet-coupon="${esc(x.id)}" ${usable?'':'disabled'}><span><strong>${esc(name)}</strong><small>剩余 ${couponLeft(x)} · ${esc(x.expires_at?String(x.expires_at).slice(0,10):'无到期日期')}</small></span><span>${walletCouponId===String(x.id)?'✓':usable?'选择':'不可用'}</span></button>`}).join(''):'<p>暂无优惠券数据。</p>'}</div>`:''}<p class="nd-ref-cart-disclaimer">付款预览：未执行真实储值扣款、优惠券核销或收据过账。</p></main><footer class="nd-payment-bottom"><button type="button" disabled>确认付款 · RM ${money(w.remaining)}</button></footer>`;};
  const renderDetail=()=>{
    const x=items().find(x=>x.id===editingId);if(!x){stage='cart';return renderCart();}
    const d=x.detail,gross=subtotal(x),off=discount(x),sum=lineTotal(x),paid=d.paid===null?0:cap(d.paid,0,9999999),due=Math.max(0,sum-paid);
@@ -44279,7 +44307,7 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
    <div class="nd-ref-detail-grid nd-ref-due-grid"><label>应付款 <strong data-item-due>RM ${money(sum)}</strong></label><label>欠款 <strong class="nd-ref-red" data-item-outstanding>RM ${money(0)}</strong></label></div>
    <section class="nd-ref-staff"><div class="nd-ref-staff-title"><strong>选择员工</strong></div><div class="nd-ref-staff-scroll" aria-label="选择员工">${workers.map(w=>{const active=d.workerIds.has(String(w.id));const name=String(w.nickname||w.name||'Staff');return `<button type="button" class="nd-ref-worker ${active?'active':''}" data-item-worker="${esc(String(w.id))}" aria-pressed="${active}"><span class="nd-ref-worker-avatar">${esc(name.slice(0,1).toUpperCase())}</span><span>${esc(name)}</span>${active?'<em>✓</em>':''}</button>`}).join('')||'<p>该分行没有可选员工</p>'}</div></section>
    <section class="nd-ref-staff-summary">${Array.from(d.workerIds).map(id=>{const w=workers.find(w=>String(w.id)===id);const percentage=cap(d.feePercent||40,0,100);const computed=d.manualFee===null?sum*percentage/100/Math.max(1,d.workerIds.size):d.manualFee;return `<div class="nd-ref-staff-card" data-selected-worker="${esc(id)}"><strong>${esc(w?.nickname||w?.name||'Staff')}</strong><div class="nd-ref-detail-grid"><label>表现 (RM) <div class="nd-commission-fields"><input data-item-field="performance" type="number" min="0" step="0.01" value="${money(d.performance)}"><span class="nd-performance-percent" data-performance-preview>${money(sum?d.performance/sum*100:0)} %</span></div></label><label>手工费 (RM) <div class="nd-commission-fields"><input data-item-field="manualFee" type="number" min="0" step="0.01" placeholder="${money(computed)}" value="${d.manualFee===null?'':money(d.manualFee)}"><span data-commission-preview>${money(sum?computed/sum*100:0)} %</span></div></label></div></div>`}).join('')||'<p class="nd-ref-no-staff">选择至少一名员工，才能计算佣金。</p>'}</section>
-   <label class="nd-ref-notes">备注 <textarea data-item-field="notes" rows="1" placeholder="备注">${esc(d.notes)}</textarea></label><button class="nd-ref-save-item" type="button" data-sale-save-item>保存修改</button></main>`;
+   <label class="nd-ref-notes">备注 <textarea data-item-field="notes" rows="1" placeholder="备注">${esc(d.notes)}</textarea></label></main>`;
  };
  const orderKey=()=> 'nd.sale.item.order.v1:'+String(a.branch||'')+':'+cat;
  const readOrder=()=>{try{return JSON.parse(localStorage.getItem(orderKey())||'[]')}catch(_){return []}};
@@ -44348,7 +44376,23 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
    modal.querySelector('[data-sale-to-cart]')?.addEventListener('click',()=>{holdOrder();stage='cart';render();});
    modal.querySelector('[data-sale-payment]')?.addEventListener('click',()=>{stage='payment';render();});
    modal.querySelectorAll('[data-pay-choice]').forEach(b=>b.onclick=()=>{paymentMethod=b.dataset.payChoice;render();});
-   modal.querySelector('[data-sale-save-item]')?.addEventListener('click',()=>{stage='cart';render();});
+   if(walletPickerOpen){
+     const picker=modal.querySelector('.nd-wallet-picker');
+     const title=picker?.querySelector('header strong');if(title)title.textContent=walletPickerKind==='优惠券'?'全部优惠券 · '+couponTotal()+' 次可用':walletPickerKind+' · 可用权益';
+     picker?.querySelectorAll('[data-wallet-coupon]').forEach(b=>{
+       const entitlement=(memberEntitlements||[]).find(x=>String(x.id)===b.dataset.walletCoupon);
+       const type=String(entitlement?.type||entitlement?.entitlement_type||entitlement?.benefit_type||'').toLowerCase();
+       const kind=walletPickerKind==='配套'?'package':walletPickerKind==='会员卡'?'member':walletPickerKind==='赠品'?'gift':'coupon';
+       const belongs=kind==='coupon'?!['package','member_card','membership','gift'].includes(type):type.includes(kind)||(kind==='member'&&type.includes('card'));
+       b.hidden=!belongs;
+       if(kind!=='coupon'){b.disabled=true;b.title='此权益可以查看，须在服务订单中核对适用项目后兑换';}
+     });
+     if(walletPickerKind!=='优惠券'){const clear=picker?.querySelector('[data-wallet-coupon-clear]');if(clear)clear.hidden=true;}
+   }
+   modal.querySelectorAll('[data-wallet-kind]').forEach(b=>b.onclick=()=>{const kind=b.dataset.walletKind;if(kind==='储值'){walletCreditOn=!walletCreditOn;render();return;}if(['优惠券','配套','会员卡','赠品'].includes(kind)){walletPickerKind=kind;walletPickerOpen=true;render();return;}if(['积分','邀请金'].includes(kind)){walletOtherOn=walletOtherOn===kind?'':kind;render();}});
+   modal.querySelector('[data-wallet-picker-close]')?.addEventListener('click',()=>{walletPickerOpen=false;render();});
+   modal.querySelector('[data-wallet-coupon-clear]')?.addEventListener('click',()=>{walletCouponId='';walletPickerOpen=false;render();});
+   modal.querySelectorAll('[data-wallet-coupon]').forEach(b=>b.onclick=()=>{walletCouponId=b.dataset.walletCoupon;walletPickerOpen=false;render();});
    modal.querySelectorAll('[data-sale-cat]').forEach(b=>b.onclick=()=>{cat=b.dataset.saleCat;duration='all';render();});
    modal.querySelectorAll('[data-sale-duration]').forEach(b=>b.onclick=()=>{duration=b.dataset.saleDuration==='all'?'all':Number(b.dataset.saleDuration);render();});
    modal.querySelector('[data-sale-show-all]')?.addEventListener('click',()=>{cat='all';duration='all';query='';render();});
@@ -44382,10 +44426,10 @@ async function openBookingSale(a,group=[a],resumeDraft=false){
    }
  }
  render();
- if(c?.id){void (async()=>{try{const r=await db.from('nd_pro_beta_customer_profiles').select('membership_level').eq('customer_id',c.id).maybeSingle();if(r.error)throw r.error;if(modal.hidden)return;customerProfile=r.data;if(stage==='cart'||stage==='menu')render();}catch(e){console.warn('Member profile unavailable:',e?.message||e);}})();}
+ if(c?.id){void (async()=>{try{const r=await db.from('nd_pro_beta_customer_profiles').select('*').eq('customer_id',c.id).maybeSingle();if(r.error)throw r.error;if(modal.hidden)return;customerProfile=r.data;render();}catch(e){console.warn('Member profile unavailable:',e?.message||e);}})();}
  if(c?.id){void (async()=>{try{
   const r=await db.from('nd_pro_beta_member_entitlements').select('*').eq('customer_id',c.id);
-  if(r.error)throw r.error;if(modal.hidden)return;memberEntitlements=r.data||[];if(stage==='menu')render();
+  if(r.error)throw r.error;if(modal.hidden)return;memberEntitlements=r.data||[];render();
  }catch(e){console.warn('Member coupon count unavailable:',e?.message||e);}})();}
 
 }
@@ -49161,6 +49205,19 @@ html body #ndProBetaPage :is(.ndm,.ndr,.nd-bstaff,.nd-bform,.nd-management-home,
 html body #ndProBetaPage #ndProContent>.proref-schedule{width:100%!important;max-width:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important}
 html body .ndmd.ndc-screen{box-sizing:border-box!important;background:#f2f2f7!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important}
 @supports not (height:100dvh){html body #ndProBetaPage.nd-pro-shown:not([hidden]){height:100vh!important;min-height:100vh!important}}
+</style>
+<style id="nd-beta-uppercase-english-v39">
+/* Presentation-only uppercase: preserve stored names, SKU data and user-entered values. */
+html body #ndProBetaPage,html body #ndProBetaPage *,
+html body #ndProAppointmentSale,html body #ndProAppointmentSale *,
+html body :is(#ndServiceEditorOverlay,#ndHistoryDetailOverlay,#ndBetaIssueNoteDialog,#ndStaffCalendarManager,#ndStaffPickerSheet,#ndStaffItemsModal,#ndSignedPaymentModal,#ndSignedReceiptViewer,#ndNoticeModal,#ndAiDetailOverlay,#ndAiPosterZoom),
+html body :is(#ndServiceEditorOverlay,#ndHistoryDetailOverlay,#ndBetaIssueNoteDialog,#ndStaffCalendarManager,#ndStaffPickerSheet,#ndStaffItemsModal,#ndSignedPaymentModal,#ndSignedReceiptViewer,#ndNoticeModal,#ndAiDetailOverlay,#ndAiPosterZoom) *,
+html body .ndmd,html body .ndmd *{text-transform:uppercase!important}
+/* Editing must never rewrite or visually disguise the data being typed. */
+html body #ndProBetaPage :is(input,textarea),html body #ndProAppointmentSale :is(input,textarea),
+html body :is(#ndServiceEditorOverlay,#ndBetaIssueNoteDialog,.ndmd) :is(input,textarea){text-transform:none!important}
+html body #ndProBetaPage :is(input,textarea)::placeholder,html body #ndProAppointmentSale :is(input,textarea)::placeholder,
+html body :is(#ndServiceEditorOverlay,#ndBetaIssueNoteDialog,.ndmd) :is(input,textarea)::placeholder{text-transform:uppercase!important}
 </style>
 <style id="nd-booking-unpaid-edit-live-time">
 #ndProBetaPage .proref-calendar-top{position:relative!important;min-height:68px!important;height:68px!important;flex-basis:68px!important;padding-bottom:24px!important;overflow:visible!important}
