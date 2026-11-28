@@ -45124,11 +45124,21 @@ function ndMenuAllEditor(host,type='all'){
    const rows=proParseCSV(await file.text());const header=(rows.shift()||[]).map(x=>String(x).replace(/^\uFEFF/,'').trim().toLowerCase());const idx=s=>header.indexOf(s);if(idx('skuid')<0||idx('sku name')<0||idx('selling price')<0)throw Error(filename+' 缺少 SKU、名字或售价列');
    let count=0,lastPackage=null;for(const r of rows){const sku=String(r[idx('skuid')]||'').trim(),name=String(r[idx('sku name')]||'').trim();if(!/^\d+$/.test(sku)||!name){if(source==='package'&&lastPackage&&/^\d+$/.test(String(r[1]||'').trim())){lastPackage.attributes.vouchers.push({sku:String(r[1]).trim(),name:String(r[2]||''),unit_price:Number(String(r[3]||0).replace(/,/g,''))||0,quantity:Number(r[4])||0,expiry_id:String(r[5]||'')})}continue}const price=Number(String(r[idx('selling price')]||'0').replace(/,/g,''));if(!Number.isFinite(price)||price<0)continue;const section=String(r[idx('section name')]||'').trim(),folder=String(r[idx('folder name')]||'').trim(),item_type=classify(source,section,name);const duration=idx('duration')>=0?Number(r[idx('duration')]||0):0;const entry={item_type,sku,name,section_name:section,folder_name:folder,price,duration_minutes:Number.isFinite(duration)?duration:0,is_active:String(r[idx('status')]||'Enabled').toLowerCase()==='enabled',attributes:{csv_source:source,...(source==='package'?{vouchers:[]}:{})}};prepared.push(entry);lastPackage=source==='package'?entry:null;count++}stats.push(filename+'：'+count+' 项');
   }
-  const duplicates=prepared.filter((x,i)=>prepared.findIndex(y=>y.sku===x.sku&&y.item_type===x.item_type)!==i);if(duplicates.length)throw Error('发现重复 SKU / 分类：'+duplicates.slice(0,5).map(x=>x.sku).join(', '));
-  if(!prepared.length)throw Error('没有读取到有效项目');
-  if(!confirm('将更新统一菜单 '+prepared.length+' 个项目（按 SKU 匹配，可能覆盖已修改价格）。\n'+stats.join('\n')+'\n\n是否确认同步？'))return;
-  for(let i=0;i<prepared.length;i+=80){const result=await db.from('nd_pro_beta_catalog_items').upsert(prepared.slice(i,i+80),{onConflict:'item_type,sku'});if(result.error)throw Error('已处理 '+i+' / '+prepared.length+' 项：'+result.error.message)}
-  const next=await db.from('nd_pro_beta_catalog_items').select('item_type,sku,name,section_name,folder_name,price,duration_minutes,is_active,attributes').order('item_type').order('sku').limit(2000);if(next.error)throw next.error;ndCloudCatalog=next.data||[];ndCatalogCloudStatus='connected';return prepared.length;
+  const canonical=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[\s\u3000·•—–_\-]+/g,'').trim();
+  const unique=[],skuSeen=new Set(),serviceSeen=new Set(),skipped=[];
+  for(const item of prepared){
+   const skuKey=item.item_type+':'+item.sku;
+   // Different service SKUs with the same name, duration and folder should not create duplicate treatments.
+   const serviceKey=item.item_type==='service'?[canonical(item.name),Number(item.duration_minutes||0),canonical(item.section_name),canonical(item.folder_name)].join('|'):'';
+   if(skuSeen.has(skuKey)||(serviceKey&&serviceSeen.has(serviceKey))){skipped.push(item.name+' ['+item.sku+']');continue;}
+   skuSeen.add(skuKey);if(serviceKey)serviceSeen.add(serviceKey);unique.push(item);
+  }
+  if(!unique.length)throw Error('没有读取到有效的新项目；重复项 '+skipped.length+' 条已跳过');
+  const existing=new Set((ndCloudCatalog||[]).map(x=>String(x.item_type)+':'+String(x.sku)));
+  const already=unique.filter(x=>existing.has(x.item_type+':'+x.sku)).length;
+  if(!confirm('CSV 有效 '+unique.length+' 项，文件内重复跳过 '+skipped.length+' 项；已有 SKU '+already+' 项会更新，不会额外新增重复行。\n'+stats.join('\n')+'\n\n确认同步吗？'))return;
+  for(let i=0;i<unique.length;i+=80){const result=await db.from('nd_pro_beta_catalog_items').upsert(unique.slice(i,i+80),{onConflict:'item_type,sku'});if(result.error)throw Error('已处理 '+i+' / '+unique.length+' 项：'+result.error.message)}
+  const next=await db.from('nd_pro_beta_catalog_items').select('item_type,sku,name,section_name,folder_name,price,duration_minutes,is_active,attributes').order('item_type').order('sku').limit(2000);if(next.error)throw next.error;ndCloudCatalog=next.data||[];ndCatalogCloudStatus='connected';return unique.length;
  };
  const draw=()=>{
   const rows=ndCloudCatalog.filter(x=>(filter==='all'||x.item_type===filter)&&(!search||(x.name+' '+x.sku).toLowerCase().includes(search.toLowerCase())));
@@ -45365,7 +45375,7 @@ const ndProGiftCardsCsv=[{"sku":"1972755","name":"OPENING PROMO-TOPUP RM1,000 FR
 const ndCommercialFilters={packages:{query:'',section:'全部',folder:'全部'},gift_cards:{query:'',section:'全部',folder:'全部'}};
 function ndDrawCommercialCatalog(host,kind){
  const entries=kind==='packages'?ndProPackagesCsv:ndProGiftCardsCsv;
- const title=kind==='packages'?tr('Packages','配套'):tr('Gift Cards','礼品卡');
+ const title=kind==='packages'?tr('Packages','配套'):tr('Top Up','充值');
  const state=ndCommercialFilters[kind];
  const sections=['全部',...new Set(entries.map(x=>x.section).filter(Boolean))];
  if(!sections.includes(state.section))state.section='全部';
@@ -45373,21 +45383,48 @@ function ndDrawCommercialCatalog(host,kind){
  if(!folders.includes(state.folder))state.folder='全部';
  const matches=entries.filter(x=>(state.section==='全部'||x.section===state.section)&&(state.folder==='全部'||x.folder===state.folder)&&(!state.query||[x.name,x.sku,x.section,x.folder].join(' ').toLowerCase().includes(state.query.toLowerCase())));
  const m=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
- host.innerHTML=`<div class="nd-svc-page nd-commercial-page">
-  <div class="nd-svc-heading"><button type="button" data-com-back aria-label="Back">‹</button><h2>${title}</h2><span class="nd-com-count">${entries.length}</span></div>
-  <div class="nd-svc-toolbar"><label class="nd-svc-search">⌕ <input id="ndComQuery" type="search" placeholder="${tr('Search name or SKU','搜索名称或 SKU')}" value="${esc(state.query)}"></label><button type="button" data-com-filter>☷ ${tr('Filter','筛选')}</button><button type="button" data-com-export title="Export CSV">⇩</button></div>
-  <div class="nd-svc-main-tabs"><button type="button" class="selected">${title} <b>${entries.length}</b></button></div>
-  <div class="nd-svc-categories">${sections.map(sec=>`<button type="button" data-com-section="${esc(sec)}" class="${state.section===sec?'selected':''}">${esc(sec)}</button>`).join('')}</div>
-  <div class="nd-com-subcategories" id="ndComSubcategories" hidden><label>${tr('Folder Name','文件夹')} <select id="ndComFolder">${folders.map(f=>`<option value="${esc(f)}" ${state.folder===f?'selected':''}>${esc(f)}</option>`).join('')}</select></label></div>
-  <div class="nd-svc-stat">${matches.length} ${kind==='packages'?tr('packages','项配套'):tr('gift cards','张礼品卡')}</div>
-  <div class="nd-svc-items">${matches.length?matches.map(x=>`<button type="button" class="nd-svc-item" data-com-sku="${esc(x.sku)}"><span class="nd-svc-placeholder">${kind==='packages'?'▤':'▣'}</span><span class="nd-svc-copy"><strong>${esc(x.name)}</strong><small>${esc(x.section)}${x.folder?' · '+esc(x.folder):''}</small><b>${m(x.price)}${kind==='packages'?' · '+x.vouchers.length+' '+tr('included items','个关联项目'):''}</b></span><span class="nd-svc-status">›</span></button>`).join(''):`<div class="nd-svc-empty">${tr('No matching items','没有符合条件的项目')}</div>`}</div>
+ host.innerHTML=`<style>
+  .nd-commercial-page{width:100%!important;max-width:none!important;min-height:100dvh!important;margin:0!important;padding:14px 16px 100px!important;background:#f0f0f6!important;box-sizing:border-box!important;color:#24262c}
+  .nd-commercial-page .nd-svc-heading{display:grid!important;grid-template-columns:48px 1fr 48px;align-items:center!important;margin:0 0 20px!important;padding:10px 0!important;background:transparent!important}
+  .nd-commercial-page .nd-svc-heading h2{text-align:center!important;font-size:24px!important;font-weight:800!important;margin:0!important}
+  .nd-commercial-page .nd-svc-heading button{font-size:34px!important;color:#3978f2!important;background:transparent!important;border:0!important}
+  .nd-commercial-page .nd-svc-toolbar{display:flex!important;gap:12px!important;align-items:center!important;margin:0 0 18px!important;padding:0!important;background:transparent!important}
+  .nd-commercial-page .nd-com-search-icon,.nd-commercial-page .nd-com-tool{flex:0 0 auto!important;height:54px!important;min-width:54px!important;border:0!important;border-radius:17px!important;background:#fff!important;color:#8a8f98!important;font-size:23px!important;box-shadow:none!important}
+  .nd-commercial-page .nd-com-filter{padding:0 23px!important;font-size:17px!important;font-weight:700!important;min-width:120px!important}
+  .nd-commercial-page .nd-com-search-field{display:none!important;flex:1;min-width:0;height:54px;border:0;border-radius:17px;padding:0 15px;background:#fff;font-size:16px}
+  .nd-commercial-page.nd-com-searching .nd-com-search-field{display:block!important}
+  .nd-commercial-page .nd-svc-main-tabs{display:flex!important;align-items:center!important;overflow-x:auto!important;gap:8px!important;background:#fff!important;border-radius:26px!important;padding:5px!important;white-space:nowrap!important;scrollbar-width:none!important}
+  .nd-commercial-page .nd-svc-main-tabs button{display:inline-flex!important;align-items:center!important;gap:10px!important;border:0!important;border-radius:24px!important;padding:14px 17px!important;font-size:17px!important;font-weight:800!important;color:#292d35!important;background:transparent!important;white-space:nowrap!important}
+  .nd-commercial-page .nd-svc-main-tabs button.selected{background:#3e75ec!important;color:white!important}
+  .nd-commercial-page .nd-svc-main-tabs b{font-size:14px!important;color:#3e75ec!important;background:#e0eaff!important;padding:2px 9px!important;border-radius:18px!important}
+  .nd-commercial-page .nd-svc-categories{display:flex!important;overflow-x:auto!important;gap:22px!important;padding:17px 8px 12px!important;background:transparent!important;white-space:nowrap!important;scrollbar-width:none!important}
+  .nd-commercial-page .nd-svc-categories button{padding:8px 4px 14px!important;border:0!important;border-bottom:3px solid transparent!important;background:transparent!important;border-radius:0!important;color:#92949e!important;font-size:16px!important;font-weight:800!important;white-space:nowrap!important}
+  .nd-commercial-page .nd-svc-categories button.selected{color:#3e75ec!important;border-bottom-color:#3e75ec!important}
+  .nd-commercial-page .nd-svc-stat{color:#8e929d!important;font-size:15px!important;margin:12px 6px!important}
+  .nd-commercial-page .nd-svc-items{background:#fff!important;border-radius:22px!important;overflow:hidden!important;padding:0 14px!important;margin:0!important}
+  .nd-commercial-page .nd-svc-item{display:flex!important;align-items:center!important;gap:14px!important;min-height:100px!important;width:100%!important;padding:18px 0!important;background:white!important;border:0!important;border-bottom:1px solid #e6e7eb!important;border-radius:0!important;text-align:left!important;box-shadow:none!important}
+  .nd-commercial-page .nd-svc-placeholder{display:flex!important;align-items:center!important;justify-content:center!important;width:52px!important;height:52px!important;min-width:52px!important;background:#f4f4f4!important;color:#9b9b9b!important;border-radius:12px!important;font-size:25px!important}
+  .nd-commercial-page .nd-svc-copy{display:flex!important;flex:1!important;min-width:0!important;flex-direction:column!important;gap:5px!important;color:#24262c!important}
+  .nd-commercial-page .nd-svc-copy strong{font-size:17px!important;line-height:1.35!important;font-weight:800!important;overflow-wrap:anywhere!important}
+  .nd-commercial-page .nd-svc-copy small{font-size:13px!important;color:#969ba5!important}
+  .nd-commercial-page .nd-svc-copy b{font-size:17px!important;color:#25272b!important}
+  .nd-commercial-page .nd-svc-status{font-size:12px!important;font-weight:800!important;color:#5b6474!important;max-width:30%!important;overflow-wrap:anywhere!important}
+ </style><div class="nd-svc-page nd-commercial-page">
+  <div class="nd-svc-heading"><button type="button" data-com-back aria-label="Back">‹</button><h2>${title}</h2><button type="button" data-com-add aria-label="Add">＋</button></div>
+  <div class="nd-svc-toolbar"><button type="button" class="nd-com-search-icon" data-com-search aria-label="搜索">⌕</button><input class="nd-com-search-field" id="ndComQuery" type="search" placeholder="${tr('Search name or SKU','搜索名称或 SKU')}" value="${esc(state.query)}"><button type="button" class="nd-com-tool nd-com-filter" data-com-filter>▽ ${tr('Filter','筛选')}</button><button type="button" class="nd-com-tool" data-com-export title="Export CSV">⇩</button></div>
+  <div class="nd-svc-main-tabs">${sections.map(sec=>`<button type="button" data-com-section="${esc(sec)}" class="${state.section===sec?'selected':''}">${sec==='全部'?'全部部门':esc(sec)} <b>${sec==='全部'?entries.length:entries.filter(x=>x.section===sec).length}</b></button>`).join('')}</div>
+  <div class="nd-svc-categories">${folders.map(f=>`<button type="button" data-com-folder="${esc(f)}" class="${state.folder===f?'selected':''}">${esc(f)}</button>`).join('')}</div>
+  <div class="nd-svc-stat">${matches.length} ${kind==='packages'?tr('packages','项配套'):tr('top-up items','项充值')}</div>
+  <div class="nd-svc-items">${matches.length?matches.map(x=>`<button type="button" class="nd-svc-item" data-com-sku="${esc(x.sku)}"><span class="nd-svc-placeholder">▧</span><span class="nd-svc-copy"><strong>${esc(x.name)}</strong><b>${m(x.price)}</b></span><span class="nd-svc-status">${esc(x.section)}</span></button>`).join(''):`<div class="nd-svc-empty">${tr('No matching items','没有符合条件的项目')}</div>`}</div>
   <div id="ndComDetails"></div>
  </div>`;
  host.querySelector('[data-com-back]').onclick=()=>{active='home';render()};
- host.querySelector('#ndComQuery').oninput=e=>{const v=e.target.value,pos=e.target.selectionStart;state.query=v;ndDrawCommercialCatalog(host,kind);const input=host.querySelector('#ndComQuery');input.focus();input.setSelectionRange(pos,pos)};
+ host.querySelector('[data-com-search]').onclick=()=>{host.querySelector('.nd-commercial-page').classList.toggle('nd-com-searching');host.querySelector('#ndComQuery').focus()};
+ host.querySelector('#ndComQuery').oninput=e=>{const v=e.target.value,pos=e.target.selectionStart;state.query=v;ndDrawCommercialCatalog(host,kind);host.querySelector('.nd-commercial-page').classList.add('nd-com-searching');const input=host.querySelector('#ndComQuery');input.focus();input.setSelectionRange(pos,pos)};
  host.querySelectorAll('[data-com-section]').forEach(b=>b.onclick=()=>{state.section=b.dataset.comSection;state.folder='全部';ndDrawCommercialCatalog(host,kind)});
- host.querySelector('[data-com-filter]').onclick=()=>{const el=host.querySelector('#ndComSubcategories');el.hidden=!el.hidden};
- host.querySelector('#ndComFolder').onchange=e=>{state.folder=e.target.value;ndDrawCommercialCatalog(host,kind);host.querySelector('#ndComSubcategories').hidden=false};
+ host.querySelectorAll('[data-com-folder]').forEach(b=>b.onclick=()=>{state.folder=b.dataset.comFolder;ndDrawCommercialCatalog(host,kind)});
+ host.querySelector('[data-com-filter]').onclick=()=>{host.querySelector('.nd-svc-categories').scrollIntoView({behavior:'smooth',block:'nearest'})};
+ host.querySelector('[data-com-add]').onclick=()=>{if(typeof ndMenuAllEditor==='function')ndMenuAllEditor(host);else alert('请从菜单编辑入口新增项目')};
  host.querySelector('[data-com-export]').onclick=()=>{
   const headers=kind==='packages'?['skuID','sku name','selling price','section name','folder name','package credits','package points','free point','status','voucher items']:['skuID','sku name','selling price','section name','folder name','free point','status'];
   const records=matches.map(x=>kind==='packages'?[x.sku,x.name,x.price,x.section,x.folder,x.credits,x.points,x.free_point,x.status,x.vouchers.map(v=>v.sku+' x '+v.quantity).join('; ')]:[x.sku,x.name,x.price,x.section,x.folder,x.free_point,x.status]);
