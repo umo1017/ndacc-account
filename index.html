@@ -2,6 +2,22 @@
 
 <html lang="en">
 <head>
+<style id="nd-benefit-owner-draft-style">
+.nd-benefit-owner-overlay{position:fixed;inset:0;z-index:2147483600;background:rgba(22,27,40,.48);display:flex;align-items:flex-end;justify-content:center;padding:0;box-sizing:border-box}
+.nd-benefit-owner-sheet{width:min(100%,560px);max-height:95dvh;overflow-y:auto;overscroll-behavior:contain;background:#f3f3f8;border-radius:22px 22px 0 0;padding:16px 18px max(24px,env(safe-area-inset-bottom));box-sizing:border-box;color:#222936;font:400 14px/1.4 system-ui,-apple-system,sans-serif;display:grid;gap:12px}
+.nd-benefit-owner-sheet header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 2px}
+.nd-benefit-owner-sheet header strong{font-size:17px;font-weight:650}
+.nd-benefit-owner-sheet header button{border:0;background:transparent;color:#3478ef;padding:10px;font-size:14px}
+.nd-benefit-owner-sheet p{margin:0;color:#697283;font-size:13px;line-height:1.5}
+.nd-benefit-owner-sheet label{display:grid;gap:5px;font-size:13px;font-weight:550;color:#313744}
+.nd-benefit-owner-sheet input,.nd-benefit-owner-sheet select{width:100%;min-width:0;min-height:44px;border:1px solid #e1e4ed;border-radius:11px;background:#fff;color:#222936;padding:9px 12px;box-sizing:border-box;font:400 15px system-ui,-apple-system,sans-serif}
+.nd-benefit-owner-sheet input[readonly]{background:#e9ebf1;color:#555f70}
+.nd-benefit-owner-sheet .nd-owner-warning{padding:10px;border-radius:10px;background:#e6eefc;color:#335a9a}
+.nd-benefit-owner-sheet .nd-owner-submit{width:100%;min-height:48px;border:0;border-radius:12px;background:#4276ed;color:#fff;font-weight:650;font-size:15px}
+.nd-benefit-owner-sheet small{color:#777e8a;font-size:12px;text-align:center}
+.nd-owner-cart-label{display:block;margin-top:6px!important;color:#3974e7;font-size:12px!important;line-height:1.5;white-space:normal;overflow-wrap:anywhere;text-align:left}
+@media(min-width:700px){.nd-benefit-owner-overlay{align-items:center;padding:20px}.nd-benefit-owner-sheet{border-radius:22px;max-height:min(90dvh,900px)}}
+</style>
 <style id="nd-fixed-mobile-scale">html,body{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%} @media (pointer:coarse){input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px!important}}</style>
 <script id="nd-fixed-mobile-scale-guard">(function(){function block(e){if(e.cancelable)e.preventDefault()}function multi(e){if(e.touches&&e.touches.length>1)block(e)}function install(d){if(!d||d.__ndScaleGuard)return;d.__ndScaleGuard=true;['gesturestart','gesturechange','gestureend'].forEach(function(n){d.addEventListener(n,block,{passive:false,capture:true})});d.addEventListener('touchmove',multi,{passive:false,capture:true});d.addEventListener('touchstart',multi,{passive:false,capture:true});d.addEventListener('wheel',function(e){if(e.ctrlKey)block(e)},{passive:false,capture:true});}install(document);document.addEventListener('load',function(e){if(e.target.tagName==='IFRAME'){try{install(e.target.contentDocument)}catch(_){}}},true);})();</script>
 <!-- Offline screen: Nature's Dao logo; independent of Content Studio -->
@@ -42849,6 +42865,13 @@ function ndOpenStaffCalendarManager(){
 }
 const timeSlots=()=>{const {start,end}=visibleTimes(),a=[];for(let m=start;m<end;m+=15)a.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));return a;};
 function ndPlaceNowLine(){
+ const top=document.querySelector('#ndProBetaPage .proref-calendar-top');
+ if(top){
+  let live=top.querySelector('.nd-actual-time-label');
+  if(!live){live=document.createElement('span');live.className='nd-actual-time-label';live.title='马来西亚实际时间';top.append(live);}
+  const nowClock=tzTime(new Date());
+  live.textContent='实际时间 '+railClock12(nowClock);
+ }
  const line=document.querySelector('#ndProBetaPage .nd-calendar-now-line');if(!line)return;
  const now=new Date();if(date!==businessDate(now,branch)){line.hidden=true;return;}
  const current=tzTime(now),minutes=(tzDate(now)>date?1440:0)+Number(current.slice(0,2))*60+Number(current.slice(3,5));
@@ -43819,6 +43842,7 @@ async function openBookingSale(a,group=[a]){
  // Recharge is a clearly labelled draft item. Wallet credit is NEVER posted here:
  // the actual balance mutation requires a server-verified payment and wallet RPC.
  menu.push({id:'nd:recharge:draft',sku:'RECHARGE',name:'充值储值（付款预览）',alt:'充值金额可在订单明细中修改',category:'recharge',duration:0,price:0,source:'draft',type:'recharge'});
+ menu.push({id:'nd:member-card:draft',sku:'MEMBER-CARD',name:'会员卡（登记持有人）',alt:'付款后绑定本人会员资料 · 20%资格需核实',category:'member_card',duration:0,price:0,source:'draft',type:'member_card'});
  // The exported member list has a 'T' prefix on phone numbers.
  const normalizePhone=v=>String(v||'').replace(/[^0-9]/g,'').replace(/^60(?=1)/,'0').replace(/^65(?=[3689])/,'');
  const memberMatches=c?.phone?ndCsvMembers.filter(m=>normalizePhone(m['Phone Number'])===normalizePhone(c.phone)):[];
@@ -43851,7 +43875,7 @@ async function openBookingSale(a,group=[a]){
  const total=()=>items().reduce((sum,x)=>sum+lineTotal(x),0);
  const totalQty=()=>items().reduce((sum,x)=>sum+x.qty,0);
  const holdOrder=()=>{if(!totalQty()){window.ndSharedPendingOrders?.remove(pendingKey);return;}window.ndSharedPendingOrders?.save({id:pendingKey,appointmentId:String(a.id),appointmentIds:group.map(x=>String(x.id)),customerId:String(c?.id||''),name:String(c?.full_name||'Guest'),phone:String(c?.phone||''),branch:String(a.branch||''),total:total(),timeLabel:new Date().toLocaleString('zh-MY',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',hour12:true,day:'numeric',month:'numeric',year:'numeric'}),lines:items().map(x=>({id:x.id,qty:x.qty,price:x.detail.price,workerIds:[...x.detail.workerIds]}))});};
- const categoryItems=[['promotion','PROMOTION'],['member','会员卡专享'],['wellness','养生 WELLNESS'],['service','其他服务'],['recharge','充值'],['product','产品'],['package','配套'],['giftcard','赠品'],['discount','折扣'],['deposit','押金'],['all','全部']];
+ const categoryItems=[['promotion','PROMOTION'],['member','会员卡专享'],['wellness','养生 WELLNESS'],['service','其他服务'],['member_card','会员卡'],['recharge','充值'],['product','产品'],['package','配套'],['giftcard','赠品'],['discount','折扣'],['deposit','押金'],['all','全部']];
  const iconFor=x=>x.category==='promotion'?'🌟':x.category==='member'?'💎':x.category==='product'?'🛍️':x.category==='package'?'🎁':x.category==='giftcard'?'💳':'💆';
  // Multi-person checkout starts on the same service-picker step as a single
  // booking. Previously groups skipped the picker and jumped to the cart.
@@ -43865,6 +43889,27 @@ async function openBookingSale(a,group=[a]){
  let modal=document.getElementById('ndProAppointmentSale');
  if(!modal){modal=document.createElement('div');modal.id='ndProAppointmentSale';document.body.appendChild(modal);}
  const close=()=>{modal.hidden=true;modal.replaceChildren();};
+ // Each entitlement has its own beneficiary, independent of the appointment contact.
+ // This remains an in-memory checkout draft until a verified Supabase issuance RPC exists.
+ const benefitOwners=new Map();
+ const isOwnedBenefit=x=>['member_card','recharge','package'].includes(x?.type);
+ const registerBenefitOwner=x=>{
+  const sheet=document.createElement('div');sheet.className='nd-benefit-owner-overlay';
+  sheet.innerHTML=`<form class="nd-benefit-owner-sheet"><header><strong>登记权益持有人</strong><button type="button" data-owner-cancel>取消</button></header><p>预约联系人与会员卡／充值／配套持有人可以不同。每位持有人都必须填写本人资料。</p><label>所属项目<input value="${esc(x.name)}" readonly></label><label>姓名 *<input name="name" autocomplete="name" maxlength="100" required placeholder="持有人真实姓名"></label><label>电话号码 *<input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required placeholder="例如 0123456789"></label><label>出生日期 *<input name="birthday" type="date" required></label><label>性别 *<select name="gender" required><option value="">请选择</option><option value="female">女</option><option value="male">男</option><option value="other">其他</option></select></label><label>与预约联系人的关系 *<select name="relation" required><option value="">请选择</option><option>本人</option><option>配偶</option><option>子女</option><option>父母</option><option>兄弟姐妹</option><option>朋友</option><option>其他</option></select></label><p class="nd-owner-warning">20% 优惠只适用于已核实有效会员卡的持有人；到期、用完或非持有人不可自动享受。</p><button type="submit" class="nd-owner-submit">确认加入订单</button><small>本页登记为结账草稿，不会在未付款时自动建立正式会员权益。</small></form>`;
+  const form=sheet.querySelector('form');
+  form.querySelector('[data-owner-cancel]').onclick=()=>sheet.remove();
+  sheet.addEventListener('click',e=>{if(e.target===sheet)sheet.remove()});
+  form.addEventListener('submit',e=>{
+   e.preventDefault();if(!form.reportValidity())return;
+   const name=form.elements.name.value.trim(),phone=form.elements.phone.value.replace(/[\s-]/g,'').trim();
+   const birthday=form.elements.birthday.value,gender=form.elements.gender.value,relation=form.elements.relation.value;
+   if(name.length<2||!/^\+?[0-9]{8,15}$/.test(phone)||!birthday||new Date(birthday)>new Date()||!gender||!relation){alert('请填写有效的姓名、电话号码、生日、性别和关系。');return;}
+   const owners=benefitOwners.get(x.id)||[];owners.push({name,phone,birthday,gender,relation});benefitOwners.set(x.id,owners);
+   selected.set(x.id,Math.min(99,(selected.get(x.id)||0)+1));sheet.remove();render();
+  });
+  modal.append(sheet);
+  form.elements.name.focus();
+ };
  const toolbar=()=>`<section class="nd-sale-member-top"><button type="button" class="nd-sale-member-identity" data-sale-member aria-label="打开预约表同一会员资料"><span class="nd-sale-avatar">${esc(String(c?.full_name||'G').slice(0,1).toUpperCase())}</span><div><strong>${esc(c?.full_name||'Guest')}</strong><small>${esc(c?.phone?"••••••"+String(c.phone).slice(-4):"")}</small></div></button><div class="nd-sale-member-balances"><div><small>储值</small><b>—</b></div><div><small>积分</small><b>—</b></div><button class="nd-sale-coupon-entry" type="button" data-sale-vouchers><small>优惠券</small><b>${memberEntitlements===null?'—':couponTotal()}</b>${couponTotal()>0?`<sup>${couponTotal()}</sup>`:''}</button><div><small>会员卡</small><b>${esc(customerProfile?.membership_level||"—")}</b></div><div><small>赠品</small><b>—</b></div><div><small>邀请金</small><b>—</b></div></div></section>`;
  const workerName=id=>{const w=workers.find(w=>String(w.id)===String(id));return w?.nickname||w?.name||'员工';};
  const renderCart=()=>`<main class="nd-sale-scroll nd-sale-cart-scroll nd-ref-cart"><div class="nd-ref-cart-card nd-order-summary"><h3>服务 / Services</h3>${items().map(x=>`<div class="nd-order-line"><button type="button" class="nd-ref-cart-item" data-sale-edit="${esc(x.id)}"><span class="nd-order-line-info"><span><strong>${esc(x.name)}</strong><small>RM ${money(x.detail.price)}</small></span><b>${x.qty}</b><b class="nd-order-blue">RM ${money(lineTotal(x))}</b></span><span class="nd-order-worker">${Array.from(x.detail.workerIds).map(id=>esc(workerName(id))).join('、')||'未分配员工'}</span></button><div class="nd-order-qty"><button type="button" data-sale-minus="${esc(x.id)}">−</button><b>${x.qty}</b><button type="button" data-sale-add="${esc(x.id)}">＋</button></div></div>`).join('')||'<p>未选择项目，请返回选择服务。</p>'}${missingBooking?`<p class="nd-checkout-note">预约项目在菜单中找不到：${esc(missingBooking)}，请手动选择。</p>`:''}</div></main><footer class="nd-order-bottom"><div><span>数量</span><b>${totalQty()}</b></div><div><span>小计</span><b>RM ${money(total())}</b></div><button type="button" data-sale-payment ${totalQty()?'':'disabled'}>付款：RM ${money(total())}</button></footer>`;
@@ -43900,7 +43945,7 @@ async function openBookingSale(a,group=[a]){
    const isService=serviceCategories.includes(cat)||cat==='all';
    const buttons=categoryItems.filter(([v])=>isService?serviceCategories.includes(v):v===cat).map(([v,label])=>`<button type="button" class="${cat===v?'active':''}" data-sale-cat="${v}">${label}</button>`).join('');
    const matches=sortItems(menu.filter(x=>!x.groupLine&&(isService?x.type==='service'&&(cat==='all'||x.category===cat):x.type===cat)&&( !isService||duration==='all'||x.duration===duration)&&(!query||normalize(x.name+' '+x.alt+' '+x.sku).includes(normalize(query)))&&(!favoritesOnly||false)));
-   return `<div class="nd-sale-toolbar"><nav class="nd-sale-type-tabs" aria-label="订单项目类型">${[['promotion','服务'],['recharge','充值'],['package','配套'],['product','产品'],['giftcard','赠品'],['discount','折扣'],['deposit','押金']].map(([v,label])=>`<button type="button" data-sale-cat="${v}" class="${(cat===v||(v==='promotion'&&['member','wellness','service','all'].includes(cat)))?'active':''}">${label}</button>`).join('')}</nav><div class="nd-sale-tools">${showSearch?`<input data-sale-search type="search" placeholder="搜索" value="${esc(query)}"><button data-sale-search-close aria-label="关闭搜索">×</button>`:`<button data-sale-search-open aria-label="搜索">⌕</button>`}</div></div><nav class="nd-sale-cat">${buttons}</nav><nav class="nd-sale-durations" style="${isService?'':'display:none!important'}">${['all',120,90,60,45,30,15,180,240].map(n=>`<button type="button" data-sale-duration="${n}" class="${duration===n?'active':''}">${n==='all'?'全部':n+' MIN'}</button>`).join('')}</nav><main class="nd-sale-scroll"><div class="nd-sale-products">${matches.map(x=>`<button type="button" class="nd-sale-product" data-sale-add="${esc(x.id)}"><span class="nd-sale-product-info"><strong>${esc(x.name)}</strong><small>RM ${money(x.price)}</small></span>${selected.has(x.id)?`<em class="nd-sale-count">${selected.get(x.id)}</em>`:''}</button>`).join('')||'<p class="nd-sale-empty">当前分类没有匹配项目，请切换分类。</p>'}</div></main><footer class="nd-sale-foot"><button data-sale-to-cart type="button" class="nd-sale-checkout">${totalQty()} 项目 ｜ RM ${money(total())}</button></footer>`;
+   return `<div class="nd-sale-toolbar"><nav class="nd-sale-type-tabs" aria-label="订单项目类型">${[['promotion','服务'],['member_card','会员卡'],['recharge','充值'],['package','配套'],['product','产品'],['giftcard','赠品'],['discount','折扣'],['deposit','押金']].map(([v,label])=>`<button type="button" data-sale-cat="${v}" class="${(cat===v||(v==='promotion'&&['member','wellness','service','all'].includes(cat)))?'active':''}">${label}</button>`).join('')}</nav><div class="nd-sale-tools">${showSearch?`<input data-sale-search type="search" placeholder="搜索" value="${esc(query)}"><button data-sale-search-close aria-label="关闭搜索">×</button>`:`<button data-sale-search-open aria-label="搜索">⌕</button>`}</div></div><nav class="nd-sale-cat">${buttons}</nav><nav class="nd-sale-durations" style="${isService?'':'display:none!important'}">${['all',120,90,60,45,30,15,180,240].map(n=>`<button type="button" data-sale-duration="${n}" class="${duration===n?'active':''}">${n==='all'?'全部':n+' MIN'}</button>`).join('')}</nav><main class="nd-sale-scroll"><div class="nd-sale-products">${matches.map(x=>`<button type="button" class="nd-sale-product" data-sale-add="${esc(x.id)}"><span class="nd-sale-product-info"><strong>${esc(x.name)}</strong><small>RM ${money(x.price)}</small></span>${selected.has(x.id)?`<em class="nd-sale-count">${selected.get(x.id)}</em>`:''}</button>`).join('')||'<p class="nd-sale-empty">当前分类没有匹配项目，请切换分类。</p>'}</div></main><footer class="nd-sale-foot"><button data-sale-to-cart type="button" class="nd-sale-checkout">${totalQty()} 项目 ｜ RM ${money(total())}</button></footer>`;
  };
  let holdSearch='',holdEditing=false;
  const renderHolds=()=>`<main class="nd-sale-scroll">${window.ndHoldReference(window.ndSharedPendingOrders?.list()||[],holdSearch,holdEditing)}</main>`;
@@ -43929,9 +43974,21 @@ async function openBookingSale(a,group=[a]){
    window.ndBindSwipeDelete(modal, '.nd-sale-stage-cart .nd-order-line', (row)=>{const id=row.querySelector('[data-sale-edit]')?.dataset.saleEdit;if(!id)return;selected.delete(id);itemDetails.delete(id);if(window.ndSharedPendingOrders?.list().some(o=>o.id===pendingKey)){if(totalQty())holdOrder();else window.ndSharedPendingOrders.remove(pendingKey);}render();});
    window.ndBindSwipeDelete(modal,'.nd-hold-card',row=>{const id=row.querySelector('[data-pending-id]')?.dataset.pendingId;if(id&&confirm('删除此挂单？')){window.ndSharedPendingOrders?.remove(id);if(id===pendingKey){selected.clear();itemDetails.clear();}render();}});
    modal.querySelectorAll('[data-sale-edit]').forEach(b=>b.onclick=()=>{editingId=b.dataset.saleEdit;stage='detail';render();});
+   if(stage==='cart'){
+    for(const b of modal.querySelectorAll('[data-sale-edit]')){
+     const x=menu.find(x=>x.id===b.dataset.saleEdit);if(!isOwnedBenefit(x))continue;
+     const owners=benefitOwners.get(x.id)||[];
+     const label=document.createElement('span');label.className='nd-owner-cart-label';
+     label.textContent=owners.length?('权益持有人：'+owners.map(o=>o.name+'（'+o.relation+'）').join('、')):'尚未登记权益持有人';
+     b.append(label);
+    }
+    const missing=items().some(x=>isOwnedBenefit(x)&&(benefitOwners.get(x.id)||[]).length<x.qty);
+    const pay=modal.querySelector('[data-sale-payment]');
+    if(pay&&missing){pay.disabled=true;pay.title='会员卡、充值或配套必须为每份权益登记完整持有人资料';}
+   }
    bindItemReorder();
-   modal.querySelectorAll('[data-sale-add]').forEach(b=>b.onclick=()=>{selected.set(b.dataset.saleAdd,Math.min(99,(selected.get(b.dataset.saleAdd)||0)+1));render();});
-   modal.querySelectorAll('[data-sale-minus]').forEach(b=>b.onclick=()=>{let q=(selected.get(b.dataset.saleMinus)||0)-1;if(q>0)selected.set(b.dataset.saleMinus,q);else selected.delete(b.dataset.saleMinus);render();});
+   modal.querySelectorAll('[data-sale-add]').forEach(b=>b.onclick=()=>{const x=menu.find(x=>x.id===b.dataset.saleAdd);if(isOwnedBenefit(x)){registerBenefitOwner(x);return;}selected.set(b.dataset.saleAdd,Math.min(99,(selected.get(b.dataset.saleAdd)||0)+1));render();});
+   modal.querySelectorAll('[data-sale-minus]').forEach(b=>b.onclick=()=>{const id=b.dataset.saleMinus,x=menu.find(x=>x.id===id);if(isOwnedBenefit(x)){const owners=benefitOwners.get(id)||[];owners.pop();if(owners.length)benefitOwners.set(id,owners);else benefitOwners.delete(id);}let q=(selected.get(id)||0)-1;if(q>0)selected.set(id,q);else selected.delete(id);render();});
    modal.querySelector('[data-sale-add-new]')?.addEventListener('click',()=>{stage='menu';render();});
    modal.querySelector('[data-sale-to-cart]')?.addEventListener('click',()=>{holdOrder();stage='cart';render();});
    modal.querySelector('[data-sale-payment]')?.addEventListener('click',()=>{stage='payment';render();});
@@ -44032,6 +44089,7 @@ function ndOpenBookingMember(c){
 }
 function detailOpen(a){
  selectedBooking=a;
+ const bookingPaid=()=>window.ndCalendarOrderStatus?.(a.id)==='paid'||['paid','completed'].includes(String(a.payment_status||a.order_status||'').toLowerCase())||Boolean(a.paid_at);
  const c=customers.find(x=>x.id===a.customer_id),worker=assigned(a.id).map(id=>staff.find(x=>String(x.id)===id)?.nickname||staff.find(x=>String(x.id)===id)?.name||id).join('、');
  const duration=Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000);
  const related=appointments.filter(x=>x.id!==a.id&&x.customer_id===a.customer_id&&tzDate(x.starts_at)===tzDate(a.starts_at)&&x.status!=='cancelled');
@@ -44143,6 +44201,7 @@ function ndOpenDetailField(a,field){
 // Keep the existing booking edit/cancel operations, but replace the old card rendering.
 detailOpen=function(a){
  selectedBooking=a;
+ const bookingPaid=()=>window.ndCalendarOrderStatus?.(a.id)==='paid'||['paid','completed'].includes(String(a.payment_status||a.order_status||'').toLowerCase())||Boolean(a.paid_at);
  const c=customers.find(x=>String(x.id)===String(a.customer_id));
  const names=assigned(a.id).map(id=>staff.find(s=>String(s.id)===String(id))?.nickname||staff.find(s=>String(s.id)===String(id))?.name||id).join('、')||'未分配';
  const min=Math.max(0,Math.round((new Date(a.ends_at)-new Date(a.starts_at))/60000));
@@ -44160,6 +44219,7 @@ detailOpen=function(a){
  const top=detailShell.querySelector('.nd-booking-detail-sheet>header');
  top.classList.add('nd-compact-detail-head');
  top.querySelector('strong').textContent='预约';
+ if(top.querySelector('[data-detail-menu]'))top.querySelector('[data-detail-menu]').hidden=bookingPaid();
  if(!top.querySelector('[data-detail-call]')){
    const phone=document.createElement('button');phone.type='button';phone.dataset.detailCall='';phone.setAttribute('aria-label','拨打电话');phone.textContent='♧';phone.className='nd-detail-phone';
    phone.textContent='☎';
@@ -44173,23 +44233,27 @@ detailOpen=function(a){
  // Every detail render owns exactly one footer; the previous footer lived outside body.
  detailShell.querySelectorAll('.nd-booking-detail-sheet>.nd-detail-bottom-bar').forEach(node=>node.remove());
  body.innerHTML=`
- <div class="nd-detail-card"><div class="nd-detail-line"><span class="nd-detail-square">${detailIcon('calendar')}</span><div><strong>${esc(dateLabel)}</strong><small>${esc(clock(a.starts_at))} - ${esc(clock(a.ends_at))}</small></div></div><div class="nd-detail-line"><span class="nd-detail-avatar">👩🏻</span><button type="button" class="nd-detail-member-open" data-detail-member ${c?'':'disabled'}><strong>${esc(c?.full_name||'—')}</strong><small>${esc(c?.phone||'未登记电话')}</small></button></div></div>
+ <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-date ${bookingPaid()?'disabled':''}><span class="nd-detail-square">${detailIcon('calendar')}</span><div><strong>${esc(dateLabel)}</strong><small>${esc(clock(a.starts_at))} - ${esc(clock(a.ends_at))}</small></div>${bookingPaid()?'':'<i>›</i>'}</button><div class="nd-detail-line"><span class="nd-detail-avatar">👩🏻</span><button type="button" class="nd-detail-member-open" data-detail-member ${c?'':'disabled'}><strong>${esc(c?.full_name||'—')}</strong><small>${esc(c?.phone||'未登记电话')}</small></button></div></div>
  <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="service"><span class="nd-detail-square nd-orange">${detailIcon('service')}</span><div><strong>${esc(a.service_name||'—')}</strong><small>${esc(priceLabel)}</small></div><i>›</i></button><div class="nd-detail-line"><span class="nd-detail-square">${detailIcon('clock')}</span><div><strong>${esc(lengthText)}</strong></div></div></div>
  <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="employee"><span class="nd-detail-square">${detailIcon('employee')}</span><div><strong>${esc(names)}</strong></div><i>›</i></button></div>
  <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="room_id"><span class="nd-detail-square">${detailIcon('room')}</span><div><strong>${esc(a.room_id?roomLabel(a.room_id):'不指定房间')}</strong></div><i>›</i></button></div>
  <div class="nd-detail-card"><button type="button" class="nd-detail-line nd-detail-editable" data-detail-edit-field="reminder"><span class="nd-detail-square">${detailIcon('bell')}</span><div><strong>${esc(a.reminder_note||'不提醒')}</strong></div><i>›</i></button></div>
  <div class="nd-detail-card nd-detail-note-card"><button type="button" class="nd-detail-note-edit" data-detail-edit-field="nd_booking_notes"><span>备注</span><span>${esc(notes)}</span><i>›</i></button></div>
  <div class="nd-detail-bottom-bar"><button type="button" data-detail-cart aria-label="开单" hidden>${detailIcon('cart')}</button><button type="button" data-detail-quick aria-label="快捷操作">${detailIcon('bolt')}</button></div>`;
- const ndOpenEditableBooking=field=>{closeDetail();choose(a);const dateInput=form.elements.date,timeInput=form.elements.time;dateInput.readOnly=true;timeInput.readOnly=true;dateInput.classList.add('nd-fixed-booking-time');timeInput.classList.add('nd-fixed-booking-time');const input=field==='reminder'?document.getElementById('proNoReminder'):form.elements[field];if(input&&!input.disabled){input.scrollIntoView({block:'center',behavior:'instant'});input.focus({preventScroll:true})}};
+ const ndOpenEditableBooking=field=>{if(bookingPaid()){alert('此预约已确认付款，只能查看。');return;}closeDetail();choose(a);const dateInput=form.elements.date,timeInput=form.elements.time;dateInput.readOnly=false;timeInput.readOnly=false;dateInput.classList.remove('nd-fixed-booking-time');timeInput.classList.remove('nd-fixed-booking-time');const input=field==='reminder'?document.getElementById('proNoReminder'):form.elements[field];if(input&&!input.disabled){input.scrollIntoView({block:'center',behavior:'instant'});input.focus({preventScroll:true})}};
  const editMenu=detailShell.querySelector('[data-detail-actions]');
  let editAction=editMenu.querySelector('[data-detail-menu-edit]');
  if(!editAction){editAction=document.createElement('button');editAction.type='button';editAction.dataset.detailMenuEdit='';editAction.textContent='编辑预约';editMenu.prepend(editAction);}
+ editAction.hidden=bookingPaid();
  editAction.onclick=()=>ndOpenEditableBooking('');
+ body.querySelector('[data-detail-date]')?.addEventListener('click',()=>ndOpenEditableBooking('date'));
  body.querySelector('[data-detail-member]')?.addEventListener('click',()=>{if(c)(window.ndProOpenMemberHome?window.ndProOpenMemberHome(c.id):ndOpenBookingMember(c));});
- body.querySelectorAll('[data-detail-edit-field]').forEach(button=>button.onclick=()=>ndOpenDetailField(a,button.dataset.detailEditField));
+ body.querySelectorAll('[data-detail-edit-field]').forEach(button=>{if(bookingPaid()){button.disabled=true;button.classList.remove('nd-detail-editable');button.querySelector('i')?.remove();}else button.onclick=()=>ndOpenDetailField(a,button.dataset.detailEditField);});
  const cart=body.querySelector('[data-detail-cart]');
  cart.onclick=()=>openBookingSale(a);
- void ndCanViewBookingCart().then(ok=>{if(cart.isConnected)cart.hidden=!ok;});
+ void ndCanViewBookingCart().then(ok=>{if(cart.isConnected)cart.hidden=!ok||bookingPaid();});
+ if(bookingPaid())cart.hidden=true;
+ if(bookingPaid())body.querySelector('[data-detail-quick]').hidden=true;
  body.querySelector('[data-detail-quick]').onclick=()=>{const menu=detailShell.querySelector('[data-detail-actions]');const quick=detailShell.querySelector('[data-detail-quick-actions]');menu.hidden=true;quick.hidden=!quick.hidden;};
  // Keep checkout and quick actions outside the scrolling appointment fields.
  const detailFooter=body.querySelector('.nd-detail-bottom-bar');
@@ -48596,6 +48660,23 @@ html body #ndProBetaPage .proref-calendar-grid .pro-cell.proref-booking small{fo
 #ndProAppointmentSale .nd-sale-coupon-sheet article strong{display:block;font-size:12px;overflow-wrap:anywhere}
 #ndProAppointmentSale .nd-sale-coupon-sheet article small{display:block;color:#87909f;font-size:11px;margin-top:3px}
 #ndProAppointmentSale .nd-sale-coupon-sheet article b{flex:none;background:#eaf2ff;color:#296be1;padding:5px 8px;border-radius:20px;font-size:12px}
+</style>
+<style id="nd-booking-unpaid-edit-live-time">
+#ndProBetaPage .proref-calendar-top{position:relative!important;min-height:68px!important;height:68px!important;flex-basis:68px!important;padding-bottom:24px!important;overflow:visible!important}
+#ndProBetaPage .proref-calendar-top .nd-actual-time-label{display:inline-flex!important;align-items:center;justify-content:center;flex:0 0 auto!important;min-width:0!important;max-width:132px!important;height:24px!important;padding:0 7px!important;border-radius:8px!important;background:#dce9ff!important;color:#3270e8!important;font-size:10px!important;font-weight:700!important;line-height:1!important;white-space:nowrap!important;letter-spacing:0!important}
+#ndProBetaPage .proref-calendar-top .nd-actual-time-label{position:absolute!important;right:10px!important;bottom:2px!important;z-index:9!important}
+#ndProBetaPage .proref-calendar-grid .nd-calendar-now-line .nd-calendar-now-clock{display:flex!important;visibility:visible!important;font-size:10px!important;z-index:20!important}
+#ndProBetaPage .proref-calendar-grid button.pro-cell.proref-booking>strong,
+#ndProBetaPage .proref-calendar-grid button.pro-cell.proref-booking>span:not(.nd-order-state-badge),
+#ndProBetaPage .proref-calendar-grid button.pro-cell.proref-booking>small{font-size:9px!important;line-height:1.25!important;max-width:100%!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+#ndProBetaPage .proref-calendar-grid button.pro-cell.proref-booking>strong{font-weight:700!important}
+.nd-booking-detail [data-detail-date]{width:100%;text-align:left;cursor:pointer}
+.nd-booking-detail [data-detail-date]:disabled{opacity:1!important;cursor:default}
+.nd-booking-detail [data-detail-date]:disabled i{display:none!important}
+.nd-booking-detail .nd-detail-line :is(strong,small),
+.nd-booking-detail .nd-detail-member-open :is(strong,small){font-size:12px!important;line-height:1.4!important}
+.nd-booking-detail .nd-detail-line small{font-size:11px!important}
+@media(max-width:390px){#ndProBetaPage .proref-calendar-top .nd-actual-time-label{font-size:9px!important;max-width:115px!important;padding:0 5px!important}}
 </style>
 <script id="nd-benefit-exchange-preview-js">
 /* Checkout benefit calculator: deliberately does not mutate wallet or payment records.
