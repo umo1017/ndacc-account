@@ -42739,7 +42739,7 @@ function renderDailyReport(host){
  const stats=[['工作',[['🛒','订单','order_count'],['🛍','项目','item_count'],['●','客户','customer_count'],['▣','员工','staff_count']]],['欠款交易',[['🔥','欠款总数','debt_count'],['↻','已收欠款','debt_paid']]],['注册',[['＄','储值','recharge'],['🎁','优惠券','voucher_issued'],['★','积分','points_issued']]],['兑换',[['＄','储值','wallet_redeemed'],['🎁','优惠券','voucher_redeemed'],['★','积分','points_redeemed'],['🎁','礼品卡','gift_redeemed'],['＄','押金','deposit']]]];
  const readableDate=d=>{const [y,m,day]=d.split('-');return `${day}/${m}/${y}`};
  host.innerHTML=`<div class="nd-ref-report nd-report-screenshot"><header class="nd-ref-report-head"><button type="button" id="ndRptBack" aria-label="返回">‹</button><div class="nd-ref-date"><button type="button" id="ndRptPrev" aria-label="上一天">❮</button><label class="nd-report-date-label" for="ndRptDate">${readableDate(ndReportDate)}</label><input id="ndRptDate" type="date" value="${ndReportDate}" aria-label="日期"><button type="button" id="ndRptNext" aria-label="下一天">❯</button></div><button type="button" id="ndRptPrint" aria-label="打印">▣</button></header><div class="nd-ref-total" role="button" tabindex="0"><strong>总收款额</strong><strong id="ndRptTotal">—</strong></div><div class="nd-ref-payment-rows" id="ndRptPayments"></div><section class="nd-beta-daily-finance"><h2>每日总汇 · Daily Settlement</h2><div class="nd-beta-daily-finance-rows" id="ndBetaDailyFinanceRows">正在读取付款数据…</div><details><summary>Installment Payments ▾</summary><div id="ndBetaInstallments"></div><small>Installments are included in the VISA / MASTER total above.</small></details><details><summary>Other Payment Items ▾</summary><div id="ndBetaOtherPayments"></div></details><div class="nd-beta-daily-finance-actions"><button type="button" data-beta-finance="proof">Card Settlement Receipt *</button><button type="button" data-beta-finance="transfer">Cash Transfer to Bank</button><button type="button" data-beta-finance="balance">Today’s Cash Balance</button></div></section>${stats.map((g,index)=>`<section class="nd-ref-report-group nd-report-group-${index}"><h2>${g[0]}</h2>${g[1].map(v=>`<button type="button" class="nd-ref-report-row" data-report-stat="${v[2]}"><span class="nd-ref-report-ico">${v[0]}</span><span>${v[1]}</span><strong data-stat="${v[2]}">—</strong></button>`).join('')}</section>`).join('')}<div class="nd-ref-report-state" id="ndRptState" aria-live="polite">正在读取数据库…</div></div>`;
- const financeRow=(label,value)=>`<div class="nd-beta-finance-row"><span>${label}</span><strong>${value==null?'—':ndHistoryMoney(value)}</strong></div>`;
+ const financeRow=(label,value)=>Number(value)>0?`<div class="nd-beta-finance-row"><span>${label}</span><strong>${ndHistoryMoney(value)}</strong></div>`:'';
  host.querySelectorAll('[data-beta-finance]').forEach(button=>button.onclick=()=>{
   const section=button.dataset.betaFinance==='proof'?'dailySettlementProofCard':button.dataset.betaFinance==='transfer'?'cashRemittanceCard':'ndCashBalanceCard';
   const tab=document.getElementById('sidebarDaily');if(!tab){alert('每日结算入口尚未连接');return;}
@@ -42755,7 +42755,10 @@ function renderDailyReport(host){
  const openReceipts=(kind='cash')=>{ndHistoryDate=ndReportDate;ndHistoryKind=kind;active='customer_history';render()};host.querySelector('.nd-ref-total').onclick=()=>openReceipts();host.querySelector('.nd-ref-total').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openReceipts()}};
  host.querySelectorAll('[data-report-stat]').forEach(b=>b.onclick=()=>{const stat=b.dataset.reportStat;if(stat==='order_count'||stat==='item_count'||stat==='customer_count'||stat==='staff_count')openReceipts('cash');else if(stat.includes('debt'))openReceipts('debt');else if(stat.includes('recharge')||stat.includes('wallet'))openReceipts('recharge')});
  (async()=>{
-  const set=(k,v)=>{const e=host.querySelector(`[data-stat="${k}"]`);if(e)e.textContent=v};
+  const set=(k,v)=>{const e=host.querySelector(`[data-stat="${k}"]`);if(e){e.textContent=v;const n=Number(String(v).replace(/,/g,''));e.closest('.nd-ref-report-row').hidden=!Number.isFinite(n)||n<=0;}};
+  const hideEmptyGroups=()=>host.querySelectorAll('.nd-ref-report-group').forEach(group=>{group.hidden=![...group.querySelectorAll('.nd-ref-report-row')].some(row=>!row.hidden)});
+  host.querySelectorAll('.nd-ref-report-row').forEach(row=>row.hidden=true);
+  hideEmptyGroups();
   const state=host.querySelector('#ndRptState');
   if(!db){state.textContent='数据库未连接，无法计算报表';return;}
   try{
@@ -42768,8 +42771,8 @@ function renderDailyReport(host){
    const legacyRows=legacy.rows.filter(o=>!knownReceipts.has(String(o.order_no||'').trim()));
    const amount=[...settled,...legacyRows].reduce((sum,o)=>sum+Number(o.total_amount||0),0);
    if(!host.querySelector('#ndRptState'))return;
-   set('order_count',String(orders.length+legacyRows.length));
-   set('customer_count',String(new Set([...orders.map(o=>o.customer_id).filter(Boolean).map(String),...legacyRows.map(o=>String(o.customer_phone||o.customer_name||o.order_no)).filter(Boolean)]).size));
+   set('order_count',String(settled.length+legacyRows.length));
+   set('customer_count',String(new Set([...settled.map(o=>o.customer_id).filter(Boolean).map(String),...legacyRows.map(o=>String(o.customer_phone||o.customer_name||o.order_no)).filter(Boolean)]).size));
    host.querySelector('#ndRptTotal').textContent=ndMoney(amount);
    const paymentMap=new Map();for(const order of [...settled,...legacyRows]){for(const [name,value] of ndHistoryPaymentChips(order)){const n=Number(value);if(Number.isFinite(n)&&n>0)paymentMap.set(name,(paymentMap.get(name)||0)+n)}}
    const allPaid=[...settled,...legacyRows];
@@ -42779,12 +42782,17 @@ function renderDailyReport(host){
    const m3=sumField(['installment3','installment_3','installment_3_months']),m6=sumField(['installment6','installment_6','installment_6_months']),m12=sumField(['installment12','installment_12','installment_12_months']);
    const installments=[m3,m6,m12].some(v=>v!=null)?[m3,m6,m12].reduce((n,v)=>n+(v||0),0):null;
    const main=[['Cashier Balance',['cashier_balance']],['VISA / MASTER',['visa_master','visa','credit_card_amount']],['TNG',['tng','tng_amount']],['CASH',['cash','cash_amount']],['Bed Fee',['bed_fee','bed_fee_amount']]];
-   host.querySelector('#ndBetaDailyFinanceRows').innerHTML=main.map(([name,keys])=>financeRow(name,name==='VISA / MASTER'?visa:amountOf(name,keys))).join('');
-   host.querySelector('#ndBetaInstallments').innerHTML=[['3 Months',m3],['6 Months',m6],['12 Months',m12]].map(([name,value])=>financeRow(name,value)).join('')+`<small>Regular card: ${visa==null?'—':ndHistoryMoney(visa-(installments||0))} | Installments: ${installments==null?'—':ndHistoryMoney(installments)}</small>`;
-   host.querySelector('#ndBetaOtherPayments').innerHTML=[['Bank Transfer',['bank_transfer']],['Tips',['tips']],['ZFB / ALIPAY',['alipay']],['Online Credit Card',['online_card']],['AMEX',['amex']]].map(([name,keys])=>financeRow(name,amountOf(name,keys))).join('');
+   host.querySelector('#ndBetaDailyFinanceRows').innerHTML=main.map(([name,keys])=>financeRow(name,name==='VISA / MASTER'?visa:amountOf(name,keys))).join('')||'<div class="nd-beta-finance-empty">当天暂无已付款的收款项目</div>';
+   const installmentRows=[['3 Months',m3],['6 Months',m6],['12 Months',m12]].map(([name,value])=>financeRow(name,value)).join('');
+   host.querySelector('#ndBetaInstallments').innerHTML=installmentRows+(installmentRows?`<small>Regular card: ${visa==null?'—':ndHistoryMoney(visa-(installments||0))} | Installments: ${ndHistoryMoney(installments||0)}</small>`:'');
+   host.querySelector('#ndBetaInstallments').closest('details').hidden=!installmentRows;
+   const otherRows=[['Bank Transfer',['bank_transfer']],['Tips',['tips']],['ZFB / ALIPAY',['alipay']],['Online Credit Card',['online_card']],['AMEX',['amex']]].map(([name,keys])=>financeRow(name,amountOf(name,keys))).join('');
+   host.querySelector('#ndBetaOtherPayments').innerHTML=otherRows;
+   host.querySelector('#ndBetaOtherPayments').closest('details').hidden=!otherRows;
    host.querySelector('#ndRptPayments').innerHTML=[...paymentMap].map(([name,value])=>`<button type="button" class="nd-report-payment"><span class="nd-report-payment-icon">▣</span><span>${ndHistorySafe(name)}</span><strong>${ndHistoryMoney(value)}</strong></button>`).join('');
    host.querySelectorAll('.nd-report-payment').forEach(b=>b.onclick=()=>openReceipts('cash'));
-   if(orders.length){const ids=orders.map(o=>o.id).filter(x=>x!=null);if(ids.length){const items=await db.from('nd_pro_beta_order_items').select('order_id,quantity').in('order_id',ids.slice(0,1000)).limit(5000);if(!items.error&&host.querySelector('#ndRptState'))set('item_count',String((items.data||[]).reduce((n,x)=>n+(Number(x.quantity)||1),0)))}}
+   if(settled.length){const ids=settled.map(o=>o.id).filter(x=>x!=null);if(ids.length){const items=await db.from('nd_pro_beta_order_items').select('order_id,quantity').in('order_id',ids.slice(0,1000)).limit(5000);if(!items.error&&host.querySelector('#ndRptState'))set('item_count',String((items.data||[]).reduce((n,x)=>n+(Number(x.quantity)||1),0)))}}
+   hideEmptyGroups();
    state.textContent=legacy.warning||'仅统计已连接的真实订单；未连接的账本以「—」显示。';
   }catch(e){if(host.querySelector('#ndRptState'))state.textContent='订单报表读取失败：'+String(e.message||e)}
  })();
@@ -48924,6 +48932,24 @@ html body #ndProBetaPage .proref-calendar-grid .pro-cell.proref-booking small{fo
 #ndProAppointmentSale .nd-sale-coupon-sheet article small{display:block;color:#87909f;font-size:11px;margin-top:3px}
 #ndProAppointmentSale .nd-sale-coupon-sheet article b{flex:none;background:#eaf2ff;color:#296be1;padding:5px 8px;border-radius:20px;font-size:12px}
 </style>
+<style id="nd-beta-every-page-fullscreen-v25">
+/* A single edge-to-edge surface, with cards only for actual content. */
+html:has(#ndProBetaPage:not([hidden])),body:has(#ndProBetaPage:not([hidden])){max-width:100%;overflow-x:clip}
+html body #ndProBetaPage:not([hidden]){position:relative!important;display:block!important;width:100%!important;min-width:0!important;max-width:none!important;min-height:100dvh!important;margin:0!important;padding:0!important;background:#f3f4f8!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow-x:clip!important}
+html body #ndProBetaPage #ndProContent{display:block!important;min-width:0!important;max-width:none!important;width:100%!important;min-height:100dvh!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow-x:clip!important}
+html body #ndProBetaPage #ndProContent>:is(section,main,article,div){min-width:0!important;max-width:none!important;width:100%!important;margin-left:0!important;margin-right:0!important;box-sizing:border-box!important}
+/* Only the screen fills the viewport: individual content panels must follow their content height. */
+html body #ndProBetaPage #ndProContent>:is(section,main,article,div):not(.proref-schedule):not(.pro-card){min-height:0!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+html body #ndProBetaPage #ndProContent>.pro-card{border-radius:0!important;border:0!important;box-shadow:none!important;background:transparent!important}
+html body #ndProBetaPage .nd-pro-home{max-width:none!important;width:100%!important;margin:0!important;background:transparent!important}
+html body #ndProBetaPage :is(.ndm,.ndr,.nd-bstaff,.nd-bform,.nd-management-home,.nd-svc-page,.pro-import-center,.pro-settings-page){min-height:100dvh!important;max-width:none!important;width:100%!important;margin:0!important;border:0!important;box-shadow:none!important;box-sizing:border-box!important}
+html body #ndProBetaPage :is(.ndm,.ndr,.nd-bstaff,.nd-bform,.nd-management-home,.nd-svc-page){background:#f3f4f8!important}
+html body #ndProBetaPage .proref-schedule{width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:hidden!important}
+html body #ndProBetaPage :is(.proref-scroll-x,.proref-scroll-y){max-width:100%!important;min-width:0!important}
+html body #ndProBetaPage :is(.ndm,.ndr){padding-bottom:calc(100px + env(safe-area-inset-bottom,0px))!important}
+html body #ndProBetaPage :is(input,select,textarea,button){max-width:100%;box-sizing:border-box}
+@media(max-width:760px){html body #ndProBetaPage #ndProContent>:is(section,main,article,div){margin-top:0!important}html body #ndProBetaPage .proref-schedule{min-height:100dvh!important}}
+</style>
 <style id="nd-beta-fullbleed-premium-v13">
 /* Keep a single continuous background across all Beta screens. */
 html body #ndProBetaPage.nd-pro-shown,
@@ -48943,6 +48969,24 @@ html body #ndProBetaPage .nd-bstaff,
 html body #ndProBetaPage .nd-bform,
 html body #ndProBetaPage .nd-management-home{min-height:100dvh!important;max-width:none!important;background:#f2f2f7!important;border:0!important;border-radius:0!important;box-shadow:none!important}
 @media(min-width:900px){html body #ndProBetaPage .ndm-card,html body #ndProBetaPage .ndm-tabs,html body #ndProBetaPage .ndm>input,html body #ndProBetaPage .ndm>footer{max-width:900px!important}}
+</style>
+<style id="nd-beta-layout-unification-v27">
+/* One canvas per screen, content-sized inner panels, consistent typography. */
+html body #ndProBetaPage:not([hidden]),html body #ndProBetaPage #ndProContent{background:#f5f6fa!important}
+html body #ndProBetaPage #ndProContent{min-height:100dvh!important;height:auto!important;padding-bottom:env(safe-area-inset-bottom,0px)!important}
+html body #ndProBetaPage #ndProContent>:is(section,main,article,div):not(.proref-schedule){min-height:0!important;height:auto;max-height:none}
+html body #ndProBetaPage :is(.ndm,.ndr,.nd-bstaff,.nd-bform,.nd-management-home,.nd-svc-page,.pro-import-center,.pro-settings-page){min-height:0!important;height:auto!important;background:#f5f6fa!important}
+html body #ndProBetaPage :is(.ndm,.ndr){padding:16px clamp(12px,3.5vw,22px) calc(88px + env(safe-area-inset-bottom,0px))!important}
+html body #ndProBetaPage .ndm h1{font-size:21px!important;line-height:1.3!important;margin:12px 0 16px!important;letter-spacing:-.02em}
+html body #ndProBetaPage .ndm .ndm-back{font-size:23px!important}
+html body #ndProBetaPage .ndm-row{font-size:13px!important;min-height:52px!important}
+html body #ndProBetaPage .ndm-row small{font-size:11px!important}
+html body #ndProBetaPage .ndm-tabs button{font-size:13px!important}
+html body #ndProBetaPage :is(.ndm-card,.ndr-card,.nd-beta-daily-finance-rows){box-shadow:none!important}
+html body #ndProBetaPage :is(.nd-svc-page,.nd-bstaff,.nd-bform){padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))!important}
+html body #ndProBetaPage :is(.ndm-row,.ndr-entry,.nd-bstaff,.nd-bform){overflow-wrap:anywhere}
+html body #ndProBetaPage .proref-schedule{min-height:0!important}
+@media(max-width:390px){html body #ndProBetaPage :is(.ndm,.ndr){padding-left:11px!important;padding-right:11px!important}html body #ndProBetaPage .ndm h1{font-size:20px!important}}
 </style>
 <style id="nd-booking-unpaid-edit-live-time">
 #ndProBetaPage .proref-calendar-top{position:relative!important;min-height:68px!important;height:68px!important;flex-basis:68px!important;padding-bottom:24px!important;overflow:visible!important}
@@ -48976,6 +49020,50 @@ html body #ndProBetaPage .nd-management-home{min-height:100dvh!important;max-wid
 #ndProBetaPage .nd-beta-daily-finance-actions{display:grid;gap:8px;margin-top:16px}
 #ndProBetaPage .nd-beta-daily-finance-actions button,#ndProBetaPage .nd-beta-cash-expense-launch{min-height:42px;border:0;border-radius:12px;background:#fff;color:#3478ed;font-size:13px;font-weight:750;text-align:left;padding:10px 14px}
 #ndProBetaPage .nd-beta-cash-expense-launch{background:#e5edff;white-space:nowrap;flex-shrink:0}
+/* Premium daily settlement: separate actual paid values from administrative actions. */
+#ndProBetaPage .nd-ref-report{background:#f7f8fb!important;color:#253047!important;padding-left:clamp(12px,3vw,28px)!important;padding-right:clamp(12px,3vw,28px)!important}
+#ndProBetaPage .nd-ref-report-head{background:transparent!important;box-shadow:none!important;border:0!important}
+#ndProBetaPage .nd-ref-total{background:#fff!important;border-radius:17px!important;padding:18px 15px!important;margin:12px 0!important;border:1px solid #e9edf5!important;box-shadow:0 4px 16px #27436909!important}
+#ndProBetaPage .nd-beta-daily-finance{padding:0!important;margin:14px 0 22px!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+#ndProBetaPage .nd-beta-daily-finance h2{font-size:15px!important;font-weight:800!important;margin:0 2px 10px!important;color:#253248!important;letter-spacing:-.02em}
+#ndProBetaPage .nd-beta-daily-finance-rows{background:#fff!important;border:1px solid #ebeff5!important;border-radius:17px!important;padding:2px 15px!important;overflow:hidden!important}
+#ndProBetaPage .nd-beta-finance-row{min-height:48px!important;padding:12px 0!important;border-bottom:1px solid #eff1f6!important;font-size:12px!important;gap:12px!important}
+#ndProBetaPage .nd-beta-finance-row:last-child{border-bottom:0!important}
+#ndProBetaPage .nd-beta-finance-row strong{font-size:14px!important;font-weight:800!important;color:#3175e7!important;white-space:nowrap!important}
+#ndProBetaPage .nd-beta-finance-empty{padding:24px 10px!important;text-align:center!important;color:#929dad!important;font-size:12px!important}
+#ndProBetaPage .nd-beta-daily-finance details{margin-top:9px!important;padding:0 13px!important;background:#fff!important;border:1px solid #ebeff5!important;border-radius:14px!important;overflow:hidden!important}
+#ndProBetaPage .nd-beta-daily-finance details[hidden]{display:none!important}
+#ndProBetaPage .nd-beta-daily-finance summary{list-style:none!important;padding:15px 0!important;font-size:12px!important;font-weight:760!important;color:#3c4a61!important}
+#ndProBetaPage .nd-beta-daily-finance details small{padding-bottom:12px!important;font-size:10px!important;color:#8a94a5!important}
+#ndProBetaPage .nd-beta-daily-finance-actions{display:grid!important;grid-template-columns:1fr!important;gap:9px!important;margin:16px 0 0!important}
+#ndProBetaPage .nd-beta-daily-finance-actions button{position:relative!important;width:100%!important;min-height:59px!important;padding:13px 42px 13px 16px!important;border:1px solid #e9edf5!important;border-radius:16px!important;background:#fff!important;box-shadow:0 3px 13px #27436908!important;color:#2a3850!important;text-align:left!important;font-size:13px!important;font-weight:740!important;line-height:1.35!important}
+#ndProBetaPage .nd-beta-daily-finance-actions button:after{content:'›';position:absolute;right:17px;top:50%;transform:translateY(-50%);font-size:23px;font-weight:400;color:#92a3bc}
+#ndProBetaPage .nd-beta-daily-finance-actions button:before{content:'▤';display:inline-grid;place-items:center;width:30px;height:30px;margin-right:11px;border-radius:10px;background:#eaf1ff;color:#3878e8;vertical-align:middle;font-size:16px}
+#ndProBetaPage .nd-beta-daily-finance-actions button:nth-child(2):before{content:'↗'}
+#ndProBetaPage .nd-beta-daily-finance-actions button:nth-child(3):before{content:'RM';font-size:11px}
+#ndProBetaPage .nd-ref-report-group[hidden],#ndProBetaPage .nd-ref-report-row[hidden]{display:none!important}
+#ndProBetaPage .nd-ref-report-group{background:#fff!important;border:1px solid #e9edf5!important;border-radius:17px!important;padding:10px 13px!important;margin:12px 0!important;box-shadow:none!important}
+#ndProBetaPage .nd-ref-report-group h2{font-size:15px!important;padding:7px 2px 9px!important;margin:0!important;color:#27354c!important}
+#ndProBetaPage .nd-ref-report-row{min-height:49px!important;padding:10px 3px!important;border-bottom:1px solid #eff1f6!important;font-size:12px!important}
+#ndProBetaPage .nd-ref-report-row:last-child{border-bottom:0!important}
+/* Full-height beneficiary registration, clean hierarchy and unobstructed form. */
+body .nd-benefit-owner-overlay{align-items:stretch!important;justify-content:center!important;padding:0!important;background:#1e2c435f!important;backdrop-filter:blur(3px)!important}
+body .nd-benefit-owner-sheet{width:100%!important;max-width:620px!important;height:100dvh!important;max-height:100dvh!important;min-height:0!important;margin:0 auto!important;padding:0 17px calc(30px + env(safe-area-inset-bottom,0px))!important;background:#f6f7fb!important;border-radius:0!important;box-shadow:none!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:12px!important;overflow-y:auto!important;overflow-x:hidden!important;scroll-padding-top:70px;scroll-padding-bottom:28px}
+body .nd-benefit-owner-sheet header{position:sticky!important;top:0!important;flex:0 0 auto!important;min-height:63px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;margin:0 -17px 5px!important;padding:10px 17px!important;background:#f6f7fbf7!important;border-bottom:1px solid #e8ecf3!important;z-index:5!important;backdrop-filter:blur(10px)!important}
+body .nd-benefit-owner-sheet header strong{font-size:16px!important;line-height:1.3!important;font-weight:780!important;letter-spacing:0!important}
+body .nd-benefit-owner-sheet header button{min-height:36px!important;border-radius:11px!important;background:#fff!important;color:#3778ea!important;font-size:12px!important;padding:7px 13px!important}
+body .nd-benefit-owner-sheet>label{display:flex!important;flex-direction:column!important;gap:6px!important;margin:0!important;font-size:12px!important;font-weight:700!important;color:#657186!important}
+body .nd-benefit-owner-sheet input,body .nd-benefit-owner-sheet select{min-height:44px!important;height:auto!important;font-size:13px!important;line-height:1.35!important;border:1px solid #e4e9f2!important;border-radius:12px!important;background:#fff!important;box-shadow:none!important;padding:10px 12px!important;color:#263249!important}
+body .nd-benefit-owner-sheet input[readonly]{background:#edf1f7!important;color:#7c8798!important}
+body .nd-benefit-owner-sheet .nd-owner-birthday{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}
+body .nd-benefit-owner-sheet .nd-owner-birthday label{min-width:0!important;font-size:11px!important;line-height:1.3!important}
+body .nd-benefit-owner-sheet .nd-owner-birthday-title{margin:3px 0 -4px!important;color:#566277!important;font-size:12px!important}
+body .nd-benefit-owner-sheet .nd-owner-preferences{padding:12px!important;background:#fff!important;border:1px solid #e9edf5!important;border-radius:15px!important;gap:9px!important}
+body .nd-benefit-owner-sheet .nd-owner-preferences>strong{font-size:12px!important}
+body .nd-benefit-owner-sheet select[multiple]{height:77px!important;min-height:77px!important}
+body .nd-benefit-owner-sheet .nd-owner-submit{position:static!important;flex:0 0 auto!important;display:block!important;margin:10px 0 0!important;min-height:50px!important;padding:13px 16px!important;width:100%!important;background:#3978e8!important;border:0!important;border-radius:14px!important;font-size:13px!important;font-weight:750!important;box-shadow:none!important;z-index:auto!important}
+body .nd-benefit-owner-sheet .nd-recharge-owner-choice{gap:8px!important;padding:12px!important;border-radius:15px!important;background:#fff!important}
+@media(min-width:700px){body .nd-benefit-owner-overlay{align-items:center!important;padding:12px!important}body .nd-benefit-owner-sheet{height:min(96dvh,920px)!important;max-height:96dvh!important;border-radius:20px!important;padding-left:22px!important;padding-right:22px!important}body .nd-benefit-owner-sheet header{margin-left:-22px!important;margin-right:-22px!important;padding-left:22px!important;padding-right:22px!important}}
 /* Home shortcut pictograms requested by the front-desk team. */
 #ndProBetaPage .nd-ref-home-extras .nd-ref-announcement_emoji .nd-ref-icon,
 #ndProBetaPage .nd-ref-home-extras .nd-ref-report_emoji .nd-ref-icon,
