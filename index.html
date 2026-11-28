@@ -42933,6 +42933,18 @@ function ndPlaceNowLine(){
  line.hidden=false;line.style.gridRow=String(2+Math.floor((minutes-start)/15));
  line.style.transform='translateY('+(((minutes-start)%15)/15*size)+'px)';
 }
+function ndJumpCalendarToNow(host){
+ // Only jump when entering today's calendar during visible business hours.
+ // Never take over scrolling after the user starts browsing the schedule.
+ const line=host.querySelector('.nd-calendar-now-line');
+ if(!line||line.hidden||date!==businessDate(new Date(),branch))return;
+ const scroller=host.querySelector('#proCalendarScroller');
+ if(!scroller)return;
+ const marker=line.querySelector('.nd-calendar-now-clock')||line;
+ const targetY=marker.getBoundingClientRect().top-scroller.getBoundingClientRect().top;
+ const viewOffset=Math.min(210,Math.max(75,scroller.clientHeight*.32));
+ scroller.scrollTop=Math.max(0,scroller.scrollTop+targetY-viewOffset);
+}
 if(!window.ndCalendarNowTimer)window.ndCalendarNowTimer=setInterval(ndPlaceNowLine,15000);
 const tzTime=(v)=>new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(v));
 const tzDate=(v)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(v));
@@ -43018,6 +43030,7 @@ async function openRestPanel(employeeId){
 }
 let ndCalendarChangeSerial=0;
 function renderAppointments(host){
+const ndEnteringCalendar=!host.querySelector('.proref-schedule');
 if(branch==='all'||!valid.includes(branch))branch=valid.includes('Eco Botanic')?'Eco Botanic':valid[0];
 const list=appointments.filter(a=>businessDate(a.starts_at,a.branch)===date&&a.branch===branch);
 const genderOrder={male:0,other:1,female:2};
@@ -43118,6 +43131,9 @@ const serviceOptions=ndBookingServices().map(s=>[ndBookingName(s),ndBookingName(
 if(window.ndCalendarVerifiedOrders){const ids=list.map(a=>String(a.id));if(ids.length){db.from('nd_pro_beta_orders').select('appointment_id,order_status').in('appointment_id',ids).in('order_status',['paid','completed']).then(r=>{if(!r.error)window.ndCalendarVerifiedOrders(r.data||[]);else console.warn('Appointment payment link unavailable:',r.error.message);});}else window.ndCalendarVerifiedOrders([]);}
 host.innerHTML=`<section class="proref-schedule"><div class="proref-calendar-top"><button type="button" id="proWeekPrev" aria-label="Previous week">‹</button><label class="proref-current-date">🗓 <input id="proWeekDate" type="date" value="${esc(date)}"></label><button type="button" id="proWeekNext" aria-label="Next week">›</button><span class="proref-cal-count">${list.filter(a=>a.status!=='cancelled').length} ${tr('Bookings','预约')}</span></div><div class="proref-weekstrip">${weekButtons}</div><div class="nd-booking-color-key"><span class="red">● No Member / Package / Credit</span><span class="blue">● Member / Package / Credit</span><span class="gray">● Rest / MC</span></div><div class="proref-calendar-toolbar"><div class="proref-branch-choice">${field(tr('Branch','分行'),chooseBranch(false))}</div><button type="button" id="proNewBooking" hidden style="display:none!important" aria-hidden="true" tabindex="-1">${tr('New Appointment','新增预约')}</button></div><div class="proref-scroll-x" id="proCalendarScroller"><div class="proref-scroll-y"><div class="pro-calendar">${grid}</div></div></div></section><div class="pro-card proref-appointment-list"><h3>${tr('Appointments','预约记录')}</h3>${rows||'<p class="pro-muted">No appointments on this day.</p>'}</div><div class="pro-card" id="proAppointmentCard" hidden><h3 id="proAppointmentHeading">${tr('New Appointment','新增预约')}</h3><form id="proAppointmentForm"><input type="hidden" name="appointment_id"><div class="pro-grid">${field(tr('Branch','分行'),`<select name="branch" required>${opt(valid.map(v=>[v,v]),branch==='all'?'Eco Botanic':branch)}</select>`)}${field(tr('Phone number / Member search','电话号码 / 搜索会员'),`<input id="proCustomerFind" type="tel" inputmode="tel" placeholder="${tr('Search member phone or name','搜索会员电话或姓名')}"><select name="customer" required><option value="">${tr('Select customer','选择顾客')}</option>${opt(customers.map(c=>[c.id,c.full_name]),'')}</select><button type="button" class="pro-tab" id="proAddCustomer">+ ${tr('Add Customer','新增顾客')}</button>`)}${field(tr('Guests','人数'),`<div class="probooking-counter"><button type="button" id="proGuestsMinus">−</button><output id="proGuestsCount">1</output><button type="button" id="proGuestsPlus">＋</button></div>`)}${field(tr('Room','房间'),`<select name="room_id"><option value="">${tr('No room','不指定房间')}</option>${opt(roomsFor(branch).map(r=>[r.id,r.room_name+' · '+r.branch]),'')}</select>`)}${field(tr('Date','日期'),`<input name="date" type="date" value="${esc(date)}" required>`)}${field(tr('Start time','开始时间'),`<input name="time" type="time" value="10:00" required step="900">`)}${field(tr('Duration (minutes)','服务时长'),`<select name="duration">${opt([[30,'30'],[60,'60'],[90,'90'],[120,'120']],60)}</select>`)}${field(tr('Service','服务'),`<select name="service" required><option value="">Select service</option>${opt(serviceOptions,'')}</select>`)}${field(tr('Therapist','技师'),`<select name="employee" required><option value="">Select therapist</option>${opt(staff.map(s=>[s.id,(s.nickname||s.name)+' · '+s.outlet]),'')}</select>`)}</div><div class="probooking-options"><label>🔒 ${tr('Block time slot','封锁预约时间段')} <input type="checkbox" id="proBlockSlot" disabled title="Not yet connected"></label><label>🔔 ${tr('No reminder','不提醒')} <input type="checkbox" id="proNoReminder" disabled title="Not yet connected"></label><label>⭐ ${tr('Returning customer','老顾客')} <input type="checkbox" id="proReturning" disabled title="Not yet connected"></label></div><div id="proQuickCustomer" class="pro-quick-customer" hidden><strong>${tr('New Customer','新增顾客')}</strong><input id="proQuickName" placeholder="${tr('Customer name','顾客姓名')}"><input id="proQuickPhone" type="tel" placeholder="${tr('Phone','电话')}"><button class="pro-action" type="button" id="proQuickSave">${tr('Save & Select','保存并选择')}</button></div><div class="pro-line" style="justify-content:flex-start;margin-top:12px;gap:8px"><button class="pro-action" type="submit" id="proAppointmentSave">${tr('Create Appointment','新增预约')}</button><button class="pro-tab" type="button" id="proAppointmentReset" hidden>${tr('New','新增')}</button><button class="pro-tab" type="button" id="proAppointmentCancel" hidden>${tr('Cancel Appointment','取消预约')}</button></div></form></div>`;
 ndPlaceNowLine();
+if(ndEnteringCalendar&&date===businessDate(new Date(),branch)){
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{ndPlaceNowLine();ndJumpCalendarToNow(host)}));
+}
 // Long-press and drag a therapist heading to rearrange all therapist columns.
 // Tap continues to open the existing staff/rest action; AUTO and OTHER stay fixed.
 if(!roomCols){
@@ -48807,7 +48823,7 @@ html body #ndProBetaPage .nd-management-home{min-height:100dvh!important;max-wid
 /* The actual-time label follows the grid's 15-minute timeline, including between rows. */
 #ndProBetaPage .proref-calendar-top .nd-actual-time-label{display:none!important}
 #ndProBetaPage .proref-calendar-top{padding-bottom:0!important;min-height:44px!important;height:auto!important;flex-basis:auto!important}
-#ndProBetaPage .proref-calendar-grid .nd-calendar-now-line{z-index:42!important;border-top:2px solid #7faaf7!important;overflow:visible!important;pointer-events:none!important}
+#ndProBetaPage .proref-calendar-grid .nd-calendar-now-line{z-index:42!important;border-top:2px dashed #9bc0fb!important;overflow:visible!important;pointer-events:none!important}
 #ndProBetaPage .proref-calendar-grid .nd-calendar-now-line .nd-calendar-now-clock{position:sticky!important;left:0!important;z-index:43!important;display:inline-flex!important;visibility:visible!important;width:60px!important;min-width:60px!important;height:24px!important;margin-top:-12px!important;padding:0 3px!important;border:1px solid #fff!important;border-radius:8px!important;background:#3478ed!important;color:white!important;font-size:10px!important;font-weight:700!important;letter-spacing:0!important;line-height:1!important;white-space:nowrap!important;box-shadow:0 1px 3px #3468af44!important}
 #ndProBetaPage .proref-calendar-grid button.pro-cell.proref-booking>strong,
 #ndProBetaPage .proref-calendar-grid button.pro-cell.proref-booking>span:not(.nd-order-state-badge),
