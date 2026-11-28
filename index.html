@@ -43816,6 +43816,9 @@ async function openBookingSale(a,group=[a]){
    if(x.type==='service'&&onlineNames.has(normalize(name)))return null;
    return {id:'csv:'+x.type+':'+String(x.sku),sku:String(x.sku),name,alt:String(x.section||'')+' '+String(x.folder||''),category:x.type==='service'?categoryForService(name,x.section):x.type,duration:Number(x.duration||0),price,source:x.source==='cloud'?'cloud':'csv',type:x.type};
  }).filter(Boolean)];
+ // Recharge is a clearly labelled draft item. Wallet credit is NEVER posted here:
+ // the actual balance mutation requires a server-verified payment and wallet RPC.
+ menu.push({id:'nd:recharge:draft',sku:'RECHARGE',name:'充值储值（付款预览）',alt:'充值金额可在订单明细中修改',category:'recharge',duration:0,price:0,source:'draft',type:'recharge'});
  // The exported member list has a 'T' prefix on phone numbers.
  const normalizePhone=v=>String(v||'').replace(/[^0-9]/g,'').replace(/^60(?=1)/,'0').replace(/^65(?=[3689])/,'');
  const memberMatches=c?.phone?ndCsvMembers.filter(m=>normalizePhone(m['Phone Number'])===normalizePhone(c.phone)):[];
@@ -43848,15 +43851,21 @@ async function openBookingSale(a,group=[a]){
  const total=()=>items().reduce((sum,x)=>sum+lineTotal(x),0);
  const totalQty=()=>items().reduce((sum,x)=>sum+x.qty,0);
  const holdOrder=()=>{if(!totalQty()){window.ndSharedPendingOrders?.remove(pendingKey);return;}window.ndSharedPendingOrders?.save({id:pendingKey,appointmentId:String(a.id),appointmentIds:group.map(x=>String(x.id)),customerId:String(c?.id||''),name:String(c?.full_name||'Guest'),phone:String(c?.phone||''),branch:String(a.branch||''),total:total(),timeLabel:new Date().toLocaleString('zh-MY',{timeZone:'Asia/Kuala_Lumpur',hour:'2-digit',minute:'2-digit',hour12:true,day:'numeric',month:'numeric',year:'numeric'}),lines:items().map(x=>({id:x.id,qty:x.qty,price:x.detail.price,workerIds:[...x.detail.workerIds]}))});};
- const categoryItems=[['promotion','PROMOTION'],['member','会员卡专享'],['wellness','养生 WELLNESS'],['service','其他服务'],['product','产品'],['package','配套'],['giftcard','赠品'],['discount','折扣'],['deposit','押金'],['all','全部']];
+ const categoryItems=[['promotion','PROMOTION'],['member','会员卡专享'],['wellness','养生 WELLNESS'],['service','其他服务'],['recharge','充值'],['product','产品'],['package','配套'],['giftcard','赠品'],['discount','折扣'],['deposit','押金'],['all','全部']];
  const iconFor=x=>x.category==='promotion'?'🌟':x.category==='member'?'💎':x.category==='product'?'🛍️':x.category==='package'?'🎁':x.category==='giftcard'?'💳':'💆';
  // Multi-person checkout starts on the same service-picker step as a single
  // booking. Previously groups skipped the picker and jumped to the cart.
- let stage='menu',editingId='',cat='promotion',duration='all',query='',favoritesOnly=false,paymentMethod='',showSearch=false,customerProfile=null;
+ let stage='menu',editingId='',cat='promotion',duration='all',query='',favoritesOnly=false,paymentMethod='',showSearch=false,customerProfile=null,memberEntitlements=null;
+ const availableCoupons=()=>Array.isArray(memberEntitlements)?memberEntitlements.filter(x=>{
+  const state=String(x.status||x.entitlement_status||'').toLowerCase();
+  return ['active','valid','available'].includes(state)&&!x.cancelled_at&&Number(x.remaining_sessions??x.remaining_quantity??x.balance??0)>0&&(!x.expires_at||Date.parse(x.expires_at)>Date.now());
+ }):[];
+ const couponLeft=x=>Math.max(0,Number(x.remaining_sessions??x.remaining_quantity??x.balance??0)||0);
+ const couponTotal=()=>availableCoupons().reduce((n,x)=>n+couponLeft(x),0);
  let modal=document.getElementById('ndProAppointmentSale');
  if(!modal){modal=document.createElement('div');modal.id='ndProAppointmentSale';document.body.appendChild(modal);}
  const close=()=>{modal.hidden=true;modal.replaceChildren();};
- const toolbar=()=>`<section class="nd-sale-member-top"><button type="button" class="nd-sale-member-identity" data-sale-member aria-label="打开预约表同一会员资料"><span class="nd-sale-avatar">${esc(String(c?.full_name||'G').slice(0,1).toUpperCase())}</span><div><strong>${esc(c?.full_name||'Guest')}</strong><small>${esc(c?.phone?"••••••"+String(c.phone).slice(-4):"")}</small></div></button><div class="nd-sale-member-balances"><div><small>储值</small><b>—</b></div><div><small>积分</small><b>—</b></div><div><small>优惠券</small><b>—</b></div><div><small>会员卡</small><b>${esc(customerProfile?.membership_level||"—")}</b></div><div><small>赠品</small><b>—</b></div><div><small>邀请金</small><b>—</b></div></div></section>`;
+ const toolbar=()=>`<section class="nd-sale-member-top"><button type="button" class="nd-sale-member-identity" data-sale-member aria-label="打开预约表同一会员资料"><span class="nd-sale-avatar">${esc(String(c?.full_name||'G').slice(0,1).toUpperCase())}</span><div><strong>${esc(c?.full_name||'Guest')}</strong><small>${esc(c?.phone?"••••••"+String(c.phone).slice(-4):"")}</small></div></button><div class="nd-sale-member-balances"><div><small>储值</small><b>—</b></div><div><small>积分</small><b>—</b></div><button class="nd-sale-coupon-entry" type="button" data-sale-vouchers><small>优惠券</small><b>${memberEntitlements===null?'—':couponTotal()}</b>${couponTotal()>0?`<sup>${couponTotal()}</sup>`:''}</button><div><small>会员卡</small><b>${esc(customerProfile?.membership_level||"—")}</b></div><div><small>赠品</small><b>—</b></div><div><small>邀请金</small><b>—</b></div></div></section>`;
  const workerName=id=>{const w=workers.find(w=>String(w.id)===String(id));return w?.nickname||w?.name||'员工';};
  const renderCart=()=>`<main class="nd-sale-scroll nd-sale-cart-scroll nd-ref-cart"><div class="nd-ref-cart-card nd-order-summary"><h3>服务 / Services</h3>${items().map(x=>`<div class="nd-order-line"><button type="button" class="nd-ref-cart-item" data-sale-edit="${esc(x.id)}"><span class="nd-order-line-info"><span><strong>${esc(x.name)}</strong><small>RM ${money(x.detail.price)}</small></span><b>${x.qty}</b><b class="nd-order-blue">RM ${money(lineTotal(x))}</b></span><span class="nd-order-worker">${Array.from(x.detail.workerIds).map(id=>esc(workerName(id))).join('、')||'未分配员工'}</span></button><div class="nd-order-qty"><button type="button" data-sale-minus="${esc(x.id)}">−</button><b>${x.qty}</b><button type="button" data-sale-add="${esc(x.id)}">＋</button></div></div>`).join('')||'<p>未选择项目，请返回选择服务。</p>'}${missingBooking?`<p class="nd-checkout-note">预约项目在菜单中找不到：${esc(missingBooking)}，请手动选择。</p>`:''}</div></main><footer class="nd-order-bottom"><div><span>数量</span><b>${totalQty()}</b></div><div><span>小计</span><b>RM ${money(total())}</b></div><button type="button" data-sale-payment ${totalQty()?'':'disabled'}>付款：RM ${money(total())}</button></footer>`;
  const paymentChoices=[['现金','自定义','自定义'],['现金','exact','RM '+money(total())],['现金','round','RM '+money(Math.ceil(total()/10)*10)],['卡','Credit卡','Credit卡'],['卡','Debit卡','Debit卡'],['在线','Online','Online'],['其他','TNG PAYMENT','TNG PAYMENT'],['其他','3 MONTH INSTALLMENT','3 MONTH INSTALLMENT'],['其他','6 MONTH INSTALLMENT','6 MONTH INSTALLMENT'],['其他','12 MONTH INSTALLMENT','12 MONTH INSTALLMENT'],['其他','ALIPAY','ALIPAY'],['其他','Online-credit card','Online-credit card'],['其他','BANK TRANSFER','BANK TRANSFER']];
@@ -43891,7 +43900,7 @@ async function openBookingSale(a,group=[a]){
    const isService=serviceCategories.includes(cat)||cat==='all';
    const buttons=categoryItems.filter(([v])=>isService?serviceCategories.includes(v):v===cat).map(([v,label])=>`<button type="button" class="${cat===v?'active':''}" data-sale-cat="${v}">${label}</button>`).join('');
    const matches=sortItems(menu.filter(x=>!x.groupLine&&(isService?x.type==='service'&&(cat==='all'||x.category===cat):x.type===cat)&&( !isService||duration==='all'||x.duration===duration)&&(!query||normalize(x.name+' '+x.alt+' '+x.sku).includes(normalize(query)))&&(!favoritesOnly||false)));
-   return `<div class="nd-sale-toolbar"><nav class="nd-sale-type-tabs" aria-label="订单项目类型">${[['promotion','服务'],['package','配套'],['product','产品'],['giftcard','赠品'],['discount','折扣'],['deposit','押金']].map(([v,label])=>`<button type="button" data-sale-cat="${v}" class="${(cat===v||(v==='promotion'&&['member','wellness','service','all'].includes(cat)))?'active':''}">${label}</button>`).join('')}</nav><div class="nd-sale-tools">${showSearch?`<input data-sale-search type="search" placeholder="搜索" value="${esc(query)}"><button data-sale-search-close aria-label="关闭搜索">×</button>`:`<button data-sale-search-open aria-label="搜索">⌕</button>`}</div></div><nav class="nd-sale-cat">${buttons}</nav><nav class="nd-sale-durations" style="${isService?'':'display:none!important'}">${['all',120,90,60,45,30,15,180,240].map(n=>`<button type="button" data-sale-duration="${n}" class="${duration===n?'active':''}">${n==='all'?'全部':n+' MIN'}</button>`).join('')}</nav><main class="nd-sale-scroll"><div class="nd-sale-products">${matches.map(x=>`<button type="button" class="nd-sale-product" data-sale-add="${esc(x.id)}"><span class="nd-sale-product-info"><strong>${esc(x.name)}</strong><small>RM ${money(x.price)}</small></span>${selected.has(x.id)?`<em class="nd-sale-count">${selected.get(x.id)}</em>`:''}</button>`).join('')||'<p class="nd-sale-empty">当前分类没有匹配项目，请切换分类。</p>'}</div></main><footer class="nd-sale-foot"><button data-sale-to-cart type="button" class="nd-sale-checkout">${totalQty()} 项目 ｜ RM ${money(total())}</button></footer>`;
+   return `<div class="nd-sale-toolbar"><nav class="nd-sale-type-tabs" aria-label="订单项目类型">${[['promotion','服务'],['recharge','充值'],['package','配套'],['product','产品'],['giftcard','赠品'],['discount','折扣'],['deposit','押金']].map(([v,label])=>`<button type="button" data-sale-cat="${v}" class="${(cat===v||(v==='promotion'&&['member','wellness','service','all'].includes(cat)))?'active':''}">${label}</button>`).join('')}</nav><div class="nd-sale-tools">${showSearch?`<input data-sale-search type="search" placeholder="搜索" value="${esc(query)}"><button data-sale-search-close aria-label="关闭搜索">×</button>`:`<button data-sale-search-open aria-label="搜索">⌕</button>`}</div></div><nav class="nd-sale-cat">${buttons}</nav><nav class="nd-sale-durations" style="${isService?'':'display:none!important'}">${['all',120,90,60,45,30,15,180,240].map(n=>`<button type="button" data-sale-duration="${n}" class="${duration===n?'active':''}">${n==='all'?'全部':n+' MIN'}</button>`).join('')}</nav><main class="nd-sale-scroll"><div class="nd-sale-products">${matches.map(x=>`<button type="button" class="nd-sale-product" data-sale-add="${esc(x.id)}"><span class="nd-sale-product-info"><strong>${esc(x.name)}</strong><small>RM ${money(x.price)}</small></span>${selected.has(x.id)?`<em class="nd-sale-count">${selected.get(x.id)}</em>`:''}</button>`).join('')||'<p class="nd-sale-empty">当前分类没有匹配项目，请切换分类。</p>'}</div></main><footer class="nd-sale-foot"><button data-sale-to-cart type="button" class="nd-sale-checkout">${totalQty()} 项目 ｜ RM ${money(total())}</button></footer>`;
  };
  let holdSearch='',holdEditing=false;
  const renderHolds=()=>`<main class="nd-sale-scroll">${window.ndHoldReference(window.ndSharedPendingOrders?.list()||[],holdSearch,holdEditing)}</main>`;
@@ -43907,6 +43916,16 @@ async function openBookingSale(a,group=[a]){
    modal.querySelector('[data-sale-holds]')?.addEventListener('click',()=>{holdOrder();stage='holds';render();});
    modal.querySelectorAll('[data-pending-id]').forEach(b=>b.onclick=()=>{if(b.dataset.pendingId===pendingKey){stage='cart';render();}else window.ndResumePendingSale?.(b.dataset.pendingId);});
    modal.querySelectorAll('[data-sale-member]').forEach(b=>b.addEventListener('click',()=>{if(!c?.id)return;window.ndProOpenMemberHome?.(c.id);}));
+   modal.querySelector('[data-sale-vouchers]')?.addEventListener('click',()=>{
+    const prior=modal.querySelector('.nd-sale-coupon-overlay');if(prior){prior.remove();return;}
+    const shade=document.createElement('div');shade.className='nd-sale-coupon-overlay';
+    const coupons=availableCoupons();
+    const content=coupons.length?coupons.map(x=>`<article><span><strong>${esc(x.item_name||x.service_name||x.product_name||x.package_name||'会员优惠券')}</strong><small>${esc(x.expires_at?'有效期至 '+String(x.expires_at).slice(0,10):'有效权益')}</small></span><b>剩余 ${couponLeft(x)}</b></article>`).join(''):'<p>暂无可用优惠券或剩余次数；尚未同步时请稍后重试。</p>';
+    shade.innerHTML=`<section class="nd-sale-coupon-sheet" role="dialog" aria-modal="true" aria-label="会员优惠券"><header><strong>优惠券 · ${couponTotal()} 次可用</strong><button type="button" data-close-vouchers>完成</button></header><main>${content}</main></section>`;
+    shade.querySelector('[data-close-vouchers]').onclick=()=>shade.remove();
+    shade.addEventListener('click',e=>{if(e.target===shade)shade.remove()});
+    modal.append(shade);
+   });
    window.ndBindSwipeDelete(modal, '.nd-sale-stage-cart .nd-order-line', (row)=>{const id=row.querySelector('[data-sale-edit]')?.dataset.saleEdit;if(!id)return;selected.delete(id);itemDetails.delete(id);if(window.ndSharedPendingOrders?.list().some(o=>o.id===pendingKey)){if(totalQty())holdOrder();else window.ndSharedPendingOrders.remove(pendingKey);}render();});
    window.ndBindSwipeDelete(modal,'.nd-hold-card',row=>{const id=row.querySelector('[data-pending-id]')?.dataset.pendingId;if(id&&confirm('删除此挂单？')){window.ndSharedPendingOrders?.remove(id);if(id===pendingKey){selected.clear();itemDetails.clear();}render();}});
    modal.querySelectorAll('[data-sale-edit]').forEach(b=>b.onclick=()=>{editingId=b.dataset.saleEdit;stage='detail';render();});
@@ -43952,6 +43971,10 @@ async function openBookingSale(a,group=[a]){
  }
  render();
  if(c?.id){void (async()=>{try{const r=await db.from('nd_pro_beta_customer_profiles').select('membership_level').eq('customer_id',c.id).maybeSingle();if(r.error)throw r.error;if(modal.hidden)return;customerProfile=r.data;if(stage==='cart'||stage==='menu')render();}catch(e){console.warn('Member profile unavailable:',e?.message||e);}})();}
+ if(c?.id){void (async()=>{try{
+  const r=await db.from('nd_pro_beta_member_entitlements').select('*').eq('customer_id',c.id);
+  if(r.error)throw r.error;if(modal.hidden)return;memberEntitlements=r.data||[];if(stage==='menu')render();
+ }catch(e){console.warn('Member coupon count unavailable:',e?.message||e);}})();}
 
 }
 window.ndResumePendingSale=async id=>{
@@ -46299,6 +46322,7 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
  let selectedService=null,serviceDraft=null;
  let maleGuests=0,femaleGuests=1;
  const products=services.flatMap(s=>prices.filter(p=>String(p.service_id)===String(s.id)&&(branch==='all'||p.branch===branch)).map(p=>({id:String(s.id)+':'+String(p.id),name:s.name_zh||s.name_en||'护理',price:Number(p.price)||0,branch:p.branch||'',duration:s.duration_minutes||0,type:s.item_type||'服务'})));
+ products.push({id:'nd:recharge:draft',name:'充值储值（付款预览）',price:0,branch:branch||'',duration:0,type:'充值'});
  const itemOrderKey=()=>`nd.beta.order.service-sort.v1:${branch}:${itemType}`;
  const orderedProducts=rows=>{let saved=[];try{const x=JSON.parse(localStorage.getItem(itemOrderKey())||'[]');if(Array.isArray(x))saved=x.map(String);}catch(_){}const positions=new Map(saved.map((id,i)=>[id,i]));return rows.slice().sort((a,b)=>(positions.get(String(a.id))??Infinity)-(positions.get(String(b.id))??Infinity));};
  const total=()=>items.reduce((n,x)=>n+x.price*x.qty,0);
@@ -46315,7 +46339,7 @@ window.ndRenderOrderFlow=function({host,customers=[],services=[],prices=[],branc
   if(stage==='list'){const drafts=window.ndSharedPendingOrders?.list()||[];html=header('挂单 ('+drafts.length+')','home').replace('data-go="list" aria-label="返回挂单">⋯','data-hold-edit>'+ (holdEditing?'取消':'编辑'))+window.ndHoldReference(drafts,search,holdEditing);}
 
   if(stage==='members')html=header('选择会员','list')+`<div class="nd-order-search">⌕ <input id="ndOrderSearch" placeholder="搜索姓名或电话号码" value="${esc(search)}"></div><div id="ndOrderMemberResults">${customerMatches()}</div>`;
-  if(stage==='products')html=header(member?.full_name||member?.name||'选择会员','home')+card()+`<div class="nd-pos-toolbar"><nav class="nd-order-type-tabs" aria-label="项目类型">${['服务','配套','产品','赠品','折扣','押金'].map(t=>`<button type="button" data-type="${t==='赠品'?'礼品卡':t}" class="${itemType===(t==='赠品'?'礼品卡':t)?'active':''}">${t}</button>`).join('')}</nav><button class="nd-pos-star" data-category="PROMOTION">★</button><button data-menu="search">☷　⌕</button></div><div class="nd-pos-categories"><button data-menu="category">${esc(category)}⌄</button><span>会员卡专享　养生 WELLNESS</span></div><nav class="nd-order-filter nd-pos-durations">${['全部','120 MIN','90 MIN','60 MIN','45 MIN','30 MIN'].map(c=>`<button data-duration="${c}" aria-pressed="${duration===c}">${c}</button>`).join('')}</nav>${catalogMenu==='category'?`<div class="nd-pos-menu">${['PROMOTION','会员卡专享','养生 WELLNESS TREATMENT','添加 ADD ON','美容护理','其他预约','私人项目','活动/免费赠送','泡澡'].map(c=>`<button data-category="${esc(c)}">${esc(c)}</button>`).join('')}</div>`:''}${catalogMenu==='type'?`<div class="nd-pos-menu nd-pos-menu-type">${['服务','产品','配套','折扣','礼品卡','押金'].map(c=>`<button data-type="${esc(c)}">${esc(c)}</button>`).join('')}</div>`:''}${catalogMenu==='search'?`<div class="nd-order-search"><input id="ndCatalogSearch" placeholder="搜索服务或产品" value="${esc(search)}"></div>`:''}<div class="nd-order-products">${orderedProducts(products.filter(p=>(itemType==='服务'||p.type===itemType)&&(duration==='全部'||Number(p.duration)===Number(duration.split(' ')[0]))&&(!search||p.name.toLowerCase().includes(search.toLowerCase())))).map(p=>`<button class="nd-order-product" data-add="${esc(p.id)}" aria-pressed="${items.some(x=>x.id===p.id)}"><i>✦</i><strong>${esc(p.name)}</strong><small>${money(p.price)}</small>${items.some(x=>x.id===p.id)?`<em class="nd-order-count">${items.filter(x=>x.id===p.id).reduce((n,x)=>n+x.qty,0)}</em>`:''}</button>`).join('')||'<p>此分类暂时没有项目</p>'}</div><button class="nd-order-cartbar" data-go="detail" ${!items.length?'disabled':''}>${count()} 项目 ｜ ${money(total())}</button>`;
+  if(stage==='products')html=header(member?.full_name||member?.name||'选择会员','home')+card()+`<div class="nd-pos-toolbar"><nav class="nd-order-type-tabs" aria-label="项目类型">${['服务','充值','配套','产品','赠品','折扣','押金'].map(t=>`<button type="button" data-type="${t==='赠品'?'礼品卡':t}" class="${itemType===(t==='赠品'?'礼品卡':t)?'active':''}">${t}</button>`).join('')}</nav><button class="nd-pos-star" data-category="PROMOTION">★</button><button data-menu="search">☷　⌕</button></div><div class="nd-pos-categories"><button data-menu="category">${esc(category)}⌄</button><span>会员卡专享　养生 WELLNESS</span></div><nav class="nd-order-filter nd-pos-durations">${['全部','120 MIN','90 MIN','60 MIN','45 MIN','30 MIN'].map(c=>`<button data-duration="${c}" aria-pressed="${duration===c}">${c}</button>`).join('')}</nav>${catalogMenu==='category'?`<div class="nd-pos-menu">${['PROMOTION','会员卡专享','养生 WELLNESS TREATMENT','添加 ADD ON','美容护理','其他预约','私人项目','活动/免费赠送','泡澡'].map(c=>`<button data-category="${esc(c)}">${esc(c)}</button>`).join('')}</div>`:''}${catalogMenu==='type'?`<div class="nd-pos-menu nd-pos-menu-type">${['服务','产品','配套','折扣','礼品卡','押金'].map(c=>`<button data-type="${esc(c)}">${esc(c)}</button>`).join('')}</div>`:''}${catalogMenu==='search'?`<div class="nd-order-search"><input id="ndCatalogSearch" placeholder="搜索服务或产品" value="${esc(search)}"></div>`:''}<div class="nd-order-products">${orderedProducts(products.filter(p=>(itemType==='服务'||p.type===itemType)&&(duration==='全部'||Number(p.duration)===Number(duration.split(' ')[0]))&&(!search||p.name.toLowerCase().includes(search.toLowerCase())))).map(p=>`<button class="nd-order-product" data-add="${esc(p.id)}" aria-pressed="${items.some(x=>x.id===p.id)}"><i>✦</i><strong>${esc(p.name)}</strong><small>${money(p.price)}</small>${items.some(x=>x.id===p.id)?`<em class="nd-order-count">${items.filter(x=>x.id===p.id).reduce((n,x)=>n+x.qty,0)}</em>`:''}</button>`).join('')||'<p>此分类暂时没有项目</p>'}</div><button class="nd-order-cartbar" data-go="detail" ${!items.length?'disabled':''}>${count()} 项目 ｜ ${money(total())}</button>`;
   if(stage==='detail')html=header(member?.full_name||member?.name||'订单明细','products')+`<div class="nd-order-detail"><div>服务</div>${items.map((x,i)=>`<div class="nd-order-line"><div><strong>${esc(x.name)}</strong><small>${money(x.price)} × ${x.qty}</small></div><div><strong>${money(x.price*x.qty)}</strong><div class="nd-order-qty"><button data-qty="${i}" data-delta="-1">−</button>${x.qty}<button data-qty="${i}" data-delta="1">＋</button></div></div></div>`).join('')}<section class="nd-order-summary"><div>数量 <strong>${count()}</strong></div><div>小计 <strong>${money(total())}</strong></div><button data-go="payment">付款：${money(total())}</button></section></div>`;
   if(stage==='payment')html=header('付款','detail')+`<section class="nd-order-due"><span>余额支付</span><strong>${money(total())}</strong></section><div class="nd-order-methods"><h3>现金</h3><div class="nd-order-cash">${['自定义',money(total()),money(Math.ceil(total()/10)*10),money(Math.ceil(total()/100)*100)].map(x=>`<button data-method="现金 ${x}" aria-pressed="${method==='现金 '+x}">${esc(x)}</button>`).join('')}</div><h3>卡</h3><div>${['Credit卡','Debit卡'].map(x=>`<button data-method="${x}" aria-pressed="${method===x}">▰ ${x}</button>`).join('')}</div><h3>在线</h3><div><button data-method="Online" aria-pressed="${method==='Online'}">◎ Online</button></div><h3>其他</h3><div>${['TNG PAYMENT','3 MONTH INSTALLMENT','6 MONTH INSTALLMENT','12 MONTH INSTALLMENT','ALIPAY','Online-credit card','BANK TRANSFER','床位费'].map(x=>`<button data-method="${x}" aria-pressed="${method===x}">▣ ${x}</button>`).join('')}</div></div><p class="nd-order-note">付款方式仅供界面核对；正式付款、储值扣减及奖励审批尚未连接，不会自动发放或入账。</p><button class="nd-order-confirm" disabled>确认付款（尚未连接）</button>`;
   if(stage==='detail')html=html.replace('</header>','</header>'+genderCounts());
@@ -48490,6 +48514,168 @@ html body #ndProBetaPage .proref-calendar-grid .pro-cell.proref-booking small{fo
 #ndProBetaPage .nd-order-products .nd-order-count{position:absolute!important;top:-7px!important;right:-5px!important;background:#e14b46!important;color:#fff!important;border-radius:50%!important;width:23px!important;height:23px!important;display:grid!important;place-items:center!important;font-size:12px!important;font-weight:800!important;font-style:normal!important}
 #ndProBetaPage .nd-pos-member .nd-order-balances{gap:15px!important}
 </style>
+<style id="nd-mobile-size-and-overflow-audit-v1">
+/* A single phone-sized type scale across Beta order and booking checkout. */
+#ndProAppointmentSale .nd-sale-shell,
+#ndProBetaPage .nd-order-flow{box-sizing:border-box!important;max-width:100vw!important;overflow-x:hidden!important}
+#ndProAppointmentSale .nd-sale-shell *,
+#ndProBetaPage .nd-order-flow *{box-sizing:border-box}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-top{margin:6px 10px 8px!important;padding:11px 12px!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-balances{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px 9px!important;overflow:visible!important;white-space:normal!important;padding-top:9px!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-balances>div{display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:center!important;flex:none!important;min-width:0!important;width:100%!important;white-space:normal!important;padding:4px 6px!important;border-radius:8px!important;background:#f7f8fb!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-balances>div:before{display:none!important;content:none!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-balances small{display:block!important;font-size:11px!important;line-height:1.25!important;white-space:normal!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-balances b{font-size:12px!important;line-height:1.35!important;margin:2px 0 0!important;max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-toolbar{gap:7px!important;margin:0 10px 7px!important;min-width:0!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-type-tabs{flex:1 1 auto!important;min-width:0!important;gap:5px!important;overscroll-behavior-x:contain}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-type-tabs button{font-size:12px!important;min-height:37px!important;height:37px!important;padding:0 12px!important;border-radius:10px!important;margin:0!important;line-height:1!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-tools{flex:0 0 37px!important;height:37px!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-tools button{width:37px!important;height:37px!important;min-height:37px!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-cat{margin:0 10px 6px!important;padding:3px!important;gap:3px!important;min-width:0!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-cat button{font-size:12px!important;min-height:35px!important;height:35px!important;padding:0 11px!important;line-height:1.1!important;white-space:nowrap!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-durations{margin:0 10px 7px!important;gap:5px!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-durations button{font-size:11px!important;padding:7px 9px!important;white-space:nowrap!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-scroll{padding:0 10px calc(130px + env(safe-area-inset-bottom))!important;overflow-y:auto!important;min-height:0!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-products{gap:8px!important;min-width:0!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-product{min-height:95px!important;padding:10px!important;min-width:0!important;align-items:center!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-product-info{min-width:0!important;max-width:100%!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-product-info strong{font-size:12px!important;line-height:1.35!important;max-width:100%!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-product-info small{font-size:11px!important;line-height:1.3!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-foot{padding:10px 10px max(14px,env(safe-area-inset-bottom))!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-checkout{font-size:14px!important;min-height:48px!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"]{padding-bottom:calc(130px + env(safe-area-inset-bottom))!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-pos-member .nd-order-balances{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important;overflow:visible!important;white-space:normal!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-pos-member .nd-order-balances span{min-width:0!important;font-size:11px!important;padding:5px!important;background:#f7f8fb!important;border-radius:7px!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-pos-member .nd-order-balances b{font-size:12px!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-pos-toolbar{grid-template-columns:minmax(0,1fr) 40px 40px!important;gap:6px!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-order-type-tabs{min-width:0!important;gap:5px!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-order-type-tabs button{font-size:12px!important;min-height:38px!important;height:38px!important;padding:0 10px!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-pos-toolbar>.nd-pos-star,
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-pos-toolbar>[data-menu="search"]{font-size:15px!important;min-height:38px!important;padding:0!important;text-align:center!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-pos-categories{min-width:0!important;overflow-x:auto!important;gap:8px!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-pos-categories :is(button,span){font-size:12px!important;line-height:1.25!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-order-product strong{font-size:12px!important;line-height:1.35!important;overflow-wrap:anywhere!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-order-product small{font-size:11px!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-order-products{padding-bottom:135px!important;min-width:0!important}
+#ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-order-cartbar{font-size:14px!important;min-height:48px!important}
+@media(max-width:370px){
+ #ndProAppointmentSale .nd-sale-stage-menu .nd-sale-product-info strong,
+ #ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-order-product strong{font-size:11px!important}
+ #ndProAppointmentSale .nd-sale-stage-menu .nd-sale-products,
+ #ndProBetaPage .nd-order-flow[data-order-stage="products"] .nd-order-products{gap:6px!important}
+}
+</style>
+<style id="nd-benefit-exchange-preview-v1">
+.nd-benefit-exchange{background:#fff;border:1px solid #e6eaf1;border-radius:14px;padding:12px;margin:12px 10px;color:#283042;font:600 12px/1.4 system-ui,-apple-system,sans-serif}
+.nd-benefit-exchange h3{margin:0 0 8px;font-size:15px}
+.nd-benefit-exchange p{margin:6px 0;color:#7a8495;font-size:11px;font-weight:500}
+.nd-benefit-types{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none}
+.nd-benefit-types button{border:0;background:#edf1f8;color:#45556d;border-radius:9px;padding:8px 10px;font-size:12px;white-space:nowrap;min-height:34px}
+.nd-benefit-types button[aria-pressed=true]{background:#3977ed;color:white}
+.nd-benefit-row{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:8px;align-items:center;margin:9px 0}
+.nd-benefit-row input{width:100%;min-width:0;border:1px solid #d5ddeb;border-radius:8px;padding:9px 7px;background:white;color:#252c39;font:inherit}
+.nd-benefit-result{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#eef4ff;border-radius:10px;padding:10px;margin-top:10px;font-size:13px}
+.nd-benefit-result strong{color:#2871ed;font-size:16px}
+.nd-benefit-exchange .nd-benefit-hint{color:#c06725}
+.nd-benefit-plan-button{width:100%;border:1px solid #b7ccf5;background:#eff5ff;color:#2f6de5;border-radius:9px;min-height:36px;font-weight:750;font-size:12px}
+.nd-benefit-plan-button:disabled{opacity:.5}
+</style>
+<style id="nd-coupon-remaining-badges">
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-balances>.nd-sale-coupon-entry{position:relative;display:flex!important;flex-direction:column;align-items:flex-start!important;justify-content:center;flex:none!important;min-width:0!important;width:100%!important;min-height:43px!important;margin:0!important;padding:4px 6px!important;border:0!important;border-radius:8px!important;background:#f7f8fb!important;color:#222!important;text-align:left!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-balances>.nd-sale-coupon-entry small{font-size:11px!important;line-height:1.25!important;color:#222!important}
+#ndProAppointmentSale .nd-sale-stage-menu .nd-sale-member-balances>.nd-sale-coupon-entry b{font-size:12px!important;line-height:1.35!important;margin:2px 0 0!important}
+#ndProAppointmentSale .nd-sale-coupon-entry sup{position:absolute;right:-5px;top:-7px;min-width:18px;height:18px;padding:0 4px;border-radius:100px;background:#e54e49;color:#fff;font-size:10px;line-height:18px;text-align:center;font-weight:800}
+#ndProAppointmentSale .nd-sale-coupon-overlay{position:fixed;inset:0;background:#10162488;z-index:2147483500;display:flex;align-items:flex-end;justify-content:center}
+#ndProAppointmentSale .nd-sale-coupon-sheet{background:#f2f1f7;color:#263146;width:100%;max-width:650px;max-height:80dvh;display:flex;flex-direction:column;border-radius:18px 18px 0 0;padding:12px 12px calc(20px + env(safe-area-inset-bottom));box-sizing:border-box}
+#ndProAppointmentSale .nd-sale-coupon-sheet header{display:flex;align-items:center;justify-content:space-between;padding:5px 3px 12px}
+#ndProAppointmentSale .nd-sale-coupon-sheet header strong{font-size:15px}
+#ndProAppointmentSale .nd-sale-coupon-sheet header button{border:0;background:none;color:#3477ed;font-size:13px}
+#ndProAppointmentSale .nd-sale-coupon-sheet main{overflow-y:auto;min-height:0}
+#ndProAppointmentSale .nd-sale-coupon-sheet article{background:white;border-radius:12px;padding:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+#ndProAppointmentSale .nd-sale-coupon-sheet article span{min-width:0}
+#ndProAppointmentSale .nd-sale-coupon-sheet article strong{display:block;font-size:12px;overflow-wrap:anywhere}
+#ndProAppointmentSale .nd-sale-coupon-sheet article small{display:block;color:#87909f;font-size:11px;margin-top:3px}
+#ndProAppointmentSale .nd-sale-coupon-sheet article b{flex:none;background:#eaf2ff;color:#296be1;padding:5px 8px;border-radius:20px;font-size:12px}
+</style>
+<script id="nd-benefit-exchange-preview-js">
+/* Checkout benefit calculator: deliberately does not mutate wallet or payment records.
+   Supabase RPC and RLS must be connected before redemption can be committed. */
+(()=>{
+ 'use strict';
+ const types=[
+  ['stored','储值','可使用储值金额'],
+  ['package','配套','可兑换的配套价值'],
+  ['coupon','优惠券','优惠券可抵扣金额'],
+  ['gift','赠品','赠品可抵扣金额'],
+  ['referral','邀请金','可使用邀请金'],
+  ['deposit','押金','可抵扣押金']
+ ];
+ const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const money=n=>'RM '+(Math.max(0,Number(n)||0)).toFixed(2);
+ function attach(scope,amountElement){
+  if(!scope||scope.querySelector('[data-nd-benefit-preview]'))return;
+  const original=Number((amountElement?.textContent||'').replace(/[^\d.]/g,''))||0;
+  let type='stored';
+  const section=document.createElement('section');
+  section.className='nd-benefit-exchange';
+  section.dataset.ndBenefitPreview='1';
+  section.innerHTML='<h3>会员权益兑换与补差额</h3><nav class="nd-benefit-types">'+types.map(([id,label])=>'<button type="button" data-benefit-type="'+id+'" aria-pressed="'+(id===type)+'">'+label+'</button>').join('')+'</nav><p>选择权益后填写已核实的可用余额，计算本次可抵扣金额。</p><div class="nd-benefit-row"><label for="ndBenefitBalance">已核实可用金额 (RM)</label><input id="ndBenefitBalance" data-benefit-balance type="number" inputmode="decimal" step="0.01" min="0" placeholder="例如 50.00"></div><div class="nd-benefit-row"><label for="ndBenefitUse">本次兑换金额 (RM)</label><input id="ndBenefitUse" data-benefit-use type="number" inputmode="decimal" step="0.01" min="0" value="0"></div><div class="nd-benefit-result"><span>本次还需补付</span><strong data-benefit-rest>'+money(original)+'</strong></div><p class="nd-benefit-hint" data-benefit-rule>储值不足时可补现金、银行卡或其他付款方式。</p><p>结账预览：尚未连接正式兑换及余额扣除，不能视作已完成付款或核销。</p>';
+  const where=scope.querySelector('.nd-payment-balance,.nd-order-due');
+  if(where)where.insertAdjacentElement('afterend',section);
+  else scope.prepend(section);
+  const balance=section.querySelector('[data-benefit-balance]'),used=section.querySelector('[data-benefit-use]'),rest=section.querySelector('[data-benefit-rest]'),rule=section.querySelector('[data-benefit-rule]');
+  let changed='';
+  const recalc=()=>{
+   const available=Math.max(0,Number(balance.value)||0);
+   const wanted=Math.max(0,Number(used.value)||0);
+   const actual=Math.min(original,available,wanted);
+   rest.textContent=money(original-actual);
+   used.max=String(Math.min(original,available));
+   if(used.value&&actual!==wanted){used.value=actual.toFixed(2);}
+   if(changed==='balance'&&available>0)used.value=Math.min(original,available).toFixed(2);
+   if(changed==='balance')rest.textContent=money(original-Math.min(original,available));
+  };
+  section.querySelectorAll('[data-benefit-type]').forEach(b=>b.addEventListener('click',()=>{
+   type=b.dataset.benefitType;
+   section.querySelectorAll('[data-benefit-type]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+   const guidance={
+    stored:'储值不足时可以使用全部可用储值，再补付剩余金额。',
+    package:'配套按可用次数核销；仅在核实可兑换项目后计算差额。',
+    coupon:'优惠券按适用项目、有效期及使用规则核销。',
+    gift:'生日或邀请赠品需核实资格及领取状态。',
+    referral:'邀请金按已批准且未使用的奖励余额抵扣。',
+    deposit:'押金仅能抵扣所属顾客与符合条件的订单。'
+   };
+   rule.textContent=guidance[type];
+   balance.value='';used.value='0';changed='';recalc();
+  }));
+  balance.addEventListener('input',()=>{changed='balance';recalc()});
+  used.addEventListener('input',()=>{changed='use';recalc()});
+  const preview=document.createElement('button');
+  preview.type='button';preview.className='nd-benefit-plan-button';
+  preview.textContent='计算兑换与补差额';
+  preview.addEventListener('click',()=>{
+   changed='use';recalc();
+   const canUse=Math.min(original,Math.max(0,Number(balance.value)||0),Math.max(0,Number(used.value)||0));
+   window.alert('兑换预览：'+money(canUse)+'\n还需补付：'+money(original-canUse)+'\n尚未实际扣除会员余额或配套次数。');
+  });
+  section.append(preview);
+ }
+ let running=false;
+ const inspect=()=>{
+  if(running)return;running=true;
+  try{
+   const sale=document.querySelector('#ndProAppointmentSale .nd-sale-stage-payment');
+   if(sale)attach(sale,sale.querySelector('.nd-payment-balance strong'));
+   const beta=document.querySelector('#ndProBetaPage .nd-order-flow[data-order-stage="payment"]');
+   if(beta)attach(beta,beta.querySelector('.nd-order-due strong'));
+  }finally{running=false;}
+ };
+ const observer=new MutationObserver(()=>inspect());
+ const start=()=>{observer.observe(document.body,{childList:true,subtree:true});inspect()};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
+</script>
 <style id="ndr-final">#ndProBetaPage .ndr{background:#f0eff4;color:#222529;min-height:75vh;padding:0 12px 16px;box-sizing:border-box}#ndProBetaPage .ndr *{box-sizing:border-box;font-family:inherit;font-size:13px!important;line-height:1.45}#ndProBetaPage .ndr header{position:sticky;top:0;z-index:5;background:#f0eff4;display:grid;grid-template-columns:40px 1fr 40px;align-items:center;text-align:center;height:48px}#ndProBetaPage .ndr button{border:0;cursor:pointer;background:white;color:#1677ff;border-radius:10px;min-height:40px;padding:8px 12px}#ndProBetaPage .ndr header button{background:transparent;font-size:22px!important}#ndProBetaPage .ndr nav,#ndProBetaPage .ndr-tools,#ndProBetaPage .ndr-chips{display:flex;align-items:center;gap:8px;margin:0 0 12px;overflow-x:auto}#ndProBetaPage .ndr nav button{flex:1}#ndProBetaPage .ndr input{min-width:0;border:0;border-radius:10px;background:#fff;padding:10px;color:#555}#ndProBetaPage .ndr-search{width:100%;margin-bottom:12px;background:#e4e4e9!important}#ndProBetaPage .ndr-card{background:white;border-radius:12px;margin:0 0 12px;padding:12px;overflow:hidden}#ndProBetaPage .ndr-entry{display:flex;align-items:center;gap:10px;width:100%;text-align:left;color:#222529!important;padding:8px 0!important;border-radius:0!important;min-height:44px!important}#ndProBetaPage .ndr-entry+ .ndr-entry,#ndProBetaPage .ndr-sub{border-top:1px solid #e8e8e8}#ndProBetaPage .ndr-entry i{width:26px;height:26px;display:grid;place-items:center;color:white;border-radius:6px;font-style:normal}#ndProBetaPage .ndr-entry em{margin-left:auto;color:#999;font-style:normal}#ndProBetaPage .ndr-sub{padding-left:14px}#ndProBetaPage .ndr-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;align-items:flex-start}#ndProBetaPage .ndr-row span{min-width:0;overflow-wrap:anywhere}#ndProBetaPage .ndr-row b{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}#ndProBetaPage .ndr-title{font-weight:700;margin-bottom:8px}#ndProBetaPage .ndr-summary{background:#f0eff4;padding:12px;border-radius:10px;margin-top:8px}#ndProBetaPage .ndr hr{border:0;border-top:1px solid #e6e6e6;margin:12px 0}#ndProBetaPage .ndr-chips button{white-space:nowrap;background:#dceefa;border-radius:24px}#ndProBetaPage .ndr-chips button.selected{background:#1677ff;color:white}#ndProBetaPage .ndr-note{color:#777}#ndProBetaPage .ndr-chart{height:150px;display:flex;align-items:flex-end;gap:3px}#ndProBetaPage .ndr-chart div{flex:1;background:#1677ff;border-radius:3px}</style>
 <style id="nd-menu-reference">#ndProBetaPage .ndm{background:#f0eff4;padding:12px 14px 85px;min-height:75vh;color:#222529}#ndProBetaPage .ndm button{border:0;background:none;color:inherit;font-size:14px;font-weight:650}#ndProBetaPage .ndm h1{font-size:30px!important;margin:12px 0}#ndProBetaPage .ndm .ndm-back{color:#087bff;font-size:30px}#ndProBetaPage .ndm input{width:100%;border:0;border-radius:12px;background:#e3e3e8;padding:13px;font-size:14px}#ndProBetaPage .ndm-tabs{display:flex;background:#e3e3e8;border-radius:9px;padding:2px;margin:10px 0 16px}#ndProBetaPage .ndm-tabs button{flex:1;padding:9px;color:#999}#ndProBetaPage .ndm-tabs .on{background:white;border-radius:8px;color:#087bff;box-shadow:0 1px 4px #0002}#ndProBetaPage .ndm-card{background:white;border-radius:13px;overflow:hidden}#ndProBetaPage .ndm-row{display:flex;align-items:center;gap:12px;width:100%;padding:12px 15px;text-align:left;border-bottom:1px solid #eee!important;min-height:49px}#ndProBetaPage .ndm-row[hidden]{display:none!important}#ndProBetaPage .ndm-row i{width:26px;height:26px;border-radius:5px;color:white;display:grid;place-items:center;font-style:normal}#ndProBetaPage .ndm-row small{margin-left:auto;color:#999}#ndProBetaPage .ndm p{color:#999;padding-left:15px}#ndProBetaPage .ndm footer{margin-top:25px;background:white;padding:12px;border-radius:10px}#ndProBetaPage .ndm footer button{color:#087bff;font-size:24px}#ndProBetaPage .nd-svc-placeholder{display:none!important}#ndProBetaPage .nd-svc-main-tabs,#ndProBetaPage .nd-svc-categories{overflow-x:auto;display:flex;scrollbar-width:none}#ndProBetaPage .nd-svc-main-tabs button,#ndProBetaPage .nd-svc-categories button{flex:none;white-space:nowrap}</style>
 <style>.ndmd{position:fixed;inset:0;z-index:2147483000;background:#f0eff4;color:#222529;overflow:auto;padding:env(safe-area-inset-top) 15px 40px;font:600 14px -apple-system,BlinkMacSystemFont,sans-serif;box-sizing:border-box}.ndmd *{box-sizing:border-box}.ndmd header{display:grid;grid-template-columns:48px 1fr 48px;align-items:center;min-height:60px;text-align:center}.ndmd button{border:0;background:none;color:#087bff;font:inherit;padding:10px}.ndmd nav{display:flex;background:#e2e2e7;border-radius:10px;padding:2px;margin:12px 0 16px}.ndmd nav button{flex:1;color:#999}.ndmd nav .on{background:white;color:#087bff;border-radius:8px;box-shadow:0 2px 5px #0002}.ndmd section{background:white;border-radius:12px;margin:0 0 15px;padding:0 15px}.ndmd label{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px;border-bottom:1px solid #e7e7e7}.ndmd label:last-child{border:0}.ndmd input:not([type=checkbox]){width:60%;min-width:0;text-align:right;border:0;background:#f5f5f5;border-radius:7px;padding:9px;color:#087bff;font:inherit}.ndmd input[type=checkbox]{accent-color:#087bff;width:22px;height:22px}.ndmd textarea{width:100%;min-height:200px;border:0;border-radius:12px;padding:16px;font:inherit;background:white;color:#222529}.ndmd-caption{color:#929297;margin:12px 0;font-size:13px}.nd-svc-placeholder,.nd-se-placeholder{display:none!important}</style>
